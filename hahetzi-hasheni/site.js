@@ -70,8 +70,33 @@ if (burger){
   document.addEventListener("keydown", function(e){ if (e.key === "Escape") setMenu(false); });
 }
 
+/* ---------- every page and every link starts at the top of what it opens ---------- */
+// The browser would otherwise restore an old scroll position, and when the site sits inside a
+// frame (the artifact viewer) the outer page keeps its own scroll. scrollIntoView moves both.
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+function goTo(el, smooth){
+  if (!el) return;
+  el.scrollIntoView({block: "start", behavior: smooth && !reduce ? "smooth" : "auto"});
+}
+if (!location.hash || !document.getElementById(location.hash.slice(1))){
+  scrollTo(0, 0);
+  goTo(document.body);
+}
+document.addEventListener("click", function(e){
+  var a = e.target.closest && e.target.closest("a[href]");
+  if (!a || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+  var url; try { url = new URL(a.getAttribute("href"), location.href); } catch (err) { return; }
+  if (url.origin !== location.origin || !url.hash || !samePage(url)) return;
+  var target = document.getElementById(decodeURIComponent(url.hash.slice(1)));
+  if (!target) return;
+  e.preventDefault();
+  goTo(target, true);
+  if (history.replaceState) history.replaceState(null, "", url.hash);
+});
+
 /* ---------- page transitions: a night-coloured wipe between pages ---------- */
-function samePage(url){ return url.pathname.replace(/index\.html$/, "") === location.pathname.replace(/index\.html$/, ""); }
+function samePage(url){ // hoisted; also used by the link handler above
+ return url.pathname.replace(/index\.html$/, "") === location.pathname.replace(/index\.html$/, ""); }
 if (!reduce){
   var wipe = document.createElement("div");
   wipe.className = "wipe"; wipe.setAttribute("aria-hidden", "true");

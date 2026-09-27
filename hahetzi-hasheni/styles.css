@@ -429,3 +429,6 @@ footer.site{padding-block:60px calc(env(safe-area-inset-bottom,0px) + 110px);bor
 .foot-links{display:flex;flex-wrap:wrap;gap:6px 20px}
 .foot-links a{text-decoration:none}
 @media (max-width:700px){.ph-title{font-size:26vw}}
+/* in-page links stop below the fixed top bar, not under it */
+main [id],footer [id]{scroll-margin-top:calc(env(safe-area-inset-top,0px) + 88px)}
+#top{scroll-margin-top:0}

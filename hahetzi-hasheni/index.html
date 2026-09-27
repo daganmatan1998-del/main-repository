@@ -126,6 +126,56 @@
     </div>
   </section>
 
+  <!-- ============ BOOK ============ -->
+  <section class="book wrap" id="book" aria-labelledby="bookTitle">
+    <div class="book-grid">
+      <div class="book-copy">
+        <span class="eyebrow">מגיעים בחבורה?</span>
+        <h2 id="bookTitle">שריון מקום</h2>
+        <p>המקום קטן, אז כדאי להודיע מראש. מלאו את הפרטים ונחזור אליכם לאישור.</p>
+      </div>
+      <form class="res" id="resForm" novalidate>
+        <div class="field">
+          <label for="r-date">תאריך</label>
+          <input id="r-date" name="date" type="date" required>
+        </div>
+        <div class="field">
+          <label for="r-time">שעה</label>
+          <input id="r-time" name="time" type="time" required step="900">
+        </div>
+        <div class="field full">
+          <label for="r-guests-out" id="r-guests-label">כמה אנשים</label>
+          <div class="guests" role="group" aria-labelledby="r-guests-label">
+            <button type="button" data-g="-1" aria-label="פחות אורחים">−</button>
+            <output id="r-guests-out" aria-live="polite">4</output>
+            <button type="button" data-g="1" aria-label="עוד אורח">+</button>
+            <input type="hidden" id="r-guests" name="guests" value="4">
+          </div>
+        </div>
+        <div class="field">
+          <label for="r-name">שם</label>
+          <input id="r-name" name="name" type="text" autocomplete="name" required>
+        </div>
+        <div class="field">
+          <label for="r-phone">טלפון</label>
+          <input id="r-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" required pattern="[0-9+\-\s]{9,15}" dir="ltr">
+        </div>
+        <div class="field full">
+          <label for="r-email">אימייל (לא חובה)</label>
+          <input id="r-email" name="email" type="email" autocomplete="email" dir="ltr">
+        </div>
+        <div class="field full">
+          <label for="r-notes">בקשות מיוחדות</label>
+          <textarea id="r-notes" name="notes" placeholder="למשל: ישיבה בחוץ ליד התנור, יום הולדת"></textarea>
+        </div>
+        <div class="form-foot">
+          <button class="btn magnetic" type="submit"><span class="half" aria-hidden="true"></span>המשך</button>
+          <small id="resHint">את הבקשה שולחים לנו בהודעה באינסטגרם. המקום שמור רק אחרי שנאשר.</small>
+        </div>
+        <div class="res-result" id="resResult" hidden aria-live="polite"></div>
+      </form>
+    </div>
+  </section>
   <!-- ============ REASONS ============ -->
   <section class="reasons" aria-labelledby="reasonsTitle">
     <div class="wrap reasons-head">
@@ -268,56 +318,6 @@
     <div class="g-grid" id="gGrid"></div>
   </section>
 
-  <!-- ============ BOOK ============ -->
-  <section class="book wrap" id="book" aria-labelledby="bookTitle">
-    <div class="book-grid">
-      <div class="book-copy">
-        <span class="eyebrow">מגיעים בחבורה?</span>
-        <h2 id="bookTitle">שריון מקום</h2>
-        <p>המקום קטן, אז כדאי להודיע מראש. מלאו את הפרטים ונחזור אליכם לאישור.</p>
-      </div>
-      <form class="res" id="resForm" novalidate>
-        <div class="field">
-          <label for="r-date">תאריך</label>
-          <input id="r-date" name="date" type="date" required>
-        </div>
-        <div class="field">
-          <label for="r-time">שעה</label>
-          <input id="r-time" name="time" type="time" required step="900">
-        </div>
-        <div class="field full">
-          <label for="r-guests-out" id="r-guests-label">כמה אנשים</label>
-          <div class="guests" role="group" aria-labelledby="r-guests-label">
-            <button type="button" data-g="-1" aria-label="פחות אורחים">−</button>
-            <output id="r-guests-out" aria-live="polite">4</output>
-            <button type="button" data-g="1" aria-label="עוד אורח">+</button>
-            <input type="hidden" id="r-guests" name="guests" value="4">
-          </div>
-        </div>
-        <div class="field">
-          <label for="r-name">שם</label>
-          <input id="r-name" name="name" type="text" autocomplete="name" required>
-        </div>
-        <div class="field">
-          <label for="r-phone">טלפון</label>
-          <input id="r-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" required pattern="[0-9+\-\s]{9,15}" dir="ltr">
-        </div>
-        <div class="field full">
-          <label for="r-email">אימייל (לא חובה)</label>
-          <input id="r-email" name="email" type="email" autocomplete="email" dir="ltr">
-        </div>
-        <div class="field full">
-          <label for="r-notes">בקשות מיוחדות</label>
-          <textarea id="r-notes" name="notes" placeholder="למשל: ישיבה בחוץ ליד התנור, יום הולדת"></textarea>
-        </div>
-        <div class="form-foot">
-          <button class="btn magnetic" type="submit"><span class="half" aria-hidden="true"></span>המשך</button>
-          <small id="resHint">את הבקשה שולחים לנו בהודעה באינסטגרם. המקום שמור רק אחרי שנאשר.</small>
-        </div>
-        <div class="res-result" id="resResult" hidden aria-live="polite"></div>
-      </form>
-    </div>
-  </section>
 </main>
 
 <footer class="site wrap">
