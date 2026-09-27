@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>החצי השני</title>
-<meta name="description" content="החצי השני – חצי בר, חצי קפה. מקום קטן בהלני המלכה 9, מרכז ירושלים: מוזיקה טובה, בירות ייחודיות, ישיבה בחוץ ליד התנור ומחירים טובים.">
+<title>תפריט · החצי השני</title>
+<meta name="description" content="התפריט של החצי השני בירושלים: אניס, ג'ין, וודקה, וויסקי, רום, טקילה, ליקרים ויין, עם מחירים לצ'ייסר, למנה, לכוס ולבקבוק.">
 <meta name="theme-color" content="#0F1420">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="he_IL">
 <meta property="og:site_name" content="החצי השני">
-<meta property="og:title" content="החצי השני">
-<meta property="og:description" content="החצי השני – חצי בר, חצי קפה. מקום קטן בהלני המלכה 9, מרכז ירושלים: מוזיקה טובה, בירות ייחודיות, ישיבה בחוץ ליד התנור ומחירים טובים.">
+<meta property="og:title" content="תפריט · החצי השני">
+<meta property="og:description" content="התפריט של החצי השני בירושלים: אניס, ג'ין, וודקה, וויסקי, רום, טקילה, ליקרים ויין, עם מחירים לצ'ייסר, למנה, לכוס ולבקבוק.">
 <meta property="og:image" content="og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -73,250 +73,95 @@
   </defs>
 </svg>
 <header class="nav" id="nav">
-  <a class="brand magnetic" href="#top" aria-label="החצי השני – לדף הבית"><svg aria-hidden="true"><use href="#emblem"/></svg><span>החצי השני</span></a>
+  <a class="brand magnetic" href="index.html" aria-label="החצי השני – לדף הבית"><svg aria-hidden="true"><use href="#emblem"/></svg><span>החצי השני</span></a>
   <nav class="nav-links" aria-label="ניווט ראשי">
-    <a href="#about">המקום</a>
-    <a href="menu.html">תפריט</a>
+    <a href="index.html#about">המקום</a>
+    <a href="menu.html" aria-current="page">תפריט</a>
     <a href="reviews.html">ביקורות</a>
     <a href="visit.html">איך מגיעים</a>
-    <a class="btn magnetic" href="#book"><span class="half" aria-hidden="true"></span>שריון מקום</a>
+    <a class="btn magnetic" href="index.html#book"><span class="half" aria-hidden="true"></span>שריון מקום</a>
   </nav>
   <button class="burger" type="button" aria-expanded="false" aria-controls="mobileMenu" aria-label="פתיחת תפריט"><span></span><span></span></button>
 </header>
 <nav class="mobile-menu" id="mobileMenu" aria-label="ניווט במובייל">
-  <a href="#about">המקום</a>
-  <a href="menu.html">תפריט</a>
+  <a href="index.html#about">המקום</a>
+  <a href="menu.html" aria-current="page">תפריט</a>
   <a href="reviews.html">ביקורות</a>
   <a href="visit.html">איך מגיעים</a>
-  <a class="btn" href="#book"><span class="half" aria-hidden="true"></span>שריון מקום</a>
+  <a class="btn" href="index.html#book"><span class="half" aria-hidden="true"></span>שריון מקום</a>
 </nav>
 
 <main id="main">
-  <!-- ============ HERO ============ -->
-  <section class="hero" id="top" aria-labelledby="heroTitle">
-    <h1 id="heroTitle">החצי השני – חצי בר, חצי קפה. הלני המלכה 9, ירושלים</h1>
-    <div class="hero-layer hero-day stone-tex" aria-hidden="true">
-      <div class="hero-words">
-        <div><span class="hero-word w1">החצי</span><span class="hero-tag">חצי קפה</span></div>
-        <div><span class="hero-word w2">השני</span><span class="hero-tag">חצי בר</span></div>
+  <!-- ============ PAGE HERO ============ -->
+  <section class="page-hero" aria-labelledby="pageTitle">
+    <div class="ph-layer ph-day stone-tex">
+      <span class="ph-eyebrow">חצי בר, חצי קפה</span>
+      <h1 class="ph-title" id="pageTitle">תפריט</h1>
+      <p class="ph-sub">המחירים בשקלים. יש גם תמונה של התפריט המקורי, כמו שהוא על הבר.</p>
+    </div>
+    <div class="ph-layer ph-night" aria-hidden="true">
+      <span class="ph-eyebrow">חצי בר, חצי קפה</span>
+      <div class="ph-title">תפריט</div>
+      <p class="ph-sub">המחירים בשקלים. יש גם תמונה של התפריט המקורי, כמו שהוא על הבר.</p>
+    </div>
+  </section>
+  <!-- ============ MENU ============ -->
+  <!-- The bar menu below is transcribed from menu-alcohol.jpg; the data lives in one place per price, keep the two in step. -->
+  <section class="menu" id="menu" aria-labelledby="pageTitle">
+    <div class="wrap menu-head">
+      <div class="menu-tabs" role="tablist" aria-label="בחירת תפריט">
+        <button type="button" role="tab" id="tab-bar" aria-controls="half-bar" aria-selected="true">חצי בר</button>
+        <button type="button" role="tab" id="tab-cafe" aria-controls="half-cafe" aria-selected="false" tabindex="-1">חצי קפה</button>
       </div>
     </div>
-    <div class="hero-layer hero-night" aria-hidden="true">
-      <div class="hero-words">
-        <div><span class="hero-word w1">החצי</span><span class="hero-tag">חצי קפה</span></div>
-        <div><span class="hero-word w2">השני</span><span class="hero-tag">חצי בר</span></div>
-      </div>
-    </div>
-    <svg class="emblem" aria-hidden="true"><use href="#emblem"/></svg>
-    <div class="hero-foot">
-      <span class="addr">הלני המלכה 9 · ירושלים</span>
-      <span class="scroll-cue" aria-hidden="true"><i></i>גללו לחצי השני</span>
-    </div>
-  </section>
-
-  <!-- ============ INTRO ============ -->
-  <section class="intro wrap" id="about" aria-labelledby="introTitle">
-    <span class="eyebrow">חצי בר, חצי קפה</span>
-    <h2 class="sr-only" id="introTitle">על המקום</h2>
-    <p class="intro-text" data-words>מקום קטן במרכז העיר, עם מוזיקה טובה, בירות שלא רואים בכל מקום ותנור חם בחוץ לערבים הקרים של ירושלים.</p>
-    <div class="intro-meta">
-      <p><b>איפה:</b> הלני המלכה 9, ליד מגרש הרוסים</p>
-      <p><b>מה:</b> קפה ובירה, בפנים ובחוץ</p>
-      <p><b>האווירה:</b> וייב צעיר ומוזיקה טובה</p>
-    </div>
-  </section>
-
-  <!-- ============ REASONS ============ -->
-  <section class="reasons" aria-labelledby="reasonsTitle">
-    <div class="wrap reasons-head">
-      <div>
-        <span class="eyebrow">מה שחוזר בביקורות</span>
-        <h2 id="reasonsTitle">למה חוזרים</h2>
-      </div>
-      <p>מה שאורחים כותבים עלינו בגוגל, שוב ושוב.</p>
-    </div>
-    <div class="track" id="track">
-      <article class="panel">
-        <div class="art" aria-hidden="true">
-          <svg viewBox="0 0 200 140" class="eq"><g fill="#EBA43A">
-            <rect x="10" y="20" width="16" height="120" rx="3" style="animation-delay:-.2s"/><rect x="38" y="40" width="16" height="100" rx="3" style="animation-delay:-.7s"/>
-            <rect x="66" y="10" width="16" height="130" rx="3" style="animation-delay:-.4s"/><rect x="94" y="50" width="16" height="90" rx="3" style="animation-delay:-.9s"/>
-            <rect x="122" y="25" width="16" height="115" rx="3" style="animation-delay:-.1s"/><rect x="150" y="60" width="16" height="80" rx="3" style="animation-delay:-.6s"/>
-            <rect x="178" y="35" width="16" height="105" rx="3" style="animation-delay:-.3s"/></g></svg>
+    <div class="menu-half bar" id="half-bar" role="tabpanel" aria-labelledby="tab-bar">
+      <div class="wrap">
+        <div class="bar-top">
+          <div>
+            <h3 class="h-menu">אלכוהול</h3>
+            <p class="lede">המחירים בשקלים, לצ'ייסר או למנה. יין אפשר לקחת בכוס או בבקבוק.</p>
+          </div>
+          <button type="button" class="menu-orig" id="openMenuImg" aria-haspopup="dialog">
+            <img src="menu-alcohol.jpg" alt="" width="574" height="650" loading="lazy" decoding="async">
+            <span>התפריט המקורי</span>
+          </button>
         </div>
-        <div>
-          <h3>המוזיקה</h3>
-          <blockquote>מקום קטן וקסום, אווירה מעולה, מוזיקה טובה מאוד.</blockquote>
-          <span class="src">מתוך ביקורת בגוגל</span>
+        <div class="drinks">
+          <table class="drink"><caption>אניס</caption><thead><tr><th scope="col"><span class="sr-only">משקה</span></th><th scope="col">צ'ייסר</th><th scope="col">מנה</th></tr></thead><tbody><tr><th scope="row">ערק שליט</th><td>12</td><td>23</td></tr><tr><th scope="row">אוזו 12</th><td>15</td><td>28</td></tr></tbody></table>
+          <table class="drink"><caption>ג&#x27;ין</caption><thead><tr><th scope="col"><span class="sr-only">משקה</span></th><th scope="col">צ'ייסר</th><th scope="col">מנה</th></tr></thead><tbody><tr><th scope="row">ג&#x27;ין גורדונס</th><td>15</td><td>29</td></tr><tr><th scope="row">ג&#x27;ין טנקרי</th><td>18</td><td>36</td></tr><tr><th scope="row">ג&#x27;ין בולדוג</th><td>19</td><td>38</td></tr></tbody></table>
+          <table class="drink"><caption>וודקה</caption><thead><tr><th scope="col"><span class="sr-only">משקה</span></th><th scope="col">צ'ייסר</th><th scope="col">מנה</th></tr></thead><tbody><tr><th scope="row">סמירנוף</th><td>15</td><td>36</td></tr><tr><th scope="row">קטל וואן</th><td>19</td><td>40</td></tr><tr><th scope="row">קטל וואן ציטרון</th><td>19</td><td>40</td></tr></tbody></table>
+          <table class="drink"><caption>וויסקי סינגל מאלט</caption><thead><tr><th scope="col"><span class="sr-only">משקה</span></th><th scope="col">צ'ייסר</th><th scope="col">מנה</th></tr></thead><tbody><tr><th scope="row">גלן גרנט 10</th><td>18</td><td>36</td></tr><tr><th scope="row">גלן גרנט 12</th><td>20</td><td>40</td></tr><tr><th scope="row">גלן גרנט 15</th><td>22</td><td>48</td></tr><tr><th scope="row">גלן גרנט 18</th><td>24</td><td>58</td></tr></tbody></table>
+          <table class="drink"><caption>וויסקי בלנדד</caption><thead><tr><th scope="col"><span class="sr-only">משקה</span></th><th scope="col">צ'ייסר</th><th scope="col">מנה</th></tr></thead><tbody><tr><th scope="row">ג&#x27;וני ווקר רד</th><td>18</td><td>36</td></tr><tr><th scope="row">ג&#x27;וני ווקר בלונד</th><td>18</td><td>36</td></tr><tr><th scope="row">ג&#x27;וני ווקר בלאק</th><td>20</td><td>40</td></tr><tr><th scope="row">ג&#x27;וני ווקר גולד</th><td>21</td><td>42</td></tr><tr><th scope="row">ג&#x27;וני ווקר גרין</th><td>30</td><td>58</td></tr><tr><th scope="row">ג&#x27;וני ווקר בלו</th><td>58</td><td>101</td></tr></tbody></table>
+          <table class="drink"><caption>רום</caption><thead><tr><th scope="col"><span class="sr-only">משקה</span></th><th scope="col">צ'ייסר</th><th scope="col">מנה</th></tr></thead><tbody><tr><th scope="row">קפטן מורגן לבן</th><td>15</td><td>29</td></tr><tr><th scope="row">קפטן מורגן ספייסד</th><td>15</td><td>29</td></tr><tr><th scope="row">קפטן מורגן בלאק</th><td>18</td><td>36</td></tr></tbody></table>
+          <table class="drink"><caption>טקילה</caption><thead><tr><th scope="col"><span class="sr-only">משקה</span></th><th scope="col">צ'ייסר</th><th scope="col">מנה</th></tr></thead><tbody><tr><th scope="row">אספולון בלנקו</th><td>20</td><td>39</td></tr><tr><th scope="row">דון חוליו בלנקו</th><td>21</td><td>42</td></tr><tr><th scope="row">קאסמיגוס בלנקו</th><td>21</td><td>42</td></tr></tbody><tbody><tr><th scope="row">אספולון רפוסדו</th><td>21</td><td>41</td></tr><tr><th scope="row">דון חוליו רפוסדו</th><td>22</td><td>46</td></tr><tr><th scope="row">קאסמיגוס רפוסדו</th><td>22</td><td>46</td></tr></tbody><tbody><tr><th scope="row">דון חוליו אנייחו</th><td>24</td><td>50</td></tr><tr><th scope="row">קאסמיגוס אנייחו</th><td>24</td><td>50</td></tr></tbody></table>
+          <table class="drink"><caption>ליקר</caption><thead><tr><th scope="col"><span class="sr-only">משקה</span></th><th scope="col">צ'ייסר</th><th scope="col">מנה</th></tr></thead><tbody><tr><th scope="row">פידג&#x27;</th><td>15</td><td>29</td></tr><tr><th scope="row">טובי נייט</th><td>16</td><td>38</td></tr><tr><th scope="row">בכרובקה</th><td>18</td><td>37</td></tr><tr><th scope="row">יגרמייסטר</th><td>18</td><td>37</td></tr><tr><th scope="row">קמפרי</th><td>19</td><td>39</td></tr></tbody></table>
         </div>
-      </article>
-      <article class="panel">
-        <div class="art" aria-hidden="true">
-          <svg viewBox="0 0 120 170">
-            <path d="M18 8 H102 L94 162 H26 Z" fill="#EBA43A" opacity=".9"/>
-            <path d="M18 8 H102 L101 30 H19 Z" fill="#F3ECDF"/>
-            <path d="M18 8 H102 L94 162 H26 Z" fill="none" stroke="#F3ECDF" stroke-width="3" stroke-linejoin="round"/>
-            <g fill="#FFF3D6"><circle class="bub" cx="44" cy="150" r="3"/><circle class="bub" cx="60" cy="155" r="2.5" style="animation-delay:-.9s"/>
-            <circle class="bub" cx="76" cy="150" r="3.5" style="animation-delay:-1.7s"/><circle class="bub" cx="52" cy="152" r="2" style="animation-delay:-2.2s"/>
-            <circle class="bub" cx="84" cy="154" r="2" style="animation-delay:-.4s"/></g>
-          </svg>
-        </div>
-        <div>
-          <h3>הבירות</h3>
-          <blockquote>בירות ייחודיות ומעולות.</blockquote>
-          <span class="src">מתוך ביקורת בגוגל</span>
-        </div>
-      </article>
-      <article class="panel hot">
-        <div class="art" aria-hidden="true">
-          <svg viewBox="0 0 160 200">
-            <ellipse class="glow" cx="80" cy="40" rx="78" ry="70" fill="url(#heat)"/>
-            <defs><radialGradient id="heat"><stop offset="0" stop-color="#FF8A3D" stop-opacity=".9"/><stop offset="1" stop-color="#E35B2C" stop-opacity="0"/></radialGradient></defs>
-            <path d="M40 22 H120 L104 42 H56 Z" fill="#F3ECDF"/>
-            <rect x="60" y="42" width="40" height="30" rx="4" fill="#E35B2C"/>
-            <rect x="76" y="72" width="8" height="112" fill="#F3ECDF"/>
-            <path d="M52 196 H108 L100 182 H60 Z" fill="#F3ECDF"/>
-          </svg>
-        </div>
-        <div>
-          <h3>בחוץ, ליד התנור</h3>
-          <blockquote>ישבנו 4 חברים בחוץ עם תנור ממש חם ונעים.</blockquote>
-          <span class="src">מתוך ביקורת בגוגל</span>
-        </div>
-      </article>
-      <article class="panel">
-        <div class="art" aria-hidden="true">
-          <svg viewBox="0 0 180 150">
-            <g stroke="#EBA43A" stroke-width="4" stroke-linecap="round" fill="none" class="ding"><path d="M50 30 L38 14"/><path d="M90 20 V2"/><path d="M130 30 L142 14"/></g>
-            <path d="M34 120 A56 56 0 0 1 146 120 Z" fill="#F3ECDF"/>
-            <rect x="84" y="50" width="12" height="12" rx="3" fill="#F3ECDF"/>
-            <rect x="18" y="120" width="144" height="12" rx="4" fill="#EBA43A"/>
-          </svg>
-        </div>
-        <div>
-          <h3>שירות מהיר</h3>
-          <blockquote>שירות מהיר ומעולה.</blockquote>
-          <span class="src">מתוך ביקורת בגוגל</span>
-        </div>
-      </article>
-      <article class="panel stone stone-tex">
-        <div class="art" aria-hidden="true">
-          <svg viewBox="0 0 170 150">
-            <path d="M10 60 L60 10 H160 V110 H60 Z" fill="#2A1A11"/>
-            <circle cx="46" cy="60" r="9" fill="#D5C29E"/>
-            <text x="112" y="80" text-anchor="middle" font-family="Rubik, Arial, sans-serif" font-weight="700" font-size="58" fill="#EBA43A">₪</text>
-          </svg>
-        </div>
-        <div>
-          <h3>המחירים</h3>
-          <blockquote>מקום חמים ונעים, אווירה מצוינת… אחלה מחירים</blockquote>
-          <span class="src">מתוך ביקורת בגוגל</span>
-        </div>
-      </article>
-      <article class="panel">
-        <div class="art" aria-hidden="true">
-          <svg viewBox="0 0 220 150">
-            <g class="cheers l"><path d="M20 40 H60 L56 140 H24 Z" fill="#EBA43A"/><path d="M20 40 H60 L59.4 54 H20.6 Z" fill="#F3ECDF"/></g>
-            <g class="cheers l" style="animation-delay:-.1s"><path d="M66 30 H106 L102 140 H70 Z" fill="#F3ECDF"/></g>
-            <g class="cheers r" style="animation-delay:-.1s"><path d="M114 30 H154 L150 140 H118 Z" fill="#B8783F"/></g>
-            <g class="cheers r"><path d="M160 40 H200 L196 140 H164 Z" fill="#EBA43A"/><path d="M160 40 H200 L199.4 54 H160.6 Z" fill="#F3ECDF"/></g>
-          </svg>
-        </div>
-        <div>
-          <h3>הווייב</h3>
-          <blockquote>המקום הכי כיפי שהייתי בו. אווירה ברמה שאי אפשר לתאר</blockquote>
-          <span class="src">הלל שושן, בגוגל</span>
-        </div>
-      </article>
-    </div>
-  </section>
-
-  <!-- ============ WEEK ============ -->
-  <section class="week wrap" aria-labelledby="weekTitle">
-    <span class="eyebrow">טיפים מהאורחים</span>
-    <h2 id="weekTitle">מתי לבוא</h2>
-    <div class="week-grid">
-      <article class="day-card">
-        <span class="d" aria-hidden="true">ה׳</span>
-        <h3>חמישי בערב</h3>
-        <blockquote>מומלץ בחום בחמישי בערב: לקנות פיצה מהשכן ולשתות ולשתות עד דלא ידע.</blockquote>
-        <span class="src">Asaf Sherman, בגוגל</span>
-      </article>
-      <article class="day-card">
-        <span class="d" aria-hidden="true">א׳</span>
-        <h3>ימי ראשון</h3>
-        <blockquote>אווירה מצוינת, ג'אמים מגניבים בראשון</blockquote>
-        <span class="src">ביקורת בגוגל · פרטים על הערב באינסטגרם</span>
-      </article>
-    </div>
-  </section>
-
-  <!-- ============ MORE ============ -->
-  <section class="more wrap" aria-labelledby="moreTitle">
-    <span class="eyebrow">עוד בחצי השני</span>
-    <h2 id="moreTitle">לפני שבאים</h2>
-    <div class="more-list">
-      <a class="more-row" href="menu.html"><span class="t">תפריט</span><span class="d">אלכוהול ויין, מצ'ייסר ועד בקבוק</span><span class="arr" aria-hidden="true">←</span></a>
-      <a class="more-row" href="reviews.html"><span class="t">ביקורות</span><span class="d">מה אורחים כתבו עלינו בגוגל</span><span class="arr" aria-hidden="true">←</span></a>
-      <a class="more-row" href="visit.html"><span class="t">איך מגיעים</span><span class="d">הלני המלכה 9, מרכז העיר</span><span class="arr" aria-hidden="true">←</span></a>
-    </div>
-  </section>
-
-  <!-- ============ GALLERY: stays hidden until PHOTOS (in the script) has entries ============ -->
-  <section class="gallery wrap" id="gallery" aria-labelledby="galleryTitle" hidden>
-    <h2 id="galleryTitle">מבפנים ומבחוץ</h2>
-    <div class="g-grid" id="gGrid"></div>
-  </section>
-
-  <!-- ============ BOOK ============ -->
-  <section class="book wrap" id="book" aria-labelledby="bookTitle">
-    <div class="book-grid">
-      <div class="book-copy">
-        <span class="eyebrow">מגיעים בחבורה?</span>
-        <h2 id="bookTitle">שריון מקום</h2>
-        <p>המקום קטן, אז כדאי להודיע מראש. מלאו את הפרטים ונחזור אליכם לאישור.</p>
-      </div>
-      <form class="res" id="resForm" novalidate>
-        <div class="field">
-          <label for="r-date">תאריך</label>
-          <input id="r-date" name="date" type="date" required>
-        </div>
-        <div class="field">
-          <label for="r-time">שעה</label>
-          <input id="r-time" name="time" type="time" required step="900">
-        </div>
-        <div class="field full">
-          <label for="r-guests-out" id="r-guests-label">כמה אנשים</label>
-          <div class="guests" role="group" aria-labelledby="r-guests-label">
-            <button type="button" data-g="-1" aria-label="פחות אורחים">−</button>
-            <output id="r-guests-out" aria-live="polite">4</output>
-            <button type="button" data-g="1" aria-label="עוד אורח">+</button>
-            <input type="hidden" id="r-guests" name="guests" value="4">
+        <div class="wine-box">
+          <h3 class="h-sub">יין</h3>
+          <div class="drinks">
+            <table class="drink"><caption>יין אדום</caption><thead><tr><th scope="col"><span class="sr-only">משקה</span></th><th scope="col">כוס</th><th scope="col">בקבוק</th></tr></thead><tbody><tr><th scope="row">קברנה סוביניון אלמנוס</th><td>35</td><td>110</td></tr><tr><th scope="row">מרלו אלמנוס</th><td>35</td><td>110</td></tr><tr><th scope="row">פרימיטיבו פיקוריטו</th><td>35</td><td>110</td></tr></tbody></table>
+            <table class="drink"><caption>יין לבן</caption><thead><tr><th scope="col"><span class="sr-only">משקה</span></th><th scope="col">כוס</th><th scope="col">בקבוק</th></tr></thead><tbody><tr><th scope="row">גוורצטרמינר אלמנוס</th><td>35</td><td>110</td></tr><tr><th scope="row">שנן בלאן אלמנוס</th><td>35</td><td>110</td></tr><tr><th scope="row">שרדונה דאקור</th><td>35</td><td>110</td></tr></tbody></table>
+            <table class="drink"><caption>יין מבעבע</caption><thead><tr><th scope="col"><span class="sr-only">משקה</span></th><th scope="col">כוס</th><th scope="col">בקבוק</th></tr></thead><tbody><tr><th scope="row">פרוסקו צ&#x27;ינזנו</th><td>35</td><td>110</td></tr></tbody></table>
+            <table class="drink"><caption>רוזה</caption><thead><tr><th scope="col"><span class="sr-only">משקה</span></th><th scope="col">כוס</th><th scope="col">בקבוק</th></tr></thead><tbody><tr><th scope="row">רוזה אלמנוס</th><td>37</td><td>115</td></tr></tbody></table>
           </div>
         </div>
-        <div class="field">
-          <label for="r-name">שם</label>
-          <input id="r-name" name="name" type="text" autocomplete="name" required>
-        </div>
-        <div class="field">
-          <label for="r-phone">טלפון</label>
-          <input id="r-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" required pattern="[0-9+\-\s]{9,15}" dir="ltr">
-        </div>
-        <div class="field full">
-          <label for="r-email">אימייל (לא חובה)</label>
-          <input id="r-email" name="email" type="email" autocomplete="email" dir="ltr">
-        </div>
-        <div class="field full">
-          <label for="r-notes">בקשות מיוחדות</label>
-          <textarea id="r-notes" name="notes" placeholder="למשל: ישיבה בחוץ ליד התנור, יום הולדת"></textarea>
-        </div>
-        <div class="form-foot">
-          <button class="btn magnetic" type="submit"><span class="half" aria-hidden="true"></span>המשך</button>
-          <small id="resHint">את הבקשה שולחים לנו בהודעה באינסטגרם. המקום שמור רק אחרי שנאשר.</small>
-        </div>
-        <div class="res-result" id="resResult" hidden aria-live="polite"></div>
-      </form>
+      </div>
     </div>
+    <div class="menu-half cafe stone-tex" id="half-cafe" role="tabpanel" aria-labelledby="tab-cafe">
+      <div class="wrap">
+        <h3 class="h-menu">קפה</h3>
+        <p class="lede">קפה טוב ושולחן קטן, בפנים או בחוץ.</p>
+        <ul class="menu-list" data-menu="cafe"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA ============ -->
+  <section class="cta-band wrap" aria-labelledby="ctaTitle">
+    <span class="eyebrow">המקום קטן</span>
+    <h2 id="ctaTitle">מגיעים הערב?</h2>
+    <p>המקום קטן, אז כדאי להודיע מראש.</p>
+    <a class="btn magnetic" href="index.html#book"><span class="half" aria-hidden="true"></span>לשריון מקום</a>
   </section>
 </main>
 
@@ -332,8 +177,12 @@
     </nav>
   </div>
 </footer>
+<dialog class="lightbox" id="menuDialog" aria-label="התפריט המקורי">
+  <img src="menu-alcohol.jpg" alt="התפריט המקורי של החצי השני: אלכוהול ויין, עם מחירים לצ'ייסר, למנה, לכוס ולבקבוק" width="574" height="650" loading="lazy" decoding="async">
+  <form method="dialog"><button class="btn" type="submit">סגירה</button></form>
+</dialog>
 
-<a class="btn float-cta magnetic" href="#book" id="floatCta"><span class="half" aria-hidden="true"></span>שריון מקום</a>
+<a class="btn float-cta magnetic" href="index.html#book" id="floatCta"><span class="half" aria-hidden="true"></span>שריון מקום</a>
 <div class="cursor" aria-hidden="true"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>

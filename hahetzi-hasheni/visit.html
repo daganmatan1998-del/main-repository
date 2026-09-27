@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>איך מגיעים · החצי השני</title>
+<meta name="description" content="החצי השני נמצא בהלני המלכה 9, במרכז ירושלים. ניווט עם Waze או גוגל מפות, ברכב, בתחבורה ציבורית או ברגל.">
+<meta name="theme-color" content="#0F1420">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="he_IL">
+<meta property="og:site_name" content="החצי השני">
+<meta property="og:title" content="איך מגיעים · החצי השני">
+<meta property="og:description" content="החצי השני נמצא בהלני המלכה 9, במרכז ירושלים. ניווט עם Waze או גוגל מפות, ברכב, בתחבורה ציבורית או ברגל.">
+<meta property="og:image" content="og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Karantina:wght@400;700&family=Rubik:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#main">דלגו לתוכן</a>
+<div class="grain" aria-hidden="true"></div>
+<div class="progress" aria-hidden="true"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- The emblem: a cup of coffee seen from above, and a glass of beer seen from above, one circle split down the middle. -->
+    <symbol id="emblem" viewBox="0 0 200 200">
+      <defs>
+        <clipPath id="cR"><rect x="100" y="0" width="100" height="200"/></clipPath>
+        <clipPath id="cL"><rect x="0" y="0" width="100" height="200"/></clipPath>
+        <radialGradient id="beer" cx="35%" cy="35%" r="75%"><stop offset="0" stop-color="#F7C66A"/><stop offset=".7" stop-color="#E39A2E"/><stop offset="1" stop-color="#B86E17"/></radialGradient>
+        <radialGradient id="crema" cx="60%" cy="40%" r="70%"><stop offset="0" stop-color="#D2965A"/><stop offset="1" stop-color="#8E5427"/></radialGradient>
+      </defs>
+      <g clip-path="url(#cR)">
+        <circle cx="100" cy="100" r="96" fill="#3A2416"/>
+        <circle cx="100" cy="100" r="80" fill="url(#crema)"/>
+        <path d="M100 138 C70 118 58 100 64 84 C70 68 90 66 100 82 C110 66 130 68 136 84 C142 100 130 118 100 138Z" fill="#F3E6CF"/>
+      </g>
+      <g clip-path="url(#cL)">
+        <circle cx="100" cy="100" r="96" fill="#F3ECDF"/>
+        <circle cx="100" cy="100" r="84" fill="url(#beer)"/>
+        <g fill="#FFF3D6" opacity=".85">
+          <circle cx="46" cy="70" r="4"/><circle cx="62" cy="52" r="2.5"/><circle cx="36" cy="104" r="3"/><circle cx="58" cy="128" r="5"/>
+          <circle cx="78" cy="94" r="2.5"/><circle cx="72" cy="150" r="3"/><circle cx="84" cy="36" r="3.5"/><circle cx="44" cy="146" r="2"/>
+        </g>
+      </g>
+      <line x1="100" y1="2" x2="100" y2="198" stroke="#0F1420" stroke-width="3"/>
+      <circle cx="100" cy="100" r="96" fill="none" stroke="#0F1420" stroke-width="3"/>
+    </symbol>
+  </defs>
+</svg>
+<header class="nav" id="nav">
+  <a class="brand magnetic" href="index.html" aria-label="החצי השני – לדף הבית"><svg aria-hidden="true"><use href="#emblem"/></svg><span>החצי השני</span></a>
+  <nav class="nav-links" aria-label="ניווט ראשי">
+    <a href="index.html#about">המקום</a>
+    <a href="menu.html">תפריט</a>
+    <a href="reviews.html">ביקורות</a>
+    <a href="visit.html" aria-current="page">איך מגיעים</a>
+    <a class="btn magnetic" href="index.html#book"><span class="half" aria-hidden="true"></span>שריון מקום</a>
+  </nav>
+  <button class="burger" type="button" aria-expanded="false" aria-controls="mobileMenu" aria-label="פתיחת תפריט"><span></span><span></span></button>
+</header>
+<nav class="mobile-menu" id="mobileMenu" aria-label="ניווט במובייל">
+  <a href="index.html#about">המקום</a>
+  <a href="menu.html">תפריט</a>
+  <a href="reviews.html">ביקורות</a>
+  <a href="visit.html" aria-current="page">איך מגיעים</a>
+  <a class="btn" href="index.html#book"><span class="half" aria-hidden="true"></span>שריון מקום</a>
+</nav>
+
+<main id="main">
+  <!-- ============ PAGE HERO ============ -->
+  <section class="page-hero" aria-labelledby="pageTitle">
+    <div class="ph-layer ph-day stone-tex">
+      <span class="ph-eyebrow">הלני המלכה 9</span>
+      <h1 class="ph-title" id="pageTitle">איך מגיעים</h1>
+      <p class="ph-sub">במרכז העיר. בחרו איך אתם מגיעים, והמפה תיפתח עם המסלול.</p>
+    </div>
+    <div class="ph-layer ph-night" aria-hidden="true">
+      <span class="ph-eyebrow">הלני המלכה 9</span>
+      <div class="ph-title">איך מגיעים</div>
+      <p class="ph-sub">במרכז העיר. בחרו איך אתם מגיעים, והמפה תיפתח עם המסלול.</p>
+    </div>
+  </section>
+  <!-- ============ VISIT ============ -->
+  <section class="visit wrap" id="visit" aria-labelledby="visitTitle">
+    <div class="visit-grid">
+      <div class="sign stone-tex" aria-hidden="true">
+        <div class="sign-inner">
+          <span class="num">9</span>
+          <span class="street">הלני המלכה</span>
+          <span class="latin">HELENI HAMALKA</span>
+        </div>
+      </div>
+      <div>
+        <span class="eyebrow">מרכז העיר, ליד מגרש הרוסים</span>
+        <h2 id="visitTitle">הכתובת</h2>
+        <dl>
+          <div><dt>כתובת</dt><dd>הלני המלכה 9, ירושלים</dd></div>
+          <div><dt>שעות פתיחה</dt><dd id="hoursBox">השעות מתעדכנות באינסטגרם שלנו.</dd></div>
+          <div><dt>אינסטגרם</dt><dd><a class="link-u" href="https://www.instagram.com/ha.hetzi.ha.sheni/" target="_blank" rel="noopener" dir="ltr">@ha.hetzi.ha.sheni</a></dd></div>
+        </dl>
+        <div class="actions">
+          <a class="btn magnetic" href="https://waze.com/ul?q=%D7%94%D7%9C%D7%A0%D7%99%20%D7%94%D7%9E%D7%9C%D7%9B%D7%94%209%2C%20%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D&amp;navigate=yes" target="_blank" rel="noopener">ניווט עם Waze</a>
+          <a class="btn ghost magnetic" href="https://www.google.com/maps/dir/?api=1&amp;destination=%D7%94%D7%9C%D7%A0%D7%99%20%D7%94%D7%9E%D7%9C%D7%9B%D7%94%209%2C%20%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D&amp;travelmode=driving" target="_blank" rel="noopener">ברכב</a>
+          <a class="btn ghost magnetic" href="https://www.google.com/maps/dir/?api=1&amp;destination=%D7%94%D7%9C%D7%A0%D7%99%20%D7%94%D7%9E%D7%9C%D7%9B%D7%94%209%2C%20%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D&amp;travelmode=transit" target="_blank" rel="noopener">בתחבורה ציבורית</a>
+          <a class="btn ghost magnetic" href="https://www.google.com/maps/dir/?api=1&amp;destination=%D7%94%D7%9C%D7%A0%D7%99%20%D7%94%D7%9E%D7%9C%D7%9B%D7%94%209%2C%20%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D&amp;travelmode=walking" target="_blank" rel="noopener">ברגל</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA ============ -->
+  <section class="cta-band wrap" aria-labelledby="ctaTitle">
+    <span class="eyebrow">המקום קטן</span>
+    <h2 id="ctaTitle">נתראה שם?</h2>
+    <p>המקום קטן, אז כדאי להודיע מראש.</p>
+    <a class="btn magnetic" href="index.html#book"><span class="half" aria-hidden="true"></span>לשריון מקום</a>
+  </section>
+</main>
+
+<footer class="site wrap">
+  <div class="foot-big" aria-hidden="true"><span>החצי</span><span>השני</span></div>
+  <div class="foot-row">
+    <span>החצי השני · חצי בר חצי קפה · הלני המלכה 9, ירושלים</span>
+    <nav class="foot-links" aria-label="קישורים בתחתית">
+      <a class="link-u" href="menu.html">תפריט</a>
+      <a class="link-u" href="reviews.html">ביקורות</a>
+      <a class="link-u" href="visit.html">איך מגיעים</a>
+      <a class="link-u" href="https://www.instagram.com/ha.hetzi.ha.sheni/" target="_blank" rel="noopener">אינסטגרם</a>
+    </nav>
+  </div>
+</footer>
+
+<a class="btn float-cta magnetic" href="index.html#book" id="floatCta"><span class="half" aria-hidden="true"></span>שריון מקום</a>
+<div class="cursor" aria-hidden="true"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="site.js"></script>
+</body>
+</html>
