@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'self'; object-src 'none'; upgrade-insecure-requests">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<title>איך מגיעים · החצי השני</title>
-<meta name="description" content="החצי השני נמצא בהלני המלכה 9, במרכז ירושלים. ניווט עם Waze או גוגל מפות, ברכב, בתחבורה ציבורית או ברגל.">
+<title>הצהרת נגישות · החצי השני</title>
+<meta name="description" content="הצהרת הנגישות של האתר של החצי השני: רמת הנגישות, ההתאמות שבוצעו, מגבלות ידועות ופרטי רכז הנגישות.">
 <meta name="theme-color" content="#0F1420">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="he_IL">
 <meta property="og:site_name" content="החצי השני">
-<meta property="og:title" content="איך מגיעים · החצי השני">
-<meta property="og:description" content="החצי השני נמצא בהלני המלכה 9, במרכז ירושלים. ניווט עם Waze או גוגל מפות, ברכב, בתחבורה ציבורית או ברגל.">
+<meta property="og:title" content="הצהרת נגישות · החצי השני">
+<meta property="og:description" content="הצהרת הנגישות של האתר של החצי השני: רמת הנגישות, ההתאמות שבוצעו, מגבלות ידועות ופרטי רכז הנגישות.">
 <meta property="og:image" content="og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -59,7 +59,7 @@
     <a href="index.html#about">המקום</a>
     <a href="menu.html">תפריט</a>
     <a href="reviews.html">ביקורות</a>
-    <a href="visit.html" aria-current="page">איך מגיעים</a>
+    <a href="visit.html">איך מגיעים</a>
     <a class="btn magnetic" href="index.html#book"><span class="half" aria-hidden="true"></span>שריון מקום</a>
   </nav>
   <button class="burger" type="button" aria-expanded="false" aria-controls="mobileMenu" aria-label="פתיחת תפריט"><span></span><span></span></button>
@@ -68,59 +68,65 @@
   <a href="index.html#about">המקום</a>
   <a href="menu.html">תפריט</a>
   <a href="reviews.html">ביקורות</a>
-  <a href="visit.html" aria-current="page">איך מגיעים</a>
+  <a href="visit.html">איך מגיעים</a>
   <a class="btn" href="index.html#book"><span class="half" aria-hidden="true"></span>שריון מקום</a>
 </nav>
 
 <main id="main">
-  <!-- ============ PAGE HERO ============ -->
-  <section class="page-hero" aria-labelledby="pageTitle">
-    <div class="ph-layer ph-day stone-tex">
-      <span class="ph-eyebrow">הלני המלכה 9</span>
-      <h1 class="ph-title" id="pageTitle">איך מגיעים</h1>
-      <p class="ph-sub">במרכז העיר. בחרו איך אתם מגיעים, והמפה תיפתח עם המסלול.</p>
-    </div>
-    <div class="ph-layer ph-night" aria-hidden="true">
-      <span class="ph-eyebrow">הלני המלכה 9</span>
-      <div class="ph-title">איך מגיעים</div>
-      <p class="ph-sub">במרכז העיר. בחרו איך אתם מגיעים, והמפה תיפתח עם המסלול.</p>
-    </div>
-  </section>
-  <!-- ============ VISIT ============ -->
-  <section class="visit wrap" id="visit" aria-labelledby="visitTitle">
-    <div class="visit-grid">
-      <div class="sign stone-tex" aria-hidden="true">
-        <div class="sign-inner">
-          <span class="num">9</span>
-          <span class="street">הלני המלכה</span>
-          <span class="latin">HELENI HAMALKA</span>
-        </div>
+  <article class="legal wrap" aria-labelledby="pageTitle">
+    <header class="legal-head">
+      <span class="eyebrow">נגישות</span>
+      <h1 id="pageTitle">הצהרת נגישות</h1>
+      <p class="legal-meta">עודכן לאחרונה: <span class="fill empty" data-legal="updated" data-label="תאריך עדכון">[להשלמה: תאריך עדכון]</span></p>
+    </header>
+    <div class="legal-grid">
+      <nav class="legal-toc" aria-label="בדף הזה">
+        <p>בדף הזה</p>
+        <ol>
+        <li><a class="link-u" href="#level">רמת הנגישות</a></li>
+        <li><a class="link-u" href="#done">מה עשינו באתר</a></li>
+        <li><a class="link-u" href="#limits">מגבלות ידועות</a></li>
+        <li><a class="link-u" href="#place">נגישות המקום</a></li>
+        <li><a class="link-u" href="#contact">פנייה לרכז הנגישות</a></li>
+        </ol>
+      </nav>
+      <div class="legal-body">
+        <section id="level">
+          <h2>רמת הנגישות</h2>
+          <p>אנחנו רוצים שכל אחד יוכל להשתמש באתר. האתר נבנה לפי תקנות שוויון זכויות לאנשים עם מוגבלות (התאמות נגישות לשירות), התשע"ג–2013, ולפי התקן הישראלי 5568, שמבוסס על הנחיות WCAG 2.0 ברמה AA.</p>
+        </section>
+        <section id="done">
+          <h2>מה עשינו באתר</h2>
+          <ul>
+            <li>אפשר לעבור על כל האתר עם המקלדת בלבד. הרכיב שנמצא בפוקוס מסומן במסגרת בולטת.</li>
+            <li>קישור "דלגו לתוכן" בתחילת כל דף.</li>
+            <li>מבנה כותרות תקין, אזורי ניווט מסומנים, ושפת הדף מוגדרת כעברית מימין לשמאל.</li>
+            <li>לכל שדה בטופס יש תווית, והודעות הטופס מוקראות לקוראי מסך.</li>
+            <li>התפריט כתוב כטקסט בטבלאות עם כותרות, ולא רק כתמונה.</li>
+            <li>ניגודיות צבעים מספקת בין טקסט לרקע.</li>
+            <li>האנימציות נעצרות אוטומטית אם הגדרתם במכשיר "הפחתת תנועה". אפשר גם לעצור אותן בכל דף, בכפתור "עצירת אנימציות" שבתחתית.</li>
+            <li>האתר מתאים את עצמו לטלפון, ואפשר להגדיל את הטקסט עד 200% בלי לאבד תוכן.</li>
+          </ul>
+        </section>
+        <section id="limits">
+          <h2>מגבלות ידועות</h2>
+          <ul>
+            <li>התמונה של התפריט המקורי היא תמונה של טקסט. כל מה שכתוב בה מופיע גם כטקסט רגיל בדף התפריט.</li>
+            <li>כתובת לשליחת טופס שריון מקום ישירות אלינו עוד לא הוגדרה. בינתיים שולחים את הבקשה בהודעה באינסטגרם, שהנגישות שלה באחריות Meta.</li>
+          </ul>
+          <p>אם נתקלתם בבעיה שלא מופיעה כאן, נשמח לדעת ולתקן.</p>
+        </section>
+        <section id="place">
+          <h2>נגישות המקום</h2>
+          <p><span class="fill empty" data-legal="physicalAccess" data-label="נגישות פיזית של המקום: כניסה, שירותים, ישיבה">[להשלמה: נגישות פיזית של המקום: כניסה, שירותים, ישיבה]</span></p>
+        </section>
+        <section id="contact">
+          <h2>פנייה לרכז הנגישות</h2>
+          <p>רכז הנגישות: <span class="fill empty" data-legal="accessCoordinator" data-label="שם או תפקיד">[להשלמה: שם או תפקיד]</span> · <span class="fill empty" data-legal="accessContact" data-label="טלפון או אימייל">[להשלמה: טלפון או אימייל]</span>. נענה תוך 14 יום.</p>
+        </section>
       </div>
-      <div>
-        <span class="eyebrow">מרכז העיר, ליד מגרש הרוסים</span>
-        <h2 id="visitTitle">הכתובת</h2>
-        <dl>
-          <div><dt>כתובת</dt><dd>הלני המלכה 9, ירושלים</dd></div>
-          <div><dt>שעות פתיחה</dt><dd id="hoursBox">השעות מתעדכנות באינסטגרם שלנו.</dd></div>
-          <div><dt>אינסטגרם</dt><dd><a class="link-u" href="https://www.instagram.com/ha.hetzi.ha.sheni/" target="_blank" rel="noopener noreferrer" dir="ltr">@ha.hetzi.ha.sheni</a></dd></div>
-        </dl>
-        <div class="actions">
-          <a class="btn magnetic" href="https://waze.com/ul?q=%D7%94%D7%9C%D7%A0%D7%99%20%D7%94%D7%9E%D7%9C%D7%9B%D7%94%209%2C%20%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D&amp;navigate=yes" target="_blank" rel="noopener noreferrer">ניווט עם Waze</a>
-          <a class="btn ghost magnetic" href="https://www.google.com/maps/dir/?api=1&amp;destination=%D7%94%D7%9C%D7%A0%D7%99%20%D7%94%D7%9E%D7%9C%D7%9B%D7%94%209%2C%20%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D&amp;travelmode=driving" target="_blank" rel="noopener noreferrer">ברכב</a>
-          <a class="btn ghost magnetic" href="https://www.google.com/maps/dir/?api=1&amp;destination=%D7%94%D7%9C%D7%A0%D7%99%20%D7%94%D7%9E%D7%9C%D7%9B%D7%94%209%2C%20%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D&amp;travelmode=transit" target="_blank" rel="noopener noreferrer">בתחבורה ציבורית</a>
-          <a class="btn ghost magnetic" href="https://www.google.com/maps/dir/?api=1&amp;destination=%D7%94%D7%9C%D7%A0%D7%99%20%D7%94%D7%9E%D7%9C%D7%9B%D7%94%209%2C%20%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D&amp;travelmode=walking" target="_blank" rel="noopener noreferrer">ברגל</a>
-        </div>
-      </div>
     </div>
-  </section>
-
-  <!-- ============ CTA ============ -->
-  <section class="cta-band wrap" aria-labelledby="ctaTitle">
-    <span class="eyebrow">המקום קטן</span>
-    <h2 id="ctaTitle">נתראה שם?</h2>
-    <p>המקום קטן, אז כדאי להודיע מראש.</p>
-    <a class="btn magnetic" href="index.html#book"><span class="half" aria-hidden="true"></span>לשריון מקום</a>
-  </section>
+  </article>
 </main>
 
 <footer class="site wrap">

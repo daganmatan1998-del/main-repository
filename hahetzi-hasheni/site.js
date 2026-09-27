@@ -8,7 +8,22 @@ var CONFIG = {
   instagram: "ha.hetzi.ha.sheni",
   // A URL that accepts a JSON POST of the reservation (Formspree, a Worker, a booking system).
   // While empty, the form prepares the request for sending as an Instagram message.
+  // Must be https://. Its origin also has to be added to connect-src in every page's
+  // Content-Security-Policy and in _headers, or the browser will refuse to send.
   reservationEndpoint: ""
+};
+// Business details shown on the legal pages. Anything left empty shows as "[להשלמה]" there.
+// Use business contact details (a business email, the business line), not personal ones.
+var LEGAL = {
+  businessName: "",          // the legal entity, e.g. "החצי השני בע\"מ" or the owner's registered business name
+  businessId: "",            // ח.פ. / ע.מ.
+  email: "",                 // for privacy requests and general contact
+  phone: "",
+  accessCoordinator: "",     // name or role of the accessibility coordinator
+  accessContact: "",         // their phone or email
+  physicalAccess: "",        // the venue itself: step at the entrance, accessible toilet, outdoor seating…
+  retentionDays: "30",       // how long booking details are kept after the booking date
+  updated: "27 בספטמבר 2026"
 };
 // Opening hours, Sunday first. Example: ["18:00–01:00", "סגור", ...]. Empty = "updates on Instagram".
 var HOURS = [];
@@ -18,12 +33,33 @@ var MENU = { cafe: [] };
 // Photos: { src, srcMobile, alt }. The gallery on the home page appears once this has entries.
 var PHOTOS = [];
 
-var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// "Stop animations" in the footer (WCAG 2.2.2): remembered on this device only.
+var still = false; try { still = localStorage.getItem("hh-still") === "1"; } catch (err) {}
+if (still) document.documentElement.classList.add("still");
+var reduce = still || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 var fine = window.matchMedia("(hover:hover) and (pointer:fine)").matches;
 var hasGsap = typeof window.gsap !== "undefined" && typeof window.ScrollTrigger !== "undefined";
 var $ = function(s, r){ return (r || document).querySelector(s); };
 var $$ = function(s, r){ return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+/* ---------- motion toggle ---------- */
+var mt = $("#motionToggle");
+if (mt){
+  mt.setAttribute("aria-pressed", still ? "true" : "false");
+  mt.textContent = still ? "הפעלת אנימציות" : "עצירת אנימציות";
+  mt.addEventListener("click", function(){
+    try { if (still) localStorage.removeItem("hh-still"); else localStorage.setItem("hh-still", "1"); } catch (err) {}
+    location.reload();
+  });
+}
+
+/* ---------- business details on the legal pages ---------- */
+$$("[data-legal]").forEach(function(el){
+  var v = LEGAL[el.getAttribute("data-legal")];
+  if (v){ el.textContent = v; el.classList.remove("empty"); }
+  else { el.textContent = "[להשלמה: " + el.getAttribute("data-label") + "]"; el.classList.add("empty"); }
+});
 
 /* ---------- café menu ---------- */
 $$("[data-menu]").forEach(function(ul){
@@ -186,12 +222,20 @@ if (form){
       gIn.value = n; gOut.textContent = n;
     });
   });
+  var openedAt = Date.now();
+  var forget = function(){
+    form.reset(); gIn.value = 4; gOut.textContent = 4;
+    result.hidden = true; result.innerHTML = "";
+  };
   var fmtDate = function(v){ if (!v) return ""; var p = v.split("-"); return p[2] + "." + p[1] + "." + p[0]; };
   var showManual = function(msg, title){
     result.hidden = false;
     result.innerHTML = "<h3>" + esc(title) + "</h3><pre id=\"resText\">" + esc(msg) + "</pre>" +
       '<div class="row"><button class="btn" type="button" id="copyRes">העתקת ההודעה</button>' +
-      '<a class="btn ghost" href="https://ig.me/m/' + CONFIG.instagram + '" target="_blank" rel="noopener">פתיחת הודעה באינסטגרם</a></div>';
+      '<a class="btn ghost" href="https://ig.me/m/' + CONFIG.instagram + '" target="_blank" rel="noopener noreferrer">פתיחת הודעה באינסטגרם</a>' +
+      '<button class="btn ghost" type="button" id="forgetRes">מחיקת הפרטים</button></div>' +
+      '<p class="res-privacy">הפרטים לא נשמרים באתר ולא נשלחים לשום מקום עד שתשלחו את ההודעה בעצמכם.</p>';
+    $("#forgetRes").addEventListener("click", forget);
     $("#copyRes").addEventListener("click", function(){
       var btn = this;
       function done(){ btn.textContent = "הועתק"; }
@@ -209,14 +253,18 @@ if (form){
       return;
     }
     var d = Object.fromEntries(new FormData(form).entries());
+    // Bots fill the hidden field or submit instantly; people do neither. Drop those quietly.
+    if (d.website || Date.now() - openedAt < 2500) return;
+    delete d.website;
     var msg = "היי! אשמח לשריין מקום בחצי השני.\n" +
       "תאריך: " + fmtDate(d.date) + "\nשעה: " + d.time + "\nכמה אנשים: " + d.guests + "\nשם: " + d.name + "\nטלפון: " + d.phone +
       (d.email ? "\nאימייל: " + d.email : "") + (d.notes ? "\nבקשות: " + d.notes : "");
-    if (CONFIG.reservationEndpoint){
+    if (CONFIG.reservationEndpoint && /^https:\/\//.test(CONFIG.reservationEndpoint)){
       result.hidden = false;
       result.innerHTML = "<h3>שולחים…</h3>";
-      fetch(CONFIG.reservationEndpoint, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(d)})
-        .then(function(r){ if (!r.ok) throw new Error(r.status); result.innerHTML = "<h3>הבקשה אצלנו. נחזור אליכם לאישור בטלפון.</h3>"; })
+      fetch(CONFIG.reservationEndpoint, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(d),
+                                         credentials: "omit", referrerPolicy: "no-referrer", cache: "no-store"})
+        .then(function(r){ if (!r.ok) throw new Error(r.status); form.reset(); result.innerHTML = "<h3>הבקשה אצלנו. נחזור אליכם לאישור בטלפון.</h3>"; })
         .catch(function(){ showManual(msg, "משהו השתבש בשליחה. אפשר לשלוח לנו את אותה הודעה באינסטגרם:"); });
       return;
     }
