@@ -1,0 +1,1023 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>החצי השני</title>
+<meta name="description" content="החצי השני – חצי בר, חצי קפה. מקום קטן בהלני המלכה 9, מרכז ירושלים: מוזיקה טובה, בירות ייחודיות, ישיבה בחוץ ליד התנור ומחירים טובים.">
+<meta name="theme-color" content="#0F1420">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="he_IL">
+<meta property="og:site_name" content="החצי השני">
+<meta property="og:title" content="החצי השני | חצי בר חצי קפה · ירושלים">
+<meta property="og:description" content="מקום קטן בהלני המלכה 9: מוזיקה טובה, בירות ייחודיות ותנור חם בחוץ.">
+<meta property="og:image" content="og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@700&family=Karantina:wght@400;700&family=Rubik:wght@400;500;700&display=swap">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": ["BarOrPub", "CafeOrCoffeeShop"],
+  "name": "החצי השני",
+  "alternateName": ["HaHetzi HaSheni", "החצי השני | חצי בר חצי קפה"],
+  "description": "חצי בר, חצי קפה במרכז ירושלים. מוזיקה טובה, בירות ייחודיות וישיבה בחוץ ליד התנור.",
+  "servesCuisine": ["קפה", "בירה"],
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "הלני המלכה 9",
+    "addressLocality": "ירושלים",
+    "postalCode": "9422105",
+    "addressCountry": "IL"
+  },
+  "sameAs": ["https://www.instagram.com/ha.hetzi.ha.sheni/"]
+}
+</script>
+<style>
+/* ============ TOKENS ============
+   Two halves: Jerusalem stone (the café half) and the city's night (the bar half).
+   The page commits to this one look, so no light/dark theme switch. */
+:root{
+  color-scheme: dark;
+  --stone:#D5C29E;      /* meleke limestone */
+  --stone-deep:#B99F74;
+  --espresso:#2A1A11;
+  --crema:#B8783F;
+  --night:#0F1420;
+  --night-2:#161D2D;
+  --night-3:#222B40;
+  --amber:#EBA43A;      /* the beer */
+  --ember:#E35B2C;      /* the heater */
+  --foam:#F3ECDF;
+  --foam-dim:#B9B4AA;
+  --line:rgba(243,236,223,.14);
+
+  --f-display:"Karantina","Rubik","Arial Hebrew",system-ui,sans-serif;
+  --f-body:"Rubik","Arial Hebrew","Segoe UI",system-ui,sans-serif;
+  --f-hand:"Amatic SC","Rubik",cursive;
+
+  --gutter:clamp(16px,4vw,56px);
+  --radius:6px;
+  --ease:cubic-bezier(.2,.7,.1,1);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--night);color:var(--foam);
+  font-family:var(--f-body);font-size:clamp(16px,1.05vw,18px);line-height:1.65;
+  overflow-x:hidden;
+}
+img{max-width:100%;display:block}
+a{color:inherit}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;line-height:.9;margin:0;text-wrap:balance;letter-spacing:.01em}
+p{margin:0}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+:focus-visible{outline:3px solid var(--amber);outline-offset:3px;border-radius:2px}
+.skip{position:fixed;top:-100px;right:16px;z-index:200;background:var(--amber);color:var(--night);padding:10px 16px;font-weight:700;text-decoration:none}
+.skip:focus{top:16px}
+.wrap{padding-inline:var(--gutter);max-width:1440px;margin-inline:auto}
+.eyebrow{font-family:var(--f-hand);font-weight:700;font-size:clamp(1.6rem,2.1vw,2.1rem);color:var(--amber);line-height:1.2;display:block}
+[hidden]{display:none!important}
+
+/* grain over everything, static */
+.grain{position:fixed;inset:0;z-index:90;pointer-events:none;opacity:.07;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.stone-tex{background-color:var(--stone);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='s'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.018 .045' numOctaves='4' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 .55  0 0 0 0 .45  0 0 0 0 .3  0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23s)'/%3E%3C/svg%3E")}
+
+/* ============ BUTTONS ============ */
+.btn{--bg:var(--amber);--fg:var(--night);
+  display:inline-flex;align-items:center;justify-content:center;gap:.6em;min-height:52px;padding:0 1.6em;
+  background:var(--bg);color:var(--fg);border:0;border-radius:999px;cursor:pointer;
+  font:700 1.05rem/1 var(--f-body);text-decoration:none;white-space:nowrap;
+  transition:background .3s,color .3s,box-shadow .3s;will-change:transform}
+.btn:hover{box-shadow:0 0 0 6px rgba(235,164,58,.22)}
+.btn.ghost{--bg:transparent;--fg:var(--foam);box-shadow:inset 0 0 0 1.5px var(--line)}
+.btn.ghost:hover{box-shadow:inset 0 0 0 1.5px var(--amber)}
+.btn .half{width:14px;height:14px;border-radius:50%;background:linear-gradient(90deg,currentColor 50%,transparent 50%);box-shadow:inset 0 0 0 1.5px currentColor}
+.link-u{text-decoration:none;background:linear-gradient(currentColor,currentColor) no-repeat 100% 100%/0 1.5px;transition:background-size .4s var(--ease)}
+.link-u:hover,.link-u:focus-visible{background-size:100% 1.5px}
+
+/* ============ NAV ============ */
+.nav{position:fixed;inset-inline:0;top:0;z-index:60;padding:calc(env(safe-area-inset-top,0px) + 14px) var(--gutter) 14px;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;pointer-events:none}
+.nav>*{pointer-events:auto}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:var(--f-display);font-size:1.9rem;line-height:1;
+  background:rgba(15,20,32,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding:6px 16px 6px 8px;border-radius:999px}
+.brand svg{width:34px;height:34px}
+.nav-links{display:flex;gap:4px;align-items:center;background:rgba(15,20,32,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding:6px;border-radius:999px}
+.nav-links a:not(.btn){padding:10px 14px;text-decoration:none;font-size:.95rem;border-radius:999px;transition:background .25s}
+.nav-links a:not(.btn):hover{background:var(--night-3)}
+.nav-links .btn{min-height:42px;padding:0 1.2em;font-size:.95rem}
+.burger{display:none;width:52px;height:52px;border-radius:50%;border:0;background:rgba(15,20,32,.8);color:var(--foam);cursor:pointer;backdrop-filter:blur(10px)}
+.burger span{display:block;width:20px;height:2px;background:currentColor;margin:5px auto;transition:transform .3s}
+.nav-open .burger span:first-child{transform:translateY(3.5px) rotate(45deg)}
+.nav-open .burger span:last-child{transform:translateY(-3.5px) rotate(-45deg)}
+.mobile-menu{position:fixed;inset:0;z-index:55;background:var(--night);display:flex;flex-direction:column;justify-content:center;gap:6px;
+  padding:calc(env(safe-area-inset-top,0px) + 90px) var(--gutter) 40px;clip-path:circle(0 at calc(100% - 50px) 40px);transition:clip-path .6s var(--ease);visibility:hidden}
+.nav-open .mobile-menu{clip-path:circle(150% at calc(100% - 50px) 40px);visibility:visible}
+.mobile-menu a{font-family:var(--f-display);font-size:clamp(3rem,14vw,5rem);line-height:1.05;text-decoration:none}
+.mobile-menu a:hover{color:var(--amber)}
+.mobile-menu .btn{font-family:var(--f-body);font-size:1.1rem;margin-top:24px;align-self:flex-start}
+@media (max-width:900px){.nav-links{display:none}.burger{display:block}}
+
+/* scroll progress: a thin amber line that fills right-to-left */
+.progress{position:fixed;top:0;right:0;left:0;height:3px;z-index:70;background:var(--amber);transform-origin:100% 50%;transform:scaleX(0)}
+
+/* ============ HERO ============ */
+.hero{position:relative;height:100svh;min-height:560px;overflow:hidden;isolation:isolate}
+.hero-layer{position:absolute;inset:0;display:flex;align-items:center}
+.hero-day{color:var(--espresso)}
+.hero-night{background:var(--night);color:var(--foam);clip-path:inset(0 50% 0 0)}
+.hero-night::before{content:"";position:absolute;inset:0;background:
+  radial-gradient(60% 50% at 25% 110%,rgba(227,91,44,.28),transparent 70%),
+  radial-gradient(40% 40% at 15% 20%,rgba(235,164,58,.12),transparent 70%)}
+.hero-words{position:relative;width:100%;display:grid;grid-template-columns:1fr 1fr;align-items:center;text-align:center}
+.hero-word{font-family:var(--f-display);font-weight:700;font-size:clamp(7rem,24vw,26rem);line-height:.78;padding-bottom:.12em;display:block;will-change:transform}
+.hero-night .w1{color:transparent;-webkit-text-stroke:2px var(--foam)}
+.hero-night .w2{color:var(--amber)}
+.hero-tag{font-family:var(--f-hand);font-weight:700;font-size:clamp(2rem,3.4vw,3.4rem);line-height:1;margin-top:clamp(14px,2.2vw,34px);display:block}
+.hero-day .hero-tag{color:var(--espresso)}
+.hero-night .hero-tag{color:var(--foam)}
+.emblem{position:absolute;left:50%;top:50%;width:clamp(96px,11vw,170px);aspect-ratio:1;translate:-50% -50%;z-index:3;filter:drop-shadow(0 18px 30px rgba(0,0,0,.35));will-change:transform}
+.hero-foot{position:absolute;z-index:4;inset-inline:var(--gutter);bottom:calc(env(safe-area-inset-bottom,0px) + 26px);display:flex;justify-content:space-between;align-items:flex-end;gap:16px;font-size:.95rem}
+.hero-foot .addr{white-space:nowrap;background:var(--night);color:var(--foam);padding:8px 14px;border-radius:999px}
+.scroll-cue{display:flex;align-items:center;gap:10px;color:var(--foam);background:var(--night);padding:8px 14px;border-radius:999px}
+.scroll-cue i{width:2px;height:22px;background:var(--line);position:relative;overflow:hidden}
+.scroll-cue i::after{content:"";position:absolute;inset:0;background:var(--amber);animation:cue 1.8s var(--ease) infinite}
+@keyframes cue{from{transform:translateY(-100%)}to{transform:translateY(100%)}}
+.hero h1{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+@media (max-width:700px){
+  .hero-night{clip-path:inset(50% 0 0 0)}
+  .hero-words{grid-template-columns:1fr;grid-template-rows:1fr 1fr;height:100%}
+  .hero-word{font-size:clamp(7rem,42vw,15rem)}
+  .hero-words>div{align-self:center}
+  .emblem{width:clamp(88px,26vw,130px)}
+  .hero-foot{justify-content:center}
+  .scroll-cue{display:none}
+}
+
+/* ============ INTRO ============ */
+.intro{padding-block:clamp(90px,16vh,200px)}
+.intro .eyebrow{margin-bottom:28px}
+.intro-text{font-family:var(--f-display);font-size:clamp(2.9rem,7vw,7.4rem);line-height:.95;max-width:19ch}
+.intro-text .w{display:inline-block;transition:opacity .2s}
+.intro-meta{display:flex;flex-wrap:wrap;gap:18px 48px;margin-top:56px;color:var(--foam-dim);max-width:62ch}
+.intro-meta b{color:var(--foam);font-weight:500}
+
+/* ============ REASONS (horizontal) ============ */
+.reasons{position:relative;overflow:hidden;padding-block:40px 80px}
+.reasons-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:40px}
+.reasons-head h2{font-size:clamp(3.4rem,8vw,8rem)}
+.reasons-head p{max-width:34ch;color:var(--foam-dim)}
+.track{display:flex;gap:clamp(16px,2vw,28px);padding-inline:var(--gutter);will-change:transform}
+.panel{flex:0 0 clamp(300px,38vw,560px);min-height:clamp(430px,62vh,620px);background-color:var(--night-2);border-radius:var(--radius);
+  padding:clamp(22px,2.4vw,36px);display:flex;flex-direction:column;justify-content:space-between;gap:24px;position:relative;overflow:hidden}
+.panel .art{height:clamp(150px,22vh,230px);display:flex;align-items:flex-end}
+.panel .art svg{height:100%;width:auto;overflow:visible}
+.panel h3{font-size:clamp(3rem,4.6vw,4.8rem);margin-bottom:14px}
+.panel blockquote{margin:0;font-family:var(--f-hand);font-weight:700;font-size:clamp(1.6rem,2vw,2rem);line-height:1.2;color:var(--amber)}
+.panel blockquote::before{content:"„"}
+.panel blockquote::after{content:"“"}
+.panel .src{font-size:.82rem;color:var(--foam-dim);margin-top:8px;display:block}
+.panel.hot{background:radial-gradient(120% 80% at 50% 0%,rgba(227,91,44,.35),var(--night-2) 60%)}
+.panel.stone{background-color:var(--stone);color:var(--espresso)}
+.anim .panel .art{opacity:0;transform:scale(.7) rotate(-6deg);transition:opacity .9s var(--ease),transform 1.1s var(--ease)}
+.anim .panel h3{clip-path:inset(0 0 100% 0);transform:translateY(30px);transition:clip-path .9s var(--ease) .1s,transform .9s var(--ease) .1s}
+.anim .panel.in .art{opacity:1;transform:none}
+.anim .panel.in h3{clip-path:inset(0 0 -10% 0);transform:none}
+.panel.stone blockquote{color:#7A4A1E}
+.panel.stone .src{color:#5a4632}
+@media (max-width:800px){
+  .reasons .track{overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:12px;scrollbar-width:none}
+  .reasons .track::-webkit-scrollbar{display:none}
+  .panel{flex-basis:84vw;scroll-snap-align:center;min-height:440px}
+}
+
+/* art animations (paused under reduced motion) */
+.eq rect{transform-box:fill-box;transform-origin:50% 100%;animation:eq 1.1s ease-in-out infinite alternate}
+@keyframes eq{from{transform:scaleY(.25)}to{transform:scaleY(1)}}
+.bub{animation:bub 2.6s linear infinite;transform-box:fill-box}
+@keyframes bub{0%{transform:translateY(0);opacity:0}15%{opacity:1}100%{transform:translateY(-120px);opacity:0}}
+.glow{animation:glow 2.4s ease-in-out infinite alternate;transform-box:fill-box;transform-origin:50% 0}
+@keyframes glow{from{opacity:.55;transform:scale(.94)}to{opacity:1;transform:scale(1.04)}}
+.ding{animation:ding 1.6s ease-out infinite;transform-box:fill-box;transform-origin:50% 100%}
+@keyframes ding{0%,40%{opacity:0;transform:scale(.6)}55%{opacity:1}100%{opacity:0;transform:scale(1.3)}}
+.cheers{transform-box:fill-box;animation:cheers 2.2s var(--ease) infinite}
+.cheers.l{transform-origin:100% 100%}.cheers.r{transform-origin:0 100%;animation-name:cheersR}
+@keyframes cheers{0%,100%{transform:rotate(0)}40%,55%{transform:rotate(12deg)}}
+@keyframes cheersR{0%,100%{transform:rotate(0)}40%,55%{transform:rotate(-12deg)}}
+
+/* ============ WEEK ============ */
+.week{padding-block:clamp(80px,12vh,150px)}
+.week h2{font-size:clamp(3.2rem,7vw,7rem);margin-bottom:48px}
+.week-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:clamp(16px,2vw,28px)}
+.day-card{border-top:1.5px solid var(--line);padding-top:24px;display:grid;grid-template-columns:auto 1fr;gap:6px 28px;align-items:start}
+.day-card .d{font-family:var(--f-display);font-size:clamp(4.5rem,8vw,8rem);line-height:.8;color:var(--amber);grid-row:span 3}
+.day-card h3{font-size:clamp(2rem,2.6vw,2.6rem)}
+.day-card blockquote{margin:0;font-family:var(--f-hand);font-weight:700;font-size:clamp(1.6rem,2vw,2rem);line-height:1.25}
+.day-card .src{font-size:.85rem;color:var(--foam-dim)}
+
+/* ============ MENU ============ */
+.menu{position:relative}
+.menu-halves{display:grid;grid-template-columns:1fr 1fr}
+.menu-half{padding:clamp(80px,12vh,140px) var(--gutter) clamp(60px,10vh,120px);position:relative}
+.menu-half.cafe{color:var(--espresso)}
+.menu-half.bar{background:var(--night-2)}
+.menu-half h2{font-size:clamp(4rem,9vw,10rem);margin-block:8px 18px}
+.menu-half.cafe .eyebrow{color:#7A4A1E}
+.menu-half .lede{max-width:40ch;margin-bottom:40px}
+.menu-half.cafe .lede{color:#4a3526}
+.menu-half.bar .lede{color:var(--foam-dim)}
+.menu-list{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.menu-item{display:grid;grid-template-columns:1fr auto;gap:4px 18px;padding:16px 0;border-bottom:1px solid currentColor;border-color:rgba(127,127,127,.25)}
+.menu-item h3{font-family:var(--f-body);font-weight:700;font-size:1.15rem;line-height:1.3;letter-spacing:0}
+.menu-item p{grid-column:1;font-size:.95rem;opacity:.75}
+.menu-item .price{font-family:var(--f-display);font-size:2rem;line-height:1;grid-row:1/span 2;grid-column:2;font-variant-numeric:tabular-nums}
+.menu-note{border:1.5px dashed currentColor;border-radius:var(--radius);padding:22px 24px;max-width:44ch;opacity:.9}
+.menu-note strong{display:block;font-family:var(--f-display);font-size:2rem;line-height:1;margin-bottom:6px}
+.menu-note a{font-weight:700}
+.menu-tabs{display:none}
+@media (max-width:800px){
+  .menu-halves{grid-template-columns:1fr;min-height:0}
+  .menu-tabs{display:flex;position:sticky;top:calc(env(safe-area-inset-top,0px) + 76px);z-index:5;gap:6px;justify-content:center;padding:10px;pointer-events:none}
+  .menu-tabs button{pointer-events:auto;box-shadow:0 8px 20px rgba(0,0,0,.35)}
+  .menu-tabs button{min-height:48px;padding:0 22px;border-radius:999px;border:0;font:700 1rem var(--f-body);background:var(--night-3);color:var(--foam);cursor:pointer}
+  .menu-tabs button[aria-selected="true"]{background:var(--amber);color:var(--night)}
+  .menu.js-tabs .menu-half[data-hidden="true"]{display:none}
+  .menu-half{padding-top:56px}
+}
+
+/* ============ REVIEWS ============ */
+.reviews{padding-block:clamp(90px,14vh,170px);overflow:hidden}
+.reviews-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:48px}
+.reviews-head h2{font-size:clamp(3.2rem,7vw,7rem)}
+.rv-ctrl{display:flex;gap:10px}
+.rv-ctrl button{width:56px;height:56px;border-radius:50%;border:1.5px solid var(--line);background:none;color:var(--foam);font-size:1.3rem;cursor:pointer;transition:border-color .25s,background .25s}
+.rv-ctrl button:hover{border-color:var(--amber);background:var(--night-2)}
+.rv-row{display:flex;gap:clamp(16px,2vw,28px);overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;padding:4px var(--gutter) 20px;scrollbar-width:none}
+.rv-row::-webkit-scrollbar{display:none}
+.rv{flex:0 0 clamp(290px,46vw,720px);scroll-snap-align:start;position:relative;padding-top:clamp(64px,7vw,104px)}
+.rv .qm{position:absolute;top:0;right:0;width:clamp(52px,5.5vw,86px);height:auto;fill:var(--amber);transform-origin:100% 0}
+.rv p{font-family:var(--f-display);font-size:clamp(2.1rem,3.6vw,3.8rem);line-height:1.02}
+.rv footer{margin-top:22px;display:flex;align-items:center;gap:12px;font-size:.95rem;color:var(--foam-dim)}
+.rv footer b{color:var(--foam);font-weight:500}
+.rv footer .g{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--night-3);font-weight:700;font-size:.8rem;color:var(--foam)}
+.rv-note{margin-top:28px;font-size:.85rem;color:var(--foam-dim)}
+
+/* ============ GALLERY (renders only when photos exist) ============ */
+.gallery{padding-block:40px 120px}
+.gallery h2{font-size:clamp(3rem,6vw,6rem);margin-bottom:32px}
+.g-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+.g-grid figure{margin:0;overflow:hidden;border-radius:var(--radius);grid-column:span 4;aspect-ratio:4/5;background:var(--night-2)}
+.g-grid figure:nth-child(5n+1){grid-column:span 8;aspect-ratio:16/10}
+.g-grid img{width:100%;height:100%;object-fit:cover;transition:transform .9s var(--ease)}
+.g-grid figure:hover img{transform:scale(1.06)}
+@media (max-width:700px){.g-grid figure,.g-grid figure:nth-child(5n+1){grid-column:span 12;aspect-ratio:4/5}}
+
+/* ============ VISIT ============ */
+.visit{padding-block:clamp(80px,12vh,150px)}
+.visit-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:clamp(32px,5vw,80px);align-items:center}
+.sign{border-radius:4px;padding:clamp(16px,2vw,24px);color:var(--espresso);box-shadow:0 30px 60px rgba(0,0,0,.4);transform:rotate(-1.5deg)}
+.sign-inner{border:2px solid rgba(42,26,17,.55);border-radius:2px;padding:clamp(22px,3vw,40px);text-align:center;background:rgba(255,255,255,.14)}
+.sign .num{font-family:var(--f-display);font-size:clamp(5rem,10vw,9rem);line-height:.8;display:block}
+.sign .street{font-family:var(--f-display);font-size:clamp(3.2rem,6.5vw,6rem);line-height:.9;display:block;margin-top:10px}
+.sign .latin{letter-spacing:.3em;font-size:clamp(.8rem,1.1vw,1rem);font-weight:500;display:block;margin-top:14px;direction:ltr}
+.visit h2{font-size:clamp(3.2rem,7vw,7rem);margin-bottom:22px}
+.visit dl{display:grid;gap:20px;margin:0 0 32px}
+.visit dt{font-size:.85rem;color:var(--foam-dim);margin-bottom:2px}
+.visit dd{margin:0;font-size:1.15rem}
+.hours{border-collapse:collapse;width:100%;max-width:360px;font-variant-numeric:tabular-nums}
+.hours td{padding:6px 0;border-bottom:1px solid var(--line)}
+.hours td:last-child{text-align:left}
+.hours tr.today td{color:var(--amber);font-weight:700}
+.visit .actions{display:flex;flex-wrap:wrap;gap:12px}
+@media (max-width:860px){.visit-grid{grid-template-columns:1fr}.sign{max-width:520px}}
+
+/* ============ BOOK ============ */
+.book{padding-block:clamp(80px,12vh,150px);position:relative}
+.book::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 50% at 50% 100%,rgba(227,91,44,.18),transparent 70%);pointer-events:none}
+.book-grid{display:grid;grid-template-columns:1fr 1.25fr;gap:clamp(32px,5vw,90px);position:relative}
+.book h2{font-size:clamp(3.6rem,8vw,8.5rem)}
+.book-copy p{color:var(--foam-dim);max-width:38ch;margin-top:20px}
+form.res{display:grid;grid-template-columns:1fr 1fr;gap:18px 16px;background:var(--night-2);padding:clamp(20px,3vw,40px);border-radius:var(--radius)}
+.field{display:flex;flex-direction:column;gap:6px}
+.field.full{grid-column:1/-1}
+.field label{font-size:.9rem;color:var(--foam-dim)}
+.field input,.field textarea,.field select{
+  font:inherit;color:var(--foam);background:var(--night);border:1.5px solid var(--night-3);border-radius:var(--radius);
+  min-height:52px;padding:10px 14px;transition:border-color .25s}
+.field textarea{min-height:96px;resize:vertical}
+.field input:focus,.field textarea:focus{border-color:var(--amber);outline:none}
+.field input:user-invalid{border-color:var(--ember)}
+.guests{display:flex;align-items:center;gap:8px}
+.guests button{width:52px;height:52px;border-radius:var(--radius);border:1.5px solid var(--night-3);background:var(--night);color:var(--foam);font-size:1.4rem;cursor:pointer}
+.guests button:hover{border-color:var(--amber)}
+.guests output{font-family:var(--f-display);font-size:2.6rem;line-height:1;min-width:2ch;text-align:center;font-variant-numeric:tabular-nums}
+.form-foot{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:14px 20px;margin-top:6px}
+.form-foot small{color:var(--foam-dim);max-width:44ch}
+.res-result{grid-column:1/-1;border:1.5px solid var(--amber);border-radius:var(--radius);padding:20px}
+.res-result h3{font-family:var(--f-body);font-size:1.15rem;font-weight:700;line-height:1.4;margin-bottom:10px;letter-spacing:0}
+.res-result pre{white-space:pre-wrap;font:inherit;background:var(--night);padding:14px;border-radius:var(--radius);margin:0 0 14px;color:var(--foam-dim);max-height:220px;overflow:auto}
+.res-result .row{display:flex;flex-wrap:wrap;gap:10px}
+@media (max-width:860px){.book-grid{grid-template-columns:1fr}}
+@media (max-width:520px){form.res{grid-template-columns:1fr}}
+
+/* ============ FOOTER ============ */
+footer.site{padding-block:60px calc(env(safe-area-inset-bottom,0px) + 110px);border-top:1px solid var(--line);overflow:hidden}
+.foot-big{font-family:var(--f-display);font-size:clamp(5rem,20vw,22rem);line-height:.75;display:flex;justify-content:space-between;gap:.1em;margin-bottom:40px}
+.foot-big span:last-child{color:var(--amber)}
+.foot-row{display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;color:var(--foam-dim);font-size:.92rem}
+
+/* ============ FLOATING CTA ============ */
+.float-cta{position:fixed;left:var(--gutter);bottom:calc(env(safe-area-inset-bottom,0px) + 20px);z-index:50;
+  transform:translateY(160%);transition:transform .5s var(--ease);box-shadow:0 12px 30px rgba(0,0,0,.4)}
+.float-cta.show{transform:none}
+
+/* ============ CURSOR (fine pointers only) ============ */
+.cursor{position:fixed;top:0;left:0;z-index:100;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;pointer-events:none;
+  background:linear-gradient(90deg,var(--amber) 50%,transparent 50%);box-shadow:inset 0 0 0 1.5px var(--amber);
+  transition:width .3s var(--ease),height .3s var(--ease),margin .3s var(--ease),opacity .3s;opacity:0;mix-blend-mode:difference}
+.cursor.on{opacity:1}
+.cursor.big{width:64px;height:64px;margin:-32px 0 0 -32px}
+@media (hover:none),(pointer:coarse){.cursor{display:none}}
+
+/* ============ LOADER ============ */
+.loader{position:fixed;inset:0;z-index:150;background:var(--night);display:grid;place-items:center}
+.loader .lh{width:120px;height:120px;position:relative}
+.loader .lh span{position:absolute;inset:0;border-radius:50%}
+.loader .lh .a{background:linear-gradient(90deg,transparent 50%,var(--crema) 50%)}
+.loader .lh .b{background:linear-gradient(90deg,var(--amber) 50%,transparent 50%)}
+.loader p{font-family:var(--f-display);font-size:2.4rem;margin-top:20px;text-align:center}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">דלגו לתוכן</a>
+<div class="grain" aria-hidden="true"></div>
+<div class="progress" aria-hidden="true"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- The emblem: a cup of coffee seen from above, and a glass of beer seen from above, one circle split down the middle. -->
+    <symbol id="emblem" viewBox="0 0 200 200">
+      <defs>
+        <clipPath id="cR"><rect x="100" y="0" width="100" height="200"/></clipPath>
+        <clipPath id="cL"><rect x="0" y="0" width="100" height="200"/></clipPath>
+        <radialGradient id="beer" cx="35%" cy="35%" r="75%"><stop offset="0" stop-color="#F7C66A"/><stop offset=".7" stop-color="#E39A2E"/><stop offset="1" stop-color="#B86E17"/></radialGradient>
+        <radialGradient id="crema" cx="60%" cy="40%" r="70%"><stop offset="0" stop-color="#D2965A"/><stop offset="1" stop-color="#8E5427"/></radialGradient>
+      </defs>
+      <g clip-path="url(#cR)">
+        <circle cx="100" cy="100" r="96" fill="#3A2416"/>
+        <circle cx="100" cy="100" r="80" fill="url(#crema)"/>
+        <path d="M100 138 C70 118 58 100 64 84 C70 68 90 66 100 82 C110 66 130 68 136 84 C142 100 130 118 100 138Z" fill="#F3E6CF"/>
+      </g>
+      <g clip-path="url(#cL)">
+        <circle cx="100" cy="100" r="96" fill="#F3ECDF"/>
+        <circle cx="100" cy="100" r="84" fill="url(#beer)"/>
+        <g fill="#FFF3D6" opacity=".85">
+          <circle cx="46" cy="70" r="4"/><circle cx="62" cy="52" r="2.5"/><circle cx="36" cy="104" r="3"/><circle cx="58" cy="128" r="5"/>
+          <circle cx="78" cy="94" r="2.5"/><circle cx="72" cy="150" r="3"/><circle cx="84" cy="36" r="3.5"/><circle cx="44" cy="146" r="2"/>
+        </g>
+      </g>
+      <line x1="100" y1="2" x2="100" y2="198" stroke="#0F1420" stroke-width="3"/>
+      <circle cx="100" cy="100" r="96" fill="none" stroke="#0F1420" stroke-width="3"/>
+    </symbol>
+  </defs>
+</svg>
+
+<header class="nav" id="nav">
+  <a class="brand magnetic" href="#top" aria-label="החצי השני – לראש העמוד"><svg aria-hidden="true"><use href="#emblem"/></svg><span>החצי השני</span></a>
+  <nav class="nav-links" aria-label="ניווט ראשי">
+    <a href="#about">המקום</a>
+    <a href="#menu">תפריט</a>
+    <a href="#reviews">ביקורות</a>
+    <a href="#visit">איך מגיעים</a>
+    <a class="btn magnetic" href="#book"><span class="half" aria-hidden="true"></span>שריון מקום</a>
+  </nav>
+  <button class="burger" type="button" aria-expanded="false" aria-controls="mobileMenu" aria-label="פתיחת תפריט"><span></span><span></span></button>
+</header>
+<nav class="mobile-menu" id="mobileMenu" aria-label="ניווט במובייל">
+  <a href="#about">המקום</a>
+  <a href="#menu">תפריט</a>
+  <a href="#reviews">ביקורות</a>
+  <a href="#visit">איך מגיעים</a>
+  <a class="btn" href="#book"><span class="half" aria-hidden="true"></span>שריון מקום</a>
+</nav>
+
+<main id="main">
+  <!-- ============ HERO ============ -->
+  <section class="hero" id="top" aria-labelledby="heroTitle">
+    <h1 id="heroTitle">החצי השני – חצי בר, חצי קפה. הלני המלכה 9, ירושלים</h1>
+    <div class="hero-layer hero-day stone-tex" aria-hidden="true">
+      <div class="hero-words">
+        <div><span class="hero-word w1">החצי</span><span class="hero-tag">חצי קפה</span></div>
+        <div><span class="hero-word w2">השני</span><span class="hero-tag">חצי בר</span></div>
+      </div>
+    </div>
+    <div class="hero-layer hero-night" aria-hidden="true">
+      <div class="hero-words">
+        <div><span class="hero-word w1">החצי</span><span class="hero-tag">חצי קפה</span></div>
+        <div><span class="hero-word w2">השני</span><span class="hero-tag">חצי בר</span></div>
+      </div>
+    </div>
+    <svg class="emblem" aria-hidden="true"><use href="#emblem"/></svg>
+    <div class="hero-foot">
+      <span class="addr">הלני המלכה 9 · ירושלים</span>
+      <span class="scroll-cue" aria-hidden="true"><i></i>גללו לחצי השני</span>
+    </div>
+  </section>
+
+  <!-- ============ INTRO ============ -->
+  <section class="intro wrap" id="about" aria-labelledby="introTitle">
+    <span class="eyebrow">חצי בר, חצי קפה</span>
+    <h2 class="sr-only" id="introTitle">על המקום</h2>
+    <p class="intro-text" data-words>מקום קטן במרכז העיר, עם מוזיקה טובה, בירות שלא רואים בכל מקום ותנור חם בחוץ לערבים של ירושלים.</p>
+    <div class="intro-meta">
+      <p><b>איפה:</b> הלני המלכה 9, ליד מגרש הרוסים</p>
+      <p><b>מה:</b> קפה ובירה, בפנים ובחוץ</p>
+      <p><b>האווירה:</b> וויב צעיר, מוזיקה טובה</p>
+    </div>
+  </section>
+
+  <!-- ============ REASONS ============ -->
+  <section class="reasons" aria-labelledby="reasonsTitle">
+    <div class="wrap reasons-head">
+      <div>
+        <span class="eyebrow">מה שחוזר בביקורות</span>
+        <h2 id="reasonsTitle">למה חוזרים</h2>
+      </div>
+      <p>לא אנחנו כתבנו את זה. אלה הדברים שאורחים מזכירים שוב ושוב בביקורות בגוגל.</p>
+    </div>
+    <div class="track" id="track">
+      <article class="panel">
+        <div class="art" aria-hidden="true">
+          <svg viewBox="0 0 200 140" class="eq"><g fill="#EBA43A">
+            <rect x="10" y="20" width="16" height="120" rx="3" style="animation-delay:-.2s"/><rect x="38" y="40" width="16" height="100" rx="3" style="animation-delay:-.7s"/>
+            <rect x="66" y="10" width="16" height="130" rx="3" style="animation-delay:-.4s"/><rect x="94" y="50" width="16" height="90" rx="3" style="animation-delay:-.9s"/>
+            <rect x="122" y="25" width="16" height="115" rx="3" style="animation-delay:-.1s"/><rect x="150" y="60" width="16" height="80" rx="3" style="animation-delay:-.6s"/>
+            <rect x="178" y="35" width="16" height="105" rx="3" style="animation-delay:-.3s"/></g></svg>
+        </div>
+        <div>
+          <h3>המוזיקה</h3>
+          <blockquote>מקום קטן וקסום אווירה מעולה מוסיקה טובה מאוד.</blockquote>
+          <span class="src">מתוך ביקורת בגוגל</span>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="art" aria-hidden="true">
+          <svg viewBox="0 0 120 170">
+            <path d="M18 8 H102 L94 162 H26 Z" fill="#EBA43A" opacity=".9"/>
+            <path d="M18 8 H102 L101 30 H19 Z" fill="#F3ECDF"/>
+            <path d="M18 8 H102 L94 162 H26 Z" fill="none" stroke="#F3ECDF" stroke-width="3" stroke-linejoin="round"/>
+            <g fill="#FFF3D6"><circle class="bub" cx="44" cy="150" r="3"/><circle class="bub" cx="60" cy="155" r="2.5" style="animation-delay:-.9s"/>
+            <circle class="bub" cx="76" cy="150" r="3.5" style="animation-delay:-1.7s"/><circle class="bub" cx="52" cy="152" r="2" style="animation-delay:-2.2s"/>
+            <circle class="bub" cx="84" cy="154" r="2" style="animation-delay:-.4s"/></g>
+          </svg>
+        </div>
+        <div>
+          <h3>הבירות</h3>
+          <blockquote>בירות ייחודיות ומעולות.</blockquote>
+          <span class="src">מתוך ביקורת בגוגל</span>
+        </div>
+      </article>
+      <article class="panel hot">
+        <div class="art" aria-hidden="true">
+          <svg viewBox="0 0 160 200">
+            <ellipse class="glow" cx="80" cy="40" rx="78" ry="70" fill="url(#heat)"/>
+            <defs><radialGradient id="heat"><stop offset="0" stop-color="#FF8A3D" stop-opacity=".9"/><stop offset="1" stop-color="#E35B2C" stop-opacity="0"/></radialGradient></defs>
+            <path d="M40 22 H120 L104 42 H56 Z" fill="#F3ECDF"/>
+            <rect x="60" y="42" width="40" height="30" rx="4" fill="#E35B2C"/>
+            <rect x="76" y="72" width="8" height="112" fill="#F3ECDF"/>
+            <path d="M52 196 H108 L100 182 H60 Z" fill="#F3ECDF"/>
+          </svg>
+        </div>
+        <div>
+          <h3>בחוץ, ליד התנור</h3>
+          <blockquote>ישבנו 4 חברים בחוץ עם תנור ממש חם ונעים.</blockquote>
+          <span class="src">מתוך ביקורת בגוגל</span>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="art" aria-hidden="true">
+          <svg viewBox="0 0 180 150">
+            <g stroke="#EBA43A" stroke-width="4" stroke-linecap="round" fill="none" class="ding"><path d="M50 30 L38 14"/><path d="M90 20 V2"/><path d="M130 30 L142 14"/></g>
+            <path d="M34 120 A56 56 0 0 1 146 120 Z" fill="#F3ECDF"/>
+            <rect x="84" y="50" width="12" height="12" rx="3" fill="#F3ECDF"/>
+            <rect x="18" y="120" width="144" height="12" rx="4" fill="#EBA43A"/>
+          </svg>
+        </div>
+        <div>
+          <h3>שירות מהיר</h3>
+          <blockquote>שירות מהיר ומעולה.</blockquote>
+          <span class="src">מתוך ביקורת בגוגל</span>
+        </div>
+      </article>
+      <article class="panel stone stone-tex">
+        <div class="art" aria-hidden="true">
+          <svg viewBox="0 0 170 150">
+            <path d="M10 60 L60 10 H160 V110 H60 Z" fill="#2A1A11"/>
+            <circle cx="46" cy="60" r="9" fill="#D5C29E"/>
+            <text x="112" y="80" text-anchor="middle" font-family="Rubik, Arial, sans-serif" font-weight="700" font-size="58" fill="#EBA43A">₪</text>
+          </svg>
+        </div>
+        <div>
+          <h3>המחירים</h3>
+          <blockquote>מקום חמים ונעים, אווירה מצויינת… אחלה מחירים</blockquote>
+          <span class="src">מתוך ביקורת בגוגל</span>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="art" aria-hidden="true">
+          <svg viewBox="0 0 220 150">
+            <g class="cheers l"><path d="M20 40 H60 L56 140 H24 Z" fill="#EBA43A"/><path d="M20 40 H60 L59.4 54 H20.6 Z" fill="#F3ECDF"/></g>
+            <g class="cheers l" style="animation-delay:-.1s"><path d="M66 30 H106 L102 140 H70 Z" fill="#F3ECDF"/></g>
+            <g class="cheers r" style="animation-delay:-.1s"><path d="M114 30 H154 L150 140 H118 Z" fill="#B8783F"/></g>
+            <g class="cheers r"><path d="M160 40 H200 L196 140 H164 Z" fill="#EBA43A"/><path d="M160 40 H200 L199.4 54 H160.6 Z" fill="#F3ECDF"/></g>
+          </svg>
+        </div>
+        <div>
+          <h3>הווייב</h3>
+          <blockquote>מקום הכי כיפית שהיתי בו אווירה ברמה שאי אפשר לתאר</blockquote>
+          <span class="src">הלל שושן, בגוגל</span>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ WEEK ============ -->
+  <section class="week wrap" aria-labelledby="weekTitle">
+    <span class="eyebrow">טיפים מהאורחים</span>
+    <h2 id="weekTitle">מתי לבוא</h2>
+    <div class="week-grid">
+      <article class="day-card">
+        <span class="d" aria-hidden="true">ה׳</span>
+        <h3>חמישי בערב</h3>
+        <blockquote>מומלץ בחום חמישי ערב, לקנות פיצה מהשכן ולשתות ולשתות עד לא ידע.</blockquote>
+        <span class="src">Asaf Sherman, בגוגל</span>
+      </article>
+      <article class="day-card">
+        <span class="d" aria-hidden="true">א׳</span>
+        <h3>ימי ראשון</h3>
+        <blockquote>אווירה מצויינת, גאמים מגניבים בראשון</blockquote>
+        <span class="src">ביקורת בגוגל · פרטים על הערב באינסטגרם</span>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ MENU ============ -->
+  <section class="menu" id="menu" aria-labelledby="menuTitle">
+    <h2 class="sr-only" id="menuTitle">תפריט</h2>
+    <div class="menu-tabs" role="tablist" aria-label="חצי התפריט">
+      <button type="button" role="tab" id="tab-cafe" aria-controls="half-cafe" aria-selected="true">חצי קפה</button>
+      <button type="button" role="tab" id="tab-bar" aria-controls="half-bar" aria-selected="false">חצי בר</button>
+    </div>
+    <div class="menu-halves">
+      <div class="menu-half cafe stone-tex" id="half-cafe" role="tabpanel" aria-labelledby="tab-cafe">
+        <span class="eyebrow">החצי הראשון</span>
+        <h3 class="h-menu" style="font-size:clamp(4rem,9vw,10rem)">קפה</h3>
+        <p class="lede">החצי של הקפה. כוס קפה בשולחן קטן, בפנים או בחוץ.</p>
+        <ul class="menu-list" data-menu="cafe"></ul>
+      </div>
+      <div class="menu-half bar" id="half-bar" role="tabpanel" aria-labelledby="tab-bar">
+        <span class="eyebrow">החצי השני</span>
+        <h3 class="h-menu" style="font-size:clamp(4rem,9vw,10rem)">בר</h3>
+        <p class="lede">החצי של הערב. בירות ייחודיות, מוזיקה טובה, ושולחן בחוץ ליד התנור.</p>
+        <ul class="menu-list" data-menu="bar"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ REVIEWS ============ -->
+  <section class="reviews" id="reviews" aria-labelledby="reviewsTitle">
+    <div class="wrap reviews-head">
+      <div>
+        <span class="eyebrow">מילה במילה, מגוגל</span>
+        <h2 id="reviewsTitle">מה כתבו עלינו</h2>
+      </div>
+      <div class="rv-ctrl">
+        <button type="button" data-rv="prev" aria-label="הביקורת הקודמת">→</button>
+        <button type="button" data-rv="next" aria-label="הביקורת הבאה">←</button>
+      </div>
+    </div>
+    <div class="rv-row" id="rvRow" tabindex="0" aria-label="ביקורות אורחים">
+      <figure class="rv">
+        <svg class="qm" viewBox="0 0 100 72" aria-hidden="true"><path d="M0 72V40C0 16 12 3 38 0v14c-12 3-18 10-18 22h18v36zM56 72V40C56 16 68 3 94 0v14c-12 3-18 10-18 22h18v36z"/></svg>
+        <blockquote><p>מקום קטן וקסום אווירה מעולה מוסיקה טובה מאוד. ישבנו 4 חברים בחוץ עם תנור ממש חם ונעים. בירות ייחודיות ומעולות. שירות מהיר ומעולה.</p></blockquote>
+        <footer><span class="g" aria-hidden="true">G</span><span>ביקורת בגוגל</span></footer>
+      </figure>
+      <figure class="rv">
+        <svg class="qm" viewBox="0 0 100 72" aria-hidden="true"><path d="M0 72V40C0 16 12 3 38 0v14c-12 3-18 10-18 22h18v36zM56 72V40C56 16 68 3 94 0v14c-12 3-18 10-18 22h18v36z"/></svg>
+        <blockquote><p>מקום הכי כיפית שהיתי בו אווירה ברמה שאי אפשר לתאר שירות לא יוצא מן הכלל ממליץ בחום</p></blockquote>
+        <footer><span class="g" aria-hidden="true">G</span><span><b>הלל שושן</b> · ממליץ מקומי בגוגל</span></footer>
+      </figure>
+      <figure class="rv">
+        <svg class="qm" viewBox="0 0 100 72" aria-hidden="true"><path d="M0 72V40C0 16 12 3 38 0v14c-12 3-18 10-18 22h18v36zM56 72V40C56 16 68 3 94 0v14c-12 3-18 10-18 22h18v36z"/></svg>
+        <blockquote><p>וויב צעיר מוזיקה מעולה, בעלים קופי חנן בן ארי מומלץ בחום חמישי ערב, לקנות פיצה מהשכן ולשתות ולשתות עד לא ידע. מחירים זולים</p></blockquote>
+        <footer><span class="g" aria-hidden="true">G</span><span><b>Asaf Sherman</b> · ממליץ מקומי בגוגל</span></footer>
+      </figure>
+      <figure class="rv">
+        <svg class="qm" viewBox="0 0 100 72" aria-hidden="true"><path d="M0 72V40C0 16 12 3 38 0v14c-12 3-18 10-18 22h18v36zM56 72V40C56 16 68 3 94 0v14c-12 3-18 10-18 22h18v36z"/></svg>
+        <blockquote><p>מקום חמים ונעים, אווירה מצויינת, גאמים מגניבים בראשון, אחלה מחירים</p></blockquote>
+        <footer><span class="g" aria-hidden="true">G</span><span>ביקורת בגוגל</span></footer>
+      </figure>
+    </div>
+    <p class="wrap rv-note">הציטוטים הועתקו כפי שנכתבו, כולל הכתיב המקורי.</p>
+  </section>
+
+  <!-- ============ GALLERY: stays hidden until PHOTOS (in the script) has entries ============ -->
+  <section class="gallery wrap" id="gallery" aria-labelledby="galleryTitle" hidden>
+    <h2 id="galleryTitle">מבפנים ומבחוץ</h2>
+    <div class="g-grid" id="gGrid"></div>
+  </section>
+
+  <!-- ============ VISIT ============ -->
+  <section class="visit wrap" id="visit" aria-labelledby="visitTitle">
+    <div class="visit-grid">
+      <div class="sign stone-tex" aria-hidden="true">
+        <div class="sign-inner">
+          <span class="num">9</span>
+          <span class="street">הלני המלכה</span>
+          <span class="latin">HELENI HAMALKA</span>
+        </div>
+      </div>
+      <div>
+        <span class="eyebrow">מרכז העיר</span>
+        <h2 id="visitTitle">איך מגיעים</h2>
+        <dl>
+          <div><dt>כתובת</dt><dd>הלני המלכה 9, ירושלים</dd></div>
+          <div><dt>שעות פתיחה</dt><dd id="hoursBox">השעות מתעדכנות באינסטגרם שלנו.</dd></div>
+          <div><dt>אינסטגרם</dt><dd><a class="link-u" href="https://www.instagram.com/ha.hetzi.ha.sheni/" target="_blank" rel="noopener" dir="ltr">@ha.hetzi.ha.sheni</a></dd></div>
+        </dl>
+        <div class="actions">
+          <a class="btn magnetic" href="https://www.google.com/maps/search/?api=1&amp;query=%D7%94%D7%97%D7%A6%D7%99+%D7%94%D7%A9%D7%A0%D7%99+%D7%94%D7%9C%D7%A0%D7%99+%D7%94%D7%9E%D7%9C%D7%9B%D7%94+9+%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D" target="_blank" rel="noopener">פתיחה בגוגל מפות</a>
+          <a class="btn ghost magnetic" href="https://waze.com/ul?q=%D7%94%D7%9C%D7%A0%D7%99%20%D7%94%D7%9E%D7%9C%D7%9B%D7%94%209%20%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D&amp;navigate=yes" target="_blank" rel="noopener">ניווט עם Waze</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BOOK ============ -->
+  <section class="book wrap" id="book" aria-labelledby="bookTitle">
+    <div class="book-grid">
+      <div class="book-copy">
+        <span class="eyebrow">מגיעים בחבורה?</span>
+        <h2 id="bookTitle">שריון מקום</h2>
+        <p>המקום קטן, אז כדאי להודיע מראש. מלאו את הפרטים ושלחו לנו. נאשר איתכם בהודעה חוזרת.</p>
+      </div>
+      <form class="res" id="resForm" novalidate>
+        <div class="field">
+          <label for="r-date">תאריך</label>
+          <input id="r-date" name="date" type="date" required>
+        </div>
+        <div class="field">
+          <label for="r-time">שעה</label>
+          <input id="r-time" name="time" type="time" required step="900">
+        </div>
+        <div class="field full">
+          <label for="r-guests-out" id="r-guests-label">כמה תהיו</label>
+          <div class="guests" role="group" aria-labelledby="r-guests-label">
+            <button type="button" data-g="-1" aria-label="פחות אורחים">−</button>
+            <output id="r-guests-out" aria-live="polite">4</output>
+            <button type="button" data-g="1" aria-label="עוד אורח">+</button>
+            <input type="hidden" id="r-guests" name="guests" value="4">
+          </div>
+        </div>
+        <div class="field">
+          <label for="r-name">שם</label>
+          <input id="r-name" name="name" type="text" autocomplete="name" required>
+        </div>
+        <div class="field">
+          <label for="r-phone">טלפון</label>
+          <input id="r-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" required pattern="[0-9+\-\s]{9,15}" dir="ltr">
+        </div>
+        <div class="field full">
+          <label for="r-email">אימייל (לא חובה)</label>
+          <input id="r-email" name="email" type="email" autocomplete="email" dir="ltr">
+        </div>
+        <div class="field full">
+          <label for="r-notes">בקשות מיוחדות</label>
+          <textarea id="r-notes" name="notes" placeholder="למשל: ישיבה בחוץ ליד התנור, יום הולדת"></textarea>
+        </div>
+        <div class="form-foot">
+          <button class="btn magnetic" type="submit"><span class="half" aria-hidden="true"></span>הכנת הבקשה</button>
+          <small id="resHint">הבקשה נשלחת אלינו בהודעה באינסטגרם. השולחן שמור רק אחרי שנאשר.</small>
+        </div>
+        <div class="res-result" id="resResult" hidden aria-live="polite"></div>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="site wrap">
+  <div class="foot-big" aria-hidden="true"><span>החצי</span><span>השני</span></div>
+  <div class="foot-row">
+    <span>החצי השני · חצי בר חצי קפה · הלני המלכה 9, ירושלים</span>
+    <a class="link-u" href="https://www.instagram.com/ha.hetzi.ha.sheni/" target="_blank" rel="noopener">אינסטגרם</a>
+  </div>
+</footer>
+
+<a class="btn float-cta magnetic" href="#book" id="floatCta"><span class="half" aria-hidden="true"></span>שריון מקום</a>
+<div class="cursor" aria-hidden="true"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ================= CONTENT TO SUPPLY =================
+   Only verified facts are on the page. Fill these in from the bar's real
+   information and the site picks them up; nothing else needs to change. */
+var CONFIG = {
+  instagram: "ha.hetzi.ha.sheni",
+  // A URL that accepts a JSON POST of the reservation (Formspree, a Worker, a booking system).
+  // While empty, the form prepares the request for sending as an Instagram message.
+  reservationEndpoint: ""
+};
+// Opening hours, Sunday first. Example: ["18:00–01:00", "סגור", ...]. Empty = "updates on Instagram".
+var HOURS = [];
+// Menu items: { name, desc, price } — price in shekels as a number, or omit it.
+var MENU = { cafe: [], bar: [] };
+// Photos: { src, srcMobile, alt }. The gallery section appears once this has entries.
+var PHOTOS = [];
+
+var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+var fine = window.matchMedia("(hover:hover) and (pointer:fine)").matches;
+var hasGsap = typeof window.gsap !== "undefined" && typeof window.ScrollTrigger !== "undefined";
+var $ = function(s, r){ return (r || document).querySelector(s); };
+var $$ = function(s, r){ return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+/* ---------- menu ---------- */
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+$$("[data-menu]").forEach(function(ul){
+  var items = MENU[ul.getAttribute("data-menu")] || [];
+  if (!items.length){
+    ul.outerHTML = '<div class="menu-note"><strong>התפריט בדרך לכאן</strong>בינתיים הוא מחכה על הבר, והעדכונים עולים ל<a class="link-u" href="https://www.instagram.com/' + CONFIG.instagram + '/" target="_blank" rel="noopener">אינסטגרם</a>.</div>';
+    return;
+  }
+  ul.innerHTML = items.map(function(it){
+    return '<li class="menu-item"><h4 style="margin:0;font-weight:700;font-size:1.15rem">' + esc(it.name) + '</h4>' +
+      (it.price != null ? '<span class="price" data-price="' + Number(it.price) + '">₪' + Number(it.price) + '</span>' : '') +
+      (it.desc ? '<p>' + esc(it.desc) + '</p>' : '') + '</li>';
+  }).join("");
+});
+
+/* ---------- hours ---------- */
+if (HOURS.length === 7){
+  var days = ["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"], today = new Date().getDay();
+  $("#hoursBox").innerHTML = '<table class="hours"><tbody>' + HOURS.map(function(h, i){
+    return '<tr' + (i === today ? ' class="today"' : '') + '><td>' + days[i] + '</td><td>' + esc(h) + '</td></tr>';
+  }).join("") + '</tbody></table>';
+}
+
+/* ---------- gallery ---------- */
+if (PHOTOS.length){
+  $("#gGrid").innerHTML = PHOTOS.map(function(p){
+    return '<figure><picture>' + (p.srcMobile ? '<source media="(max-width:700px)" srcset="' + esc(p.srcMobile) + '">' : '') +
+      '<img src="' + esc(p.src) + '" alt="' + esc(p.alt || "") + '" loading="lazy" decoding="async"></picture></figure>';
+  }).join("");
+  $("#gallery").hidden = false;
+}
+
+/* ---------- nav ---------- */
+var burger = $(".burger");
+function setMenu(open){
+  document.body.classList.toggle("nav-open", open);
+  burger.setAttribute("aria-expanded", open ? "true" : "false");
+  burger.setAttribute("aria-label", open ? "סגירת תפריט" : "פתיחת תפריט");
+  document.body.style.overflow = open ? "hidden" : "";
+}
+burger.addEventListener("click", function(){ setMenu(!document.body.classList.contains("nav-open")); });
+$$("#mobileMenu a").forEach(function(a){ a.addEventListener("click", function(){ setMenu(false); }); });
+document.addEventListener("keydown", function(e){ if (e.key === "Escape") setMenu(false); });
+
+/* ---------- menu tabs (phones) ---------- */
+var menuSec = $("#menu");
+menuSec.classList.add("js-tabs");
+function showHalf(which){
+  $$(".menu-tabs [role=tab]").forEach(function(t){ t.setAttribute("aria-selected", t.id === "tab-" + which ? "true" : "false"); });
+  $("#half-cafe").setAttribute("data-hidden", which !== "cafe");
+  $("#half-bar").setAttribute("data-hidden", which !== "bar");
+  if (hasGsap && !reduce){
+    gsap.fromTo("#half-" + which + " > *", {y: 24, opacity: 0}, {y: 0, opacity: 1, stagger: .06, duration: .5, ease: "power3.out"});
+  }
+}
+$("#tab-cafe").addEventListener("click", function(){ showHalf("cafe"); });
+$("#tab-bar").addEventListener("click", function(){ showHalf("bar"); });
+$(".menu-tabs").addEventListener("keydown", function(e){
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight"){
+    var next = document.activeElement.id === "tab-cafe" ? "bar" : "cafe";
+    showHalf(next); $("#tab-" + next).focus();
+  }
+});
+showHalf("cafe");
+
+/* ---------- reviews carousel ---------- */
+var row = $("#rvRow");
+$$("[data-rv]").forEach(function(b){
+  b.addEventListener("click", function(){
+    var card = row.querySelector(".rv"), step = card ? card.getBoundingClientRect().width + 24 : 400;
+    // RTL: scrollLeft runs 0 → negative. "next" moves further left.
+    row.scrollBy({left: b.getAttribute("data-rv") === "next" ? -step : step, behavior: reduce ? "auto" : "smooth"});
+  });
+});
+
+/* ---------- reservation ---------- */
+var form = $("#resForm"), result = $("#resResult"), gOut = $("#r-guests-out"), gIn = $("#r-guests");
+var dateIn = $("#r-date");
+var t = new Date(); t.setMinutes(t.getMinutes() - t.getTimezoneOffset());
+dateIn.min = t.toISOString().slice(0, 10);
+$$(".guests [data-g]").forEach(function(b){
+  b.addEventListener("click", function(){
+    var n = Math.min(20, Math.max(1, Number(gIn.value) + Number(b.getAttribute("data-g"))));
+    gIn.value = n; gOut.textContent = n;
+  });
+});
+function fmtDate(v){ if (!v) return ""; var p = v.split("-"); return p[2] + "." + p[1] + "." + p[0]; }
+form.addEventListener("submit", function(e){
+  e.preventDefault();
+  if (!form.checkValidity()){
+    var bad = form.querySelector(":invalid"); if (bad) bad.focus();
+    form.reportValidity && form.reportValidity();
+    return;
+  }
+  var d = Object.fromEntries(new FormData(form).entries());
+  var msg = "היי! אשמח לשריין מקום בחצי השני.\n" +
+    "תאריך: " + fmtDate(d.date) + "\nשעה: " + d.time + "\nכמה: " + d.guests + "\nשם: " + d.name + "\nטלפון: " + d.phone +
+    (d.email ? "\nאימייל: " + d.email : "") + (d.notes ? "\nבקשות: " + d.notes : "");
+
+  if (CONFIG.reservationEndpoint){
+    result.hidden = false;
+    result.innerHTML = "<h3>שולחים…</h3>";
+    fetch(CONFIG.reservationEndpoint, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(d)})
+      .then(function(r){ if (!r.ok) throw new Error(r.status); result.innerHTML = "<h3>הבקשה נשלחה. נחזור אליכם לאישור בטלפון.</h3>"; })
+      .catch(function(){ showManual(msg, "השליחה לא עברה. אפשר לשלוח את אותה בקשה בהודעה באינסטגרם:"); });
+    return;
+  }
+  showManual(msg, "הבקשה מוכנה, אבל עוד לא נשלחה. העתיקו אותה ושלחו לנו בהודעה באינסטגרם. השולחן שמור רק אחרי שנאשר.");
+});
+function showManual(msg, title){
+  result.hidden = false;
+  result.innerHTML = "<h3>" + esc(title) + "</h3><pre id=\"resText\">" + esc(msg) + "</pre>" +
+    '<div class="row"><button class="btn" type="button" id="copyRes">העתקת הבקשה</button>' +
+    '<a class="btn ghost" href="https://ig.me/m/' + CONFIG.instagram + '" target="_blank" rel="noopener">פתיחת הודעה באינסטגרם</a></div>';
+  $("#copyRes").addEventListener("click", function(){
+    var btn = this;
+    function done(){ btn.textContent = "הועתק"; }
+    function fallback(){ var r = document.createRange(); r.selectNodeContents($("#resText")); var s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = "סומן, העתיקו ידנית"; }
+    try { navigator.clipboard.writeText(msg).then(done, fallback); } catch (err) { fallback(); }
+  });
+  if (!reduce && hasGsap) gsap.from(result, {y: 20, opacity: 0, duration: .5, ease: "power3.out"});
+  result.scrollIntoView({block: "nearest", behavior: reduce ? "auto" : "smooth"});
+}
+
+/* ---------- floating CTA: after the hero, hidden over the booking form ---------- */
+var cta = $("#floatCta"), bookEl = $("#book");
+var heroGone = false, bookIn = false;
+function updCta(){ cta.classList.toggle("show", heroGone && !bookIn); }
+if ("IntersectionObserver" in window){
+  new IntersectionObserver(function(en){ bookIn = en[0].isIntersecting; updCta(); }, {threshold: .15}).observe(bookEl);
+  window.addEventListener("scroll", function(){ heroGone = window.scrollY > window.innerHeight * .9; updCta(); }, {passive: true});
+}
+
+/* ---------- progress ---------- */
+var prog = $(".progress");
+function updProg(){ var h = document.documentElement.scrollHeight - innerHeight; prog.style.transform = "scaleX(" + (h > 0 ? scrollY / h : 0) + ")"; }
+addEventListener("scroll", updProg, {passive: true}); updProg();
+
+/* ---------- cursor + magnetic (fine pointers, motion allowed) ---------- */
+if (fine && !reduce){
+  var cur = $(".cursor"), cx = innerWidth / 2, cy = innerHeight / 2, x = cx, y = cy;
+  addEventListener("pointermove", function(e){ cx = e.clientX; cy = e.clientY; cur.classList.add("on"); }, {passive: true});
+  document.addEventListener("pointerleave", function(){ cur.classList.remove("on"); });
+  (function loop(){ x += (cx - x) * .22; y += (cy - y) * .22; cur.style.transform = "translate(" + x + "px," + y + "px)"; requestAnimationFrame(loop); })();
+  $$("a,button,input,textarea,[role=tab]").forEach(function(el){
+    el.addEventListener("pointerenter", function(){ cur.classList.add("big"); });
+    el.addEventListener("pointerleave", function(){ cur.classList.remove("big"); });
+  });
+  $$(".magnetic").forEach(function(el){
+    el.addEventListener("pointermove", function(e){
+      var r = el.getBoundingClientRect();
+      el.style.transform = "translate(" + ((e.clientX - r.left - r.width / 2) * .25) + "px," + ((e.clientY - r.top - r.height / 2) * .35) + "px)";
+    });
+    el.addEventListener("pointerleave", function(){ el.style.transform = ""; });
+  });
+}
+
+/* ================= SCROLL CHOREOGRAPHY ================= */
+if (!hasGsap || reduce) return;
+gsap.registerPlugin(ScrollTrigger);
+
+/* Loader: the two halves of the emblem close into one circle. Once per visit. */
+var seen = false; try { seen = sessionStorage.getItem("hh-seen") === "1"; sessionStorage.setItem("hh-seen", "1"); } catch (err) {}
+if (!seen){
+  var ld = document.createElement("div");
+  ld.className = "loader"; ld.setAttribute("aria-hidden", "true");
+  ld.innerHTML = '<div><div class="lh"><span class="a"></span><span class="b"></span></div><p>החצי השני</p></div>';
+  document.body.appendChild(ld);
+  gsap.timeline({onComplete: function(){ ld.remove(); }})
+    .from(ld.querySelector(".a"), {xPercent: -60, opacity: 0, duration: .55, ease: "power3.out"})
+    .from(ld.querySelector(".b"), {xPercent: 60, opacity: 0, duration: .55, ease: "power3.out"}, "<")
+    .from(ld.querySelector("p"), {y: 20, opacity: 0, duration: .4}, "-=.2")
+    .to(ld, {clipPath: "inset(0 0 100% 0)", duration: .7, ease: "power4.inOut"}, "+=.35")
+    .from(".hero-word", {yPercent: 40, opacity: 0, stagger: .05, duration: .9, ease: "power4.out"}, "-=.45");
+}
+
+var mm = gsap.matchMedia();
+
+/* HERO — the night half wipes across the day half, words drift apart, emblem turns over. */
+mm.add({wide: "(min-width:701px)", narrow: "(max-width:700px)"}, function(ctx){
+  var wide = ctx.conditions.wide;
+  var tl = gsap.timeline({scrollTrigger: {trigger: ".hero", start: "top top", end: "+=130%", scrub: .6, pin: true, anticipatePin: 1}});
+  tl.to(".hero-night", {clipPath: "inset(0% 0% 0% 0%)", ease: "none", duration: 1}, 0)
+    .to(".hero-words", {scale: 1.12, ease: "none", duration: 1}, 0)
+    .to(".hero-words .w1", wide ? {xPercent: 10} : {yPercent: -10}, 0)
+    .to(".hero-words .w2", wide ? {xPercent: -10} : {yPercent: 10}, 0)
+    .to(".hero-tag", {opacity: 0, y: -20, duration: .4}, 0)
+    .to(".emblem", {rotate: 180, scale: .55, ease: "none", duration: 1}, 0)
+    .to(".hero-foot", {opacity: 0, duration: .3}, 0)
+    .to(".hero-layer, .emblem", {filter: "blur(6px)", opacity: .0, duration: .35}, .72);
+});
+
+/* INTRO — words light up as you read down. */
+var intro = $("[data-words]");
+intro.innerHTML = intro.textContent.trim().split(/\s+/).map(function(w){ return '<span class="w">' + w + '</span>'; }).join(" ");
+gsap.fromTo(".intro-text .w", {opacity: .14}, {opacity: 1, stagger: .1, ease: "none",
+  scrollTrigger: {trigger: ".intro-text", start: "top 80%", end: "bottom 45%", scrub: true}});
+gsap.from(".intro-meta p", {y: 30, opacity: 0, stagger: .1, duration: .8, ease: "power3.out", scrollTrigger: {trigger: ".intro-meta", start: "top 88%"}});
+
+/* REASONS — pinned horizontal run on wide screens; native swipe on phones. */
+mm.add("(min-width:801px)", function(){
+  var track = $("#track");
+  // RTL: the row overflows to the left, where scrollWidth does not see it. Measure the panels instead.
+  var dist = function(){
+    var ps = track.querySelectorAll(".panel"), a = ps[0].getBoundingClientRect(), b = ps[ps.length - 1].getBoundingClientRect();
+    var gut = parseFloat(getComputedStyle(track).paddingLeft) || 0;
+    return Math.max(0, a.right - b.left + gut * 2 - innerWidth);
+  };
+  gsap.to(track, {x: function(){ return dist(); }, ease: "none",
+    scrollTrigger: {trigger: ".reasons", start: "top top", end: function(){ return "+=" + dist(); }, scrub: .8, pin: true, invalidateOnRefresh: true}});
+});
+/* Panel art and titles reveal as each panel enters view, whichever way the row moves.
+   (containerAnimation assumes a left-moving LTR row, so it is not used here.) */
+if ("IntersectionObserver" in window){
+  document.documentElement.classList.add("anim");
+  var pio = new IntersectionObserver(function(en){ en.forEach(function(e){ if (e.isIntersecting){ e.target.classList.add("in"); pio.unobserve(e.target); } }); }, {threshold: .35});
+  $$(".panel").forEach(function(p){ pio.observe(p); });
+}
+gsap.from(".reasons-head h2", {yPercent: 60, opacity: 0, duration: 1, ease: "power4.out", scrollTrigger: {trigger: ".reasons", start: "top 80%"}});
+
+/* WEEK */
+gsap.from(".day-card", {y: 60, opacity: 0, stagger: .15, duration: 1, ease: "power3.out", scrollTrigger: {trigger: ".week-grid", start: "top 85%"}});
+gsap.from(".day-card .d", {scale: 1.6, opacity: 0, stagger: .15, duration: 1.1, ease: "expo.out", scrollTrigger: {trigger: ".week-grid", start: "top 85%"}});
+
+/* MENU — on wide screens the café half and bar half slide in from their own sides. */
+mm.add("(min-width:801px)", function(){
+  gsap.from(".menu-half.cafe", {clipPath: "inset(0 0 0 100%)", ease: "none", scrollTrigger: {trigger: ".menu", start: "top 90%", end: "top 30%", scrub: true}});
+  gsap.from(".menu-half.bar", {clipPath: "inset(0 100% 0 0)", ease: "none", scrollTrigger: {trigger: ".menu", start: "top 90%", end: "top 30%", scrub: true}});
+  gsap.from(".h-menu", {yPercent: 50, opacity: 0, stagger: .1, duration: 1, ease: "power4.out", scrollTrigger: {trigger: ".menu", start: "top 45%"}});
+});
+$$(".price[data-price]").forEach(function(el){
+  var n = Number(el.getAttribute("data-price")), o = {v: 0};
+  gsap.to(o, {v: n, duration: 1.2, ease: "power2.out", onUpdate: function(){ el.textContent = "₪" + Math.round(o.v); },
+    scrollTrigger: {trigger: el, start: "top 92%"}});
+});
+
+/* REVIEWS — quote marks swing in; the row drifts sideways with the page. */
+$$(".rv").forEach(function(rv, i){
+  gsap.from(rv.querySelector(".qm"), {rotate: -35, scale: .3, opacity: 0, duration: 1.1, ease: "back.out(2)", delay: i * .08, scrollTrigger: {trigger: ".reviews", start: "top 65%"}});
+  gsap.from(rv.querySelector("p"), {y: 40, opacity: 0, filter: "blur(8px)", duration: 1, ease: "power3.out", delay: .1 + i * .08, scrollTrigger: {trigger: ".reviews", start: "top 65%"}});
+});
+mm.add("(min-width:801px)", function(){
+  gsap.fromTo("#rvRow", {x: 0}, {x: -90, ease: "none", scrollTrigger: {trigger: ".reviews", start: "top bottom", end: "bottom top", scrub: true}});
+});
+
+/* GALLERY */
+if (PHOTOS.length){
+  $$(".g-grid figure").forEach(function(f){
+    gsap.from(f, {clipPath: "inset(100% 0 0 0)", duration: 1.1, ease: "power4.out", scrollTrigger: {trigger: f, start: "top 90%"}});
+    gsap.fromTo(f.querySelector("img"), {scale: 1.25, filter: "blur(10px)"}, {scale: 1, filter: "blur(0px)", ease: "none", scrollTrigger: {trigger: f, start: "top bottom", end: "center center", scrub: true}});
+  });
+}
+
+/* VISIT — the street sign settles onto the wall. */
+gsap.from(".sign", {rotate: -9, y: 120, opacity: 0, ease: "none", scrollTrigger: {trigger: ".visit", start: "top 90%", end: "top 35%", scrub: true}});
+
+/* BOOK + FOOTER */
+gsap.from(".book h2", {yPercent: 50, opacity: 0, duration: 1, ease: "power4.out", scrollTrigger: {trigger: ".book", start: "top 75%"}});
+gsap.from("form.res .field, form.res .form-foot", {y: 30, opacity: 0, stagger: .05, duration: .7, ease: "power3.out", scrollTrigger: {trigger: "form.res", start: "top 80%"}});
+gsap.from(".foot-big span", {yPercent: 100, stagger: .1, duration: 1.2, ease: "expo.out", scrollTrigger: {trigger: "footer.site", start: "top 90%"}});
+
+addEventListener("load", function(){ ScrollTrigger.refresh(); });
+})();
+</script>
+</body>
+</html>
