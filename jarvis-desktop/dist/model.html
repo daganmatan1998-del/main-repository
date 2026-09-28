@@ -154,6 +154,8 @@
   controls.enablePan = false;          // the right button belongs to the menu
 
   let model = null, spin = true, wire = false;
+  /* Gesture zoom's distance, eased toward (see below). */
+  let fitDist = 0, wantDist = 0;
 
   function resize(){
     const w = innerWidth, h = Math.max(1, innerHeight);
@@ -173,6 +175,12 @@
     const vFov = camera.fov * Math.PI / 180;
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
     const dist = (sphere.radius / Math.sin(Math.min(vFov, hFov) / 2)) * 1.15;
+    fitDist = dist; wantDist = 0;
+    /* The closest the camera may come is just outside the model's bounding
+       sphere — a fraction of the framing distance put it INSIDE a turned
+       box, where everything is culled and the window goes empty. */
+    controls.minDistance = sphere.radius * 1.15;
+    controls.maxDistance = dist * 8;
     controls.target.copy(sphere.center);
     camera.position.set(sphere.center.x, sphere.center.y + sphere.radius * 0.3, sphere.center.z + dist);
     camera.near = Math.max(0.001, dist / 1000);
@@ -204,9 +212,42 @@
   });
   document.getElementById('fitBtn').addEventListener('click', ()=>{ frame(); closeMenu(); });
 
+  /* GESTURE ZOOM, directly. The camera window tracks his two pinches and,
+     when this viewer is the window in front, sends the zoom here as a
+     factor instead of as wheel notches: the camera moves along its line to
+     the model's centre (the orbit target), eased so each step glides, and
+     stays between a close-up and eight times the framing distance. The
+     window itself never changes size. */
+  function zoomBy(factor){
+    if(!model || !fitDist || !(factor > 0)) return;
+    const now = camera.position.distanceTo(controls.target);
+    const from = wantDist || now;
+    wantDist = Math.min(controls.maxDistance, Math.max(controls.minDistance, from / factor));
+  }
+  (function listenForGestures(){
+    const ev = window.__TAURI__ && window.__TAURI__.event;
+    if(!ev || !ev.listen) return;
+    ev.listen('jarvis://model-zoom', (e) => {
+      const p = (e && e.payload) || {};
+      if(p.end){ return; }
+      zoomBy(Number(p.factor));
+    }).catch(() => {});
+  })();
+  window.__jarvisModelZoom = zoomBy;   // the same entry point, for tests
+
   resize();
   (function tick(){
     requestAnimationFrame(tick);
+    if(wantDist){
+      const off = camera.position.clone().sub(controls.target);
+      const len = off.length();
+      const next = len + (wantDist - len) * 0.25;
+      off.setLength(next);
+      camera.position.copy(controls.target).add(off);
+      camera.near = Math.max(0.001, next / 1000);
+      camera.updateProjectionMatrix();
+      if(Math.abs(wantDist - next) < wantDist * 0.002) wantDist = 0;
+    }
     if(spin && model) model.rotation.y += 0.004;
     controls.update();
     renderer.render(scene, camera);

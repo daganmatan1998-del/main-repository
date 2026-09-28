@@ -31,7 +31,9 @@ sysinfo = "0.32"
 serde_json = "1"   # structuring the workspace/system tool results as JSON, not ad-hoc strings
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"] }
+# Gesture zoom adds the program-name lookup (Threading) and the monitor
+# check for full-screen windows (Gdi) to what closing windows already used.
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Threading", "Win32_Graphics_Gdi"] }
 
 [profile.release]
 opt-level = "s"

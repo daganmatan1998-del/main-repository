@@ -330,6 +330,408 @@ fn close_browser_tab(_name: String) -> Result<String, String> {
     Err("only available on Windows".into())
 }
 
+/* ------------------------------------------------------------------
+   GESTURE ZOOM — the operating-system half.
+
+   The camera window tracks his hands and decides HOW MUCH to zoom
+   (gesture-zoom.js). This half answers two questions for it and never
+   decides anything on its own:
+
+   zoom_target — which window is he working in, and what is it: the
+   program's file name, its window class, whether it is full screen,
+   whether the pointer is over it. The foreground window, except when
+   that is our own orb or camera (he clicked it): then the last window
+   he WAS working in, remembered here each time it is asked.
+
+   zoom_send — deliver a number of zoom notches to that window in the one
+   form the page chose for it: Ctrl+wheel, the plain wheel, Alt+wheel or
+   Ctrl+= / Ctrl+-. Only to the window asked about, only while it is in
+   front (put back in front and CHECKED if our own camera window took
+   focus — close_browser_tab's guard), and a wheel only where WindowFromPoint
+   says that very window is under the pointer, because Windows sends the
+   wheel to whatever is under the pointer, not to the foreground. Nothing
+   here moves or resizes any window.
+------------------------------------------------------------------ */
+static ZOOM_LAST_EXTERNAL: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+/* Our own windows by native handle, labelled: the orb ("main") and the
+   camera are never zoomed; the 3D viewer ("model") is zoomed directly by
+   the page, not through the OS; the workspace panes ("ws-...") are
+   webviews and take Ctrl+wheel like a browser. */
+#[cfg(target_os = "windows")]
+fn zoom_own_windows(app: &tauri::AppHandle) -> Vec<(String, isize)> {
+    app.webview_windows()
+        .into_iter()
+        .filter_map(|(label, w)| w.hwnd().ok().map(|h| (label, h.0 as isize)))
+        .collect()
+}
+
+#[cfg(target_os = "windows")]
+fn zoom_is_control(label: &str) -> bool {
+    label == "main" || label == "camera"
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn zoom_exe_of_pid(pid: u32) -> String {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+        PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h.is_null() {
+            return String::new();
+        }
+        let mut buf = [0u16; 1024];
+        let mut len: u32 = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(h, PROCESS_NAME_WIN32, buf.as_mut_ptr(), &mut len);
+        CloseHandle(h);
+        if ok == 0 {
+            return String::new();
+        }
+        let path = String::from_utf16_lossy(&buf[..len as usize]);
+        path.rsplit(['\\', '/']).next().unwrap_or("").to_lowercase()
+    }
+}
+
+/* A Store app's window belongs to ApplicationFrameHost.exe; the program
+   itself is a child window in another process, and that is the name that
+   says what it is. */
+#[cfg(target_os = "windows")]
+unsafe fn zoom_exe_of_window(hwnd: windows_sys::Win32::Foundation::HWND) -> String {
+    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{EnumChildWindows, GetWindowThreadProcessId};
+    struct Find {
+        frame: u32,
+        found: u32,
+    }
+    unsafe extern "system" fn visit(child: HWND, lparam: LPARAM) -> BOOL {
+        unsafe {
+            let f = &mut *(lparam as *mut Find);
+            let mut p: u32 = 0;
+            GetWindowThreadProcessId(child, &mut p);
+            if p != 0 && p != f.frame {
+                f.found = p;
+                return 0;
+            }
+            1
+        }
+    }
+    unsafe {
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        let exe = zoom_exe_of_pid(pid);
+        if exe != "applicationframehost.exe" {
+            return exe;
+        }
+        let mut f = Find { frame: pid, found: 0 };
+        EnumChildWindows(hwnd, Some(visit), &mut f as *mut Find as LPARAM);
+        if f.found != 0 {
+            zoom_exe_of_pid(f.found)
+        } else {
+            exe
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn zoom_class_of(hwnd: windows_sys::Win32::Foundation::HWND) -> String {
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetClassNameW;
+    unsafe {
+        let mut buf = [0u16; 256];
+        let n = GetClassNameW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+        if n > 0 {
+            String::from_utf16_lossy(&buf[..n as usize])
+        } else {
+            String::new()
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn zoom_title_of(hwnd: windows_sys::Win32::Foundation::HWND) -> String {
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowTextW;
+    unsafe {
+        let mut buf = [0u16; 512];
+        let n = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+        if n > 0 {
+            String::from_utf16_lossy(&buf[..n as usize])
+        } else {
+            String::new()
+        }
+    }
+}
+
+/* Covering its whole monitor: full screen, or a borderless game. */
+#[cfg(target_os = "windows")]
+unsafe fn zoom_covers_monitor(hwnd: windows_sys::Win32::Foundation::HWND) -> bool {
+    use windows_sys::Win32::Foundation::RECT;
+    use windows_sys::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect;
+    unsafe {
+        let mut r: RECT = std::mem::zeroed();
+        if GetWindowRect(hwnd, &mut r) == 0 {
+            return false;
+        }
+        let mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        if mon.is_null() {
+            return false;
+        }
+        let mut mi: MONITORINFO = std::mem::zeroed();
+        mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        if GetMonitorInfoW(mon, &mut mi) == 0 {
+            return false;
+        }
+        let m = mi.rcMonitor;
+        r.left <= m.left && r.top <= m.top && r.right >= m.right && r.bottom >= m.bottom
+    }
+}
+
+/* The top-level window actually under a point of the screen. */
+#[cfg(target_os = "windows")]
+unsafe fn zoom_root_at(pt: windows_sys::Win32::Foundation::POINT) -> isize {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetAncestor, WindowFromPoint, GA_ROOT};
+    unsafe {
+        let h = WindowFromPoint(pt);
+        if h.is_null() {
+            0
+        } else {
+            GetAncestor(h, GA_ROOT) as isize
+        }
+    }
+}
+
+/* Where a wheel notch will land on this window. The pointer, if it is
+   already over the window — the content zooms around what he is looking
+   at. Otherwise the middle of the window, or the nearest point to it that
+   is not covered by something else (our own always-on-top camera, say). */
+#[cfg(target_os = "windows")]
+unsafe fn zoom_aim_at(hwnd: windows_sys::Win32::Foundation::HWND) -> Result<(), String> {
+    use windows_sys::Win32::Foundation::{POINT, RECT};
+    use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetClientRect, GetCursorPos, SetCursorPos};
+    unsafe {
+        let target = hwnd as isize;
+        let mut cur = POINT { x: 0, y: 0 };
+        if GetCursorPos(&mut cur) != 0 && zoom_root_at(cur) == target {
+            return Ok(());
+        }
+        let mut rc: RECT = std::mem::zeroed();
+        if GetClientRect(hwnd, &mut rc) == 0 {
+            return Err("could not read the window's size".into());
+        }
+        let (w, h) = (rc.right - rc.left, rc.bottom - rc.top);
+        if w < 8 || h < 8 {
+            return Err("the window has no room to zoom".into());
+        }
+        let spots = [
+            (0.5, 0.5), (0.5, 0.35), (0.35, 0.5), (0.65, 0.5), (0.5, 0.65), (0.3, 0.3), (0.7, 0.7),
+        ];
+        for (fx, fy) in spots {
+            let mut p = POINT {
+                x: rc.left + (w as f32 * fx) as i32,
+                y: rc.top + (h as f32 * fy) as i32,
+            };
+            ClientToScreen(hwnd, &mut p);
+            if zoom_root_at(p) == target {
+                SetCursorPos(p.x, p.y);
+                return Ok(());
+            }
+        }
+        Err("the window is covered where it would be zoomed".into())
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn zoom_target(app: tauri::AppHandle) -> serde_json::Value {
+    use windows_sys::Win32::Foundation::{HWND, POINT};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetCursorPos, GetForegroundWindow, IsIconic, IsWindow,
+    };
+    let own = zoom_own_windows(&app);
+    let label_of = |h: isize| own.iter().find(|(_, x)| *x == h).map(|(l, _)| l.clone());
+    unsafe {
+        let fg = GetForegroundWindow() as isize;
+        let fg_is_control = label_of(fg).map(|l| zoom_is_control(&l)).unwrap_or(false);
+        let target = if fg != 0 && !fg_is_control {
+            ZOOM_LAST_EXTERNAL.store(fg, Ordering::SeqCst);
+            fg
+        } else {
+            ZOOM_LAST_EXTERNAL.load(Ordering::SeqCst)
+        };
+        if target == 0 || IsWindow(target as HWND) == 0 {
+            return serde_json::json!({ "hwnd": 0, "error": "no window is in front" });
+        }
+        let h = target as HWND;
+        let mut cur = POINT { x: 0, y: 0 };
+        let cursor_inside = GetCursorPos(&mut cur) != 0 && zoom_root_at(cur) == target;
+        serde_json::json!({
+            "hwnd": target,
+            "exe": zoom_exe_of_window(h),
+            "class": zoom_class_of(h),
+            "title": zoom_title_of(h),
+            "own": label_of(target),
+            "fullscreen": zoom_covers_monitor(h),
+            "minimized": IsIconic(h) != 0,
+            "foreground": fg == target,
+            "cursor_inside": cursor_inside
+        })
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn zoom_send(app: tauri::AppHandle, hwnd: isize, method: String, notches: i32) -> Result<String, String> {
+    use std::{thread, time::Duration};
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP,
+        MOUSEEVENTF_WHEEL, MOUSEINPUT, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_OEM_MINUS, VK_OEM_PLUS,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, IsIconic, IsWindow, SetForegroundWindow,
+    };
+
+    if notches == 0 {
+        return Ok("nothing to send".into());
+    }
+    let n = notches.clamp(-6, 6);
+    let own = zoom_own_windows(&app);
+    let label_of = |h: isize| own.iter().find(|(_, x)| *x == h).map(|(l, _)| l.clone());
+    if let Some(l) = label_of(hwnd) {
+        if zoom_is_control(&l) || l == "model" {
+            return Err("that is JARVIS's own window".into());
+        }
+    }
+
+    unsafe {
+        let h = hwnd as HWND;
+        if hwnd == 0 || IsWindow(h) == 0 {
+            return Err("that window is gone".into());
+        }
+        if IsIconic(h) != 0 {
+            return Err("the window is minimised".into());
+        }
+        let fg = GetForegroundWindow() as isize;
+        if fg != hwnd {
+            /* He clicked our camera window (or the orb): put the program he
+               was working in back in front, and check that it really is,
+               before a single notch goes anywhere. Anything else in front
+               means he switched programs — send nothing; the page re-reads
+               the foreground and carries on with that one. */
+            let ours = label_of(fg).map(|l| zoom_is_control(&l)).unwrap_or(false);
+            if !(ours || fg == 0) {
+                return Err("foreground changed".into());
+            }
+            SetForegroundWindow(h);
+            thread::sleep(Duration::from_millis(60));
+            if GetForegroundWindow() as isize != hwnd {
+                return Err("could not bring the window forward, so nothing was sent".into());
+            }
+        }
+
+        let key = |vk: VIRTUAL_KEY, up: bool| INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: vk,
+                    wScan: 0,
+                    dwFlags: if up { KEYEVENTF_KEYUP } else { 0 },
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+        const NOTCH: i32 = 120; // WHEEL_DELTA: one click of a wheel
+        let wheel = |delta: i32| INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: INPUT_0 {
+                mi: MOUSEINPUT {
+                    dx: 0,
+                    dy: 0,
+                    mouseData: delta as u32,
+                    dwFlags: MOUSEEVENTF_WHEEL,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+        /* An unassigned key, pressed while Alt is down: without it, letting
+           go of Alt on its own opens the program's menu bar. */
+        const MENU_MASK: VIRTUAL_KEY = 0xE8;
+
+        let count = n.unsigned_abs() as usize;
+        let mut inputs: Vec<INPUT> = Vec::with_capacity(count * 2 + 4);
+        let modifier: Option<VIRTUAL_KEY>;
+        match method.as_str() {
+            "ctrl_wheel" | "wheel" | "alt_wheel" => {
+                zoom_aim_at(h)?;
+                modifier = match method.as_str() {
+                    "ctrl_wheel" => Some(VK_CONTROL),
+                    "alt_wheel" => Some(VK_MENU),
+                    _ => None,
+                };
+                if let Some(m) = modifier {
+                    inputs.push(key(m, false));
+                }
+                for _ in 0..count {
+                    inputs.push(wheel(if n > 0 { NOTCH } else { -NOTCH }));
+                }
+                if modifier == Some(VK_MENU) {
+                    inputs.push(key(MENU_MASK, false));
+                    inputs.push(key(MENU_MASK, true));
+                }
+                if let Some(m) = modifier {
+                    inputs.push(key(m, true));
+                }
+            }
+            "ctrl_keys" => {
+                modifier = Some(VK_CONTROL);
+                let vk = if n > 0 { VK_OEM_PLUS } else { VK_OEM_MINUS };
+                inputs.push(key(VK_CONTROL, false));
+                for _ in 0..count {
+                    inputs.push(key(vk, false));
+                    inputs.push(key(vk, true));
+                }
+                inputs.push(key(VK_CONTROL, true));
+            }
+            other => return Err(format!("unknown zoom method \"{}\"", other)),
+        }
+
+        let sent = SendInput(
+            inputs.len() as u32,
+            inputs.as_mut_ptr(),
+            std::mem::size_of::<INPUT>() as i32,
+        );
+        if (sent as usize) < inputs.len() {
+            /* A modifier left down would turn his next click into Ctrl+click. */
+            if let Some(m) = modifier {
+                let mut up = [key(m, true)];
+                SendInput(1, up.as_mut_ptr(), std::mem::size_of::<INPUT>() as i32);
+            }
+            return Err("Windows blocked the input (an elevated program, or a secure screen)".into());
+        }
+    }
+    Ok(format!("{} {}", method, n))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn zoom_target() -> serde_json::Value {
+    serde_json::json!({ "hwnd": 0, "error": "gesture zoom drives Windows programs, and this is not Windows" })
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn zoom_send(_hwnd: isize, _method: String, _notches: i32) -> Result<String, String> {
+    Err("only available on Windows".into())
+}
+
+
 /* Screen capture. The point is not to save a file — it is to let him SEE
    what you are looking at, so the image goes back as base64 and straight
    into the conversation as an attachment. He already handles images; this
@@ -993,7 +1395,9 @@ fn main() {
             workspace_list_dir,
             workspace_git,
             system_metrics,
-            list_processes
+            list_processes,
+            zoom_target,
+            zoom_send
         ])
         .setup(|app| {
             let window = app

@@ -1,12 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "model",
-  "description": "The 3D viewer window, and nothing else. It has no title bar, so it closes itself from its own right-click menu and moves itself on Shift-drag; that is all it may do. No opener, no shell, no filesystem, no events.",
-  "windows": ["model"],
+  "description": "The 3D viewer window, and nothing else. It has no title bar, so it closes itself from its own right-click menu and moves itself on Shift-drag, and it listens for gesture zoom from the camera window. That is all it may do. No opener, no shell, no filesystem.",
+  "windows": [
+    "model"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-close",
     "core:window:allow-start-dragging",
-    "core:window:allow-set-focus"
+    "core:window:allow-set-focus",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
   ]
 }

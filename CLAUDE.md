@@ -185,6 +185,31 @@ single file `dist/index.html`.
   taskbar, closed from model.html's own right-click menu, moved by
   Shift/Alt-drag — which needs capabilities/model.json (close,
   start-dragging), or the calls are refused.
+- **Two-hand gesture zoom (page 2.10.0) lives in the CAMERA window**, the
+  only webview with the stream: camera.html loads the vendored MediaPipe
+  (`dist/vendor/mediapipe`: IIFE bundle, SIMD wasm, hand_landmarker.task —
+  no CDN) and `dist/gesture-zoom.js`, which is pure logic above the tracker
+  and is tested in Node with REAL landmarks (scratchpad handimgs/
+  landmarks.json, from MediaPipe's own test photos). Pinch = thumb tip to
+  index tip over palm length (on < 0.30, off > 0.42, two frames each way)
+  AND the fist guard (index tip and thumb tip both > 0.33 palm from the
+  index knuckle — a fist reads 0.20 on the pinch alone). Distance is over
+  hand size, so leaning in is not a zoom. Position control from a fresh
+  median baseline, 8 % dead zone subtracted, eased and slew-limited; either
+  hand letting go ends it. Rust does only the OS half: `zoom_target`
+  (foreground, else the last non-orb/camera window; exe via
+  QueryFullProcessImageName, UWP child exe; class; full screen) and
+  `zoom_send` (verified-foreground, WindowFromPoint-aimed Ctrl/Alt/plain
+  wheel or Ctrl+=/-). Adapters are chosen in JS (selectAdapter) by exe and
+  class — Blender gets the PLAIN wheel (Ctrl+wheel pans there), Photoshop
+  Alt+wheel, Electron Ctrl+=/-, our model window the direct
+  `jarvis://model-zoom` event; unknown windowed apps get Ctrl+wheel (what a
+  touchpad pinch sends), unknown full-screen apps nothing. Never resize or
+  move a window for it. Settings: orb GESTURES tab → Store key
+  gesture_zoom (the camera reads jarvis_store:gesture_zoom) + the
+  `jarvis://gesture-settings` event. In the sandbox the GPU delegate runs
+  in software at ~600 ms a frame, so tests force `delegate: 'CPU'`; the
+  controller itself falls back to CPU when the GPU path averages > 70 ms.
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.

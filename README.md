@@ -320,6 +320,61 @@ actually forwarded where it should be, actually stripped where it must be, that
 the warning fires only in the second case, and that a blind primary is overtaken
 in the chain by a fallback that can see.
 
+## Page 2.10.0: two-hand gesture zoom, for whatever is in front
+
+**The gesture.** In front of the camera, pinch the thumb and index finger of
+both hands. Pull your hands apart to zoom in, and bring them together to
+zoom out. The zoom is proportional: a little apart is a little zoom, twice
+as far apart is a lot. Bring your hands back to where they started and the
+zoom goes back too. Open either hand and it stops at once. The next pinch
+starts fresh from wherever your hands are.
+
+**Where it runs.** In the camera window, the only window that has the camera
+(two webviews cannot share a stream). It needs the camera window open.
+
+| Stage | Where | What it does |
+|---|---|---|
+| Hand tracking | `vendor/mediapipe` | MediaPipe HandLandmarker, bundled. It works offline and nothing leaves the machine. GPU first, falling back to CPU if the GPU path is slow. |
+| Pinch | `gesture-zoom.js` | Thumb tip to index tip, measured in palm lengths. On below 0.30, off above 0.42, two frames each way. A fist guard stops a fist (0.20 on the pinch alone) from counting. |
+| Distance | `gesture-zoom.js` | Between the two pinch points, divided by hand size, so leaning toward the camera is not a zoom. |
+| Smoothing | `gesture-zoom.js` | A One Euro filter, a median baseline, an 8 % dead zone that is subtracted rather than jumped, then easing and a speed cap. Notches carry hysteresis, so a hand held at a boundary never makes the content twitch in and out. |
+| Foreground | Rust `zoom_target` | The window in front, or the last one you used if you clicked the camera or the orb. Reports its program name (a Store app's real one), window class, and whether it is full screen. Re-read every half second, so switching programs mid-gesture carries the gesture over. |
+| Adapter | `selectAdapter` | Chooses how this program zooms (table below). |
+| Zoom | Rust `zoom_send` | Sends to that window only, while it is in front, and aimed with `WindowFromPoint` so the wheel lands on it and not on whatever sits on top. Nothing is ever moved or resized. |
+
+**How each kind of program is zoomed:**
+
+| Program | Method |
+|---|---|
+| Browsers, PDF readers, Office, image viewers, terminals, Explorer, JARVIS workspace panes | Ctrl + wheel at the pointer, or at the window's centre if the pointer is elsewhere |
+| Blender and other 3D apps | The plain wheel (in Blender, Ctrl + wheel pans) |
+| Photoshop | Alt + wheel |
+| Electron apps (VS Code, Slack, Discord) | Ctrl + = and Ctrl + - |
+| The JARVIS 3D viewer | Directly: the camera eases toward the model's centre |
+| Any other windowed app | Ctrl + wheel, which is what Windows itself sends when you pinch a precision touchpad |
+| An unknown full-screen app | Nothing (probably a game, where Ctrl + wheel is not a zoom) |
+| The desktop, the taskbar | Nothing |
+
+**Settings.** The GESTURES tab in OPTIONS: on/off (on by default), plus:
+
+- Sensitivity
+- Movement before it zooms
+- Smoothing
+- Maximum zoom speed
+- Maximum and minimum zoom, counted from where JARVIS first found each window
+
+By voice: "turn on gesture zoom", through the `gesture_zoom` tool. Turning it
+on opens the camera.
+
+**Tested:**
+
+- In Node, with landmarks the real model produced from MediaPipe's own test
+  photos: two OK signs (a real pinch), relaxed open hands, and a fist.
+- End to end in the real camera window, with the real model, on a camera
+  stream made from those photos, with the hands moved apart and together.
+
+The Rust half is type-checked for Windows; the full build needs Windows.
+
 ## Page 2.9.3 / worker 2.6.6: screen mode out loud, "sir", studied 3D models
 
 **Screen mode went silent.** A description of a screen is full of words the

@@ -769,12 +769,12 @@
   #closeOptions{ background:none; border:none; color:var(--cyan); cursor:pointer; font-size:13px; font-family:inherit; }
 
   #optionsTabs{ display:flex; gap:6px; padding:10px 14px 0; flex-wrap:wrap; }
-  #voiceSettingsBtn, #planBtn, #brainSettingsBtn, #historyBtn, #languageBtn{
+  #voiceSettingsBtn, #planBtn, #brainSettingsBtn, #historyBtn, #languageBtn, #gestureBtn{
     flex:1; min-width:64px; min-height:40px; background:none; border:1px solid rgba(var(--cyan-rgb), 0.3); color:var(--cyan);
     cursor:pointer; font-size:10px; font-family:inherit; letter-spacing:0.5px; padding:8px 4px;
   }
-  #voiceSettingsBtn:hover, #planBtn:hover, #brainSettingsBtn:hover, #historyBtn:hover, #languageBtn:hover{ background:rgba(var(--cyan-rgb), 0.1); }
-  #planBtn.active, #brainSettingsBtn.active, #voiceSettingsBtn.active, #historyBtn.active, #languageBtn.active{ background:rgba(var(--cyan-rgb), 0.15); }
+  #voiceSettingsBtn:hover, #planBtn:hover, #brainSettingsBtn:hover, #historyBtn:hover, #languageBtn:hover, #gestureBtn:hover{ background:rgba(var(--cyan-rgb), 0.1); }
+  #planBtn.active, #brainSettingsBtn.active, #voiceSettingsBtn.active, #historyBtn.active, #languageBtn.active, #gestureBtn.active{ background:rgba(var(--cyan-rgb), 0.15); }
 
   #planPanel{
     display:none; flex-direction:column; gap:8px; padding:12px 14px;
@@ -929,6 +929,16 @@
     background:rgba(var(--cyan-rgb), 0.03);
   }
   #languagePanel.open{ display:flex; }
+  #gesturePanel{
+    display:none; flex-direction:column; gap:8px; padding:12px 14px;
+    background:rgba(var(--cyan-rgb), 0.03);
+  }
+  #gesturePanel.open{ display:flex; }
+  .gzRow{ display:grid; grid-template-columns:minmax(0, 1.3fr) minmax(0, 1.6fr) 52px; align-items:center; gap:8px; }
+  .gzRow label{ font-size:10px; color:rgba(180,240,255,0.7); letter-spacing:0.5px; }
+  .gzRow input[type=range]{ width:100%; accent-color:var(--cyan); }
+  .gzVal{ font-size:10px; color:#7dffc4; text-align:right; }
+  #gestureStatus{ font-size:10px; color:#7dffc4; }
   .langOption{
     background:none; border:1px solid rgba(var(--cyan-rgb), 0.3); color:var(--cyan);
     font-family:inherit; font-size:13px; padding:10px 12px; cursor:pointer; text-align:left;
@@ -1438,7 +1448,7 @@
     #chatLog{ padding:11px 12px; font-size:13px; gap:10px; }
     .hud{ max-width:34vw; }
     #optionsTabs{ gap:8px; padding:12px 12px 0; }
-    #voiceSettingsBtn, #planBtn, #brainSettingsBtn, #historyBtn, #languageBtn{ font-size:11px; padding:10px 4px; }
+    #voiceSettingsBtn, #planBtn, #brainSettingsBtn, #historyBtn, #languageBtn, #gestureBtn{ font-size:11px; padding:10px 4px; }
     .vsRow{ margin-bottom:10px; }
     .vsHint{ font-size:11px; line-height:1.6; }
     .historyItem{ padding:10px 12px; }
@@ -1561,6 +1571,7 @@
     <button id="voiceSettingsBtn" title="Cartesia voice settings">VOICE ID</button>
     <button id="actionsBtn" title="What he actually did">ACTIONS</button>
     <button id="languageBtn" title="Language">LANGUAGE</button>
+    <button id="gestureBtn" title="Two-hand gesture zoom">GESTURES</button>
   </div>
   <div id="planPanel">
     <div id="planAddRow">
@@ -1653,6 +1664,22 @@
   <div id="languagePanel">
     <button class="langOption" id="langEnBtn" data-lang="en">English</button>
     <button class="langOption" id="langHeBtn" data-lang="he">עברית</button>
+  </div>
+  <div id="gesturePanel">
+    <div class="vsRow vsActions">
+      <button id="gestureToggleBtn" type="button">✋ GESTURE ZOOM: ON</button>
+      <span id="gestureStatus"></span>
+    </div>
+    <div class="vsHint" id="gestureHint">Pinch thumb and index finger on BOTH hands in front of the camera, then pull your hands apart to zoom in and bring them together to zoom out — on whatever is in front: a web page, a PDF, a picture, a 3D model. Let go with either hand and it stops; the next pinch starts fresh. Needs the camera window open.</div>
+    <div class="gzRow"><label for="gzSensitivity" id="gzSensitivityLabel">Sensitivity</label><input id="gzSensitivity" type="range" min="0.25" max="3" step="0.05"><span class="gzVal" id="gzSensitivityVal"></span></div>
+    <div class="gzRow"><label for="gzThreshold" id="gzThresholdLabel">Movement before it zooms</label><input id="gzThreshold" type="range" min="2" max="30" step="1"><span class="gzVal" id="gzThresholdVal"></span></div>
+    <div class="gzRow"><label for="gzSmoothing" id="gzSmoothingLabel">Smoothing</label><input id="gzSmoothing" type="range" min="0" max="1" step="0.05"><span class="gzVal" id="gzSmoothingVal"></span></div>
+    <div class="gzRow"><label for="gzMaxSpeed" id="gzMaxSpeedLabel">Maximum zoom speed</label><input id="gzMaxSpeed" type="range" min="1.2" max="10" step="0.1"><span class="gzVal" id="gzMaxSpeedVal"></span></div>
+    <div class="gzRow"><label for="gzMaxZoom" id="gzMaxZoomLabel">Maximum zoom</label><input id="gzMaxZoom" type="range" min="1.2" max="20" step="0.1"><span class="gzVal" id="gzMaxZoomVal"></span></div>
+    <div class="gzRow"><label for="gzMinZoom" id="gzMinZoomLabel">Minimum zoom</label><input id="gzMinZoom" type="range" min="0.05" max="0.9" step="0.01"><span class="gzVal" id="gzMinZoomVal"></span></div>
+    <div class="vsRow vsActions">
+      <button id="gestureResetBtn" type="button">DEFAULTS</button>
+    </div>
   </div>
 </div>
 
@@ -2014,6 +2041,13 @@ const I18N = {
     cameraBlocked: 'The camera is blocked. On Windows: Settings → Privacy & security → Camera, turn on \"Camera access\" and \"Let desktop apps access your camera\". On a Mac: System Settings → Privacy & Security → Camera, and tick JARVIS.',
     cameraBusy: 'Another app is holding the camera — close Zoom, Teams or whatever has it, and say it again.',
     actionsBtn: 'ACTIONS',
+    gestureBtn: 'GESTURES',
+    gestureOn: '✋ GESTURE ZOOM: ON',
+    gestureOff: '✋ GESTURE ZOOM: OFF',
+    gestureHint: 'Pinch thumb and index finger on BOTH hands in front of the camera, then pull your hands apart to zoom in and bring them together to zoom out — on whatever is in front: a web page, a PDF, a picture, a 3D model. Let go with either hand and it stops; the next pinch starts fresh. Needs the camera window open.',
+    gzSensitivityLabel: 'Sensitivity', gzThresholdLabel: 'Movement before it zooms', gzSmoothingLabel: 'Smoothing',
+    gzMaxSpeedLabel: 'Maximum zoom speed', gzMaxZoomLabel: 'Maximum zoom', gzMinZoomLabel: 'Minimum zoom',
+    gestureResetBtn: 'DEFAULTS',
     actNote: 'Every tool he ran, newest first. Click a row for the full arguments and result. This is what actually happened — not what he said happened.',
     actEmpty: 'Nothing yet. This fills up the moment he actually does something.',
     actDone: 'done',
@@ -2260,6 +2294,13 @@ const I18N = {
     cameraBlocked: 'המצלמה חסומה. בווינדוז: הגדרות ← פרטיות ואבטחה ← מצלמה, להדליק גישה למצלמה וגם את האפשרות של אפליקציות שולחן עבודה. במק : הגדרות מערכת ← פרטיות ואבטחה ← מצלמה, ולסמן את ג\'רוויס.',
     cameraBusy: 'אפליקציה אחרת מחזיקה במצלמה — תסגור את Zoom או Teams או מה שלא יהיה, ותגיד שוב.',
     actionsBtn: 'פעולות',
+    gestureBtn: 'מחוות',
+    gestureOn: '✋ זום בידיים: פועל',
+    gestureOff: '✋ זום בידיים: כבוי',
+    gestureHint: 'תצמיד אגודל ואצבע בשתי הידיים מול המצלמה, ואז תרחיק את הידיים זו מזו כדי להגדיל ותקרב אותן כדי להקטין — בכל מה שפתוח מלפנים: דף אינטרנט, PDF, תמונה, מודל תלת-ממד. שחרור של יד אחת עוצר; הצביטה הבאה מתחילה מחדש. צריך שחלון המצלמה יהיה פתוח.',
+    gzSensitivityLabel: 'רגישות', gzThresholdLabel: 'תנועה לפני שמתחיל זום', gzSmoothingLabel: 'החלקה',
+    gzMaxSpeedLabel: 'מהירות זום מרבית', gzMaxZoomLabel: 'זום מרבי', gzMinZoomLabel: 'זום מזערי',
+    gestureResetBtn: 'ברירת מחדל',
     actNote: 'כל כלי שהוא הריץ, החדש למעלה. לחץ על שורה לפרטים המלאים. זה מה שבאמת קרה — לא מה שהוא אמר שקרה.',
     actEmpty: 'עדיין כלום. זה יתמלא ברגע שהוא באמת יעשה משהו.',
     actDone: 'בוצע',
@@ -2374,6 +2415,9 @@ function applyLanguage(lang){
     voiceHint:'voiceHint', wakeHint:'wakeHint', permissionBtn:'permissionBtn', permissionHint:'permissionHint', communicateLabel:'communicateLabel', entBtn:'entBtn', convBtn:'convBtn', micBtn:'micBtn', liveBtn:'liveBtn',
     attachCameraBtn:'attachCameraBtn', attachGalleryBtn:'attachGalleryBtn', attachFilesBtn:'attachFilesBtn',
     actionsBtn:'actionsBtn',
+    gestureBtn:'gestureBtn', gestureHint:'gestureHint', gzSensitivityLabel:'gzSensitivityLabel', gzThresholdLabel:'gzThresholdLabel',
+    gzSmoothingLabel:'gzSmoothingLabel', gzMaxSpeedLabel:'gzMaxSpeedLabel', gzMaxZoomLabel:'gzMaxZoomLabel',
+    gzMinZoomLabel:'gzMinZoomLabel', gestureResetBtn:'gestureResetBtn',
     readyMsg:'readyMsg', authEnterBtn:'authEnterBtn', decoySendBtn:'decoySendBtn'
   };
   Object.keys(textMap).forEach(id=>{
@@ -2391,6 +2435,7 @@ function applyLanguage(lang){
   if(typeof renderActionLog === 'function') renderActionLog();
   if(typeof renderTasks === 'function') renderTasks();
   if(typeof syncChatToggleLabel === 'function') syncChatToggleLabel();
+  if(typeof renderGestureSettings === 'function') renderGestureSettings();
 
   const placeholderMap = {
     backendUrlInput:'backendUrlPlaceholder', cartesiaVoiceIdInput:'cartesiaVoiceIdPlaceholder',
@@ -2428,7 +2473,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.9.3';
+const APP_VERSION = '2.10.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -6768,8 +6813,8 @@ const cartesiaClearBtn = document.getElementById('cartesiaClearBtn');
 const cartesiaStatus = document.getElementById('cartesiaStatus');
 
 function closeAllSubPanels(){
-  [voiceSettings, brainSettings, planPanel, historyPanel, languagePanel].forEach(p=> p && p.classList.remove('open'));
-  [voiceSettingsBtn, brainSettingsBtn, planBtn, historyBtn, languageBtn].forEach(b=> b && b.classList.remove('active'));
+  [voiceSettings, brainSettings, planPanel, historyPanel, languagePanel, document.getElementById('gesturePanel')].forEach(p=> p && p.classList.remove('open'));
+  [voiceSettingsBtn, brainSettingsBtn, planBtn, historyBtn, languageBtn, document.getElementById('gestureBtn')].forEach(b=> b && b.classList.remove('active'));
 }
 function toggleSubPanel(panelEl, btnEl){
   const willOpen = !panelEl.classList.contains('open');
@@ -7247,6 +7292,98 @@ document.getElementById('actionsClearBtn').addEventListener('click', async ()=>{
 /* The log is read after a restart far more often than during a session, so
    it is loaded at boot rather than waiting for the panel to be opened. */
 loadActionLog().then(renderActionLog).catch(()=>{});
+
+const gestureBtn = document.getElementById('gestureBtn');
+const gesturePanel = document.getElementById('gesturePanel');
+gestureBtn.addEventListener('click', ()=> toggleSubPanel(gesturePanel, gestureBtn));
+
+/* --- GESTURE ZOOM — the settings. The engine itself runs in the camera
+   window (gesture-zoom.js), because that is the window with the camera.
+   Saved under the key the camera window reads at start, and pushed to it
+   live, so a change applies without reopening anything. --- */
+var GZ_STORE = 'gesture_zoom';   // jarvis_store:gesture_zoom, with Store's prefix
+var GZ_DEFAULTS = { enabled:true, sensitivity:1, threshold:8, smoothing:0.5, maxSpeed:3, maxZoom:5, minZoom:0.25 };
+var GZ_FIELDS = [
+  ['sensitivity', 'gzSensitivity', v => '×' + v.toFixed(2)],
+  ['threshold',   'gzThreshold',   v => Math.round(v) + '%'],
+  ['smoothing',   'gzSmoothing',   v => Math.round(v * 100) + '%'],
+  ['maxSpeed',    'gzMaxSpeed',    v => '×' + v.toFixed(1) + '/s'],
+  ['maxZoom',     'gzMaxZoom',     v => Math.round(v * 100) + '%'],
+  ['minZoom',     'gzMinZoom',     v => Math.round(v * 100) + '%']
+];
+/* var, not let: applyLanguage can render this panel before this line has
+   run, and a let read that early throws. */
+var gestureSettings = Object.assign({}, GZ_DEFAULTS);
+var gestureSaveTimer = null;
+async function loadGestureSettings(){
+  try{
+    const r = await Store.get(GZ_STORE);
+    gestureSettings = Object.assign({}, GZ_DEFAULTS, JSON.parse(r.value));
+  }catch(err){}
+  return gestureSettings;
+}
+function pushGestureSettings(){
+  const ev = window.__TAURI__ && window.__TAURI__.event;
+  if(ev && ev.emit){ try{ const p = ev.emit('jarvis://gesture-settings', gestureSettings); if(p && p.catch) p.catch(()=>{}); }catch(err){} }
+}
+async function saveGestureSettings(){
+  try{ await Store.set(GZ_STORE, JSON.stringify(gestureSettings)); }catch(err){}
+  pushGestureSettings();
+}
+function renderGestureSettings(){
+  if(!GZ_FIELDS || !gestureSettings) return;
+  const btn = document.getElementById('gestureToggleBtn');
+  if(btn){
+    btn.textContent = gestureSettings.enabled ? t('gestureOn') : t('gestureOff');
+    btn.classList.toggle('active', !!gestureSettings.enabled);
+  }
+  GZ_FIELDS.forEach(([key, id, fmt]) => {
+    const input = document.getElementById(id), out = document.getElementById(id + 'Val');
+    if(input && document.activeElement !== input) input.value = String(gestureSettings[key]);
+    if(out) out.textContent = fmt(Number(gestureSettings[key]));
+  });
+}
+/* On, off — and on means the camera, which is its only sensor. */
+async function setGestureZoom(on){
+  gestureSettings.enabled = !!on;
+  await saveGestureSettings();
+  renderGestureSettings();
+  if(on && IS_DESKTOP && !liveActive()) await startLive();
+  return { ok: true, enabled: gestureSettings.enabled, camera_open: liveActive(),
+           note: gestureSettings.enabled
+             ? 'On. The gesture: pinch thumb and index on BOTH hands in front of the camera, pull apart to zoom in, together to zoom out, let go to stop. It zooms whatever program is in front.'
+             : 'Off. The camera stays as it was.' };
+}
+(function wireGesturePanel(){
+  const toggle = document.getElementById('gestureToggleBtn');
+  if(toggle) toggle.addEventListener('click', () => { setGestureZoom(!gestureSettings.enabled); });
+  const reset = document.getElementById('gestureResetBtn');
+  if(reset) reset.addEventListener('click', () => {
+    gestureSettings = Object.assign({}, GZ_DEFAULTS, { enabled: gestureSettings.enabled });
+    renderGestureSettings(); saveGestureSettings();
+  });
+  GZ_FIELDS.forEach(([key, id]) => {
+    const input = document.getElementById(id);
+    if(!input) return;
+    input.addEventListener('input', () => {
+      gestureSettings[key] = Number(input.value);
+      renderGestureSettings();
+      clearTimeout(gestureSaveTimer);
+      gestureSaveTimer = setTimeout(saveGestureSettings, 250);
+    });
+  });
+  loadGestureSettings().then(renderGestureSettings).catch(()=>{});
+})();
+
+const GESTURE_ZOOM_TOOL = {
+  name: 'gesture_zoom',
+  description: "Turn two-hand gesture zoom on or off. When it is on, he pinches thumb and index finger on BOTH hands in front of the camera and pulls his hands apart to zoom in, or together to zoom out, on whatever program is in front — a web page, a PDF, a picture, a 3D model; letting go with either hand stops it. Use it for \"turn on gesture zoom\", \"let me zoom with my hands\", \"תפעיל זום עם הידיים\", and with on=false for \"turn off gesture zoom\". Turning it on opens the camera, which it needs. Confirm in one short line, and tell him the gesture if he may not know it.",
+  input_schema: {
+    type: 'object',
+    properties: { on: { type:'boolean', description:'true to turn it on (opening the camera if it is off), false to turn it off.' } },
+    required: ['on']
+  }
+};
 
 /* Standing tasks only exist on the desktop, because only there is there an
    app that stays open. Catching up runs a beat after startup so the first
@@ -13639,7 +13776,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
     if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                           TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                           WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
-                                          NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL);
+                                          NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL);
   } else {
     /* The mode boundary is enforced HERE, by which tools exist, rather than by
        asking the model to hold back. A prompt instruction is something it can
@@ -13659,7 +13796,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
     if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                       TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                       WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
-                                      NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL);
+                                      NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL);
     /* The report needs a connected store, not a desktop — it reads the same
        Shopify connection the website uses, so it is offered in both. Offered
        only when a store really is configured: a tool that can only return
@@ -14220,6 +14357,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callCameraTool(tu.input);
           } else if(tu.name === 'take_screenshot'){
             payload = await callScreenshotTool();
+          } else if(tu.name === 'gesture_zoom'){
+            payload = await setGestureZoom(!(tu.input && tu.input.on === false));
           } else if(tu.name === 'watch_screen'){
             payload = await callWatchScreenTool(tu.input);
           } else if(tu.name === 'close_browser_tab'){
@@ -16484,7 +16623,20 @@ adjustLayout();
       try{ addMessage('system', why || t('liveOff')); }catch(err){}
     };
 
-    ev.listen('jarvis://camera-open',   ()=>{ liveWinOpen = true; });
+    ev.listen('jarvis://camera-open',   ()=>{ liveWinOpen = true; pushGestureSettings(); });
+    /* What the gesture zoom is doing, shown in the GESTURES panel. */
+    ev.listen('jarvis://gesture-status', (e)=>{
+      const s = (e && e.payload) || {};
+      const el = document.getElementById('gestureStatus');
+      if(!el) return;
+      el.textContent = s.kind === 'ready'   ? 'hand tracking ready (' + (s.delegate || '') + ')'
+                     : s.kind === 'failed'  ? 'hand tracking failed: ' + (s.reason || '')
+                     : s.kind === 'target'  ? 'zooming ' + (s.name || '')
+                     : s.kind === 'zoom'    ? (s.name || '') + ' \u00d7' + Number(s.level || 1).toFixed(2)
+                     : s.kind === 'unsupported' ? 'cannot zoom: ' + (s.reason || '')
+                     : s.kind === 'error'   ? 'zoom failed: ' + (s.reason || '')
+                     : el.textContent;
+    });
     ev.listen('jarvis://camera-closed', ()=>{ wentAway(null); });
     ev.listen('jarvis://camera-error',  (e)=>{
       wentAway('DEBUG (camera): ' + String((e && e.payload) || 'unknown'));

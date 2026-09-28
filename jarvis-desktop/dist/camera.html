@@ -35,6 +35,12 @@
     object-fit:cover; background:#000; display:block;
   }
   #feed.mirrored{ transform:scaleX(-1); }
+  #stage{ position:relative; flex:1 1 auto; min-height:0; }
+  #stage #feed{ position:absolute; inset:0; width:100%; height:100%; }
+  /* Gesture zoom's overlay: the two pinch points and the line between them,
+     over the picture and mirrored with it. Never takes a click. */
+  #gz{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  #gz.mirrored{ transform:scaleX(-1); }
   #bar{
     flex:0 0 auto; display:flex; align-items:center; gap:10px;
     padding:6px 10px; background:rgba(4,12,20,0.94);
@@ -64,7 +70,10 @@
 </head>
 <body>
 <div id="wrap">
-  <video id="feed" autoplay playsinline muted></video>
+  <div id="stage">
+    <video id="feed" autoplay playsinline muted></video>
+    <canvas id="gz" class="mirrored"></canvas>
+  </div>
   <div id="bar">
     <span id="dot"></span>
     <span id="state">starting…</span>
@@ -73,6 +82,10 @@
 </div>
 <div id="err"></div>
 
+<!-- Hand tracking, vendored (see vendor/mediapipe/README.txt), and the
+     gesture zoom built on it. Both load here and nowhere else. -->
+<script src="./vendor/mediapipe/vision_bundle.js"></script>
+<script src="./gesture-zoom.js"></script>
 <script>
 (function(){
   "use strict";
@@ -83,6 +96,51 @@
   var state  = document.getElementById('state');
   var errBox = document.getElementById('err');
   var stream = null, timer = null, mirrored = true;
+
+  /* GESTURE ZOOM (gesture-zoom.js). Two hands, thumb and index pinched on
+     each, stretched apart to zoom in and brought together to zoom out —
+     whatever program is in front. It runs here because this is the one
+     window that has the camera. Settings come from the orb: saved where
+     both windows can read them, and pushed live when they change. */
+  var GZ = window.JarvisGestureZoom;
+  var gzOverlay = document.getElementById('gz');
+  var gz = null, gzNote = '', liveText = '';
+  function gzSettings(){
+    try{ return JSON.parse(localStorage.getItem(GZ.STORE_KEY) || 'null'); }catch(e){ return null; }
+  }
+  function showState(){
+    if(liveText) say(liveText + (gzNote ? ' · ' + gzNote : ''), true);
+  }
+  function gzStart(){
+    if(!GZ || gz) return;
+    var saved = gzSettings() || {};
+    gz = GZ.startGestureZoom({
+      video: feed, overlay: gzOverlay, settings: saved,
+      /* GPU first, CPU if the GPU path is slow; 'CPU' in the saved settings
+         forces it, for a machine whose GPU path misbehaves. */
+      delegate: saved.delegate === 'CPU' ? 'CPU' : undefined,
+      invoke: function(cmd, args){
+        return (T.core && T.core.invoke) ? T.core.invoke(cmd, args) : Promise.reject(new Error('no desktop bridge'));
+      },
+      emit: emit,
+      onStatus: function(s){
+        if(s.kind === 'ready') gzNote = '✋ zoom';
+        else if(s.kind === 'foreground') gzNote = '✋ zoom' + (s.supported && s.name ? ' · ' + s.name : '');
+        else if(s.kind === 'failed') gzNote = 'no hand tracking';
+        showState();
+        emit('jarvis://gesture-status', s);
+      }
+    });
+    gz.start();
+    window.__gz = gz;   // for the tests: stats() and the live gesture state
+  }
+  if(ev.listen) ev.listen('jarvis://gesture-settings', function(e){
+    var s = e && e.payload;
+    if(!s || typeof s !== 'object') return;
+    if(!gz){ if(s.enabled !== false){ try{ localStorage.setItem(GZ.STORE_KEY, JSON.stringify(s)); }catch(err){} gzStart(); } return; }
+    gz.configure(s);
+    if(s.enabled === false){ gzNote = ''; showState(); }
+  });
 
   /* How often a frame is handed to the orb. Fast enough that "look at
      this" never shows something stale, slow enough to be free. */
@@ -205,8 +263,10 @@
     }).then(function(){
       var track = stream.getVideoTracks()[0];
       var st = (track && track.getSettings) ? track.getSettings() : {};
-      say((st.width || '?') + '×' + (st.height || '?') + ' — live', true);
+      liveText = (st.width || '?') + '×' + (st.height || '?') + ' — live';
+      showState();
       emit('jarvis://camera-open', true);
+      gzStart();
       if(timer) clearInterval(timer);
       timer = setInterval(pushFrame, PUSH_MS);
       pushFrame();
@@ -230,6 +290,7 @@
   document.getElementById('mirror').addEventListener('click', function(){
     mirrored = !mirrored;
     feed.classList.toggle('mirrored', mirrored);
+    if(gzOverlay) gzOverlay.classList.toggle('mirrored', mirrored);
   });
 
   /* The orb asks for one out of turn, when it wants to look right now
@@ -250,6 +311,7 @@
   window.addEventListener('beforeunload', function(){
     rememberPlace();
     emit('jarvis://camera-closed', true);
+    if(gz) gz.stop();
     if(stream) stream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} });
   });
   /* Moves and resizes are frequent; the last one before it closes is the
