@@ -155,6 +155,36 @@ single file `dist/index.html`.
   into "I opened YouTube" (screen and voice), speakableToolTalk strips any
   leftover underscores for the voice. On the website open_site returns
   false and the model answers as before.
+- **A turn with a picture in it is a turn ABOUT the picture (2.9.3).** While
+  watching his screen, every description ("a button with an icon on it",
+  "two orders marked done", "Created 3 hours ago", "הזמנות שבוצעו") was held
+  by the voice gate as an unbacked "I did it", so screen mode went silent and
+  ended every turn with "I did not actually do that" plus a corrective round.
+  turnIsLook (set in askJarvis from the turn's images) switches claimsAnAction
+  to the strict set: first-person verbs, tool names, a bare "Done."/"Opened,
+  sir.", Hebrew first-person verbs — not בוצע/הנה לך/mid-sentence "done".
+  "done"/"on it" also no longer count mid-sentence anywhere. And a dozing
+  orb strips the wake word AND its filler ("can", "you", "look"), so "hey
+  jarvis you see my screen" reaches screenWatchCommand as "see my screen" —
+  the anchored start patterns for those stripped shapes must stay.
+- **He says "sir" / "אדוני" once a reply (2.9.3)** — in both prompts, in the
+  canned lines, and on every local-flow line via addressHim() (not on a
+  failure, never twice). CLAIM_COURTESY allows the ", sir".
+- **"Make a 3D model of it" is studied first (page 2.9.3 / worker 2.6.6).**
+  photo_to_3d has two steps enforced in code: without `analysis` it only
+  takes the picture (camera / screen / attached, pick3dPicture), keeps it
+  as pending3d and hands it to the model BESIDE the result; only a second
+  call with that image_id and an analysis covering all six sides,
+  proportions, materials and symmetry (check3dAnalysis) sends anything.
+  materials → Meshy texture_prompt (≤800), symmetry → symmetry_mode, an
+  optional crop cuts the object out first. MODEL3D_OF_IT_NOTE steers every
+  engine to it for the turn. A finished job opens the model window itself,
+  and each poll refreshes lastThinkStart (the 45 s stall breaker otherwise
+  "released" a two-minute job). The model window is frameless and
+  transparent (main.rs; `.transparent` is cfg-gated off macOS), in the
+  taskbar, closed from model.html's own right-click menu, moved by
+  Shift/Alt-drag — which needs capabilities/model.json (close,
+  start-dragging), or the calls are refused.
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.
@@ -190,6 +220,15 @@ The page's CSS can be checked in the pre-installed Chromium via Playwright
 (`/opt/node22/lib/node_modules/playwright`), forcing state by setting
 `document.documentElement.className`. Wait out any transition before reading
 `getComputedStyle`, or you read the value at the start of the animation.
+
+A backslash-u escape typed into a tool command does not always arrive as
+typed: in some commands (python3 -c, a quoted heredoc) it has arrived as the
+character itself, in others as the six characters — and Python reading a
+file behaves normally, so it is not Python. In JS source both spellings mean
+the same, so behaviour is unaffected; but a replacement that searches for the
+escaped spelling can miss, and a test can pin the wrong form. After writing,
+grep the file for what actually landed, and match on text with no escapes
+in it where you can.
 
 When patching with a Python script that collects edits in a string and writes
 once at the end, an assertion failure on a later edit silently discards every

@@ -9,48 +9,65 @@
   The orb's page is one 600KB file that starts a microphone, a scheduler, a
   hologram and a conversation the moment it loads. Opening a second copy of
   that to look at a mesh would run all of it twice. This is the viewer and
-  nothing else, off the same vendored three.js, so the model can sit beside
-  the work it is about — resized, dragged and closed like any other window.
+  nothing else, off the same vendored three.js.
+
+  Since 2.9.3 the window has no frame and no background: the model floats on
+  the desktop by itself. Drag turns it, the wheel zooms, Shift- or Alt-drag
+  moves the window, and the only ways to close it are right-click → Close
+  and the taskbar — which is what he asked for.
 
   The model to show arrives in the query string: model.html?glb=<url>.
 -->
 <style>
-  :root{
-    --cyan:#5fe8ff; --bg:#05070d; --dim:170,200,220;
-  }
+  :root{ --cyan:#5fe8ff; --dim:170,200,220; }
   *{ box-sizing:border-box; }
-  html,body{ height:100%; margin:0; background:var(--bg); overflow:hidden;
-             font-family:'Courier New',monospace; color:var(--cyan); }
+  html,body{ height:100%; margin:0; background:transparent; overflow:hidden;
+             font-family:'Courier New',monospace; color:var(--cyan); user-select:none; }
   #stage{ position:absolute; inset:0; }
-  canvas{ display:block; }
-  #bar{
-    position:absolute; left:0; right:0; bottom:0; display:flex; gap:1px;
-    background:rgba(0,0,0,0.55); border-top:1px solid rgba(95,232,255,0.25);
-  }
-  #bar button{
-    flex:1; min-height:34px; background:rgba(95,232,255,0.06); border:none;
-    border-right:1px solid rgba(95,232,255,0.18); color:var(--cyan);
-    font-family:inherit; font-size:10px; letter-spacing:1.5px; cursor:pointer;
-  }
-  #bar button:last-child{ border-right:none; }
-  #bar button:hover{ background:rgba(95,232,255,0.18); }
-  #bar button.on{ background:rgba(95,232,255,0.22); }
+  canvas{ display:block; background:transparent; }
   #note{
-    position:absolute; left:0; right:0; top:0; padding:8px 10px; font-size:11px;
-    letter-spacing:1px; color:rgba(var(--dim),0.75); background:rgba(0,0,0,0.4);
-    pointer-events:none;
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    font-size:12px; letter-spacing:2px; color:var(--cyan);
+    text-shadow:0 0 8px rgba(95,232,255,0.9), 0 0 2px #000; pointer-events:none;
   }
-  #err{ padding:14px; font-size:12px; line-height:1.6; color:#ff9d9d; }
+  #hint{
+    position:absolute; left:50%; bottom:10px; transform:translateX(-50%); white-space:nowrap;
+    font-size:10px; letter-spacing:1.5px; color:rgba(var(--dim),0.9);
+    text-shadow:0 0 3px #000, 0 0 6px #000; pointer-events:none;
+    opacity:0; transition:opacity .6s ease;
+  }
+  #hint.show{ opacity:1; }
+  #err{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:min(86%,360px);
+    padding:14px; font-size:12px; line-height:1.6; color:#ffb3b3;
+    background:rgba(5,7,13,0.82); border:1px solid rgba(255,120,120,0.35); border-radius:8px;
+  }
+  #menu{
+    position:fixed; display:none; min-width:150px; padding:4px 0; z-index:10;
+    background:rgba(5,7,13,0.92); border:1px solid rgba(95,232,255,0.35); border-radius:6px;
+    box-shadow:0 6px 24px rgba(0,0,0,0.5), 0 0 12px rgba(95,232,255,0.15);
+  }
+  #menu.open{ display:block; }
+  #menu button{
+    display:block; width:100%; padding:7px 14px; text-align:left; background:none; border:none;
+    color:var(--cyan); font-family:inherit; font-size:11px; letter-spacing:1.5px; cursor:pointer;
+  }
+  #menu button:hover{ background:rgba(95,232,255,0.14); }
+  #menu button.on::after{ content:' \2713'; }
+  #menu hr{ border:none; border-top:1px solid rgba(95,232,255,0.18); margin:4px 0; }
+  #menu #closeItem{ color:#ff9d9d; }
 </style>
 </head>
 <body>
 <div id="stage"></div>
 <div id="note">loading…</div>
-<div id="bar">
-  <button id="spinBtn" class="on">SPIN</button>
-  <button id="wireBtn">WIRE</button>
-  <button id="bgBtn">BACKDROP</button>
-  <button id="fitBtn">FIT</button>
+<div id="hint">drag to turn · shift+drag to move · right-click to close</div>
+<div id="menu" role="menu">
+  <button id="spinBtn" class="on" role="menuitem">SPIN</button>
+  <button id="wireBtn" role="menuitem">WIREFRAME</button>
+  <button id="fitBtn" role="menuitem">FIT</button>
+  <hr>
+  <button id="closeItem" role="menuitem">CLOSE</button>
 </div>
 
 <script src="./vendor/three/build/three.min.js"></script>
@@ -61,24 +78,65 @@
   "use strict";
   const note = document.getElementById('note');
   const stage = document.getElementById('stage');
+  const menu = document.getElementById('menu');
+  const hint = document.getElementById('hint');
+  const tauriWin = () => {
+    try{ return window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrentWindow(); }
+    catch(e){ return null; }
+  };
+
+  /* The one way out besides the taskbar. Wired before anything else, so
+     even a window whose model failed to load can still be closed. */
+  function closeWindow(){
+    const w = tauriWin();
+    if(w && typeof w.close === 'function') w.close().catch(() => window.close());
+    else window.close();
+  }
+  function openMenu(x, y){
+    menu.classList.add('open');
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(4, Math.min(x, innerWidth - r.width - 4)) + 'px';
+    menu.style.top = Math.max(4, Math.min(y, innerHeight - r.height - 4)) + 'px';
+  }
+  function closeMenu(){ menu.classList.remove('open'); }
+  document.addEventListener('contextmenu', (e) => { e.preventDefault(); openMenu(e.clientX, e.clientY); });
+  document.addEventListener('pointerdown', (e) => { if(!menu.contains(e.target)) closeMenu(); }, true);
+  document.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeMenu(); });
+  document.getElementById('closeItem').addEventListener('click', closeWindow);
+
+  /* Moving a window that has no title bar: Shift- or Alt-drag anywhere.
+     Taken in the capture phase, before the orbit controls see the press. */
+  stage.addEventListener('pointerdown', (e) => {
+    if(e.button !== 0 || !(e.shiftKey || e.altKey)) return;
+    const w = tauriWin();
+    if(!w || typeof w.startDragging !== 'function') return;
+    e.preventDefault(); e.stopPropagation();
+    w.startDragging().catch(() => {});
+  }, true);
 
   function fail(msg){
     note.style.display = 'none';
-    stage.innerHTML = '<div id="err">' + msg + '</div>';
+    const box = document.createElement('div');
+    box.id = 'err';
+    box.textContent = msg + ' Right-click to close.';
+    stage.appendChild(box);
   }
   if(!window.THREE){ fail('three.js did not load from ./vendor/three/.'); return; }
 
   const glb = new URLSearchParams(location.search).get('glb');
   if(!glb){ fail('No model was given. This window is opened by JARVIS with a model to show.'); return; }
 
-  const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, preserveDrawingBuffer:true });
+  /* Transparent all the way down: the page, the canvas and the scene. What
+     is left on the desktop is the model and nothing around it. */
+  const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, premultipliedAlpha:true, preserveDrawingBuffer:true });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x000000, 0);
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.physicallyCorrectLights = true;
   stage.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x05070d);
+  scene.background = null;
   const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 2000);
 
   /* Three lights, not one. A single source makes every curve read as a flat
@@ -93,12 +151,14 @@
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
+  controls.enablePan = false;          // the right button belongs to the menu
 
-  let model = null, spin = true, wire = false, dark = true;
+  let model = null, spin = true, wire = false;
 
   function resize(){
-    const w = innerWidth, h = Math.max(1, innerHeight - 34);
+    const w = innerWidth, h = Math.max(1, innerHeight);
     renderer.setSize(w, h, false);
+    renderer.domElement.style.width = w + 'px';
     renderer.domElement.style.height = h + 'px';
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
@@ -106,8 +166,7 @@
   addEventListener('resize', resize);
 
   /* Framed from the bounding sphere and the NARROWER of the two fields of
-     view, so a wide flat object still fits when the window is tall and thin.
-     Re-run on FIT, because the window can be resized to any shape. */
+     view, so a wide flat object still fits when the window is tall and thin. */
   function frame(){
     if(!model) return;
     const sphere = new THREE.Box3().setFromObject(model).getBoundingSphere(new THREE.Sphere());
@@ -128,6 +187,8 @@
     resize();
     frame();
     note.style.display = 'none';
+    hint.classList.add('show');
+    setTimeout(() => hint.classList.remove('show'), 4500);
   }, (ev)=>{
     if(ev && ev.total) note.textContent = 'loading… ' + Math.round(ev.loaded / ev.total * 100) + '%';
   }, ()=>{
@@ -135,17 +196,13 @@
   });
 
   document.getElementById('spinBtn').addEventListener('click', (e)=>{
-    spin = !spin; e.target.classList.toggle('on', spin);
+    spin = !spin; e.target.classList.toggle('on', spin); closeMenu();
   });
   document.getElementById('wireBtn').addEventListener('click', (e)=>{
-    wire = !wire; e.target.classList.toggle('on', wire);
+    wire = !wire; e.target.classList.toggle('on', wire); closeMenu();
     if(model) model.traverse(o => { if(o.isMesh && o.material) o.material.wireframe = wire; });
   });
-  document.getElementById('bgBtn').addEventListener('click', (e)=>{
-    dark = !dark; e.target.classList.toggle('on', !dark);
-    scene.background = new THREE.Color(dark ? 0x05070d : 0xe9eef3);
-  });
-  document.getElementById('fitBtn').addEventListener('click', frame);
+  document.getElementById('fitBtn').addEventListener('click', ()=>{ frame(); closeMenu(); });
 
   resize();
   (function tick(){

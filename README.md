@@ -320,6 +320,51 @@ actually forwarded where it should be, actually stripped where it must be, that
 the warning fires only in the second case, and that a blind primary is overtaken
 in the chain by a fallback that can see.
 
+## Page 2.9.3 / worker 2.6.6: screen mode out loud, "sir", studied 3D models
+
+**Screen mode went silent.** A description of a screen is full of words the
+voice gate was built to catch: a button with an icon *on it*, orders marked
+*done*, "*Created* 3 hours ago", הזמנות *שבוצעו*. Each such sentence was held
+as an "I did it" with no tool behind it. It was never spoken, and the turn
+ended with "I did not actually do that" plus a corrective model round. So he
+said "I can see your screen" and then nothing true.
+
+- A turn that carries a picture (screen, camera or photo) now holds only
+  claims that cannot be descriptions: "I opened…", a tool's name, a bare
+  "Done." or "Opened, sir.", and Hebrew first-person verbs.
+- "Done" and "on it" no longer count mid-sentence anywhere.
+
+Separately, a dozing orb strips the wake word *and* its filler words. So
+"hey jarvis, you see my screen" arrived as "see my screen", and "look at my
+screen" as "at my screen". Neither started screen watching by voice. Both
+shapes start it now.
+
+**Sir.** He addresses you as "sir", or "אדוני" in Hebrew, once a reply. The
+prompt says so, and so do the lines the app speaks on its own (wake reply,
+"Say that again, sir?", "YouTube is open, sir.").
+
+**"Make a 3D model of it."** The picture is no longer sent the moment it is
+taken. `photo_to_3d` has two steps, and the page enforces both:
+
+1. The first call only takes the picture: the camera, the screen while
+   watched, or a photo. It puts that exact picture in front of the model.
+2. Only a second call sends anything, and only with a study that covers
+   front, back, left, right, top and bottom (seen or inferred, and from
+   what), proportions, materials and symmetry. A thin study is refused and
+   names what is missing.
+
+The study does real work on the way out:
+
+- The materials become Meshy's texture prompt.
+- The symmetry becomes its symmetry mode, so the unseen side mirrors the
+  seen one.
+- An optional crop cuts the object out of a busy screen.
+
+The finished model opens in its own window. The window has no frame and no
+background, so the model stands on the desktop by itself. Drag turns it,
+Shift-drag moves the window, and the ways to close it are right-click →
+Close or the taskbar.
+
 ## The loop that needed Ctrl+C
 
 `lastSpokeEndedAt` was declared at the top of the file and assigned nowhere in

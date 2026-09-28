@@ -77,7 +77,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.6.5';
+const WORKER_VERSION = '2.6.6';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -883,12 +883,21 @@ async function handleModel3d(request, env) {
     if (image.length > 12 * 1024 * 1024) {
       return json({ error: 'that image is too large; send one under about 8MB' }, 413, env, request);
     }
-    const startedImg = await startMeshyTask({
+    /* What JARVIS worked out by studying the picture from every side (page
+       2.9.3): the materials and colours steer the texture pass, and the
+       symmetry tells Meshy to mirror what it can see onto the side it
+       cannot. Both optional, so an older page sends exactly what it did. */
+    const meshyImage = {
       image_url: image,
       enable_pbr: true,
       should_remesh: true,
       should_texture: true
-    }, env, 'image');
+    };
+    const texturePrompt = String((body && body.texture_prompt) || '').replace(/\s+/g, ' ').trim().slice(0, 800);
+    if (texturePrompt) meshyImage.texture_prompt = texturePrompt;
+    const symmetry = String((body && body.symmetry_mode) || '').trim();
+    if (symmetry === 'on' || symmetry === 'off' || symmetry === 'auto') meshyImage.symmetry_mode = symmetry;
+    const startedImg = await startMeshyTask(meshyImage, env, 'image');
     if (startedImg.error) return json({ error: startedImg.error }, 502, env, request);
     return json({ taskId: startedImg.taskId, kind: 'image', stage: 'single' }, 200, env, request);
   }

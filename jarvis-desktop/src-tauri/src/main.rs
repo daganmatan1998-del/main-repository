@@ -439,11 +439,12 @@ fn capture_screen_frame() -> Result<String, String> {
 
 /* A WINDOW OF ITS OWN FOR A MODEL.
  *
- * The orb is a 180-pixel circle with no frame, pinned above everything: a
- * thing you glance at, not a thing you work in. A model you are judging needs
- * the opposite — room, a frame to drag by, an edge to pull. So it gets a real
- * window, with decorations, resizable, NOT always-on-top, which can sit beside
- * the work it is about instead of on top of it.
+ * A real window of its own, like the workspace panes, NOT always-on-top, so it
+ * can sit beside the work it is about instead of on top of it. Since 2.9.3 it
+ * has no frame and no background at all — he asked for the model to stand on
+ * the desktop by itself. It stays in the taskbar, because with no title bar
+ * the taskbar and the viewer's own right-click → Close are the ways to close
+ * it; Shift-drag in the viewer moves it.
  *
  * It points at model.html rather than at the app's own page. index.html starts
  * a microphone, a scheduler and a hologram the moment it loads; opening a
@@ -481,16 +482,21 @@ async fn open_model_window(app: tauri::AppHandle, url: String) -> Result<String,
         return Ok("reused".into());
     }
 
-    WebviewWindowBuilder::new(&app, "model", WebviewUrl::App(page.into()))
+    let builder = WebviewWindowBuilder::new(&app, "model", WebviewUrl::App(page.into()))
         .title("JARVIS — 3D")
-        .inner_size(760.0, 620.0)
-        .min_inner_size(320.0, 280.0)
+        .inner_size(620.0, 620.0)
+        .min_inner_size(240.0, 240.0)
+        .center()
         .resizable(true)
-        .decorations(true)
+        .decorations(false)
+        .shadow(false)
         .always_on_top(false)
-        .skip_taskbar(false)
-        .build()
-        .map_err(|e| e.to_string())?;
+        .skip_taskbar(false);
+    // A see-through webview needs the private API on macOS; everywhere else
+    // it is an ordinary window attribute.
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.transparent(true);
+    builder.build().map_err(|e| e.to_string())?;
     Ok("opened".into())
 }
 

@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "model",
+  "description": "The 3D viewer window, and nothing else. It has no title bar, so it closes itself from its own right-click menu and moves itself on Shift-drag; that is all it may do. No opener, no shell, no filesystem, no events.",
+  "windows": ["model"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-focus"
+  ]
+}
