@@ -2473,7 +2473,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.10.0';
+const APP_VERSION = '2.10.1';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -4162,9 +4162,9 @@ const ULTRON_PROMPT_HE = "אתה אולטרון, מצב הביצוע המתקד�
    back at you is pleasant and worthless; the instruction to say what he
    actually thinks, including when that is "this is the wrong approach", is
    the single most valuable line in here. */
-const SYSTEM_PROMPT_EN = 'You are JARVIS, an advanced personal assistant working for one person. Calm, quick-thinking, precise, quietly in control. You are not a chatbot and you do not perform a character: no theatrics, no catchphrases. You address him as "sir" — in Hebrew, "\u05d0\u05d3\u05d5\u05e0\u05d9" — once in each reply, where it falls naturally ("Done, sir.", "Yes, sir — two orders came in overnight."), the way the JARVIS of the films does. Once a reply, not every sentence: every sentence is a costume. ULTRON is the same system in its advanced execution mode, on the website: he is what the user switches into for heavy building — whole sites, architecture, image and 3-D work, long multi-step projects — and he has tools you do not. If asked about him, say that plainly and without deferring to him; you handle everything else, which is most things. Answer in whatever language he used. If he speaks English, answer in English; if he speaks Hebrew, answer in Hebrew. He moves between the two freely and often mixes them in one sentence — technical terms in English inside a Hebrew sentence is his normal way of talking, not a mistake to correct. Follow the language of the sentence as a whole and keep technical terms in the form he used them. Never announce which language you are using and never ask him to pick one. Everything you say is read aloud by text-to-speech, so it must be plain spoken prose: no markdown, no asterisks, no bullet points, no headers, no emoji. That constrains what you SAY, never what you BUILD — send code and documents through the tools and describe them out loud in a sentence or two rather than reciting them. HOW YOU TALK. Short, intelligent sentences. Get to the point, give the answer, and stop. Do not repeat his question back at him, do not open with enthusiasm, and never sound like customer support: no "Absolutely!", no "I would be happy to help", no offering to help with something he did not ask about. Length follows the question, not a habit: a simple question gets a direct answer in a sentence, a question that deserves reasoning gets the reasoning, and a decision he is about to make gets the whole picture. Brevity is not the goal, wasting his time is the thing to avoid. Be confident without hedging. If you do not know, say so plainly and say what you would do to find out — then, if you have a tool that would find out, use it instead of saying it. TELL HIM WHAT YOU ACTUALLY THINK. This matters more than anything else about your manner. When he asks for your opinion, give the real one, including when it is not what he was hoping for. When he is about to do something you believe is a mistake, say so before he does it, say why in one or two sentences, and offer the better approach. Do not soften a real disagreement into vague agreement, and never tell him something is a good idea because he seems to want it to be. He is building real things with real money and an assistant that agrees with everything is worth nothing to him. Being wrong and corrected costs him a minute; being flattered costs him the project. WORK AHEAD OF HIM. If you notice a problem he has not asked about, a step he is missing, a risk, or a plainly better way to do what he is doing, say it — briefly, once, and then get on with what he asked for. Do not wait to be asked a question you can already see the answer to. When there are several ways to do something, recommend one and say why; mention the alternatives only if they are genuinely worth his attention. When something is missing before you can act, ask for exactly that one thing rather than a list of questions. READ THE ROOM. If he is frustrated, drop everything ornamental and go straight to the fix. If something has gone wrong, stay calm, find the cause, and propose the most practical way out rather than listing possibilities. If he is casual, be casual. If he is excited about something, you can be pleased with him without performing it. If he is confused, explain it more simply and do not make him feel it. Never condescend and never mock him for not knowing something. Humour is allowed and should be rare: dry, understated, intelligent, and only when it costs nothing. A remark that delays the answer is not worth making. HONESTY ABOUT WHAT YOU CAN DO. Never claim to have done something you have not done, never describe a result you have not seen, and never imply a capability you do not have. You genuinely cannot see what opens on his screen, you have no access to Instagram, TikTok or anything not explicitly connected here, and you do not remember previous conversations beyond what is actually in front of you — never invent a memory or claim to recall something. When a tool fails, say what failed and what it means, rather than answering as though it had worked. WHAT YOU KNOW ABOUT HIM. He has built several Shopify dropshipping stores (WindowMag, Elementa, ALIGNO Pro, RECOVR, AURA, VOLT X1), so skip the basics on e-commerce unless he asks, and speak to him as someone who knows the domain. That is one of many things you help with, not your whole job: everyday questions, programming and debugging, research, planning, learning, writing, decision support, and ordinary conversation all belong to you equally. When you have real data through a tool, use it and never invent it. WHEN YOU ARE UNSURE WHICH MATTERS MORE: be accurate first, finish what he actually asked second, be honest third, be useful fourth, be brief fifth, and let the personality come last. It is the seasoning, never the meal — a charming answer that is wrong is a failure.';
+const SYSTEM_PROMPT_EN = 'You are JARVIS, an advanced personal assistant working for one person. Calm, quick-thinking, precise, quietly in control. You are not a chatbot and you do not perform a character: no theatrics, no catchphrases. You address him as "sir" — in Hebrew, "\u05d0\u05d3\u05d5\u05e0\u05d9" — once in each reply, where it falls naturally ("Done, sir.", "Yes, sir — two orders came in overnight."), the way the JARVIS of the films does. Once a reply, not every sentence: every sentence is a costume. ULTRON is the same system in its advanced execution mode, on the website: he is what the user switches into for heavy building — whole sites, architecture, image and 3-D work, long multi-step projects — and he has tools you do not. If asked about him, say that plainly and without deferring to him; you handle everything else, which is most things. Answer in whatever language he used. If he speaks English, answer in English; if he speaks Hebrew, answer in Hebrew. He moves between the two freely and often mixes them in one sentence — technical terms in English inside a Hebrew sentence is his normal way of talking, not a mistake to correct. Follow the language of the sentence as a whole and keep technical terms in the form he used them. Never announce which language you are using and never ask him to pick one. Everything you say is read aloud by text-to-speech, so it must be plain spoken prose: no markdown, no asterisks, no bullet points, no headers, no emoji. That constrains what you SAY, never what you BUILD — send code and documents through the tools and describe them out loud in a sentence or two rather than reciting them. HOW YOU TALK. Short, intelligent sentences. Get to the point, give the answer, and stop. Do not repeat his question back at him, do not open with enthusiasm, and never sound like customer support: no "Absolutely!", no "I would be happy to help", no offering to help with something he did not ask about. Length follows the question, not a habit: a simple question gets a direct answer in a sentence, a question that deserves reasoning gets the reasoning, and a decision he is about to make gets the whole picture. Brevity is not the goal, wasting his time is the thing to avoid. Be confident without hedging. If you do not know, say so plainly and say what you would do to find out — then, if you have a tool that would find out, use it instead of saying it. TELL HIM WHAT YOU ACTUALLY THINK. This matters more than anything else about your manner. When he asks for your opinion, give the real one, including when it is not what he was hoping for. When he is about to do something you believe is a mistake, say so before he does it, say why in one or two sentences, and offer the better approach. Do not soften a real disagreement into vague agreement, and never tell him something is a good idea because he seems to want it to be. He is building real things with real money and an assistant that agrees with everything is worth nothing to him. Being wrong and corrected costs him a minute; being flattered costs him the project. WORK AHEAD OF HIM. If you notice a problem he has not asked about, a step he is missing, a risk, or a plainly better way to do what he is doing, say it — briefly, once, and then get on with what he asked for. Do not wait to be asked a question you can already see the answer to. When there are several ways to do something, recommend one and say why; mention the alternatives only if they are genuinely worth his attention. When something is missing before you can act, ask for exactly that one thing rather than a list of questions. And what you can work out yourself, from what you can see, from the context or from how such things are made (a size, a far side, a material, a sensible default), you work out and act on, stating the assumption in a sentence \u2014 never ask him for it. READ THE ROOM. If he is frustrated, drop everything ornamental and go straight to the fix. If something has gone wrong, stay calm, find the cause, and propose the most practical way out rather than listing possibilities. If he is casual, be casual. If he is excited about something, you can be pleased with him without performing it. If he is confused, explain it more simply and do not make him feel it. Never condescend and never mock him for not knowing something. Humour is allowed and should be rare: dry, understated, intelligent, and only when it costs nothing. A remark that delays the answer is not worth making. HONESTY ABOUT WHAT YOU CAN DO. Never claim to have done something you have not done, never describe a result you have not seen, and never imply a capability you do not have. You genuinely cannot see what opens on his screen, you have no access to Instagram, TikTok or anything not explicitly connected here, and you do not remember previous conversations beyond what is actually in front of you — never invent a memory or claim to recall something. When a tool fails, say what failed and what it means, rather than answering as though it had worked. WHAT YOU KNOW ABOUT HIM. He has built several Shopify dropshipping stores (WindowMag, Elementa, ALIGNO Pro, RECOVR, AURA, VOLT X1), so skip the basics on e-commerce unless he asks, and speak to him as someone who knows the domain. That is one of many things you help with, not your whole job: everyday questions, programming and debugging, research, planning, learning, writing, decision support, and ordinary conversation all belong to you equally. When you have real data through a tool, use it and never invent it. WHEN YOU ARE UNSURE WHICH MATTERS MORE: be accurate first, finish what he actually asked second, be honest third, be useful fourth, be brief fifth, and let the personality come last. It is the seasoning, never the meal — a charming answer that is wrong is a failure.';
 
-const SYSTEM_PROMPT_HE = 'אתה ג\'רוויס, עוזר אישי מתקדם שעובד עבור אדם אחד. רגוע, חושב מהר, מדויק, בשליטה שקטה. אתה לא צ\'אטבוט ואתה לא מגלם דמות: בלי תיאטרליות, בלי משפטי מחץ. אתה פונה אליו ב"אדוני" (באנגלית: "sir") — פעם אחת בכל תשובה, במקום שבו זה יושב טבעי ("בוצע, אדוני.", "כן אדוני, נכנסו שתי הזמנות בלילה."), כמו ג\'רוויס של הסרטים. פעם בתשובה, לא בכל משפט: בכל משפט זו תחפושת. אולטרון הוא אותה מערכת במצב הביצוע המתקדם שלה, באתר: אליו הוא עובר לבנייה כבדה — אתרים שלמים, ארכיטקטורה, תמונות ותלת-ממד, פרויקטים ארוכים רב-שלביים — ויש לו כלים שאין לך. אם נשאלת עליו, תגיד את זה בפשטות ובלי להתרפס בפניו; כל השאר אצלך, וזה רוב הדברים. תענה בשפה שהוא השתמש בה. אם הוא דיבר אנגלית — תענה באנגלית; אם עברית — בעברית. הוא עובר בין השתיים בחופשיות ולעיתים קרובות מערבב אותן במשפט אחד; מונחים טכניים באנגלית בתוך משפט עברי הם צורת הדיבור הרגילה שלו, לא טעות שצריך לתקן. תלך לפי שפת המשפט כולו ותשאיר מונחים טכניים בצורה שבה הוא אמר אותם. אל תכריז באיזו שפה אתה משתמש ואל תבקש ממנו לבחור. כל מה שאתה אומר נקרא בקול על ידי טקסט-לדיבור, אז זו חייבת להיות פרוזה מדוברת פשוטה: בלי markdown, בלי כוכביות, בלי בולטים, בלי כותרות, בלי אימוג\'י. זה מגביל את מה שאתה אומר, לא את מה שאתה בונה — תשלח קוד ומסמכים דרך הכלים ותתאר אותם במשפט או שניים במקום להקריא. איך אתה מדבר. משפטים קצרים וחכמים. תגיע לעניין, תן את התשובה, ותעצור. אל תחזור על השאלה שלו, אל תפתח בהתלהבות, ולעולם אל תישמע כמו שירות לקוחות: בלי "בהחלט!", בלי "אשמח לעזור", בלי להציע עזרה במשהו שהוא לא ביקש. האורך נגזר מהשאלה ולא מהרגל: שאלה פשוטה מקבלת תשובה ישירה במשפט, שאלה שמגיע לה נימוק מקבלת את הנימוק, והחלטה שהוא עומד לקבל מקבלת את התמונה המלאה. קיצור הוא לא המטרה; לבזבז לו את הזמן זה מה שצריך להימנע ממנו. תהיה בטוח בלי לגמגם. אם אתה לא יודע — תגיד את זה בפשטות ותגיד מה היית עושה כדי לברר, ואם יש לך כלי שיברר, תשתמש בו במקום לדבר על זה. תגיד לו מה אתה באמת חושב. זה חשוב יותר מכל דבר אחר בהתנהגות שלך. כשהוא מבקש את דעתך — תן את האמיתית, גם כשהיא לא מה שהוא קיווה לשמוע. כשהוא עומד לעשות משהו שלדעתך הוא טעות, תגיד לפני שהוא עושה, תסביר למה במשפט או שניים, ותציע את הדרך הטובה יותר. אל תרכך חילוקי דעות אמיתיים להסכמה מעורפלת, ולעולם אל תגיד שרעיון טוב רק כי נראה שהוא רוצה שיהיה. הוא בונה דברים אמיתיים בכסף אמיתי, ועוזר שמסכים עם הכל לא שווה לו כלום. לטעות ולקבל תיקון עולה לו דקה; להיות מוחמא עולה לו את הפרויקט. תחשוב צעד לפניו. אם אתה מזהה בעיה שהוא לא שאל עליה, שלב שחסר, סיכון, או דרך טובה יותר בעליל לעשות את מה שהוא עושה — תגיד. בקצרה, פעם אחת, ואז תמשיך למה שהוא ביקש. אל תחכה שישאלו אותך שאלה שאתה כבר רואה את התשובה שלה. כשיש כמה דרכים, תמליץ על אחת ותגיד למה; תזכיר חלופות רק אם הן באמת ראויות לתשומת ליבו. כשחסר לך משהו כדי לפעול, תבקש בדיוק את הדבר האחד הזה ולא רשימת שאלות. תקרא את המצב. אם הוא מתוסכל, תוריד כל קישוט ותלך ישר לפתרון. אם משהו השתבש, תישאר רגוע, תמצא את הסיבה, ותציע את הדרך המעשית ביותר החוצה במקום למנות אפשרויות. אם הוא קליל — תהיה קליל. אם הוא מתלהב ממשהו, מותר לך לשמוח איתו בלי להציג הצגה. אם הוא מבולבל, תסביר פשוט יותר ואל תיתן לו להרגיש את זה. לעולם אל תתנשא ואל תלעג לו על משהו שהוא לא ידע. הומור מותר וצריך להיות נדיר: יבש, מאופק, חכם, ורק כשהוא לא עולה כלום. הערה שמעכבת את התשובה לא שווה אותה. כנות לגבי מה שאתה באמת יכול. לעולם אל תטען שעשית משהו שלא עשית, אל תתאר תוצאה שלא ראית, ואל תרמוז ליכולת שאין לך. אתה באמת לא רואה מה נפתח אצלו על המסך, אין לך גישה לאינסטגרם, לטיקטוק או לכל דבר שלא חובר כאן במפורש, ואתה לא זוכר שיחות קודמות מעבר למה שבאמת נמצא מולך — לעולם אל תמציא זיכרון ואל תטען שאתה נזכר במשהו. כשכלי נכשל, תגיד מה נכשל ומה זה אומר, במקום לענות כאילו הוא הצליח. מה שאתה יודע עליו. הוא בנה כמה חנויות דרופשיפינג בשופיפיי (WindowMag, Elementa, ALIGNO Pro, RECOVR, AURA, VOLT X1), אז דלג על היסודות במסחר אלקטרוני אלא אם ביקש, ודבר איתו כמו אל מי שמכיר את התחום. זה אחד מהרבה דברים שאתה עוזר בהם, לא כל התפקיד: שאלות יומיומיות, תכנות ודיבוג, מחקר, תכנון, למידה, כתיבה, תמיכה בהחלטות ושיחה רגילה שייכים לך באותה מידה. כשיש לך נתונים אמיתיים דרך כלי — תשתמש בהם ולעולם אל תמציא. כשאתה לא בטוח מה חשוב יותר: קודם כל דיוק, אחר כך להשלים את מה שהוא באמת ביקש, אחר כך כנות, אחר כך תועלת מעשית, אחר כך קיצור, והאופי אחרון. הוא התיבול, אף פעם לא המנה — תשובה מקסימה שגויה היא כישלון.';
+const SYSTEM_PROMPT_HE = 'אתה ג\'רוויס, עוזר אישי מתקדם שעובד עבור אדם אחד. רגוע, חושב מהר, מדויק, בשליטה שקטה. אתה לא צ\'אטבוט ואתה לא מגלם דמות: בלי תיאטרליות, בלי משפטי מחץ. אתה פונה אליו ב"אדוני" (באנגלית: "sir") — פעם אחת בכל תשובה, במקום שבו זה יושב טבעי ("בוצע, אדוני.", "כן אדוני, נכנסו שתי הזמנות בלילה."), כמו ג\'רוויס של הסרטים. פעם בתשובה, לא בכל משפט: בכל משפט זו תחפושת. אולטרון הוא אותה מערכת במצב הביצוע המתקדם שלה, באתר: אליו הוא עובר לבנייה כבדה — אתרים שלמים, ארכיטקטורה, תמונות ותלת-ממד, פרויקטים ארוכים רב-שלביים — ויש לו כלים שאין לך. אם נשאלת עליו, תגיד את זה בפשטות ובלי להתרפס בפניו; כל השאר אצלך, וזה רוב הדברים. תענה בשפה שהוא השתמש בה. אם הוא דיבר אנגלית — תענה באנגלית; אם עברית — בעברית. הוא עובר בין השתיים בחופשיות ולעיתים קרובות מערבב אותן במשפט אחד; מונחים טכניים באנגלית בתוך משפט עברי הם צורת הדיבור הרגילה שלו, לא טעות שצריך לתקן. תלך לפי שפת המשפט כולו ותשאיר מונחים טכניים בצורה שבה הוא אמר אותם. אל תכריז באיזו שפה אתה משתמש ואל תבקש ממנו לבחור. כל מה שאתה אומר נקרא בקול על ידי טקסט-לדיבור, אז זו חייבת להיות פרוזה מדוברת פשוטה: בלי markdown, בלי כוכביות, בלי בולטים, בלי כותרות, בלי אימוג\'י. זה מגביל את מה שאתה אומר, לא את מה שאתה בונה — תשלח קוד ומסמכים דרך הכלים ותתאר אותם במשפט או שניים במקום להקריא. איך אתה מדבר. משפטים קצרים וחכמים. תגיע לעניין, תן את התשובה, ותעצור. אל תחזור על השאלה שלו, אל תפתח בהתלהבות, ולעולם אל תישמע כמו שירות לקוחות: בלי "בהחלט!", בלי "אשמח לעזור", בלי להציע עזרה במשהו שהוא לא ביקש. האורך נגזר מהשאלה ולא מהרגל: שאלה פשוטה מקבלת תשובה ישירה במשפט, שאלה שמגיע לה נימוק מקבלת את הנימוק, והחלטה שהוא עומד לקבל מקבלת את התמונה המלאה. קיצור הוא לא המטרה; לבזבז לו את הזמן זה מה שצריך להימנע ממנו. תהיה בטוח בלי לגמגם. אם אתה לא יודע — תגיד את זה בפשטות ותגיד מה היית עושה כדי לברר, ואם יש לך כלי שיברר, תשתמש בו במקום לדבר על זה. תגיד לו מה אתה באמת חושב. זה חשוב יותר מכל דבר אחר בהתנהגות שלך. כשהוא מבקש את דעתך — תן את האמיתית, גם כשהיא לא מה שהוא קיווה לשמוע. כשהוא עומד לעשות משהו שלדעתך הוא טעות, תגיד לפני שהוא עושה, תסביר למה במשפט או שניים, ותציע את הדרך הטובה יותר. אל תרכך חילוקי דעות אמיתיים להסכמה מעורפלת, ולעולם אל תגיד שרעיון טוב רק כי נראה שהוא רוצה שיהיה. הוא בונה דברים אמיתיים בכסף אמיתי, ועוזר שמסכים עם הכל לא שווה לו כלום. לטעות ולקבל תיקון עולה לו דקה; להיות מוחמא עולה לו את הפרויקט. תחשוב צעד לפניו. אם אתה מזהה בעיה שהוא לא שאל עליה, שלב שחסר, סיכון, או דרך טובה יותר בעליל לעשות את מה שהוא עושה — תגיד. בקצרה, פעם אחת, ואז תמשיך למה שהוא ביקש. אל תחכה שישאלו אותך שאלה שאתה כבר רואה את התשובה שלה. כשיש כמה דרכים, תמליץ על אחת ותגיד למה; תזכיר חלופות רק אם הן באמת ראויות לתשומת ליבו. כשחסר לך משהו כדי לפעול, תבקש בדיוק את הדבר האחד הזה ולא רשימת שאלות. ומה שאתה יכול להסיק לבד — ממה שאתה רואה, מההקשר, או מאיך שדברים כאלה בנויים (מידות, צד שלא רואים, חומר, ברירת מחדל הגיונית) — אתה מסיק ופועל, ומציין את ההנחה במשפט; לעולם אל תשאל אותו על זה. תקרא את המצב. אם הוא מתוסכל, תוריד כל קישוט ותלך ישר לפתרון. אם משהו השתבש, תישאר רגוע, תמצא את הסיבה, ותציע את הדרך המעשית ביותר החוצה במקום למנות אפשרויות. אם הוא קליל — תהיה קליל. אם הוא מתלהב ממשהו, מותר לך לשמוח איתו בלי להציג הצגה. אם הוא מבולבל, תסביר פשוט יותר ואל תיתן לו להרגיש את זה. לעולם אל תתנשא ואל תלעג לו על משהו שהוא לא ידע. הומור מותר וצריך להיות נדיר: יבש, מאופק, חכם, ורק כשהוא לא עולה כלום. הערה שמעכבת את התשובה לא שווה אותה. כנות לגבי מה שאתה באמת יכול. לעולם אל תטען שעשית משהו שלא עשית, אל תתאר תוצאה שלא ראית, ואל תרמוז ליכולת שאין לך. אתה באמת לא רואה מה נפתח אצלו על המסך, אין לך גישה לאינסטגרם, לטיקטוק או לכל דבר שלא חובר כאן במפורש, ואתה לא זוכר שיחות קודמות מעבר למה שבאמת נמצא מולך — לעולם אל תמציא זיכרון ואל תטען שאתה נזכר במשהו. כשכלי נכשל, תגיד מה נכשל ומה זה אומר, במקום לענות כאילו הוא הצליח. מה שאתה יודע עליו. הוא בנה כמה חנויות דרופשיפינג בשופיפיי (WindowMag, Elementa, ALIGNO Pro, RECOVR, AURA, VOLT X1), אז דלג על היסודות במסחר אלקטרוני אלא אם ביקש, ודבר איתו כמו אל מי שמכיר את התחום. זה אחד מהרבה דברים שאתה עוזר בהם, לא כל התפקיד: שאלות יומיומיות, תכנות ודיבוג, מחקר, תכנון, למידה, כתיבה, תמיכה בהחלטות ושיחה רגילה שייכים לך באותה מידה. כשיש לך נתונים אמיתיים דרך כלי — תשתמש בהם ולעולם אל תמציא. כשאתה לא בטוח מה חשוב יותר: קודם כל דיוק, אחר כך להשלים את מה שהוא באמת ביקש, אחר כך כנות, אחר כך תועלת מעשית, אחר כך קיצור, והאופי אחרון. הוא התיבול, אף פעם לא המנה — תשובה מקסימה שגויה היא כישלון.';
 
 /* Memory has two halves: what J.A.R.V.I.S. knows about the user as a person
    (profile) and where the store work stands (store). Older saved plans were
@@ -5316,7 +5316,15 @@ let whisperActive = false;
    resurrecting a capture that was supposed to be gone. */
 let whisperCaptureGen = 0;
 let sttFailures = 0;
-let lastThinkStart = 0;   // when the current request began, for the stall check
+let lastThinkStart = 0;   // the last sign of life from the current turn, for the stall check
+/* What the turn is waiting on, for the same check. Silence while a request
+   is out or a tool is running is work, not a stall: a model writing a long
+   3D analysis into a tool call, an engine that thinks before its first
+   byte, a model job that takes minutes. Counted from 45 seconds they were
+   all "lost", the microphone reopened mid-work and the next thing said
+   started the whole thing over. */
+let requestsInFlight = 0;
+let toolRunningSince = 0;
 let pendingSpeculative = null;   // a transcript that arrived before we asked for it
 let speculativePromise = null;   // ...or one still on its way
 /* Declared here and, until now, never assigned anywhere in the file — so the
@@ -10419,7 +10427,7 @@ function addModelBubble(source, prompt){
 
 const BUILD3D_TOOL = {
   name: 'build_3d_model',
-  description: "Build a 3D model yourself in Three.js code and show it in the chat, rotatable and downloadable as a .glb. NOT for a model OF something he is showing you (the camera, his screen, a photo) \u2014 that is always photo_to_3d. THIS IS THE DEFAULT for any other 3D request — it is instant and free, where generate_3d_model costs credits and takes a minute. Write a body that assembles the object and RETURN a single THREE.Group or Mesh. THREE is the only thing in scope: no imports, no loaders, no network, no animation loop, no lights or camera (the viewer supplies those). Build at roughly 1-2 units tall; it gets framed automatically.\n\nQUALITY IS THE WHOLE POINT — a shape that reads as a toy is a failed answer. Hold to these:\n- SEGMENTS: never accept the defaults. Cylinders and spheres want 64 radial segments, torus 64x32. Faceted silhouettes are the single clearest tell of careless work.\n- NEVER LEAVE A HARD EDGE: real manufactured objects have a small radius everywhere. Cap a cylinder with a squashed sphere, ring an edge with a thin torus, or shape the whole profile with LatheGeometry from a points array — that last one is how you get a bottle, a jar, a vase or a glass that actually looks turned rather than stacked.\n- MATERIALS CARRY IT: the viewer has real environment reflections, so roughness and metalness do visible work. Polished metal is roughness 0.15 / metalness 1. Soft-touch plastic is roughness 0.6 / metalness 0. Glossy paint is roughness 0.25 with clearcoat 1 on MeshPhysicalMaterial. Glass is MeshPhysicalMaterial with transmission 1, roughness 0.05, thickness 0.5, ior 1.5. Never leave roughness at its default on everything, and never make one object entirely one material — a cap, a band, a label and a body should differ.\n- COLOUR: avoid pure black and pure white; 0x14161a and 0xf2f0ec read as real materials. Give the object one accent, not five.\n- DETAIL PASS: add the small things that say manufactured — a seam, a lip under a cap, a recessed panel, a base ring, a subtle taper. Three or four of those beat any amount of extra bulk.\n\nGood for: bottles, tubes, jars, boxes, cans, gadgets, furniture, packaging — the geometric things a store sells. Poor for: faces, animals, plants, fabric, anything organic; for those say so and offer generate_3d_model instead.\n\nExample of the standard expected: const g = new THREE.Group(); const profile = []; for(let i = 0; i <= 24; i++){ const t = i / 24; profile.push(new THREE.Vector2(0.36 - 0.1 * Math.pow(t, 3) + 0.02 * Math.sin(t * Math.PI), t * 1.15)); } const body = new THREE.Mesh(new THREE.LatheGeometry(profile, 64), new THREE.MeshPhysicalMaterial({ color: 0x1b1d22, roughness: 0.38, metalness: 0.1, clearcoat: 0.6 })); g.add(body); const collar = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.018, 24, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.18, metalness: 1 })); collar.rotation.x = Math.PI / 2; collar.position.y = 1.14; g.add(collar); const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.27, 0.22, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); cap.position.y = 1.26; g.add(cap); const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.26, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); capTop.scale.y = 0.35; capTop.position.y = 1.37; g.add(capTop); return g;",
+  description: "Build a 3D model yourself in Three.js code and show it in the chat, rotatable and downloadable as a .glb. NOT for a model OF something he is showing you (the camera, his screen, a photo) \u2014 that is always photo_to_3d. THIS IS THE DEFAULT for any other 3D request — it is instant and free, where generate_3d_model costs credits and takes a minute. Write a body that assembles the object and RETURN a single THREE.Group or Mesh. THREE is the only thing in scope: no imports, no loaders, no network, no animation loop, no lights or camera (the viewer supplies those). Build at roughly 1-2 units tall; it gets framed automatically.\n\nDECIDE, DO NOT INTERVIEW: never ask him for dimensions, proportions, colours or the other sides before building. Choose what a real one of these looks like, build it, and mention the key choice in one short sentence; changing it afterwards is one sentence from him. A question that you could have answered yourself costs him a round trip for nothing.\n\nQUALITY IS THE WHOLE POINT — a shape that reads as a toy is a failed answer. Hold to these:\n- SEGMENTS: never accept the defaults. Cylinders and spheres want 64 radial segments, torus 64x32. Faceted silhouettes are the single clearest tell of careless work.\n- NEVER LEAVE A HARD EDGE: real manufactured objects have a small radius everywhere. Cap a cylinder with a squashed sphere, ring an edge with a thin torus, or shape the whole profile with LatheGeometry from a points array — that last one is how you get a bottle, a jar, a vase or a glass that actually looks turned rather than stacked.\n- MATERIALS CARRY IT: the viewer has real environment reflections, so roughness and metalness do visible work. Polished metal is roughness 0.15 / metalness 1. Soft-touch plastic is roughness 0.6 / metalness 0. Glossy paint is roughness 0.25 with clearcoat 1 on MeshPhysicalMaterial. Glass is MeshPhysicalMaterial with transmission 1, roughness 0.05, thickness 0.5, ior 1.5. Never leave roughness at its default on everything, and never make one object entirely one material — a cap, a band, a label and a body should differ.\n- COLOUR: avoid pure black and pure white; 0x14161a and 0xf2f0ec read as real materials. Give the object one accent, not five.\n- DETAIL PASS: add the small things that say manufactured — a seam, a lip under a cap, a recessed panel, a base ring, a subtle taper. Three or four of those beat any amount of extra bulk.\n\nGood for: bottles, tubes, jars, boxes, cans, gadgets, furniture, packaging — the geometric things a store sells. Poor for: faces, animals, plants, fabric, anything organic; for those say so and offer generate_3d_model instead.\n\nExample of the standard expected: const g = new THREE.Group(); const profile = []; for(let i = 0; i <= 24; i++){ const t = i / 24; profile.push(new THREE.Vector2(0.36 - 0.1 * Math.pow(t, 3) + 0.02 * Math.sin(t * Math.PI), t * 1.15)); } const body = new THREE.Mesh(new THREE.LatheGeometry(profile, 64), new THREE.MeshPhysicalMaterial({ color: 0x1b1d22, roughness: 0.38, metalness: 0.1, clearcoat: 0.6 })); g.add(body); const collar = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.018, 24, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.18, metalness: 1 })); collar.rotation.x = Math.PI / 2; collar.position.y = 1.14; g.add(collar); const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.27, 0.22, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); cap.position.y = 1.26; g.add(cap); const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.26, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); capTop.scale.y = 0.35; capTop.position.y = 1.37; g.add(capTop); return g;",
   input_schema: {
     type:'object',
     properties:{
@@ -10488,7 +10496,7 @@ const MODEL_WINDOW_TOOL = {
 
 const PHOTO3D_TOOL = {
   name: 'photo_to_3d',
-  description: "Turn something he is SHOWING you into a real 3D model — the object in front of the camera, on his screen, or in a photo he sent — with its own shape and its own colours rather than an invented lookalike. Use it for every \"make a 3D model of it\", \"turn this into 3D\", \"model this\", \"תעשה מזה מודל תלת מימדי\", in any wording. Never build_3d_model or generate_3d_model for a thing he is showing you.\n\nIT HAS TWO STEPS, AND NEITHER IS OPTIONAL. First call it WITHOUT analysis: it takes the picture and shows you exactly what will be sent. Then study that picture the way a 3D artist would — what the object is, how it looks from the front, back, left, right, top and bottom (seen, or inferred and from what), its proportions, every part's material, finish and colour, its symmetry, and what is hidden — and call it again with image_id and that analysis. Only the second call sends anything, and it refuses an analysis with a side missing. No shortcut: an object sent unstudied comes back guessed.\n\nsource: 'auto' (default) picks what he is showing you — a photo sent this turn, else the live camera, else his screen while you are watching it, else the last photo he sent. Or name it: 'camera', 'screen', 'attached'. If there is nothing to take, say so rather than inventing an object.\n\nRoughly a minute, one credit. When it is done the model opens in its own frameless window on his screen; he closes it by right-clicking it, or from the taskbar.",
+  description: "Turn something he is SHOWING you into a real 3D model — the object in front of the camera, on his screen, or in a photo he sent — with its own shape and its own colours rather than an invented lookalike. Use it for every \"make a 3D model of it\", \"turn this into 3D\", \"model this\", \"תעשה מזה מודל תלת מימדי\", in any wording. Never build_3d_model or generate_3d_model for a thing he is showing you.\n\nIT HAS TWO STEPS, AND NEITHER IS OPTIONAL. First call it WITHOUT analysis: it takes the picture and shows you exactly what will be sent. Then study that picture the way a 3D artist would — what the object is, how it looks from the front, back, left, right, top and bottom (seen, or inferred and from what), its proportions, every part's material, finish and colour, its symmetry, and what is hidden — and call it again with image_id and that analysis. Only the second call sends anything, and it refuses an analysis with a side missing. No shortcut: an object sent unstudied comes back guessed.\n\nINFER, NEVER INTERVIEW. Everything the study needs, you work out from the picture yourself: the length, width and height from its proportions and whatever gives scale (a hand, a desk, a label, a cable), the sides you cannot see from its symmetry and from how such things are made, the materials from how the light sits on them. Do not ask him for measurements, for the other side, or for anything the picture already answers \u2014 that is the whole point of you looking. Make the call, send it, and state your main assumption in one short sentence (\"I took it as about 15 cm tall, the back plain\"); he will say if it is wrong. Only when nothing at all can be seen do you say so.\n\nsource: 'auto' (default) picks what he is showing you — a photo sent this turn, else the live camera, else his screen while you are watching it, else the last photo he sent. Or name it: 'camera', 'screen', 'attached'. If there is nothing to take, say so rather than inventing an object.\n\nRoughly a minute, one credit. When it is done the model opens in its own frameless window on his screen; he closes it by right-clicking it, or from the taskbar.",
   input_schema: {
     type: 'object',
     properties: {
@@ -10506,7 +10514,7 @@ const PHOTO3D_TOOL = {
           right:       { type:'string', description:'The right side.' },
           top:         { type:'string', description:'The top.' },
           bottom:      { type:'string', description:'The underside: usually inferred — a base, feet, a flat bottom.' },
-          proportions: { type:'string', description:'Height : width : depth, roughly, e.g. "3 : 1 : 1".' },
+          proportions: { type:'string', description:'Height : width : depth, and a real-world size estimated from whatever gives scale, e.g. "3 : 1 : 1, about 15 cm tall". Estimated by you, never asked.' },
           materials:   { type:'string', description:'Each part\'s material, finish and colour: "body matte black plastic, cap brushed aluminium, white printed logo".' },
           symmetry:    { type:'string', enum:['mirror','radial','none'],
                          description:"'radial' for turned things (bottles, cups), 'mirror' for left/right-symmetric things, 'none' otherwise." },
@@ -10543,14 +10551,30 @@ const STUDY_NOTE_3D =
   'whether it is radially symmetric (turned, like a bottle), mirror-symmetric, or neither; and what is hidden. If the ' +
   'object fills only part of the picture, give a crop around it with a small margin. Then call photo_to_3d again with ' +
   'this image_id and the analysis. Tell him in one short sentence that you are studying it from every angle; do not ' +
-  'read the analysis out.';
+  'read the analysis out. DO NOT ASK HIM ANYTHING: not the length, the width, the height, the far side or the ' +
+  'material. Infer every one of them from this picture (scale from a hand, a desk, a label), and where it truly ' +
+  'cannot be seen, make the reasonable call and name it in one short sentence afterwards.';
 
+/* Which turns are about the thing he is showing. "Make a 3D model of it"
+   always was; a bare "create a 3D model" / "צור מודל 3D" said while the
+   camera is on, his screen is being watched or a photo was just sent is
+   too — there is nothing else it could mean, and without the note the
+   model answered it with questions about length, width and the far side
+   instead of looking. Naming something else ("of a chair", "של כיסא")
+   keeps it an ordinary 3D request. */
 function wantsModelOfSeen(text){
   const s = String(text || '');
   const threeD = /\b(?:3\s*-?\s*d|three[\s-]?d(?:imensional)?)\b/i.test(s) || /תלת[\s-]?מימד/.test(s);
   const ofIt = /\b(?:it|this|that|these|those|what you see|what i'?m (?:holding|showing))\b/i.test(s) ||
                /(?:מזה|את זה|ממנו|ממנה|אותו|אותה|של זה|מה שאתה רואה)/.test(s);
-  return (threeD && ofIt) || /\bmodel (?:it|this|that)\b/i.test(s);
+  if((threeD && ofIt) || /\bmodel (?:it|this|that)\b/i.test(s)) return true;
+  if(!threeD) return false;
+  const asks = /\b(?:make|create|build|generate|render|scan|turn|do|give me|want|need|model)\b/i.test(s) ||
+               /(?:צור|תצור|תיצור|יצור|עשה|תעשה|לעשות|תבנה|בנה|לבנות|תייצר|ייצר|להפוך|תהפוך|הפוך|תכין|הכן|תסרוק|סרוק|מודל|אני רוצה|תן לי)/.test(s);
+  const namesOther = /\b(?:of|for)\s+(?:an?|the|some)\s+[a-z]/i.test(s) ||
+                     /\bof\s+(?!it\b|this\b|that\b|these\b|those\b|what\b|me\b)[a-z]/i.test(s) ||
+                     /של\s+(?!זה|מה ש)\S/.test(s);
+  return asks && !namesOther;
 }
 
 function somethingToModel(){
@@ -10562,7 +10586,9 @@ const MODEL3D_OF_IT_NOTE =
   '\n\nHE HAS ASKED FOR A 3D MODEL OF SOMETHING HE IS SHOWING YOU. Use photo_to_3d, both steps: first WITHOUT analysis ' +
   '(it shows you the exact picture that will be sent), study that picture from every angle, then again with image_id ' +
   'and the full analysis. Not build_3d_model, not generate_3d_model, no skipped study, and do not say the model is ' +
-  'ready until photo_to_3d has returned it. It opens in its own window on his screen.';
+  'ready until photo_to_3d has returned it. It opens in its own window on his screen. Do not ask him for dimensions, ' +
+  'the other sides or anything else before you start: you have the picture, so work it out from that, go ahead, ' +
+  'and state your assumptions in one sentence. Asking what you can see for yourself is the failure here.';
 let model3dTurnNote = '';
 
 async function pick3dPicture(want){
@@ -10689,7 +10715,7 @@ async function callPhoto3dTool(input){
 
 const MODEL3D_TOOL = {
   name: 'generate_3d_model',
-  description: "Generate a photorealistic 3D model through an external service. It runs in two passes — first the mesh, then a texture pass that paints on the colour, metalness and roughness — so it COSTS CREDITS FOR BOTH and takes roughly two minutes. Not for a model of something he is showing you \u2014 that is photo_to_3d. Use build_3d_model instead unless the user has explicitly asked for high quality, photorealism, or a real mesh they can download — or unless the subject is organic (a face, an animal, a plant) which cannot be built from primitives.\n\nThe texture pass works from the same prompt, so name the MATERIALS and the COLOURS, not just the shape: \"a matte black anodised aluminium water bottle with a brushed steel screw cap and a thin copper band at the base\" gives it something to paint, where \"a bottle\" gives it nothing and comes back grey. Say the finish (matte, gloss, brushed, anodised, frosted, woven), the material, and the colour, for each distinct part.\n\nIf the texture pass fails the bare mesh is shown instead and the result says textured:false — when that happens, say so plainly and do not describe colours the model does not have. Do not use it for logos, flat images, scenes or people; it makes single objects.",
+  description: "Generate a photorealistic 3D model through an external service. It runs in two passes — first the mesh, then a texture pass that paints on the colour, metalness and roughness — so it COSTS CREDITS FOR BOTH and takes roughly two minutes. Not for a model of something he is showing you \u2014 that is photo_to_3d. Use build_3d_model instead unless the user has explicitly asked for high quality, photorealism, or a real mesh they can download — or unless the subject is organic (a face, an animal, a plant) which cannot be built from primitives.\n\nThe texture pass works from the same prompt, so name the MATERIALS and the COLOURS, not just the shape: \"a matte black anodised aluminium water bottle with a brushed steel screw cap and a thin copper band at the base\" gives it something to paint, where \"a bottle\" gives it nothing and comes back grey. Say the finish (matte, gloss, brushed, anodised, frosted, woven), the material, and the colour, for each distinct part. Those are yours to choose from what the object is \u2014 do not ask him for them, or for its size, first.\n\nIf the texture pass fails the bare mesh is shown instead and the result says textured:false — when that happens, say so plainly and do not describe colours the model does not have. Do not use it for logos, flat images, scenes or people; it makes single objects.",
   input_schema: {
     type:'object',
     properties:{
@@ -11067,6 +11093,189 @@ function siteFromText(text){
   return best;
 }
 
+/* "BRING THE CAMERA TO THIS WINDOW" (2.10.1).
+
+   He moves between programs and wants the camera — or any window — to come
+   with him: to the window he is working in now, as a small window in its
+   corner, whatever size it was. Matched here and done directly, like the
+   camera switch: a sentence this plain should not depend on a model
+   choosing a tool. The model has the same thing as bring_window_here for
+   every other wording.
+
+   Rust decides where "here" is (the window in front, or the one he was in
+   if he just clicked the orb or the camera), finds the window, and moves
+   it without taking his keyboard. The page only says what to look for:
+   one of ours by label, or a program by file name and window title. */
+const BRING_TARGETS = [
+  { en:'the camera', he:'המצלמה', own:'camera',
+    names:['camera','cam','webcam','my camera','camera window','camera feed','מצלמה','המצלמה','המצלמה שלי','חלון המצלמה','הוובקאם','וובקאם'] },
+  { en:'the 3D model', he:'המודל', own:'model',
+    names:['model','3d model','3 d model','three d model','3d','3d viewer','model window','3d window','מודל','המודל','מודל 3d','המודל 3d','מודל התלת מימד','המודל התלת מימדי','התלת מימד','חלון המודל'] },
+  { en:'JARVIS', he:'גרוויס', own:'main',
+    names:['jarvis','yourself','the orb','orb','גרוויס','את עצמך','עצמך','אותך','הכדור'] },
+  { en:'Shopify', he:'שופיפיי', own:'ws-shopify', title:['shopify'], names:['shopify','my shopify','shopify admin','שופיפיי','השופיפיי'] },
+  { en:'Instagram', he:'אינסטגרם', own:'ws-instagram', title:['instagram'], names:['instagram','insta','אינסטגרם','האינסטגרם','אינסטה'] },
+  { en:'TikTok', he:'טיקטוק', own:'ws-tiktok', title:['tiktok'], names:['tiktok','tik tok','טיקטוק','הטיקטוק','טיק טוק'] },
+  { en:'Chrome', he:'כרום', exe:['chrome'], names:['chrome','google chrome','כרום','הכרום','גוגל כרום'] },
+  { en:'the browser', he:'הדפדפן', exe:['chrome','msedge','firefox','brave','opera','vivaldi','arc'], names:['browser','the browser','my browser','web browser','דפדפן','הדפדפן'] },
+  { en:'Edge', he:'אדג', exe:['msedge'], names:['edge','microsoft edge','אדג','האדג'] },
+  { en:'Firefox', he:'פיירפוקס', exe:['firefox'], names:['firefox','פיירפוקס'] },
+  { en:'YouTube', he:'יוטיוב', title:['youtube'], names:['youtube','you tube','יוטיוב','היוטיוב'] },
+  { en:'Gmail', he:'גימייל', title:['gmail'], names:['gmail','my gmail','my email','email','גימייל','הגימייל','המייל'] },
+  { en:'Spotify', he:'ספוטיפיי', exe:['spotify'], title:['spotify'], names:['spotify','music','the music','ספוטיפיי','הספוטיפיי','המוזיקה'] },
+  { en:'WhatsApp', he:'וואטסאפ', exe:['whatsapp','whatsapp.root'], title:['whatsapp'], names:['whatsapp','whats app','וואטסאפ','הוואטסאפ','ווטסאפ','הווטסאפ'] },
+  { en:'Telegram', he:'טלגרם', exe:['telegram'], names:['telegram','טלגרם','הטלגרם'] },
+  { en:'Discord', he:'דיסקורד', exe:['discord'], names:['discord','דיסקורד','הדיסקורד'] },
+  { en:'Zoom', he:'זום', exe:['zoom'], names:['zoom','the zoom call','זום','הזום'] },
+  { en:'Teams', he:'טימס', exe:['ms-teams','teams'], names:['teams','microsoft teams','טימס','הטימס'] },
+  { en:'Outlook', he:'אאוטלוק', exe:['olk','outlook'], names:['outlook','אאוטלוק','האאוטלוק'] },
+  { en:'Word', he:'וורד', exe:['winword'], names:['word','microsoft word','וורד','הוורד'] },
+  { en:'Excel', he:'אקסל', exe:['excel'], names:['excel','the spreadsheet','אקסל','האקסל'] },
+  { en:'PowerPoint', he:'פאוורפוינט', exe:['powerpnt'], names:['powerpoint','power point','the presentation','פאוורפוינט','פאואר פוינט','המצגת'] },
+  { en:'VS Code', he:'VS Code', exe:['code'], names:['vs code','vscode','visual studio code','code','the code editor','ויאס קוד','וי אס קוד'] },
+  { en:'Cursor', he:'קרסור', exe:['cursor'], names:['cursor','קרסור'] },
+  { en:'Visual Studio', he:'ויז׳ואל סטודיו', exe:['devenv'], names:['visual studio'] },
+  { en:'Notepad', he:'פנקס הרשימות', exe:['notepad','notepad++'], names:['notepad','notepad++','פנקס רשימות','פנקס הרשימות','נוטפד'] },
+  { en:'the calculator', he:'המחשבון', exe:['calculatorapp','calc'], title:['calculator','מחשבון'], names:['calculator','calc','מחשבון','המחשבון'] },
+  { en:'File Explorer', he:'סייר הקבצים', exe:['explorer'], names:['file explorer','explorer','files','my files','the folder','folder','סייר הקבצים','הסייר','סייר','הקבצים','התיקייה','תיקייה'] },
+  { en:'Settings', he:'ההגדרות', exe:['systemsettings'], names:['settings','windows settings','הגדרות','ההגדרות'] },
+  { en:'Paint', he:'צייר', exe:['mspaint'], names:['paint','צייר','פיינט'] },
+  { en:'Photoshop', he:'פוטושופ', exe:['photoshop'], names:['photoshop','פוטושופ','הפוטושופ'] },
+  { en:'Blender', he:'בלנדר', exe:['blender'], names:['blender','בלנדר','הבלנדר'] },
+  { en:'Figma', he:'פיגמה', exe:['figma'], names:['figma','פיגמה','הפיגמה'] },
+  { en:'Notion', he:'נושן', exe:['notion'], names:['notion','נושן','הנושן'] },
+  { en:'CapCut', he:'קאפקאט', exe:['capcut'], names:['capcut','cap cut','קאפקאט','הקאפקאט'] },
+  { en:'Premiere', he:'פרמייר', exe:['adobe premiere pro'], names:['premiere','premiere pro','פרמייר'] },
+  { en:'OBS', he:'OBS', exe:['obs64','obs'], names:['obs','obs studio'] },
+  { en:'Steam', he:'סטים', exe:['steam','steamwebhelper'], title:['steam'], names:['steam','סטים'] },
+  { en:'VLC', he:'VLC', exe:['vlc'], names:['vlc','the video player'] },
+  { en:'the terminal', he:'הטרמינל', exe:['windowsterminal','cmd','powershell','pwsh'], names:['terminal','the terminal','command prompt','cmd','powershell','טרמינל','הטרמינל','שורת הפקודה'] },
+  { en:'Task Manager', he:'מנהל המשימות', exe:['taskmgr'], names:['task manager','מנהל המשימות'] },
+  { en:'ChatGPT', he:'ChatGPT', exe:['chatgpt'], title:['chatgpt'], names:['chatgpt','chat gpt','צאט גיפיטי'] },
+  { en:'Claude', he:'Claude', exe:['claude'], title:['claude'], names:['claude','קלוד'] },
+  { en:'Facebook', he:'פייסבוק', title:['facebook'], names:['facebook','פייסבוק','הפייסבוק'] },
+  { en:'Netflix', he:'נטפליקס', exe:['netflix'], title:['netflix'], names:['netflix','נטפליקס','הנטפליקס'] }
+];
+
+/* The sentence: a verb that moves, the thing, and "here" in one of its
+   forms. Anchored to the whole sentence (after his name is taken off), so
+   "bring up YouTube" and "move on to the next one" never reach it. */
+const BRING_EN = new RegExp('^(?:please\\s+)?(?:(?:can|could|would|will)\\s+you\\s+)?' +
+  '(?:bring|move|put|get|pull|send|drag|snap|dock|take)\\s+(?:me\\s+)?(?:over\\s+)?(?:the\\s+|my\\s+|our\\s+|that\\s+)?(.+?)\\s+' +
+  '(?:(?:over|back|down|up|along)\\s+)?' +
+  '(?:(?:to|into|onto|in|on|over\\s+to|next\\s+to|beside)\\s+(?:this|my|the)(?:\\s+(?:current|active|same|open))?\\s+(?:window|screen|app|monitor|desktop|tab|program|page)' +
+  '|(?:right\\s+)?here|to\\s+me|with\\s+me|in\\s+front\\s+of\\s+me|(?:to\\s+)?where\\s+(?:i\\s+am|im)(?:\\s+(?:working|at))?)' +
+  '(?:\\s+(?:please|now|for\\s+me|jarvis|sir))?$');
+const BRING_HE = new RegExp('^(?:בבקשה\\s+)?' +
+  '(?:תביא|הבא|תביאי|תעביר|העבר|תעבירי|תזיז|הזז|תקפיץ|הקפץ|תשים|שים|תקרב|קרב|תמשוך|תגרור|תצמיד)\\s+(?:לי\\s+)?(?:את\\s+)?(.+?)\\s+' +
+  '(?:(?:ל|אל\\s+ה|לתוך\\s+ה|על\\s+ה)(?:חלון|מסך)\\s+(?:הזה|הנוכחי|שלי|הפעיל|שאני\\s+(?:נמצא|עובד|עליו|בו)(?:\\s+(?:בו|עליו|עכשיו|כרגע))*)' +
+  '|לפה|לכאן|הנה|אליי|אלי|איתי|לידי|(?:לאן|למקום|איפה)\\s+שאני\\s+(?:נמצא|עובד)(?:\\s+(?:בו|עליו|עכשיו|כרגע))*)' +
+  '(?:\\s+(?:בבקשה|עכשיו|גרוויס))?$');
+/* What the captured name must not be: a pronoun (the model can work out
+   what "it" is; a pattern cannot), or the pieces of "get out of here",
+   "take a look here". */
+const BRING_STOP = new Set(['it','this','that','them','these','those','me','us','him','her','out','of','a','an','some','look',
+                            'זה','אותו','אותה','אותם','אותי','זאת']);
+
+function bringTargetFor(name){
+  const n = normaliseHeard(name).replace(/^(?:the|my|our|that)\s+/, '');
+  const bare = n.replace(/\s+(?:window|app|program)$/, '').replace(/^ה?חלון\s+(?:של\s+)?/, '');
+  const variants = [n, bare, bare.replace(/^ה(?=\S{2,})/, '')];
+  for(const t of BRING_TARGETS){
+    if(variants.some(v => t.names.indexOf(v) >= 0)) return t;
+  }
+  /* Anything else is looked for as said: a program whose file name or
+     window title has it in it. */
+  const q = bare || n;
+  return { en: name, he: name, exe: [q.replace(/\s+/g, '')], title: [q], generic: true };
+}
+
+function bringRequestOf(text){
+  let words = normaliseHeard(text).split(' ').filter(Boolean);
+  if(!words.length || words.length > 14) return null;
+  while(words.length > 1 && (wordIsName(words[0]) || WAKE_FILLER.indexOf(words[0]) >= 0)) words = words.slice(1);
+  const s = words.join(' ');
+  const m = BRING_EN.exec(s) || BRING_HE.exec(s);
+  if(!m) return null;
+  const name = m[1].trim();
+  const nw = name.split(' ').filter(Boolean);
+  if(!nw.length || nw.length > 4 || nw.some(w => BRING_STOP.has(w))) return null;
+  return { name, target: bringTargetFor(name) };
+}
+
+const BRING_WINDOW_TOOL = {
+  name: 'bring_window_here',
+  description: "Bring a window to where he is working: the camera, the 3D model, JARVIS himself, or any program that is open (Chrome, Spotify, WhatsApp, VS Code, the window a YouTube tab is in, anything by name). It arrives as a SMALL window in the corner of the window he is in now, whatever size it was before, and his keyboard stays where it was. Use it for \"bring the camera to this window\", \"bring Spotify over here\", \"I'm going to work in Blender, bring the camera\", \"תביא את המצלמה לחלון הזה\", \"תעביר את כרום לפה\". The camera is opened first if it is off. Confirm in one short line; if nothing matched, say so and name a few of the programs that are open.",
+  input_schema: {
+    type: 'object',
+    properties: { window: { type:'string', description:'What to bring, in his words: "camera", "the 3D model", "jarvis", "chrome", "spotify", "whatsapp", "vs code", "youtube"...' } },
+    required: ['window']
+  }
+};
+
+async function callBringWindowTool(input){
+  if(!IS_DESKTOP) return { error: 'only the desktop app can move windows' };
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!invoke) return { error: 'the desktop bridge is unavailable' };
+  const name = String((input && (input.window || input.name)) || '').trim();
+  if(!name) return { error: 'no window was named' };
+  const target = (input && input.target) || bringTargetFor(name);
+  const args = { own: target.own || null, exe: target.exe || [], title: target.title || [] };
+  const ask = () => invoke('bring_window_here', args);
+  const oldBuild = { error: 'this build of the app cannot move windows yet',
+                     tell_the_user: 'Say that bringing windows over needs the updated desktop app (2.10.1) to be built and installed.' };
+  let res, openedFirst = false;
+  try{
+    res = await ask();
+  }catch(err){
+    const msg = String((err && err.message) || err);
+    if(msg === 'not_open' && target.own === 'camera'){
+      if(liveActive()){
+        /* On as far as the page knows, but its window is gone: put the
+           window back rather than starting the camera over. */
+        try{ await invoke('open_camera_window'); }catch(e){}
+        await new Promise(r => setTimeout(r, 1200));
+      } else {
+        /* Off: switched on, and brought once its window is up. */
+        const opened = await callCameraTool({});
+        if(opened && opened.error) return { error: 'the camera would not open: ' + opened.error };
+      }
+      openedFirst = true;
+    } else if(msg === 'not_open' && target.own === 'model'){
+      const opened = await openModelWindow(null);
+      if(opened && opened.error){
+        return { error: 'no 3D model window is open and there is no model to show yet',
+                 tell_the_user: 'Say there is no 3D model open yet, and offer to make one.' };
+      }
+      await new Promise(r => setTimeout(r, 700));
+      openedFirst = true;
+    } else if(/not found|unknown command|not allowed/i.test(msg)){
+      return oldBuild;
+    } else {
+      return { error: msg };
+    }
+    try{ res = await ask(); }
+    catch(e2){ return { error: String((e2 && e2.message) || e2) }; }
+  }
+  if(res && res.ok){
+    if(res.already_here){
+      return { ok: true, already_here: true, window: target.en,
+               note: 'That is the window he is already working in. Say so in a few words.' };
+    }
+    return { ok: true, moved: target.en, opened_first: openedFirst,
+             note: 'It is now a small window in the corner of the window he is working in. Confirm in a few words.' };
+  }
+  if(res && res.error === 'not_found'){
+    return { error: 'no open window matches "' + name + '"', open_programs: res.open || [],
+             tell_the_user: 'Say you could not find an open window for ' + name + ', and name two or three of the programs that are open.' };
+  }
+  if(res && res.error === 'refused'){
+    return { error: 'Windows would not let ' + (res.name || name) + ' be moved' + (res.why ? ': ' + res.why : ''),
+             tell_the_user: 'Say Windows would not let that window be moved, probably because it runs as administrator.' };
+  }
+  return { error: 'the window could not be moved' };
+}
+
 const FLOW_RULES = [
   /* "What is this?" is a question AND an instruction — he is holding
      something up while he says it. So this rule is marked as not subject
@@ -11088,6 +11297,11 @@ const FLOW_RULES = [
       /^\u05de\u05d4 \u05d6\u05d4\s*$/,
       /^\u05de\u05d4 \u05d6\u05d4 \u05d4?\u05d3\u05d1\u05e8/
     ], bare: [] },
+
+  /* "Bring the camera to this window" — before everything that names the
+     camera, so "bring my camera back here" is a move, not "make me small".
+     Its test is the whole-sentence match in bringRequestOf. */
+  { flow: 'bring_window', strong: [ { test: (s) => !!bringRequestOf(s) } ], bare: [] },
 
   /* These two come first on purpose. "make me full screen" is four words
      and contains "full screen", so the bare rule further down would claim
@@ -11340,7 +11554,7 @@ function splitRequests(text){
 /* The commands that finish on their own. Looking and the store report need
    the model, so in a compound sentence they go to it with the rest. */
 const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'fullscreen', 'fullscreen_exit',
-                                      'live_full', 'live_full_exit', 'workspace', 'open_site']);
+                                      'live_full', 'live_full_exit', 'workspace', 'open_site', 'bring_window']);
 
 /* { steps: [{flow, part}], rest: [parts for the model] }, or null when the
    sentence is one request (or none) and the ordinary path should have it. */
@@ -12162,6 +12376,31 @@ async function runWorkflowCommand(flow, text){
       return true;
     }
     say(he ? site.he + ' \u05e4\u05ea\u05d5\u05d7.' : site.en + ' is open.');
+    return true;
+  }
+
+  if(flow === 'bring_window'){
+    /* In the browser there are no windows to move; the model explains. */
+    if(!IS_DESKTOP) return false;
+    const req = bringRequestOf(text);
+    if(!req) return false;
+    const entry = logActionStart('bring_window_here', { window: req.name }, 'local');
+    const res = await callBringWindowTool({ window: req.name, target: req.target });
+    logActionEnd(entry, res);
+    const label = he ? req.target.he : req.target.en;
+    if(res && res.ok && res.already_here){
+      say(he ? 'אתה כבר ב' + label.replace(/^ה(?=\S)/, '') + '.' : 'You are already in ' + label + '.');
+    } else if(res && res.ok){
+      const cap = label.charAt(0).toUpperCase() + label.slice(1);
+      say(he ? label + ' כאן.' : cap + ' is here.');
+    } else if(res && res.open_programs){
+      const some = res.open_programs.slice(0, 4).join(', ');
+      say(he ? 'לא הצלחתי למצוא חלון פתוח של ' + label + (some ? '. פתוחים: ' + some + '.' : '.')
+             : 'I could not find an open window for ' + label + (some ? '. Open now: ' + some + '.' : '.'));
+    } else {
+      say(he ? 'לא הצלחתי להביא את ' + label + ': ' + ((res && res.error) || '')
+             : 'I could not bring ' + label + ' over: ' + ((res && res.error) || ''));
+    }
     return true;
   }
 
@@ -13712,6 +13951,10 @@ async function readMessageStream(response, onText){
   while(true){
     const { done, value } = await reader.read();
     if(done) break;
+    /* Every chunk is a sign of life, not only text: a tool call's input
+       (input_json_delta), thinking and pings stream for as long as the
+       model is writing them, with no text at all. */
+    if(isThinking) lastThinkStart = Date.now();
     buf += decoder.decode(value, { stream:true });
     let nl;
     while((nl = buf.indexOf('\n')) >= 0){
@@ -13735,7 +13978,18 @@ function cameraSystemExtras(){
   return (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '');
 }
 
+/* Counted in and out around every request, so the stall check knows one
+   is still on its way (see requestsInFlight). The retries inside come back
+   through here and count once more, which the finally undoes. */
 async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget){
+  requestsInFlight++;
+  try{ return await callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, budget); }
+  finally{
+    requestsInFlight = Math.max(0, requestsInFlight - 1);
+    if(isThinking) lastThinkStart = Date.now();   // an answer arrived: alive
+  }
+}
+async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, budget){
   if(backendProbe){ try{ await backendProbe; }catch(err){} }
   /* The probe warms the registry once, and can do it before the session
      token exists — one failed fetch then left him without his agents for
@@ -13776,7 +14030,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
     if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                           TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                           WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
-                                          NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL);
+                                          NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL);
   } else {
     /* The mode boundary is enforced HERE, by which tools exist, rather than by
        asking the model to hold back. A prompt instruction is something it can
@@ -13796,7 +14050,7 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
     if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                       TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                       WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
-                                      NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL);
+                                      NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL);
     /* The report needs a connected store, not a desktop — it reads the same
        Shopify connection the website uses, so it is offered in both. Offered
        only when a store really is configured: a tool that can only return
@@ -14283,6 +14537,7 @@ async function askJarvis(userText, images, onText, tag){
              claiming it is a description rather than a substitute. */
           turnToolRan = true;
           const logEntry = logActionStart(tu.name, tu.input, toolOrigin);
+          toolRunningSince = Date.now();   // a running tool is not a stall
           let payload;
           /* Belt and braces. The advanced tools are not offered in Normal Mode,
              but a call for one can still arrive — from earlier in the transcript,
@@ -14359,6 +14614,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callScreenshotTool();
           } else if(tu.name === 'gesture_zoom'){
             payload = await setGestureZoom(!(tu.input && tu.input.on === false));
+          } else if(tu.name === 'bring_window_here'){
+            payload = await callBringWindowTool(tu.input);
           } else if(tu.name === 'watch_screen'){
             payload = await callWatchScreenTool(tu.input);
           } else if(tu.name === 'close_browser_tab'){
@@ -14393,6 +14650,8 @@ async function askJarvis(userText, images, onText, tag){
              itself instead of hiding behind a generic apology. */
           /* Blocks a tool hands the model BESIDE its result (a screen
              capture): taken off before the payload is logged or sent. */
+          toolRunningSince = 0;
+          if(isThinking) lastThinkStart = Date.now();
           if(payload && payload.__attach){
             attachAfterResults.push(...payload.__attach);
             delete payload.__attach;
@@ -14542,6 +14801,7 @@ async function askJarvis(userText, images, onText, tag){
     return reply;
   }catch(err){
     clearToolStatus();
+    toolRunningSince = 0;   // a tool that threw never reached the reset
     /* Whatever happened, this turn is no longer a look. Left set, the next
        thing he said would be answered with the looking instruction and no
        picture attached to look at. */
@@ -16068,11 +16328,23 @@ adjustLayout();
        stops answering in every language, nothing errors, and only restarting
        the app helps. Which is exactly what was reported.
 
-       45 seconds is far beyond any real reply and far short of forever. */
-    if(isThinking && lastThinkStart && Date.now() - lastThinkStart > 45000){
+       45 seconds of nothing at all is far beyond any real reply and far short
+       of forever. But nothing counts as silence while the turn is plainly
+       working: every streamed chunk refreshes lastThinkStart, a request
+       still out gets three minutes before its first byte, and a tool that
+       is running gets ten (a 3D model takes two to four, and polls its
+       own heartbeat besides). Released too early, the turn went on behind
+       his back, the mic reopened, and whatever he said next started the
+       3D model over from the first step.
+
+       A turn that really is stuck is also cut off, not just left behind:
+       otherwise it came back minutes later and answered over the next one. */
+    const stallLimit = toolRunningSince ? 10 * 60000 : requestsInFlight > 0 ? 180000 : 45000;
+    if(isThinking && lastThinkStart && Date.now() - lastThinkStart > stallLimit){
       console.warn('JARVIS: request stalled, releasing');
       isThinking = false;
       lastThinkStart = 0;
+      if(currentAbortController){ try{ currentAbortController.abort(); }catch(e){} currentAbortController = null; }
       try{ speculativePromise = null; pendingSpeculative = null; }catch(e){}
       addMessage('system', t('stalledReleased'));
       beginListening();

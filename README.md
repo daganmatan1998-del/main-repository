@@ -320,6 +320,86 @@ actually forwarded where it should be, actually stripped where it must be, that
 the warning fires only in the second case, and that a blind primary is overtaken
 in the chain by a fallback that can see.
 
+## Page 2.10.1: long 3D turns finish, he infers instead of asking, "bring the camera to this window"
+
+**A 3D model no longer starts over halfway through.** The watchdog that
+unsticks a request that never returns released any turn that went 45
+seconds without new text. A 3D turn is exactly that kind of turn:
+
+- the model writes its analysis into a tool call, which streams with no
+  text at all;
+- an engine can think for a minute before it sends its first byte;
+- the job itself takes two to four minutes.
+
+So the turn was dropped mid-work, the microphone reopened, and whatever he
+said next started the model over from the first photo. Now:
+
+- every streamed chunk counts as a sign of life, not only text;
+- a request still waiting for its first byte gets three minutes;
+- a running tool gets ten minutes (the 3D job also sends its own heartbeat
+  on every poll).
+
+A request that really is stuck is still released, and it is now also cut
+off, so its answer can no longer arrive later on top of the next turn.
+
+**He works it out instead of asking.** A bare "create a 3D model" or "צור
+מודל 3D", said while the camera is on, the screen is being watched, or a
+photo has just been sent, now takes the studied photo route, the same as
+"make a 3D model of it". Naming something else ("of a chair", "של כיסא")
+still means build it from scratch. `photo_to_3d`, the study note,
+`build_3d_model`, `generate_3d_model` and both system prompts now all tell
+him the same thing: infer the length, width and height, the hidden sides
+and the materials from the picture and from how such objects are made, then
+act and state the main assumption in one sentence. He never asks for what
+he can see or work out.
+
+**"Bring the camera to this window".** Any window arrives small, in the
+bottom-right corner of the window you are working in, whatever size it
+was before, and your keyboard stays where it is. What you can name:
+
+- JARVIS's own windows: the camera, the 3D model, JARVIS himself (moved
+  only; the orb is small already), and the Shopify, Instagram and TikTok
+  panes;
+- any program by name: Chrome, Spotify, WhatsApp, VS Code, Word, Explorer,
+  and around 40 more with Hebrew names;
+- anything else, looked up by program name or window title ("bring the
+  YouTube window", "bring obsidian").
+
+In English: bring, move, put, get or pull the thing, then to this window,
+to my screen, here, over here, to me, or to where I'm working. In Hebrew:
+תביא, תעביר, תזיז, תקפיץ or תשים, then לחלון הזה, לפה, לכאן, אליי, or
+לחלון שאני עובד עליו. Anchored to the whole sentence, so "bring up
+YouTube" and "take a look here" are untouched. For any other wording the
+model has the same thing as the `bring_window_here` tool.
+
+| Step | Where | What it does |
+|---|---|---|
+| "Here" | Rust `bring_window_here` | The window in front. If that is the orb or the camera (you clicked it), it is the topmost real program window, found by walking top-level windows in Z order. Minimised, cloaked (another virtual desktop), tool and shell windows are skipped. |
+| Which window | Rust | Ours by label. A program by score: exact file name, then title, then partial file name, with the topmost winning ties. A Store app is named by its real program, as in gesture zoom. |
+| Size | `bring_size` | Camera: 20 % of the screen's width (280–480 px), 5 : 4. 3D viewer: 22 %, square. A program: 30 % (440–760 px), 3 : 2. |
+| Place | `bring_place` | Bottom-right of the window you are in, 24 px in, inside the work area. If the orb is in that corner, it tries the other corners in turn. |
+| Move | Rust | Restored without activating (`SW_SHOWNOACTIVATE`), then raised above your window without focus (`SWP_NOACTIVATE`). |
+
+If the camera is off, it is opened first. If nothing matches, he says so
+and names what is open. If Windows refuses (an elevated program such as
+Task Manager), he says why.
+
+**Tested:**
+
+- The stall on the real page, with the page clock jumped forward: a
+  request out for a minute, a tool call streaming for 280 seconds, a tool
+  running for five minutes, and a request that is really stuck. The
+  previous page fails the first cases.
+- The 3D wording.
+- "Bring": 23 phrasings in English and Hebrew and nine that must not
+  trigger, with the camera off, a stale camera window, not found, refused,
+  already here, an older app, and the model's tool.
+- The size and placement maths as Rust unit tests.
+- `main.rs` type-checked for Windows.
+
+**Needs the app rebuilt** for "bring"; the stall fix and the 3D changes are
+in the page alone.
+
 ## Page 2.10.0: two-hand gesture zoom, for whatever is in front
 
 **The gesture.** In front of the camera, pinch the thumb and index finger of

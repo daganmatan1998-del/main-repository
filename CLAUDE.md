@@ -210,6 +210,30 @@ single file `dist/index.html`.
   `jarvis://gesture-settings` event. In the sandbox the GPU delegate runs
   in software at ~600 ms a frame, so tests force `delegate: 'CPU'`; the
   controller itself falls back to CPU when the GPU path averages > 70 ms.
+- **The stall breaker counts work, not text (2.10.1).** lastThinkStart is
+  the last sign of life: every stream chunk (readMessageStream), every
+  answered request (the callClaude wrapper around callClaudeOnce) and every
+  finished tool refresh it. The limit is 45 s of nothing, 180 s while
+  `requestsInFlight` > 0, and 10 min while `toolRunningSince` is set. A real
+  stall also aborts currentAbortController. Counted from text alone, a 3D
+  turn (analysis streamed as input_json_delta, a model thinking before its
+  first byte, a minutes-long job) was released mid-work and started over.
+  stall.e2e.mjs jumps the page clock; ORB_DIR runs it against an old copy.
+- **A bare "create a 3D model" while something is shown IS "of it"
+  (2.10.1).** wantsModelOfSeen takes a create verb plus 3D unless another
+  object is named ("of a chair", "של כיסא"). Every 3D tool and both prompts
+  say infer and state the assumption, never ask for sizes or sides.
+- **"Bring the X to this window" (2.10.1)** is the bring_window flow
+  (second in FLOW_RULES; its strong "regex" is an object with test() that
+  calls bringRequestOf, which is anchored to the whole sentence) and the
+  bring_window_here tool, both through callBringWindowTool. Names resolve
+  via BRING_TARGETS (own label, exe, title; anything else is searched as
+  said). Rust bring_window_here picks "here" (foreground, or the topmost
+  real program if ours is in front), sizes it small (bring_size), places
+  it bottom-right of here avoiding the orb (bring_place), and moves it with
+  SW_SHOWNOACTIVATE + SWP_NOACTIVATE, never stealing focus. Camera
+  not_open → opened first (or its window put back if the page thinks it is
+  on). Needs Win32_Graphics_Dwm for the cloaked check.
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.

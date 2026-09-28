@@ -731,6 +731,387 @@ fn zoom_send(_hwnd: isize, _method: String, _notches: i32) -> Result<String, Str
     Err("only available on Windows".into())
 }
 
+/* ------------------------------------------------------------------
+   "BRING THE CAMERA TO THIS WINDOW" (page 2.10.1)
+
+   He moves between programs and wants the camera, or any other window,
+   to come with him: to the window he is working in now, as a small
+   window in its corner, whatever size it was before.
+
+   "Here" is the window he is working in: the foreground window, unless
+   that is one of ours (he typed to the orb, or clicked the camera), in
+   which case the topmost real program window below ours — EnumWindows
+   walks top-level windows in Z order, so the first real one is the one he
+   was last in. The window to bring is one of ours by label ("camera",
+   "model", "main", a workspace pane), or a program found by its file name
+   and title, the same way gesture zoom names programs.
+
+   Nothing takes the keyboard away from him: a program is restored with
+   SW_SHOWNOACTIVATE and raised with SWP_NOACTIVATE, above the window he
+   is in and no further. An elevated program refuses a move from a normal
+   one (UIPI) and that is reported, not hidden.
+------------------------------------------------------------------ */
+#[cfg(target_os = "windows")]
+struct BringCandidate {
+    hwnd: isize,
+    exe: String,
+    title: String,
+    iconic: bool,
+}
+
+/* A window worth calling a program: visible, not a tool window, not owned
+   by another (a dialog, a tooltip), not cloaked (a Store app parked on
+   another virtual desktop or suspended), not the shell, and not a sliver. */
+#[cfg(target_os = "windows")]
+unsafe fn bring_is_app_window(hwnd: windows_sys::Win32::Foundation::HWND) -> bool {
+    use windows_sys::Win32::Foundation::RECT;
+    use windows_sys::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetWindow, GetWindowLongW, GetWindowRect, IsIconic, IsWindowVisible, GWL_EXSTYLE, GW_OWNER,
+        WS_EX_TOOLWINDOW,
+    };
+    unsafe {
+        if IsWindowVisible(hwnd) == 0 {
+            return false;
+        }
+        if (GetWindowLongW(hwnd, GWL_EXSTYLE) as u32) & WS_EX_TOOLWINDOW != 0 {
+            return false;
+        }
+        if !GetWindow(hwnd, GW_OWNER).is_null() {
+            return false;
+        }
+        let mut cloaked: u32 = 0;
+        if DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_CLOAKED as u32,
+            &mut cloaked as *mut u32 as *mut core::ffi::c_void,
+            std::mem::size_of::<u32>() as u32,
+        ) == 0
+            && cloaked != 0
+        {
+            return false;
+        }
+        let class = zoom_class_of(hwnd);
+        if matches!(
+            class.as_str(),
+            "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd"
+                | "Windows.UI.Core.CoreWindow" | "NotifyIconOverflowWindow"
+        ) {
+            return false;
+        }
+        if zoom_title_of(hwnd).trim().is_empty() {
+            return false;
+        }
+        if IsIconic(hwnd) != 0 {
+            return true;
+        }
+        let mut r: RECT = std::mem::zeroed();
+        GetWindowRect(hwnd, &mut r) != 0 && r.right - r.left >= 120 && r.bottom - r.top >= 80
+    }
+}
+
+/* Every program window, topmost first, with its file name and title. */
+#[cfg(target_os = "windows")]
+fn bring_app_windows(own: &[(String, isize)]) -> Vec<BringCandidate> {
+    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, IsIconic};
+    unsafe extern "system" fn visit(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        unsafe {
+            let list = &mut *(lparam as *mut Vec<isize>);
+            list.push(hwnd as isize);
+        }
+        1
+    }
+    let mut all: Vec<isize> = Vec::new();
+    unsafe {
+        EnumWindows(Some(visit), &mut all as *mut Vec<isize> as LPARAM);
+    }
+    all.into_iter()
+        .filter(|h| !own.iter().any(|(_, x)| x == h))
+        .filter(|h| unsafe { bring_is_app_window(*h as HWND) })
+        .map(|h| unsafe {
+            let exe = zoom_exe_of_window(h as HWND);
+            BringCandidate {
+                hwnd: h,
+                exe: exe.trim_end_matches(".exe").to_string(),
+                title: zoom_title_of(h as HWND),
+                iconic: IsIconic(h as HWND) != 0,
+            }
+        })
+        .collect()
+}
+
+/* How well a window answers to what he said: the file name exactly beats
+   a title that mentions it, which beats a file name that only contains it.
+   Needles arrive lower-case from the page. */
+#[cfg(target_os = "windows")]
+fn bring_score(c: &BringCandidate, exe: &[String], title: &[String]) -> i32 {
+    let t = c.title.to_lowercase();
+    let mut best = 0;
+    for n in exe.iter().map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()) {
+        let n = n.trim_end_matches(".exe").to_string();
+        if c.exe == n {
+            best = best.max(4);
+        } else if c.exe.contains(&n) {
+            best = best.max(2);
+        }
+    }
+    for n in title.iter().map(|s| s.trim().to_lowercase()).filter(|s| s.len() >= 2) {
+        if t.contains(&n) {
+            best = best.max(3);
+        }
+    }
+    best
+}
+
+/* The usable part of the monitor a window (or, with none, the pointer) is
+   on: [left, top, right, bottom], physical pixels. */
+#[cfg(target_os = "windows")]
+unsafe fn bring_work_area_of(hwnd: isize) -> Option<[i32; 4]> {
+    use windows_sys::Win32::Foundation::{HWND, POINT};
+    use windows_sys::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+    unsafe {
+        let mon = if hwnd != 0 {
+            MonitorFromWindow(hwnd as HWND, MONITOR_DEFAULTTONEAREST)
+        } else {
+            let mut p = POINT { x: 0, y: 0 };
+            GetCursorPos(&mut p);
+            MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST)
+        };
+        if mon.is_null() {
+            return None;
+        }
+        let mut mi: MONITORINFO = std::mem::zeroed();
+        mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        if GetMonitorInfoW(mon, &mut mi) == 0 {
+            return None;
+        }
+        let w = mi.rcWork;
+        Some([w.left, w.top, w.right, w.bottom])
+    }
+}
+
+/* The size a brought window arrives at, from the size of the screen it
+   arrives on — small, whatever it was: the camera a picture-in-picture,
+   the 3D viewer a square, anything else a little landscape window. */
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn bring_size(kind: &str, work_w: i32, work_h: i32) -> (i32, i32) {
+    let clamp = |v: f32, lo: i32, hi: i32| (v.round() as i32).max(lo).min(hi);
+    let (w, h) = match kind {
+        "camera" => {
+            let w = clamp(work_w as f32 * 0.20, 280, 480);
+            (w, (w as f32 * 0.8).round() as i32)
+        }
+        "model" => {
+            let w = clamp(work_w as f32 * 0.22, 300, 560);
+            (w, w)
+        }
+        _ => {
+            let w = clamp(work_w as f32 * 0.30, 440, 760);
+            (w, (w as f32 * 0.66).round() as i32)
+        }
+    };
+    (w.min(work_w - 16).max(1), h.min((work_h as f32 * 0.7) as i32).max(1))
+}
+
+/* Where it lands: the bottom-right corner of the window he is in (as much
+   of it as is on the screen), 24 px in — or the next corner along when that
+   one is where the orb sits, so it never lands on top of JARVIS himself. */
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn bring_place(here: [i32; 4], work: [i32; 4], size: (i32, i32), avoid: Option<[i32; 4]>) -> (i32, i32) {
+    let (w, h) = size;
+    let l = here[0].max(work[0]);
+    let t = here[1].max(work[1]);
+    let r = here[2].min(work[2]);
+    let b = here[3].min(work[3]);
+    let (l, t, r, b) = if r - l < w / 2 || b - t < h / 2 { (work[0], work[1], work[2], work[3]) } else { (l, t, r, b) };
+    let m = 24;
+    let corners = [(r - w - m, b - h - m), (r - w - m, t + m), (l + m, b - h - m), (l + m, t + m)];
+    let fit = |(x, y): (i32, i32)| {
+        (x.max(work[0] + 8).min(work[2] - w - 8).max(work[0]), y.max(work[1] + 8).min(work[3] - h - 8).max(work[1]))
+    };
+    let clear = |(x, y): (i32, i32)| match avoid {
+        Some(a) => x + w <= a[0] || x >= a[2] || y + h <= a[1] || y >= a[3],
+        None => true,
+    };
+    for c in corners.iter() {
+        let p = fit(*c);
+        if clear(p) {
+            return p;
+        }
+    }
+    fit(corners[0])
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn bring_window_here(
+    app: tauri::AppHandle,
+    own: Option<String>,
+    exe: Vec<String>,
+    title: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    use windows_sys::Win32::Foundation::{HWND, RECT};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowRect, IsIconic, IsZoomed, SetWindowPos, ShowWindow,
+        HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+        SW_SHOWNOACTIVATE,
+    };
+    let own_windows = zoom_own_windows(&app);
+    let is_ours = |h: isize| own_windows.iter().any(|(_, x)| *x == h);
+    let apps = bring_app_windows(&own_windows);
+    let rect_of = |h: isize| unsafe {
+        let mut r: RECT = std::mem::zeroed();
+        if GetWindowRect(h as HWND, &mut r) != 0 { Some([r.left, r.top, r.right, r.bottom]) } else { None }
+    };
+
+    /* Ours, when it is ours. A workspace pane that is not open is looked
+       for among the programs instead (Shopify in his browser). */
+    let own_label = own.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let own_target = own_label.as_ref().and_then(|l| app.get_webview_window(l));
+    if let Some(l) = own_label.as_ref() {
+        if own_target.is_none() && !l.starts_with("ws-") {
+            return Err("not_open".into());
+        }
+    }
+
+    /* The window he is in. */
+    let fg = unsafe { GetForegroundWindow() } as isize;
+    let fg_ok = fg != 0 && !is_ours(fg) && apps.iter().any(|c| c.hwnd == fg && !c.iconic);
+    /* Otherwise the topmost program on screen — a minimised one is not
+       where he is working. */
+    let first_open = apps.iter().find(|c| !c.iconic).map(|c| c.hwnd).unwrap_or(0);
+    let pick_target = |exclude: isize| -> Option<&BringCandidate> {
+        let mut best: Option<(&BringCandidate, i32)> = None;
+        for c in apps.iter().filter(|c| c.hwnd != exclude) {
+            let s = bring_score(c, &exe, &title);
+            if s > 0 && best.map(|(_, b)| s > b).unwrap_or(true) {
+                best = Some((c, s));
+            }
+        }
+        best.map(|(c, _)| c)
+    };
+
+    let (here, target_hwnd, target_name): (isize, isize, String) = if let Some(w) = own_target.as_ref() {
+        let h = w.hwnd().map(|h| h.0 as isize).unwrap_or(0);
+        let here = if fg_ok { fg } else { first_open };
+        (here, h, own_label.clone().unwrap_or_default())
+    } else {
+        let here = if fg_ok { fg } else { first_open };
+        match pick_target(here) {
+            Some(c) => {
+                /* When the only match is not the window he is in but the
+                   one after it in Z order was taken as "here", fine; when
+                   the only match IS the window he is in, say so. */
+                (here, c.hwnd, if c.title.is_empty() { c.exe.clone() } else { c.title.clone() })
+            }
+            None => {
+                if here != 0 && apps.iter().any(|c| c.hwnd == here && bring_score(c, &exe, &title) > 0) {
+                    return Ok(serde_json::json!({ "ok": true, "already_here": true }));
+                }
+                let mut open: Vec<String> = Vec::new();
+                for c in apps.iter() {
+                    if !c.exe.is_empty() && !open.contains(&c.exe) && open.len() < 12 {
+                        open.push(c.exe.clone());
+                    }
+                }
+                return Ok(serde_json::json!({ "ok": false, "error": "not_found", "open": open }));
+            }
+        }
+    };
+    if target_hwnd == 0 {
+        return Err("that window has no native handle".into());
+    }
+
+    let here_rect = if here != 0 { rect_of(here) } else { None };
+    let work = unsafe { bring_work_area_of(if here != 0 { here } else { 0 }) }
+        .ok_or("could not read the screen's size")?;
+    let here_rect = here_rect.unwrap_or(work);
+    let kind = match own_label.as_deref() {
+        Some("camera") => "camera",
+        Some("model") => "model",
+        _ => "app",
+    };
+    let avoid = if own_label.as_deref() == Some("main") {
+        None
+    } else {
+        app.get_webview_window("main").and_then(|m| m.hwnd().ok()).and_then(|h| rect_of(h.0 as isize))
+    };
+
+    /* The orb keeps its own size: it is small already, and it lays itself
+       out for that size. Only its place changes. */
+    if own_label.as_deref() == Some("main") {
+        let win = own_target.as_ref().ok_or("the orb is missing")?;
+        let sz = win.outer_size().map_err(|e| e.to_string())?;
+        let (x, y) = bring_place(here_rect, work, (sz.width as i32, sz.height as i32), None);
+        let _ = win.unminimize();
+        win.set_position(tauri::PhysicalPosition { x, y }).map_err(|e| e.to_string())?;
+        let _ = win.show();
+        return Ok(serde_json::json!({ "ok": true, "moved": "main", "x": x, "y": y }));
+    }
+
+    let (w, h) = bring_size(kind, work[2] - work[0], work[3] - work[1]);
+    let (x, y) = bring_place(here_rect, work, (w, h), avoid);
+
+    if let Some(win) = own_target.as_ref() {
+        /* Out of full screen or maximised first, or the new size is
+           ignored; then the size (inner, so the frame is added on top of
+           it) and the place. It keeps its own always-on-top setting. */
+        let _ = win.set_fullscreen(false);
+        let _ = win.unmaximize();
+        let _ = win.unminimize();
+        let frame = match (win.outer_size(), win.inner_size()) {
+            (Ok(o), Ok(i)) => (o.width as i32 - i.width as i32, o.height as i32 - i.height as i32),
+            _ => (0, 0),
+        };
+        let (iw, ih) = ((w - frame.0).max(160), (h - frame.1).max(120));
+        win.set_size(tauri::PhysicalSize { width: iw as u32, height: ih as u32 }).map_err(|e| e.to_string())?;
+        win.set_position(tauri::PhysicalPosition { x, y }).map_err(|e| e.to_string())?;
+        let _ = win.show();
+        return Ok(serde_json::json!({
+            "ok": true, "moved": target_name, "x": x, "y": y, "w": w, "h": h,
+            "here": if here != 0 { unsafe { zoom_title_of(here as HWND) } } else { String::new() }
+        }));
+    }
+
+    unsafe {
+        let t = target_hwnd as HWND;
+        /* Out of maximised or minimised without being activated: a
+           maximised window ignores a new size, and SW_RESTORE would take
+           the keyboard from the window he is typing in. */
+        if IsIconic(t) != 0 || IsZoomed(t) != 0 {
+            ShowWindow(t, SW_SHOWNOACTIVATE);
+        }
+        /* Topmost and straight back: that leaves it at the top of the
+           ordinary windows — above the one he is in, below the orb. */
+        let placed = SetWindowPos(t, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        SetWindowPos(t, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        if placed == 0 {
+            return Ok(serde_json::json!({
+                "ok": false, "error": "refused", "name": target_name,
+                "why": "Windows would not let it be moved — it is probably running as administrator"
+            }));
+        }
+    }
+    Ok(serde_json::json!({
+        "ok": true, "moved": target_name, "x": x, "y": y, "w": w, "h": h,
+        "here": if here != 0 { unsafe { zoom_title_of(here as HWND) } } else { String::new() }
+    }))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn bring_window_here(
+    _own: Option<String>,
+    _exe: Vec<String>,
+    _title: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    Err("moving other programs' windows is only available on Windows".into())
+}
+
 
 /* Screen capture. The point is not to save a file — it is to let him SEE
    what you are looking at, so the image goes back as base64 and straight
@@ -1397,7 +1778,8 @@ fn main() {
             system_metrics,
             list_processes,
             zoom_target,
-            zoom_send
+            zoom_send,
+            bring_window_here
         ])
         .setup(|app| {
             let window = app
