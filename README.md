@@ -291,6 +291,30 @@ language — which engine, and the three ways to fix it. The placeholder handed 
 the model also says *why* the image is missing, so it reports a backend
 limitation rather than claiming it has no eyes.
 
+**Worker 2.6.5 — why the screen still reached him as "a backend limitation".**
+When nothing in the chain can see (Claude out of credit, Gemini's allowance
+spent, a Groq text model answering), the picture is described by a Workers AI
+vision model first. The two describers were Llama 3.2 Vision, which answers
+every account with error 5016 until someone sends it the word `agree` once
+(Meta's licence), and LLaVA 1.5, handed the picture as a JSON array of one
+number per byte, so a screen capture became millions of numbers. Both failed,
+nothing was described, and every screen capture arrived as the placeholder
+above. Now Llama 4 Scout and Gemma 3 go first. They take the picture as an
+ordinary data URL inside the chat message and have no licence step. The old
+two stay behind them. `VISION_DESCRIBER` (optional) puts a model of your
+choice first. The describer is also told what he asked ("what does this
+error say"), so that part is copied out word for word. When every describer
+still fails, `X-Jarvis-Blind-Why` says which ones failed and what each said,
+and the page shows it beside the "never reached him" line.
+
+Two more fixes rode along:
+
+- A picture inside a tool result (`take_screenshot`, the camera's look) is now
+  lifted out beside the results. Before, it reached every non-Claude engine
+  as a JSON string of base64.
+- The page (2.9.2) sends screen captures as JPEG, a fraction of the PNG's
+  size, and falls back to PNG if the conversion fails.
+
 Checked across eleven real provider configurations — that the picture is
 actually forwarded where it should be, actually stripped where it must be, that
 the warning fires only in the second case, and that a blind primary is overtaken

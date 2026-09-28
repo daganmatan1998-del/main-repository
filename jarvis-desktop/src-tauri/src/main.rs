@@ -45,8 +45,11 @@ const HUSH_LABEL: &str = "Ctrl+Shift+X";
 
    Fn was the key asked for, and it cannot be done: on nearly every laptop Fn
    is handled inside the keyboard itself and never reaches Windows at all —
-   there is no key code for it to register. Caps Lock is the nearest key that
-   Windows does see: one key, no combination, easy to find without looking.
+   there is no key code for it to register. Caps Lock came next, and it stuck:
+   Windows flips the Caps Lock light and state underneath the hotkey, so every
+   hold left the keyboard typing in capitals. \ (the key above Enter) has no
+   lock state to flip — one key, no combination, easy to find without looking.
+   While JARVIS runs the key is his, so it does not type a backslash anywhere.
 
    Both edges are needed, which is why this cannot be a key listener in the
    page: the page only hears keys while it has focus, and the point is to
@@ -54,8 +57,8 @@ const HUSH_LABEL: &str = "Ctrl+Shift+X";
    release as well as the press, and registers with MOD_NOREPEAT, so holding
    the key sends one press and one release rather than a stream of repeats.
    Change the key here if you would rather hold something else. */
-const PTT_CODE: Code = Code::CapsLock;
-const PTT_LABEL: &str = "Caps Lock";
+const PTT_CODE: Code = Code::Backslash;
+const PTT_LABEL: &str = "\\ (backslash)";
 /* Whether the key was actually won. Another program can already own it, and
    the page must not switch to push-to-talk on a key that will never arrive —
    that would be a JARVIS who cannot hear anything and no way to find out. */

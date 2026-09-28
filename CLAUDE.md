@@ -44,7 +44,8 @@ single file `dist/index.html`.
 - **Check the page against the worker.** Every endpoint the page fetches must
   exist in `jarvis-worker.js`, and every `invoke()` name must match
   `generate_handler!` in `src-tauri/src/main.rs`.
-- **Push-to-talk (Caps Lock, 2.7.0) gates `startListening()`.** While
+- **Push-to-talk (the `\` key since 2.9.2 — Caps Lock before, which left
+  Windows stuck in capitals; PTT_CODE in main.rs) gates `startListening()`.** While
   `pttMode` is on, nothing opens the microphone unless `pttHeld` — every
   automatic restart ends there. Whether a recording is a key recording is fixed
   when it starts (`myPtt`); endpointing, speculation and the echo guard are
@@ -134,6 +135,17 @@ single file `dist/index.html`.
   it reaches every non-Anthropic engine as base64 text. A build without
   capture_screen_frame refuses honestly; it never falls back to
   take_screenshot, which would save a file per sentence.
+- **Blind engines get the picture DESCRIBED, and the describers must work
+  (worker 2.6.5).** Llama 3.2 Vision is licence-gated (5016 until "agree" —
+  the user's decision, never sent automatically) and LLaVA takes a byte array
+  that a screen capture makes enormous; with only those two, every screen
+  frame reached a text engine as the "backend limitation" placeholder. Llama 4
+  Scout and Gemma 3 go first (chat `messages` with an `image_url` data URL;
+  answer in `response`). When all fail, `X-Jarvis-Blind-Why` names each —
+  keep it ASCII, it is a header. Images inside a `tool_result` are lifted out
+  beside the results (liftToolResultImages): the OpenAI shape has no image in
+  a tool message. The page sends screen captures as JPEG (screenFrameAsJpeg,
+  PNG fallback); test stubs matching describer names need `scout|gemma` too.
 - **"Open YouTube" is opened locally (2.9.1)**, like the camera: the
   open_site flow (OPEN_SITES, anchored to the whole sentence, last in
   FLOW_RULES, in SELF_CONTAINED_FLOWS) calls callOpenUrlTool itself. Fallback

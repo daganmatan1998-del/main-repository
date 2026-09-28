@@ -2424,7 +2424,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.9.1';
+const APP_VERSION = '2.9.2';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -4451,7 +4451,7 @@ let conversationMode = false;
    from here, and a held key cannot be misheard. */
 let pttMode = false;      // the key, not the room, decides when he listens
 let pttHeld = false;      // the key is down right now
-let pttKeyLabel = '';     // "Caps Lock"; empty when this build has no key
+let pttKeyLabel = '';     // "\ (backslash)" (Caps Lock before 2.9.2); empty when this build has no key
 let pttLive = false;      // the key recording is actually receiving sound
 
 /* The "go ahead" tone. Opening a microphone is not instant — a Bluetooth
@@ -12053,6 +12053,38 @@ function setScreenWatch(on){
   document.documentElement.classList.toggle('screen-watch', screenWatch);
 }
 
+/* A 1280px PNG of a screen full of text is often one to two megabytes, and
+   it rides on every message while he is being watched. The same picture as
+   a JPEG is a fraction of that and reads just as well — and it gets under
+   the size limits of every engine and of the vision model that describes it
+   for an engine that cannot see. Bounded; the PNG stays if anything fails. */
+function screenFrameAsJpeg(b64){
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (v) => { if(!settled){ settled = true; resolve(v); } };
+    setTimeout(() => done(null), 1500);
+    try{
+      const img = new Image();
+      img.onload = () => {
+        try{
+          const c = document.createElement('canvas');
+          c.width = img.naturalWidth; c.height = img.naturalHeight;
+          if(!c.width || !c.height) return done(null);
+          const g = c.getContext('2d');
+          g.fillStyle = '#ffffff';
+          g.fillRect(0, 0, c.width, c.height);
+          g.drawImage(img, 0, 0);
+          const url = c.toDataURL('image/jpeg', 0.85);
+          const data = url.slice(url.indexOf(',') + 1);
+          done(url.startsWith('data:image/jpeg') && data.length && data.length < b64.length ? data : null);
+        }catch(e){ done(null); }
+      };
+      img.onerror = () => done(null);
+      img.src = 'data:image/png;base64,' + b64;
+    }catch(e){ done(null); }
+  });
+}
+
 async function captureScreenFrame(){
   const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
   if(!IS_DESKTOP || !invoke) return { error: 'only the desktop app can see the screen' };
@@ -12064,9 +12096,11 @@ async function captureScreenFrame(){
       new Promise((_, reject) => setTimeout(() => reject(new Error('the screen capture took too long')), 4000))
     ]);
     if(!b64) return { error: 'the capture came back empty' };
+    const jpeg = await screenFrameAsJpeg(b64);
     /* live: only the newest is ever sent. screen: it is not a photo he
        chose, and not a camera frame either — see askJarvis. */
-    return { frame: { kind:'image', media_type:'image/png', data: b64, live:true, screen:true } };
+    return { frame: { kind:'image', media_type: jpeg ? 'image/jpeg' : 'image/png', data: jpeg || b64,
+                      live:true, screen:true } };
   }catch(err){
     const why = String((err && err.message) || err);
     /* An app built before this existed answers "command ... not found". */
@@ -12197,7 +12231,7 @@ async function callWatchScreenTool(input){
   return { ok: true, watching: true,
            note: 'You are watching his screen now; the image after this result is it, as it is this moment.',
            __attach: [
-             { type:'image', source:{ type:'base64', media_type:'image/png', data: got.frame.data } },
+             { type:'image', source:{ type:'base64', media_type: got.frame.media_type || 'image/png', data: got.frame.data } },
              { type:'text', text:'[His screen, captured just now for watch_screen.]' }
            ] };
 }
@@ -13540,7 +13574,11 @@ async function callClaude(messages, usingOwnBackend, onText, retriedAuth, budget
   const blindEngine = response.headers.get('X-Jarvis-Blind');
   if(blindEngine && blindEngine !== announcedBlind){
     announcedBlind = blindEngine;
-    addMessage('system', t('imageNotSeen').replace('{engine}', blindEngine));
+    /* Worker 2.6.5 says why no vision model could describe it either —
+       the difference between "set a key" and "your Workers AI allowance
+       for today is spent". */
+    const blindWhy = response.headers.get('X-Jarvis-Blind-Why');
+    addMessage('system', t('imageNotSeen').replace('{engine}', blindEngine) + (blindWhy ? ' \u2014 ' + blindWhy : ''));
   } else if(!blindEngine){
     announcedBlind = null;
   }

@@ -77,7 +77,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.6.4';
+const WORKER_VERSION = '2.6.5';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -180,7 +180,7 @@ function cors(env, request) {
        fallen back to another model, that an image was dropped — arrived and was
        then discarded by the browser. That is why the debug line said
        "engine=unknown" while the worker knew perfectly well which engine it was. */
-    'Access-Control-Expose-Headers': 'X-Jarvis-Engine, X-Jarvis-Fallback, X-Jarvis-Voice, X-Jarvis-Blind, X-Jarvis-Vision',
+    'Access-Control-Expose-Headers': 'X-Jarvis-Engine, X-Jarvis-Fallback, X-Jarvis-Voice, X-Jarvis-Blind, X-Jarvis-Blind-Why, X-Jarvis-Vision',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
   };
@@ -296,6 +296,7 @@ async function health(env) {
     vision_via: chain.some(e => e.vendor === 'anthropic' || engineSeesImages(e, env))
       ? 'engine' : (env.AI ? 'described' : false),
     vision_engine: (chain.find(e => e.vendor === 'anthropic' || engineSeesImages(e, env)) || {}).label || null,
+    vision_describer: env.AI ? describersFor(env)[0].model : null,
     voice: !!(env.CARTESIA_API_KEY || env.AI),
     voice_via: env.CARTESIA_API_KEY ? 'cartesia' : (env.AI ? 'workers-ai' : false),
     model3d: !!env.MESHY_API_KEY,
@@ -373,10 +374,12 @@ async function handleMessages(request, env) {
     }
   }
 
+  liftToolResultImages(body);
   const hasImage = (body.messages || []).some(m =>
     Array.isArray(m.content) && m.content.some(b => b && b.type === 'image'));
   let describedBy = null;
   let describeTried = false;
+  const describeFailures = [];
   if (hasImage) {
     const seeing = chain.filter(e => e.vendor === 'anthropic' || engineSeesImages(e, env));
     if (seeing.length) {
@@ -386,12 +389,12 @@ async function handleMessages(request, env) {
          apologise, have a model that CAN see write down what is in it, and
          hand that to the one that is answering. Done once, before any
          engine is tried, so a failover does not re-describe. */
-      describedBy = await describeImagesInBody(body, env);
+      describedBy = await describeImagesInBody(body, env, describeFailures);
       describeTried = true;
     }
   }
 
-  return runEngineChain(chain, body, env, request, describedBy, describeTried);
+  return runEngineChain(chain, body, env, request, describedBy, describeTried, describeFailures);
 }
 
 /* THE ACTUAL CALL, DOWN THE CHAIN — pulled out of handleMessages so the
@@ -399,7 +402,7 @@ async function handleMessages(request, env) {
    exact same fallback machinery rather than reimplementing it. Nothing
    about handleMessages' behaviour changes: this is its own loop, moved
    here verbatim, with the two callers now sharing it. */
-async function runEngineChain(chain, body, env, request, describedBy, alreadyTriedDescribing) {
+async function runEngineChain(chain, body, env, request, describedBy, alreadyTriedDescribing, describeFailures) {
   const skipped = [];
   let lastError = null;
 
@@ -423,6 +426,10 @@ async function runEngineChain(chain, body, env, request, describedBy, alreadyTri
      CAN see and comes later (pass 2) still gets the real thing. */
   let described = null;
   let describeTried = !!alreadyTriedDescribing;   // a describer that just failed is not asked twice
+  /* Why no describer could help, when none could — sent with the blind
+     answer so the page can say it, instead of him just saying "a backend
+     limitation" with nobody able to tell which one. */
+  const failures = describeFailures || [];
 
   for (const group of [awake, resting]) {
     for (let i = 0; i < group.length; i++) {
@@ -432,12 +439,13 @@ async function runEngineChain(chain, body, env, request, describedBy, alreadyTri
         if (!describeTried) {
           describeTried = true;
           const copy = JSON.parse(JSON.stringify(body));
-          const by = await describeImagesInBody(copy, env);
+          const by = await describeImagesInBody(copy, env, failures);
           if (by) described = { body: copy, by: by };
         }
         if (described) { sendBody = described.body; sendDescribedBy = described.by; }
       }
-      const attempt = await callEngine(engine, sendBody, env, request, group !== awake || i > 0, sendDescribedBy);
+      const attempt = await callEngine(engine, sendBody, env, request, group !== awake || i > 0, sendDescribedBy,
+                                       describeFailureSummary(failures));
       if (attempt.ok) { clearCooldown(engine); return attempt.response; }
 
       if (!attempt.retriable) return attempt.response;
@@ -502,10 +510,10 @@ function systemText(system) {
   return String(system);
 }
 
-async function callEngine(engine, body, env, request, announce, describedBy) {
+async function callEngine(engine, body, env, request, announce, describedBy, blindWhy) {
   /* Workers AI is a binding, not an endpoint: no fetch, no key, no streaming
      to convert. Handled up front so the HTTP path below stays untouched. */
-  if (engine.vendor === 'workers-ai') return await callWorkersAI(engine, body, env, request, announce, describedBy);
+  if (engine.vendor === 'workers-ai') return await callWorkersAI(engine, body, env, request, announce, describedBy, blindWhy);
   const anthropicBody = engine.vendor === 'anthropic' ? withoutThoughtSignatures(body) : body;
   let upstream;
   try {
@@ -587,7 +595,7 @@ async function callEngine(engine, body, env, request, announce, describedBy) {
         engine.model = picked;
         engine.label = engine.vendor + '/' + picked;
         engine.repicked = true;
-        return await callEngine(engine, body, env, request, announce, describedBy);
+        return await callEngine(engine, body, env, request, announce, describedBy, blindWhy);
       }
     }
 
@@ -611,7 +619,10 @@ async function callEngine(engine, body, env, request, announce, describedBy) {
   if (announce) headers['X-Jarvis-Fallback'] = engine.model;
   /* The reply will talk about an image it never received. Without this the page
      has no way to know that, and the user is left thinking the app is lying. */
-  if (imageWillBeDropped(engine, body, env)) headers['X-Jarvis-Blind'] = engine.label;
+  if (imageWillBeDropped(engine, body, env)) {
+    headers['X-Jarvis-Blind'] = engine.label;
+    if (blindWhy) headers['X-Jarvis-Blind-Why'] = blindWhy;
+  }
   if (describedBy) headers['X-Jarvis-Vision'] = describedBy;
 
   if (engine.vendor === 'anthropic') {
@@ -653,7 +664,7 @@ const MELO_MODEL = '@cf/myshell-ai/melotts';
    Tools are not offered here: these models handle function calling
    inconsistently, and a mangled tool call is worse than a plain answer from
    an engine whose only job is to keep something responding. */
-async function callWorkersAI(engine, body, env, request, announce, describedBy) {
+async function callWorkersAI(engine, body, env, request, announce, describedBy, blindWhy) {
   const messages = [];
   { const sys = systemText(body.system); if (sys) messages.push({ role: 'system', content: sys }); }
   for (const m of (body.messages || [])) {
@@ -672,7 +683,10 @@ async function callWorkersAI(engine, body, env, request, announce, describedBy) 
     }
     const headers = { ...cors(env, request), 'X-Jarvis-Engine': engine.label };
     if (announce) headers['X-Jarvis-Fallback'] = engine.model;
-    if (imageWillBeDropped(engine, body, env)) headers['X-Jarvis-Blind'] = engine.label;
+    if (imageWillBeDropped(engine, body, env)) {
+      headers['X-Jarvis-Blind'] = engine.label;
+      if (blindWhy) headers['X-Jarvis-Blind-Why'] = blindWhy;
+    }
     if (describedBy) headers['X-Jarvis-Vision'] = describedBy;
     const shaped = {
       content: [{ type: 'text', text: stripLeadingThinkingBlock(String(text)) }],
@@ -1206,11 +1220,32 @@ function engineSeesImages(provider, env) {
    tells the model to say so rather than guess if what it needs is not in
    there.
 
-   Costs one extra Workers AI call per picture and needs no new key. */
+   Costs one extra Workers AI call per picture and needs no new key.
+
+   Which describer matters (2.6.5). The first two used to be Llama 3.2
+   Vision — which answers every account with error 5016 until someone sends
+   it the word "agree" once, accepting Meta's licence — and LLaVA 1.5, sent
+   the picture as a JSON array of numbers: one number per byte, so a screen
+   capture became millions of them. Both failed, nothing was described, and
+   every picture from the screen reached a text-only engine as "a backend
+   limitation". Llama 4 Scout and Gemma 3 take the picture the ordinary
+   way, as a data URL inside the chat message, with no licence step, so
+   they go first; the old two stay behind them for accounts where they
+   work. VISION_DESCRIBER (optional) puts a model of your choice first. */
 const VISION_DESCRIBERS = [
-  '@cf/meta/llama-3.2-11b-vision-instruct',
-  '@cf/llava-hf/llava-1.5-7b-hf'
+  { model: '@cf/meta/llama-4-scout-17b-16e-instruct', input: 'chat' },
+  { model: '@cf/google/gemma-3-12b-it',               input: 'chat' },
+  { model: '@cf/meta/llama-3.2-11b-vision-instruct',  input: 'bytes' },
+  { model: '@cf/llava-hf/llava-1.5-7b-hf',            input: 'bytes' }
 ];
+
+function describersFor(env) {
+  const pinned = String((env && env.VISION_DESCRIBER) || '').trim();
+  if (!pinned) return VISION_DESCRIBERS;
+  const known = VISION_DESCRIBERS.find(d => d.model === pinned);
+  const first = known || { model: pinned, input: /llava|uform|llama-3\.2-11b-vision/i.test(pinned) ? 'bytes' : 'chat' };
+  return [first].concat(VISION_DESCRIBERS.filter(d => d.model !== pinned));
+}
 
 const DESCRIBE_PROMPT =
   'Describe this image for someone who cannot see it. Name what is in it, ' +
@@ -1230,40 +1265,98 @@ function base64ToBytes(b64) {
   return out;
 }
 
-async function describeOneImage(block, env) {
-  let bytes;
+/* What the person asked alongside the picture — "what does this error say"
+   while he watches his screen. The describer is told, so the one thing he
+   asked about is in the description, and read out in full, rather than
+   left out of a general summary of a crowded screen. */
+function questionBeside(message) {
+  if (!message || !Array.isArray(message.content)) return '';
+  return message.content
+    .filter(b => b && b.type === 'text' && typeof b.text === 'string')
+    .map(b => b.text.trim())
+    .filter(t => t && !/^\[/.test(t))
+    .join(' ').replace(/\s+/g, ' ').slice(0, 400);
+}
+
+function describeReplyText(out) {
+  if (!out) return '';
+  if (typeof out === 'string') return out;
+  const c = out.choices && out.choices[0] && out.choices[0].message && out.choices[0].message.content;
+  const r = out.description || out.response || out.result || c || '';
+  return typeof r === 'string' ? r : '';
+}
+
+/* One short, header-safe reason per failed describer. */
+function describeFailure(model, err) {
+  const short = String(model).replace(/^@cf\/[^/]+\//, '');
+  const msg = String((err && (err.message || err)) || 'no answer');
+  const why = /5016|agree/i.test(msg)
+    ? 'needs the one-time "agree" to Meta\'s licence'
+    : msg.replace(/[^\x20-\x7e]/g, '').replace(/\s+/g, ' ').trim().slice(0, 110);
+  return short + ': ' + (why || 'failed');
+}
+
+function describeFailureSummary(failures) {
+  if (!failures || !failures.length) return null;
+  const seen = [];
+  for (const f of failures) if (seen.indexOf(f) < 0) seen.push(f);
+  return ('no vision model could describe it - ' + seen.join('; ')).slice(0, 400);
+}
+
+async function describeOneImage(block, env, question, failures) {
+  const data = String((block.source && block.source.data) || '');
+  const mediaType = (block.source && block.source.media_type) || 'image/jpeg';
+  let bytes = null;
+  const byteArray = () => {
+    if (!bytes) bytes = [...base64ToBytes(data)];
+    return bytes;
+  };
   try {
-    bytes = base64ToBytes(block.source && block.source.data);
+    if (!base64ToBytes(data.slice(0, 64)).length) return null;
   } catch (e) { return null; }
-  if (!bytes.length) return null;
-  const asArray = [...bytes];
-  for (const model of VISION_DESCRIBERS) {
+  const prompt = DESCRIBE_PROMPT + (question
+    ? ' The person who sent it asked: "' + question + '". Make sure everything that question needs is in ' +
+      'the description, with any text it is about copied out word for word.'
+    : '');
+  for (const d of describersFor(env)) {
     try {
-      const out = await env.AI.run(model, {
-        image: asArray,
-        prompt: DESCRIBE_PROMPT,
-        max_tokens: 512
-      });
-      const text = String((out && (out.description || out.response || out.result || '')) || '').trim();
-      if (text) return { text: text, model: model };
-    } catch (err) { /* try the next describer */ }
+      const out = d.input === 'chat'
+        ? await env.AI.run(d.model, {
+            messages: [{ role: 'user', content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: 'data:' + mediaType + ';base64,' + data } }
+            ] }],
+            max_tokens: 800
+          })
+        : await env.AI.run(d.model, { image: byteArray(), prompt: prompt, max_tokens: 512 });
+      const text = String(describeReplyText(out)).trim();
+      if (text) return { text: text, model: d.model };
+      if (failures) failures.push(describeFailure(d.model, 'answered with no text'));
+    } catch (err) {
+      if (failures) failures.push(describeFailure(d.model, err));
+    }
   }
   return null;
 }
 
 /* Replaces image blocks in place. Returns the model that did the work, or
    null if nothing could be described — in which case the old behaviour
-   stands and the picture is stripped further down, as before. */
-async function describeImagesInBody(body, env) {
-  if (!env || !env.AI) return null;
+   stands and the picture is stripped further down, as before, and
+   `failures` says why. */
+async function describeImagesInBody(body, env, failures) {
+  if (!env || !env.AI) {
+    if (failures) failures.push('the worker has no AI binding, so nothing could describe it');
+    return null;
+  }
   let used = null, done = 0;
   for (const message of (body.messages || [])) {
     if (!Array.isArray(message.content)) continue;
+    const question = questionBeside(message);
     for (let i = 0; i < message.content.length; i++) {
       const block = message.content[i];
       if (!block || block.type !== 'image') continue;
       if (done >= DESCRIBE_MAX) continue;
-      const got = await describeOneImage(block, env);
+      const got = await describeOneImage(block, env, question, failures);
       if (!got) continue;
       done++;
       used = got.model;
@@ -1279,6 +1372,34 @@ async function describeImagesInBody(body, env) {
     }
   }
   return used;
+}
+
+/* A picture INSIDE a tool result (take_screenshot, the camera's look)
+   reaches Claude as a picture — and every other engine as a JSON string of
+   base64, because a tool message in the OpenAI shape holds text only. So a
+   screenshot taken while Claude was out of credit arrived as megabytes of
+   noise: no picture, and nothing any describer could reach. Lifted out to
+   sit straight after the results, where an engine that can see gets it as a
+   picture and one that cannot gets it described. Claude takes both shapes. */
+function liftToolResultImages(body) {
+  for (const message of ((body && body.messages) || [])) {
+    if (!Array.isArray(message.content)) continue;
+    const lifted = [];
+    for (const block of message.content) {
+      if (!block || block.type !== 'tool_result' || !Array.isArray(block.content)) continue;
+      if (!block.content.some(b => b && b.type === 'image')) continue;
+      const keep = block.content.filter(b => !(b && b.type === 'image'));
+      for (const b of block.content) if (b && b.type === 'image') lifted.push(b);
+      keep.push({ type: 'text', text: '[The picture this returned comes right after the results.]' });
+      block.content = keep;
+    }
+    if (lifted.length) {
+      const results = message.content.filter(b => b && b.type === 'tool_result');
+      const rest = message.content.filter(b => !(b && b.type === 'tool_result'));
+      message.content = results.concat(lifted, rest);
+    }
+  }
+  return body;
 }
 
 /* Did this request carry a picture that this engine will not be shown? */
@@ -1307,8 +1428,10 @@ function toOpenAIRequest(body, env, provider) {
           messages.push({
             role: 'tool',
             tool_call_id: result.tool_use_id,
-            content: typeof result.content === 'string'
-              ? result.content : JSON.stringify(result.content)
+            content: typeof result.content === 'string' ? result.content
+              : (Array.isArray(result.content) && result.content.every(b => b && b.type === 'text'))
+                ? result.content.map(b => b.text).join('\n')
+                : JSON.stringify(result.content)
           });
         }
         const leftover = content.filter(b => b && b.type !== 'tool_result');
