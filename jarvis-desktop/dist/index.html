@@ -557,6 +557,11 @@
     animation:none;
   }
   html.tauri.mic-busy #micLabel{ color:#ffb020; }
+  /* The locked 3D build: steady blue, the colour of the viewer it ends in. */
+  html.tauri.model-lock #micDot{
+    background:#2f8cff; border-color:#7fd3ff; box-shadow:0 0 10px #2f8cff; animation:none;
+  }
+  html.tauri.model-lock #micLabel{ color:#7fd3ff; }
   /* Open, but only for his name: hollow and still, not pulsing. */
   html.tauri.orb-dozing #micDot{
     background:transparent; border-color:var(--cyan); box-shadow:none; animation:none;
@@ -2040,6 +2045,12 @@ const I18N = {
     pttNever: 'never',
     orbResetPlace: 'Reset position',
     orbHide: 'Hide',
+    orbRefresh: 'Refresh JARVIS', refreshedNote: 'Refreshed.',
+    lockStudying: '\u25B8 3D: studying the picture I described — nothing interrupts until the model is on screen…',
+    lockReady: 'Here it is.', lockReadyBare: 'Here it is. The colours did not come through, so it is the bare shape.',
+    lockNoWindow: 'The model is built, but its window would not open.',
+    lockFailed: 'I could not make the 3D model: {why}',
+    lockNothingSeen: 'Nothing to make a model of: I have not described a picture yet.',
     hushed: '\u25B8 stopped — Ctrl+Shift+X anytime',
     cameraAsking: '\u25B8 allow the camera once and it is remembered from then on',
     cameraBlocked: 'The camera is blocked. On Windows: Settings → Privacy & security → Camera, turn on \"Camera access\" and \"Let desktop apps access your camera\". On a Mac: System Settings → Privacy & Security → Camera, and tick JARVIS.',
@@ -2293,6 +2304,12 @@ const I18N = {
     pttNever: 'אף פעם',
     orbResetPlace: 'אפס מיקום',
     orbHide: 'הסתר',
+    orbRefresh: 'רענון ג׳רוויס', refreshedNote: 'רועננתי.',
+    lockStudying: '\u25B8 תלת מימד: בוחן את התמונה שתיארתי — שום דבר לא עוצר עד שהמודל על המסך…',
+    lockReady: 'הנה הוא.', lockReadyBare: 'הנה הוא. הצבעים לא עברו, אז זו הצורה בלבד.',
+    lockNoWindow: 'המודל נבנה, אבל החלון שלו לא נפתח.',
+    lockFailed: 'לא הצלחתי ליצור את המודל: {why}',
+    lockNothingSeen: 'אין ממה לעשות מודל: עוד לא תיארתי תמונה.',
     hushed: '\u25B8 נעצר — Ctrl+Shift+X בכל רגע',
     cameraAsking: '\u25B8 תאשר את המצלמה פעם אחת וזה יישמר מעכשיו',
     cameraBlocked: 'המצלמה חסומה. בווינדוז: הגדרות ← פרטיות ואבטחה ← מצלמה, להדליק גישה למצלמה וגם את האפשרות של אפליקציות שולחן עבודה. במק : הגדרות מערכת ← פרטיות ואבטחה ← מצלמה, ולסמן את ג\'רוויס.',
@@ -2477,7 +2494,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.10.4';
+const APP_VERSION = '2.11.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -4495,6 +4512,10 @@ function getSystemPrompt(calendarAvailable){
 
 let isThinking = false;
 let isSpeaking = false;
+/* "Make it a 3D model" (2.11.0): while this is set nothing listens, nothing
+   speaks, nothing is started and nothing can stop the build — see
+   runLockedModel3d. The refresh button is the one way out. */
+let modelLock = false;
 let conversationMode = false;
 /* PUSH TO TALK (desktop). While it is on, the key is the only thing that
    opens the microphone: held, he records; let go, what was said is sent and
@@ -4545,6 +4566,7 @@ function updateStopBtnVisibility(){
 }
 
 function stopJarvis(){
+  if(modelLock) return;   // nothing stops the locked 3D build
   userInterrupted = true;
   if(currentAbortController){ currentAbortController.abort(); currentAbortController = null; }
   speechQueue = []; // drop anything queued but not yet spoken
@@ -6506,6 +6528,7 @@ async function handleTranscript(rawText, sawSpeech, spokeAt, ptt){
 }
 
 function startListening(){
+  if(modelLock) return;   // deaf until the locked 3D model is on screen
   /* isSpeaking is deliberately no longer a blocker — the microphone staying
      open while he talks is exactly what makes interrupting him possible.
      isThinking still is, but ONLY while he is silent: there is nothing to
@@ -6682,7 +6705,7 @@ function buildAmbient(){
 }
 
 function startAmbient(){
-  if(!wakeWordEnabled || ambientRunning) return;
+  if(!wakeWordEnabled || ambientRunning || modelLock) return;
   if(isThinking || isSpeaking) return;      // never let him hear himself
   if(micBtn.classList.contains('listening')) return; // manual mic owns the input
   if(!ambient) ambient = buildAmbient();
@@ -8007,7 +8030,7 @@ async function fetchVoiceAudioQueued(text){
 
 function enqueueSpeech(text){
   const clean = (text || '').trim();
-  if(!clean || silentMode) return;
+  if(!clean || silentMode || modelLock) return;
   /* Every line he is about to say is registered before it plays, so the
      recognizer can recognise his own voice coming back through the speaker
      and not mistake it for you interrupting. */
@@ -8074,6 +8097,7 @@ function speechDrained(){
 /* Speak a complete, already-finished string (greetings, mode notices). */
 async function speak(text, onStart){
   if(onStart) onStart();
+  if(modelLock) return;   // silent until the locked 3D model is on screen
   /* Returning here used to skip the loop restart at the bottom, so a muted or
      empty reply silently ended continuous conversation — the microphone shut
      and nothing said why. Hand back to listening on the way out instead. */
@@ -9043,7 +9067,7 @@ async function runStandingTask(task){
    mid-sentence or mid-answer waits for the next tick rather than talking
    over the person it was set up for. */
 function tasksShouldHold(){
-  if(taskRunning || isThinking || isSpeaking) return true;
+  if(taskRunning || isThinking || isSpeaking || modelLock) return true;
   if(speechQueue && speechQueue.length) return true;
   if(whisperActive && captureSawSpeech) return true;
   if(typeof window.__orbAsleep === 'function' && window.__orbAsleep()) return true;
@@ -9708,7 +9732,7 @@ async function eyeLook(){
 }
 
 function eyeTick(){
-  if(!liveActive() || !eyeOn) return;
+  if(!liveActive() || !eyeOn || modelLock) return;
   const thumb = eyeThumb();
   if(!thumb) return;
 
@@ -10366,7 +10390,7 @@ function modelFileName(prompt){
 
 function addModelBubble(source, prompt){
   const glbUrl = typeof source === 'string' ? source : (source && source.glb);
-  if(glbUrl) lastModelUrl = glbUrl;
+  if(glbUrl){ lastModelUrl = glbUrl; lastModelName = String(prompt || '').trim().slice(0, 80); }
   const wrap = document.createElement('div');
   wrap.className = 'msg assistant modelMsg';
   const label = document.createElement('div');
@@ -10386,7 +10410,7 @@ function addModelBubble(source, prompt){
     const pop = document.createElement('button');
     pop.className = 'modelPop';
     pop.textContent = t('modelPopOut');
-    pop.addEventListener('click', ()=> openModelWindow(glbUrl));
+    pop.addEventListener('click', ()=> openModelWindow(glbUrl, prompt));
     wrap.appendChild(pop);
   }
 
@@ -10478,7 +10502,7 @@ async function callBuild3dTool(input){
     try{ url = await builtModelUrl(builder(THREE)); }
     catch(err){ why = (err && err.message) || String(err); }
     if(url) lastModelUrl = url;
-    const inWindow = url ? await showModelWindowToo(url) : false;
+    const inWindow = url ? await showModelWindowToo(url, name) : false;
     if(!inWindow){
       return { error: 'the model was built but could not be shown: ' + (why || 'the 3D window did not open'),
                tell_the_user: 'Say the model was built but its window would not open, and why. Do not describe it as on his screen.' };
@@ -10497,15 +10521,19 @@ async function callBuild3dTool(input){
    without being told which model. */
 let lastModelUrl = null;
 
-async function openModelWindow(url){
+let lastModelName = '';
+async function openModelWindow(url, name){
   const glb = url || lastModelUrl;
+  /* The name rides along so SAVE in the viewer names the file after what it
+     is ("coffee mug.glb"), not "model.glb". */
+  const label = String(name || (url ? '' : lastModelName) || '').trim().slice(0, 80);
   if(!glb) return { error: 'no model to show yet' };
   if(!IS_DESKTOP) return { error: 'a separate window is only possible in the desktop app' };
   const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
   if(!invoke) return { error: 'the desktop bridge is unavailable' };
   await makeRoomForOwnWindow();
   try{
-    const how = await invoke('open_model_window', { url: glb });
+    const how = await invoke('open_model_window', label ? { url: glb, name: label } : { url: glb });
     addMessage('system', t('modelWindowOpen'));
     return { ok: true, reused: how === 'reused',
              note: 'It is open in its own window now, which he can move and resize. Confirm in a few words.' };
@@ -10601,6 +10629,200 @@ function wantsModelOfSeen(text){
                      /\bof\s+(?!it\b|this\b|that\b|these\b|those\b|what\b|me\b)[a-z]/i.test(s) ||
                      /של\s+(?!זה|מה ש)\S/.test(s);
   return asks && !namesOther;
+}
+
+/* ---------------------------------------------------------------------
+   "MAKE IT A 3D MODEL" (2.11.0)
+
+   The picture he was last told about, and the sentence that turns it into
+   a model with no discussion. Every turn that had a picture in it — a
+   photo, a camera look, a screen capture, one a tool took — leaves the
+   picture and the reply here; the command builds from exactly that.
+   --------------------------------------------------------------------- */
+let lastDescribedPicture = null;   // { media_type, data, from, description, at }
+let turnPicture = null;
+const DESCRIBED_PICTURE_TTL = 15 * 60 * 1000;
+let modelLockTimer = null;
+
+function pictureOfTurn(images){
+  let pic = null;
+  for(const a of (images || [])){
+    if(!a || a.kind === 'pdf' || a.kind === 'text') continue;
+    if(a.kind === 'video'){
+      const f = a.frames && a.frames[Math.floor(a.frames.length / 2)];
+      if(f && f.data) pic = { media_type: f.media_type || 'image/jpeg', data: f.data, from: 'video' };
+      continue;
+    }
+    if(a.data) pic = { media_type: a.media_type || 'image/jpeg', data: a.data,
+                       from: a.screen ? 'screen' : a.live ? 'camera' : 'attached' };
+  }
+  return pic;
+}
+
+function freshDescribedPicture(){
+  const p = lastDescribedPicture;
+  return (p && p.data && Date.now() - p.at < DESCRIBED_PICTURE_TTL) ? p : null;
+}
+
+/* 'it' for the sentence itself, "make it a 3D model" and its kin; null for
+   everything else. "Make a 3D model of it" is deliberately NOT this: it is
+   the studied photo_to_3d turn it has been since 2.9.3, and while he is
+   watching the screen every turn has a picture in it, so taking that
+   wording too would have replaced that flow wholesale. */
+function makeItModelCommand(text){
+  const s = looseTokens(text).join(' ');
+  if(!s) return null;
+  const en3d = '(?:3 ?d|three ?d|three dimensional)';
+  const he3d = '(?:ל|ה|ב)?(?:תלת ?מ?י?מד(?:י|ית|ים)?|3 ?d)';
+  const enIt = new RegExp('^(?:make|turn|convert|change|transform|do) (?:it|this|that|this one|that one|them)' +
+                          '(?: (?:in ?to|to|as|in))?(?: an?)? ' + en3d + '(?: (?:model|object|version|mesh|thing))?$');
+  const heVerb = '(?:תעשה|תעשי|עשה|לעשות|תהפוך|תהפכי|הפוך|להפוך|תמיר|תמירי|המר|להמיר|תבנה|תבני|בנה|לבנות|תיצור|תצור|צור|ליצור|תייצר|לייצר|תכין|להכין)';
+  const heIt = '(?:מזה|את זה|אותו|אותה|זה|ממנו|ממנה|מזאת|את זאת)';
+  const heModel = '(?:ל?מודל|ל?אובייקט|ל?דגם)';
+  const heIt1 = new RegExp('^' + heVerb + '(?: לי)? ' + heIt + '(?: ' + heModel + ')? ' + he3d + '$');
+  return (enIt.test(s) || heIt1.test(s)) ? 'it' : null;
+}
+
+/* When the study cannot be had, the description he was given IS a study:
+   thin, but every side is accounted for and the build goes ahead. */
+function analysisFromDescription(desc){
+  const d = String(desc || '').replace(/\s+/g, ' ').trim();
+  const said = (d.split(/(?<=[.!?])\s/)[0] || d).trim()
+                 .replace(/,?\s*(?:sir|\u05d0\u05d3\u05d5\u05e0\u05d9)\s*([.!?]?)$/i, '$1').trim();
+  const first = (/[\p{L}\p{N}]/u.test(said) ? said : 'the object in the picture').slice(0, 160);
+  const side = name => 'Inferred for the ' + name + ' from what was seen: ' + first;
+  return { object: first, front: 'As seen in the picture: ' + first, back: side('back'), left: side('left side'),
+           right: side('right side'), top: side('top'), bottom: side('bottom'),
+           proportions: 'as in the picture', materials: 'Materials and colours as in the picture: ' + (d.slice(0, 400) || first),
+           symmetry: 'mirror', hidden: 'the unseen sides follow the seen ones' };
+}
+
+function completeAnalysis(a, fb){
+  const out = Object.assign({}, fb);
+  if(a && typeof a === 'object'){
+    const long = (k, min) => { const v = String(a[k] == null ? '' : a[k]).trim(); if(v.length >= min) out[k] = v.slice(0, 600); };
+    long('object', 3);
+    ['front','back','left','right','top','bottom'].forEach(k => long(k, 8));
+    long('proportions', 3);
+    long('materials', 10);
+    long('hidden', 3);
+    if(['mirror','radial','none'].indexOf(a.symmetry) >= 0) out.symmetry = a.symmetry;
+    if(a.crop && typeof a.crop === 'object') out.crop = a.crop;
+  }
+  return out;
+}
+
+const LOCK_STUDY_SYSTEM =
+  'You prepare one object from a picture for an image-to-3D service. The user was just told what the picture shows ' +
+  '(the description below); the object meant is the main thing in that description. Study the picture the way a 3D ' +
+  'artist would and respond with ONLY a raw JSON object, no markdown, no preamble, exactly these keys: ' +
+  '{"object": what it is in a few words, "front", "back", "left", "right", "top", "bottom": each a sentence on how that ' +
+  'side looks, seen or inferred (and from what), "proportions": length/width/height ratios and an estimated size, ' +
+  '"materials": every part\'s material, finish and colour, "symmetry": "mirror" or "radial" or "none", "hidden": what ' +
+  'cannot be seen and how you filled it in, "crop": {"left","top","width","height"} as fractions of the picture that ' +
+  'frame just the object, or null when it already fills the picture}. Infer everything; never ask a question.';
+
+async function studyPictureSilently(seen){
+  const fb = analysisFromDescription(seen.description);
+  if(!backendUrl) return fb;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 60000);
+  try{
+    const res = await fetch(anthropicEndpoint(), {
+      method:'POST', headers: jarvisHeaders(), signal: ctrl.signal,
+      body: JSON.stringify({
+        model:'claude-sonnet-4-6', max_tokens: 1500, system: LOCK_STUDY_SYSTEM,
+        messages: [{ role:'user', content: [
+          { type:'image', source:{ type:'base64', media_type: seen.media_type || 'image/jpeg', data: seen.data } },
+          { type:'text', text: 'What he was told about this picture: "' + String(seen.description || '').slice(0, 1500) +
+                               '"\n\nThe JSON study of that object:' }
+        ] }]
+      })
+    });
+    if(!res.ok) return fb;
+    const data = await res.json();
+    const raw = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim()
+                  .replace(/^```(?:json)?\s*|\s*```$/g, '');
+    const m = raw.match(/\{[\s\S]*\}/);
+    return completeAnalysis(JSON.parse(m ? m[0] : raw), fb);
+  }catch(err){
+    return fb;
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
+/* Everything that could speak, listen or start something, stopped — and
+   kept stopped by the modelLock guards until the model is on screen. */
+function silenceForLock(){
+  speechQueue = [];
+  if(activeAudio){ try{ activeAudio.pause(); activeAudio.currentTime = 0; }catch(e){} activeAudio = null; }
+  try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
+  isSpeaking = false;
+  if(convRestartTimer){ clearTimeout(convRestartTimer); convRestartTimer = null; }
+  try{ clearTurnTimer(); }catch(e){}
+  try{ if(whisperRec && whisperRec.state === 'recording') whisperDiscardNext = true; }catch(e){}
+  try{ stopWhisperCapture(); }catch(e){}
+  try{ if(recognition) recognition.abort(); }catch(e){}
+  try{ stopAmbient(); }catch(e){}
+  try{ eyeAbandon(); }catch(e){}
+  try{ speculativePromise = null; pendingSpeculative = null; }catch(e){}
+  updateStopBtnVisibility();
+}
+
+async function runLockedModel3d(seen, text){
+  if(modelLock) return;
+  const he = flowLang(text) === 'he';
+  modelLock = true;
+  document.documentElement.classList.add('model-lock');
+  silenceForLock();
+  userInterrupted = false;
+  isThinking = true;
+  lastThinkStart = Date.now();
+  toolRunningSince = Date.now();
+  /* Its own clock, since the watchdog stands aside: a job that never
+     answers is abandoned after twelve minutes rather than holding him
+     deaf for good. */
+  let timedOut = false;
+  modelLockTimer = setTimeout(() => { timedOut = true; userInterrupted = true; }, 12 * 60 * 1000);
+  let result;
+  try{
+    const note = addMessage('system', t('lockStudying'));
+    hudFollow(note);
+    const analysis = await studyPictureSilently(seen);
+    note.remove();
+    pending3d = { id: 'pic-' + Date.now().toString(36), at: Date.now(), from: 'seen: ' + (seen.from || 'picture'),
+                  media_type: seen.media_type || 'image/jpeg', data: seen.data,
+                  dataUrl: 'data:' + (seen.media_type || 'image/jpeg') + ';base64,' + seen.data };
+    result = await callPhoto3dTool({ image_id: pending3d.id, analysis });
+  }catch(err){
+    result = { error: String((err && err.message) || err) };
+  }finally{
+    clearTimeout(modelLockTimer);
+    modelLockTimer = null;
+    modelLock = false;
+    document.documentElement.classList.remove('model-lock');
+    isThinking = false;
+    lastThinkStart = 0;
+    toolRunningSince = 0;
+    userInterrupted = false;
+    try{ noteActivity(); }catch(e){}
+  }
+  const T = k => (I18N[he ? 'he' : 'en'] || {})[k] || t(k);
+  let line;
+  if(result && result.ok){
+    line = (IS_DESKTOP && !result.window) ? T('lockNoWindow')
+         : result.textured === false ? T('lockReadyBare') : T('lockReady');
+  } else {
+    const why = timedOut ? (he ? 'לקח יותר מדי זמן' : 'it took too long') : String((result && result.error) || 'unknown');
+    line = T('lockFailed').replace('{why}', why);
+  }
+  line = addressHim(line, he);
+  addMessage('assistant', line);
+  chatHistory.push({ role:'assistant', content: line });
+  persistCurrentSession();
+  if(typeof speak === 'function') speak(line);
+  else if(conversationMode) setTimeout(startListening, 250);
 }
 
 function somethingToModel(){
@@ -10852,9 +11074,10 @@ function builtModelUrl(object){
   });
 }
 
-async function showModelWindowToo(glb){
+async function showModelWindowToo(glb, name){
   if(!IS_DESKTOP || !glb) return false;
-  try{ const r = await openModelWindow(glb); return !!(r && r.ok); }catch(e){ return false; }
+  if(name) lastModelName = String(name).trim().slice(0, 80);
+  try{ const r = await openModelWindow(glb, name); return !!(r && r.ok); }catch(e){ return false; }
 }
 function whereShown(inWindow){
   return inWindow ? 'It is open in its own frameless window on his screen (he turns it by dragging, and closes it by right-clicking it or from the taskbar), and in the chat.'
@@ -10922,7 +11145,7 @@ async function runModel3dJob(body, firstLabel, caption){
         note.remove();
         addModelBubble(st.glb, caption);
         if(st.textured === false && st.note) addMessage('system', t('modelUntextured'));
-        const inWindow = await showModelWindowToo(st.glb);
+        const inWindow = await showModelWindowToo(st.glb, caption);
         return { ok:true, shown:true, window: inWindow, textured: st.textured !== false,
                  note: st.textured === false
                    ? 'The model is ready but texturing failed, so it is a bare mesh (' + st.note + '). Say so plainly. ' + whereShown(inWindow)
@@ -10935,7 +11158,7 @@ async function runModel3dJob(body, firstLabel, caption){
         if(previewGlb){
           addModelBubble(previewGlb, caption);
           addMessage('system', t('modelUntextured'));
-          const inWindow = await showModelWindowToo(previewGlb);
+          const inWindow = await showModelWindowToo(previewGlb, caption);
           return { ok:true, shown:true, window: inWindow, textured:false,
                    note:'The shape generated but texturing failed, so what is shown is the untextured mesh. Say that plainly rather than describing colours it does not have. ' + whereShown(inWindow) };
         }
@@ -10946,7 +11169,7 @@ async function runModel3dJob(body, firstLabel, caption){
     if(previewGlb){
       addModelBubble(previewGlb, caption);
       addMessage('system', t('modelUntextured'));
-      const inWindow = await showModelWindowToo(previewGlb);
+      const inWindow = await showModelWindowToo(previewGlb, caption);
       return { ok:true, shown:true, window: inWindow, textured:false,
                note:'Texturing timed out, so what is shown is the untextured mesh. Say that plainly. ' + whereShown(inWindow) };
     }
@@ -14796,6 +15019,7 @@ async function askJarvis(userText, images, onText, tag){
   turnToolSucceeded = false;
   turnToolFailures = [];
   turnIsLook = !!(images && images.some(a => a && a.kind !== 'pdf' && a.kind !== 'text'));
+  turnPicture = pictureOfTurn(images);
   turnStartedAt = Date.now();
   /* Set for the whole turn, so every tool the loop runs is attributed to
      whoever started it rather than all of them reading "chat". */
@@ -15009,6 +15233,8 @@ async function askJarvis(userText, images, onText, tag){
           toolRunningSince = 0;
           if(isThinking) lastThinkStart = Date.now();
           if(payload && payload.__attach){
+            const shown = payload.__attach.find(b => b && b.type === 'image' && b.source && b.source.data);
+            if(shown) turnPicture = { media_type: shown.source.media_type || 'image/png', data: shown.source.data, from: tu.name };
             attachAfterResults.push(...payload.__attach);
             delete payload.__attach;
           }
@@ -15025,6 +15251,7 @@ async function askJarvis(userText, images, onText, tag){
              which is worse than sending nothing, because it looks like it
              worked. Everything else still goes as JSON text. */
           if(payload && payload.image && payload.image.data){
+            turnPicture = { media_type: payload.image.media_type || 'image/png', data: payload.image.data, from: tu.name };
             toolResults.push({
               type:'tool_result', tool_use_id: tu.id,
               content: [
@@ -15159,6 +15386,12 @@ async function askJarvis(userText, images, onText, tag){
       }
       lookFrame = null;
     }
+    /* What he was just told about a picture, kept with the picture itself:
+       "make it a 3D model" means THAT, and builds from it without asking. */
+    if(reply && turnPicture){
+      lastDescribedPicture = Object.assign({ at: Date.now(), description: reply.slice(0, 1500) }, turnPicture);
+    }
+    turnPicture = null;
     if(!reply){
       addMessage('system', describeBreak(data, budget));
       reply = currentLang === 'he'
@@ -16221,6 +16454,9 @@ function makeTypewriter(el, onTick){
 }
 
 async function handleSend(){
+  /* A transcript already on its way when the lock began, or anything
+     typed: nothing reaches him until the model is on screen. */
+  if(modelLock) return;
   const text = chatInput.value.trim();
   const images = pendingImages.slice();
   /* THE CAMERA NO LONGER RIDES ALONG WITH EVERY MESSAGE.
@@ -16279,6 +16515,27 @@ async function handleSend(){
   pendingImages = [];
   renderImgPreviews();
   addMessage('user', text, images);
+
+  /* "Make it a 3D model" (2.11.0). After he has been told what a picture
+     shows, it builds THAT picture, locked: no model to argue with, no
+     microphone, no voice, nothing else started, nothing that can stop it,
+     until the model is on his screen. Said with nothing described it does
+     nothing at all. A photo sent with it is a new picture, and goes to the
+     model as before. */
+  if(!images.length && text && makeItModelCommand(text)){
+    const seen = freshDescribedPicture();
+    if(seen){
+      chatHistory.push({ role:'user', content: text });
+      persistCurrentSession();
+      runLockedModel3d(seen, text);
+      return;
+    }
+    /* Kept out of chatHistory on purpose: an unanswered request left
+       there is one the model later "remembers" having done. */
+    addMessage('system', t('lockNothingSeen'));
+    if(conversationMode && !isThinking) setTimeout(startListening, 250);
+    return;
+  }
 
   /* Screen watching starts and ends here, before any local command can
      read the same words as something else ("look at my screen" is not the
@@ -16689,6 +16946,7 @@ adjustLayout();
      fixes it. Cheap, and it cannot deadlock. */
   setInterval(()=>{
     if(orbMuted) return;              // muted means muted; do not reopen
+    if(modelLock) return;             // the locked 3D build has its own clock
     /* Hidden normally means dismissed. Asleep it means listening for his
        name, which is exactly when a lost capture must be put back. */
     if(document.visibilityState !== 'visible' && !(window.__orbAsleep && window.__orbAsleep())) return;
@@ -16912,6 +17170,10 @@ adjustLayout();
           }] : []),
           { label: t('orbLanguage') + ' \u203a', page:'lang' },
           { label: t('orbResetPlace'), run: resetOrbPlace },
+          /* The way back when he is stuck: the page reloaded, from Rust
+             (refresh_orb), which also takes him out of full screen first.
+             The same thing Ctrl+Shift+F5 and the tray's Refresh do. */
+          { label: t('orbRefresh'), run: refreshJarvis },
           { label: t('orbHide'), run: hideOrb }
         ];
     for(const it of items){
@@ -16935,6 +17197,23 @@ adjustLayout();
     orbMenu.style.top  = Math.max(4, Math.min(y, window.innerHeight - h - 4)) + 'px';
   }
   function hideOrbMenu(){ if(orbMenu) orbMenu.style.display = 'none'; }
+
+  async function refreshJarvis(){
+    try{ await persistCurrentSession(); }catch(err){}
+    try{ sessionStorage.setItem('jarvis:refreshed', String(Date.now())); }catch(err){}
+    try{ await window.__TAURI__.core.invoke('refresh_orb'); return; }catch(err){}
+    location.reload();       // a build without refresh_orb
+  }
+  window.__orbRefresh = refreshJarvis;
+  /* After a refresh, a word on screen that it happened, so a reload is not
+     mistaken for a crash. */
+  try{
+    const at = +sessionStorage.getItem('jarvis:refreshed');
+    if(at && Date.now() - at < 60000){
+      sessionStorage.removeItem('jarvis:refreshed');
+      setTimeout(()=>{ try{ addMessage('system', t('refreshedNote')); }catch(err){} }, 1500);
+    }
+  }catch(err){}
 
   document.addEventListener('contextmenu', (e)=>{
     e.preventDefault();
@@ -17008,6 +17287,7 @@ adjustLayout();
                         : (!capturing && Date.now() - lastCaptureAt > 5000)));
       micDot.title = orbMuted ? 'Standby — click to switch the microphone on'
                    : deaf      ? 'Cannot transcribe — ' + sttBrokenWhy
+                   : modelLock ? 'Building the 3D model \u2014 nothing interrupts until it is on screen (right-click \u2192 Refresh to abandon it)'
                    : busy      ? 'Working…'
                    : ptt && stalled ? 'Microphone is NOT delivering sound — check the input device'
                    : pttIdle && pttHeld ? 'Opening the microphone — speak after the tone'
@@ -17021,6 +17301,7 @@ adjustLayout();
       if(label){
         label.textContent = orbMuted ? 'standby'
                           : deaf      ? 'not hearing'
+                          : modelLock ? 'building 3D'
                           : busy      ? 'working'
                           : ptt && stalled ? 'microphone not open'
                           : pttIdle && pttHeld ? 'starting'

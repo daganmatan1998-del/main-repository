@@ -281,6 +281,33 @@ single file `dist/index.html`.
   a Try again button; play() is raced with 2.5 s so a frameless camera does
   not hang the window. The main window never holds the camera (its
   getUserMedia video calls are click-only website features).
+- **"Make it a 3D model" is a LOCK, not a turn (2.11.0).** askJarvis keeps
+  the turn's picture (pictureOfTurn from its images, or a tool's __attach /
+  image result) with the reply as lastDescribedPicture (15 min).
+  makeItModelCommand runs on looseTokens in handleSend right after
+  addMessage ("make/turn it|this|that (into) a 3d model", "תעשה מזה מודל
+  תלת מימדי"): with nothing described it does NOTHING (a system note, kept
+  out of chatHistory); after a description it runs runLockedModel3d. "Make
+  a 3d model OF it" is deliberately not matched — in screen-watch mode
+  every turn has a picture, and taking it would have replaced the 2.9.3
+  studied photo_to_3d flow (model3d.e2e covers that). The lock:
+  modelLock (declared beside isThinking, so no TDZ) + html.model-lock,
+  silenceForLock, then ONE quiet model call (LOCK_STUDY_SYSTEM, no tools)
+  whose JSON is completed from the description (analysisFromDescription /
+  completeAnalysis, so check3dAnalysis always passes), then pending3d +
+  callPhoto3dTool. Guards on modelLock: startListening, enqueueSpeech,
+  speak, stopJarvis, handleSend, tasksShouldHold, eyeTick, startAmbient
+  and the orb watchdog; it has its own 12-min clock instead. A new guard
+  anywhere that listens, speaks or starts work must check modelLock. The
+  ways out are the job ending and Refresh: orb menu / tray / Ctrl+Shift+F5
+  → refresh_orb (main.rs: leaves full screen, orb topmost again, reload).
+  The viewer (model.html) has the blueprint backdrop on by default
+  (jarvis:model-backdrop), FULL SCREEN (needs allow-set-fullscreen in
+  capabilities/model.json), and SAVE → save_model_file (glTF magic
+  checked; jarvis_folder finds an existing JARVIS / ג'רוויס folder or makes
+  one on the Desktop; never overwrites; Windows reserved names get
+  "model-"). open_model_window takes an optional name (the caption) for
+  the file. lock.e2e.mjs, makeit.test.mjs and viewer.e2e.mjs cover it.
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.

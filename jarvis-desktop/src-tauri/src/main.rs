@@ -41,6 +41,14 @@ const HUSH_MODS: Modifiers = Modifiers::CONTROL.union(Modifiers::SHIFT);
 const HUSH_CODE: Code = Code::KeyX;
 const HUSH_LABEL: &str = "Ctrl+Shift+X";
 
+/* REFRESH — reloads the orb when he is stuck (refresh_orb_now). F5 is the
+   key every Windows user already knows means "reload"; Ctrl+Shift keeps it
+   from taking a browser's plain F5 or Ctrl+F5, and Ctrl+Shift+R, the other
+   reflex, is a browser's own hard reload, so it is left alone. */
+const REFRESH_MODS: Modifiers = Modifiers::CONTROL.union(Modifiers::SHIFT);
+const REFRESH_CODE: Code = Code::F5;
+const REFRESH_LABEL: &str = "Ctrl+Shift+F5";
+
 /* PUSH TO TALK: hold the key and he listens, let go and he is deaf.
 
    Fn was the key asked for, and it cannot be done: on nearly every laptop Fn
@@ -1307,7 +1315,7 @@ fn capture_screen_frame(app: tauri::AppHandle) -> Result<String, String> {
  * and it is brought forward. Otherwise every model would leave another window
  * behind. */
 #[tauri::command]
-async fn open_model_window(app: tauri::AppHandle, url: String) -> Result<String, String> {
+async fn open_model_window(app: tauri::AppHandle, url: String, name: Option<String>) -> Result<String, String> {
     // Only ever our own viewer, with the model as a parameter. A url straight
     // from a tool result must never become the page this window loads.
     if url.trim().is_empty() {
@@ -1324,7 +1332,17 @@ async fn open_model_window(app: tauri::AppHandle, url: String) -> Result<String,
             _ => encoded.push_str(&format!("%{:02X}", b)),
         }
     }
-    let page = format!("model.html?glb={}", encoded);
+    let mut page = format!("model.html?glb={}", encoded);
+    /* The model's name, for the file Save writes. Encoded the same way. */
+    if let Some(n) = name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+        page.push_str("&name=");
+        for b in n.chars().take(80).collect::<String>().as_bytes() {
+            match b {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => page.push(*b as char),
+                _ => page.push_str(&format!("%{:02X}", b)),
+            }
+        }
+    }
 
     if let Some(existing) = app.get_webview_window("model") {
         let _ = existing.eval(&format!("location.replace({:?})", page));
@@ -1618,6 +1636,136 @@ fn close_camera_window(app: tauri::AppHandle) -> bool {
 #[tauri::command]
 fn camera_window_open(app: tauri::AppHandle) -> bool {
     app.get_webview_window("camera").is_some()
+}
+
+/* REFRESH (2.11.0) — a way back when he is broken.
+
+   The orb page can wedge: a capture that never closed, a request that never
+   came back, a state flag left set. Restarting the whole app was the only
+   cure. This reloads just the orb's page — the conversation is saved
+   before every turn and the PIN is kept for the session, so nothing is
+   lost — from Rust, so it works even when the page's own script is stuck
+   and cannot run its menu. Full screen and the window order are put back
+   first: a reloaded page starts as the small orb and must not find its
+   window still filling the screen. Reached from the hotkey (REFRESH_*),
+   the tray, and the orb's right-click menu. */
+fn refresh_orb_now(app: &tauri::AppHandle) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.set_fullscreen(false);
+        ORB_EXPANDED.store(false, Ordering::SeqCst);
+        let _ = main.set_always_on_top(true);
+        for (label, w) in app.webview_windows() {
+            if label == "model" || label.starts_with("ws-") {
+                let _ = w.set_always_on_top(false);
+            }
+        }
+        let _ = main.show();
+        if main.reload().is_err() {
+            let _ = main.eval("location.reload()");
+        }
+    }
+}
+
+#[tauri::command]
+fn refresh_orb(app: tauri::AppHandle) {
+    refresh_orb_now(&app);
+}
+
+/* SAVING A MODEL — into his JARVIS folder.
+
+   He already has a folder called JARVIS on this computer; the 3D viewer's
+   right-click → Save puts the .glb there. It is looked for where people
+   keep such a folder (the desktop, Documents, the home folder, OneDrive's
+   copies of those, Downloads, Pictures, the root of the usual drives),
+   under its English or Hebrew name — Windows paths are case-insensitive,
+   so "Jarvis" is found as "JARVIS". Only if there is none anywhere is one
+   made, on the desktop, and the answer says where it went. The bytes must
+   be a real binary glTF: this writes models, not whatever it is handed. */
+fn jarvis_folder() -> Option<std::path::PathBuf> {
+    let names = ["JARVIS", "Jarvis", "jarvis", "ג'רוויס", "ג׳רוויס", "גרוויס"];
+    let mut roots: Vec<std::path::PathBuf> = Vec::new();
+    if let Some(d) = dirs_next::desktop_dir() {
+        roots.push(d);
+    }
+    if let Some(d) = dirs_next::document_dir() {
+        roots.push(d);
+    }
+    if let Some(h) = dirs_next::home_dir() {
+        roots.push(h.join("OneDrive").join("Desktop"));
+        roots.push(h.join("OneDrive").join("Documents"));
+        roots.push(h.join("OneDrive"));
+        roots.push(h);
+    }
+    if let Some(d) = dirs_next::download_dir() {
+        roots.push(d);
+    }
+    if let Some(d) = dirs_next::picture_dir() {
+        roots.push(d);
+    }
+    #[cfg(target_os = "windows")]
+    for drive in ["C:\\", "D:\\", "E:\\"] {
+        roots.push(std::path::PathBuf::from(drive));
+    }
+    for r in &roots {
+        for n in names {
+            let p = r.join(n);
+            if p.is_dir() {
+                return Some(p);
+            }
+        }
+    }
+    let base = dirs_next::desktop_dir().or_else(dirs_next::document_dir)?;
+    let p = base.join("JARVIS");
+    std::fs::create_dir_all(&p).ok()?;
+    Some(p)
+}
+
+fn model_file_stem(name: &str) -> String {
+    let mut s: String = name
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' { c } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join("-");
+    if s.chars().count() > 60 {
+        s = s.chars().take(60).collect();
+    }
+    if s.is_empty() {
+        return "model".to_string();
+    }
+    /* Names Windows will not create a file under, whatever the extension. */
+    let upper = s.to_uppercase();
+    let reserved = ["CON", "PRN", "AUX", "NUL"].contains(&upper.as_str())
+        || ((upper.starts_with("COM") || upper.starts_with("LPT"))
+            && upper.len() == 4
+            && upper.as_bytes()[3].is_ascii_digit());
+    if reserved {
+        format!("model-{}", s)
+    } else {
+        s
+    }
+}
+
+#[tauri::command]
+fn save_model_file(b64: String, name: String) -> Result<serde_json::Value, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let bytes = STANDARD
+        .decode(b64.trim())
+        .map_err(|e| format!("that is not a model file ({e})"))?;
+    if bytes.len() < 12 || &bytes[0..4] != b"glTF" {
+        return Err("that is not a .glb model".into());
+    }
+    let dir = jarvis_folder().ok_or("could not find or make a JARVIS folder")?;
+    let stem = model_file_stem(&name);
+    let mut path = dir.join(format!("{}.glb", stem));
+    let mut n = 2;
+    while path.exists() {
+        path = dir.join(format!("{} ({}).glb", stem, n));
+        n += 1;
+    }
+    std::fs::write(&path, &bytes).map_err(|e| format!("could not write {}: {e}", path.display()))?;
+    Ok(serde_json::json!({ "path": path.display().to_string(), "folder": dir.display().to_string(), "bytes": bytes.len() }))
 }
 
 /* A MODEL BUILT IN CODE, HANDED TO THE 3D VIEWER.
@@ -1939,7 +2087,9 @@ fn main() {
             bring_window_here,
             orb_layer,
             stash_model,
-            stashed_model
+            stashed_model,
+            refresh_orb,
+            save_model_file
         ])
         .setup(|app| {
             let window = app
@@ -1957,10 +2107,11 @@ fn main() {
             let shortcut = Shortcut::new(Some(HOTKEY_MODS), HOTKEY_CODE);
             let hush = Shortcut::new(Some(HUSH_MODS), HUSH_CODE);
             let ptt = Shortcut::new(None, PTT_CODE);
+            let refresh = Shortcut::new(Some(REFRESH_MODS), REFRESH_CODE);
             let hotkey_window = window.clone();
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
-                    .with_handler(move |_app, fired, event| {
+                    .with_handler(move |hk_app, fired, event| {
                         /* Push to talk takes both edges, so it is handled
                            before the press-only filter below: true while the
                            key is down, false the moment it comes up. Like
@@ -1976,6 +2127,8 @@ fn main() {
                         }
                         if fired.matches(HOTKEY_MODS, HOTKEY_CODE) {
                             toggle(&hotkey_window);
+                        } else if fired.matches(REFRESH_MODS, REFRESH_CODE) {
+                            refresh_orb_now(hk_app);
                         } else if fired.matches(HUSH_MODS, HUSH_CODE) {
                             /* Deliberately does NOT show or focus the window.
                                The whole point is to shut him up without being
@@ -2000,6 +2153,12 @@ fn main() {
                     HUSH_LABEL, err
                 );
             }
+            if let Err(err) = app.global_shortcut().register(refresh) {
+                eprintln!(
+                    "JARVIS: could not register {} — another app may already use it ({})",
+                    REFRESH_LABEL, err
+                );
+            }
             match app.global_shortcut().register(ptt) {
                 Ok(()) => PTT_REGISTERED.store(true, Ordering::SeqCst),
                 Err(err) => eprintln!(
@@ -2013,16 +2172,17 @@ fn main() {
                the shortcut is taken, and no obvious way to quit. */
             let show_item = MenuItem::with_id(app, "show", "Show JARVIS", true, None::<&str>)?;
             let hush_item = MenuItem::with_id(app, "hush", "Stop talking", true, None::<&str>)?;
+            let refresh_item = MenuItem::with_id(app, "refresh", "Refresh JARVIS", true, None::<&str>)?;
             let hide_item = MenuItem::with_id(app, "hide", "Hide", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_item, &hush_item, &hide_item, &quit_item])?;
+            let menu = Menu::with_items(app, &[&show_item, &hush_item, &refresh_item, &hide_item, &quit_item])?;
 
             let tray_window = window.clone();
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip(&format!(
-                    "JARVIS — hold {} to talk, {} to summon, {} to stop talking",
-                    PTT_LABEL, HOTKEY_LABEL, HUSH_LABEL
+                    "JARVIS — hold {} to talk, {} to summon, {} to stop talking, {} to refresh",
+                    PTT_LABEL, HOTKEY_LABEL, HUSH_LABEL, REFRESH_LABEL
                 ))
                 .menu(&menu)
                 .show_menu_on_left_click(false)
@@ -2034,6 +2194,7 @@ fn main() {
                     "hush" => {
                         let _ = tray_window.emit("jarvis://hush", ());
                     }
+                    "refresh" => refresh_orb_now(app),
                     "hide" => {
                         let _ = tray_window.hide();
                     }

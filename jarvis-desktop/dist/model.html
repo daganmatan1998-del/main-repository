@@ -11,10 +11,13 @@
   that to look at a mesh would run all of it twice. This is the viewer and
   nothing else, off the same vendored three.js.
 
-  Since 2.9.3 the window has no frame and no background: the model floats on
-  the desktop by itself. Drag turns it, the wheel zooms, Shift- or Alt-drag
-  moves the window, and the only ways to close it are right-click → Close
-  and the taskbar — which is what he asked for.
+  Since 2.9.3 the window has no frame. Since 2.11.0 the model stands on a
+  blue blueprint backdrop with grid lines, as he asked (BACKDROP in the menu
+  takes it away again, back to the model floating on the desktop). Drag
+  turns it, the wheel or his two hands zoom it, Shift- or Alt-drag moves the
+  window, FULL SCREEN (or a double-click) fills the screen and Esc comes
+  back, SAVE writes the .glb into his JARVIS folder, and the only ways to
+  close it are right-click → Close and the taskbar.
 
   The model to show arrives in the query string: model.html?glb=<url>.
 -->
@@ -23,6 +26,27 @@
   *{ box-sizing:border-box; }
   html,body{ height:100%; margin:0; background:transparent; overflow:hidden;
              font-family:'Courier New',monospace; color:var(--cyan); user-select:none; }
+  /* The blueprint: deep blue, a fine grid every 20 px and a stronger one
+     every 100 px, lighter toward the middle where the model stands. */
+  body.backdrop{
+    background-color:#06244d;
+    background-image:
+      linear-gradient(rgba(130,205,255,0.20) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(130,205,255,0.20) 1px, transparent 1px),
+      linear-gradient(rgba(130,205,255,0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(130,205,255,0.08) 1px, transparent 1px),
+      radial-gradient(120% 95% at 50% 42%, #0f4a8c 0%, #07295a 58%, #041b3c 100%);
+    background-size:100px 100px, 100px 100px, 20px 20px, 20px 20px, 100% 100%;
+    background-position:center center;
+  }
+  #toast{
+    position:absolute; left:50%; bottom:14px; transform:translateX(-50%); max-width:90%;
+    padding:7px 12px; font-size:11px; letter-spacing:0.6px; color:#dff6ff; text-align:center;
+    background:rgba(4,16,34,0.88); border:1px solid rgba(95,232,255,0.4); border-radius:5px;
+    opacity:0; transition:opacity .35s ease; pointer-events:none; word-break:break-all;
+  }
+  #toast.show{ opacity:1; }
+  #toast.bad{ color:#ffb3b3; border-color:rgba(255,120,120,0.45); }
   #stage{ position:absolute; inset:0; }
   canvas{ display:block; background:transparent; }
   #note{
@@ -31,8 +55,9 @@
     text-shadow:0 0 8px rgba(95,232,255,0.9), 0 0 2px #000; pointer-events:none;
   }
   #hint{
-    position:absolute; left:50%; bottom:10px; transform:translateX(-50%); white-space:nowrap;
-    font-size:10px; letter-spacing:1.5px; color:rgba(var(--dim),0.9);
+    position:absolute; left:50%; bottom:10px; transform:translateX(-50%);
+    width:max-content; max-width:calc(100% - 24px); text-align:center; line-height:1.5;
+    font-size:10px; letter-spacing:1px; color:rgba(var(--dim),0.9);
     text-shadow:0 0 3px #000, 0 0 6px #000; pointer-events:none;
     opacity:0; transition:opacity .6s ease;
   }
@@ -61,12 +86,16 @@
 <body>
 <div id="stage"></div>
 <div id="note">loading…</div>
-<div id="hint">drag to turn · shift+drag to move · right-click to close</div>
+<div id="hint">drag: turn · shift+drag: move · double-click: full screen · right-click: save, close</div>
+<div id="toast"></div>
 <div id="menu" role="menu">
   <button id="spinBtn" class="on" role="menuitem">SPIN</button>
   <button id="wireBtn" role="menuitem">WIREFRAME</button>
   <button id="fitBtn" role="menuitem">FIT</button>
+  <button id="bgBtn" class="on" role="menuitem">BACKDROP</button>
+  <button id="fsBtn" role="menuitem">FULL SCREEN</button>
   <hr>
+  <button id="saveBtn" role="menuitem">SAVE</button>
   <button id="closeItem" role="menuitem">CLOSE</button>
 </div>
 
@@ -88,6 +117,7 @@
   /* The one way out besides the taskbar. Wired before anything else, so
      even a window whose model failed to load can still be closed. */
   function closeWindow(){
+    closeMenu();
     const w = tauriWin();
     if(w && typeof w.close === 'function') w.close().catch(() => window.close());
     else window.close();
@@ -101,7 +131,36 @@
   function closeMenu(){ menu.classList.remove('open'); }
   document.addEventListener('contextmenu', (e) => { e.preventDefault(); openMenu(e.clientX, e.clientY); });
   document.addEventListener('pointerdown', (e) => { if(!menu.contains(e.target)) closeMenu(); }, true);
-  document.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeMenu(); });
+  document.addEventListener('keydown', (e) => {
+    if(e.key === 'Escape'){ closeMenu(); setFull(false); }
+    if(e.key === 'F11'){ e.preventDefault(); setFull(!full); }
+  });
+
+  /* FULL SCREEN, from the menu, a double-click, F11; Esc leaves it. */
+  let full = false;
+  async function setFull(on){
+    const w = tauriWin();
+    if(!w || typeof w.setFullscreen !== 'function') return;
+    try{ await w.setFullscreen(!!on); full = !!on; }catch(e){ return; }
+    const b = document.getElementById('fsBtn');
+    if(b) b.textContent = full ? 'EXIT FULL SCREEN' : 'FULL SCREEN';
+  }
+  document.getElementById('fsBtn').addEventListener('click', () => { closeMenu(); setFull(!full); });
+  document.addEventListener('dblclick', (e) => { if(!menu.contains(e.target)) setFull(!full); });
+
+  let toastTimer = null;
+  function toast(text, bad){
+    const el = document.getElementById('toast');
+    el.textContent = text; el.classList.toggle('bad', !!bad); el.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), bad ? 7000 : 5000);
+  }
+
+  /* THE BACKDROP: on unless he turned it off, remembered between models. */
+  const BG_KEY = 'jarvis:model-backdrop';
+  let backdrop = true;
+  try{ backdrop = localStorage.getItem(BG_KEY) !== 'off'; }catch(e){}
+  document.body.classList.toggle('backdrop', backdrop);
+  document.getElementById('bgBtn').classList.toggle('on', backdrop);
   document.getElementById('closeItem').addEventListener('click', closeWindow);
 
   /* Moving a window that has no title bar: Shift- or Alt-drag anywhere.
@@ -123,7 +182,9 @@
   }
   if(!window.THREE){ fail('three.js did not load from ./vendor/three/.'); return; }
 
-  const glb = new URLSearchParams(location.search).get('glb');
+  const params = new URLSearchParams(location.search);
+  const glb = params.get('glb');
+  const modelName = (params.get('name') || 'model').trim();
   if(!glb){ fail('No model was given. This window is opened by JARVIS with a model to show.'); return; }
 
   /* Transparent all the way down: the page, the canvas and the scene. What
@@ -153,7 +214,7 @@
   controls.dampingFactor = 0.08;
   controls.enablePan = false;          // the right button belongs to the menu
 
-  let model = null, spin = true, wire = false;
+  let model = null, spin = true, wire = false, bytes = null, floorGrid = null;
   /* Gesture zoom's distance, eased toward (see below). */
   let fitDist = 0, wantDist = 0;
 
@@ -187,6 +248,21 @@
     camera.far = dist * 20;
     camera.updateProjectionMatrix();
     controls.update();
+    placeFloorGrid(sphere);
+  }
+
+  /* A grid under the model on the blueprint backdrop, so it stands on
+     something; sized to it and hidden with the backdrop. */
+  function placeFloorGrid(sphere){
+    if(floorGrid){ scene.remove(floorGrid); floorGrid = null; }
+    if(!model) return;
+    const box = new THREE.Box3().setFromObject(model);
+    const span = Math.max(sphere.radius * 4, 0.01);
+    floorGrid = new THREE.GridHelper(span, 16, 0x7fd3ff, 0x2f6fa8);
+    floorGrid.material.transparent = true; floorGrid.material.opacity = 0.55;
+    floorGrid.position.set(sphere.center.x, box.min.y, sphere.center.z);
+    floorGrid.visible = backdrop;
+    scene.add(floorGrid);
   }
 
   const shown = (gltf)=>{
@@ -201,22 +277,46 @@
   const lost = ()=>{
     fail('The model could not be loaded. The link may have expired — ask JARVIS to make it again.');
   };
-  /* A model JARVIS built in code is not at an address: the orb left the
-     .glb with the app (stash_model in main.rs) and it is asked for here. */
-  if(glb.indexOf('stash:') === 0){
-    const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
-    if(!invoke) lost();
-    else invoke('stashed_model', { key: glb.slice(6) }).then((b64)=>{
-      const bin = atob(String(b64 || ''));
-      const bytes = new Uint8Array(bin.length);
-      for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      new THREE.GLTFLoader().parse(bytes.buffer, '', shown, lost);
-    }).catch(lost);
-  } else {
-    new THREE.GLTFLoader().load(glb, shown, (ev)=>{
-      if(ev && ev.total) note.textContent = 'loading… ' + Math.round(ev.loaded / ev.total * 100) + '%';
-    }, lost);
+  /* The model as BYTES first, whichever way it came — so what Save writes is
+     exactly what is on screen:
+       stash:KEY  a model JARVIS built in code, left with the app
+                  (stash_model in main.rs) and asked for here;
+       data:      a small one carried in the address itself;
+       anything else is fetched. */
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  const fromB64 = (b64) => { const bin = atob(String(b64 || '')); const u = new Uint8Array(bin.length);
+                             for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; };
+  function loadBytes(){
+    if(glb.indexOf('stash:') === 0){
+      if(!invoke) return Promise.reject(new Error('no bridge'));
+      return invoke('stashed_model', { key: glb.slice(6) }).then(fromB64);
+    }
+    if(glb.indexOf('data:') === 0) return Promise.resolve(fromB64(glb.slice(glb.indexOf(',') + 1)));
+    return fetch(glb).then(r => { if(!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); });
   }
+  loadBytes().then((buf)=>{
+    bytes = buf;
+    new THREE.GLTFLoader().parse(buf, '', shown, lost);
+  }).catch(lost);
+
+  /* SAVE: the .glb into his JARVIS folder (save_model_file in main.rs). */
+  function toB64(buf){
+    const u = new Uint8Array(buf); let s = '';
+    for(let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    closeMenu();
+    if(!bytes){ toast('The model has not finished loading yet.', true); return; }
+    if(!invoke){ toast('Saving needs the JARVIS app.', true); return; }
+    toast('Saving…');
+    try{
+      const r = await invoke('save_model_file', { b64: toB64(bytes), name: modelName });
+      toast('Saved to ' + (r && r.path ? r.path : 'the JARVIS folder'));
+    }catch(e){
+      toast('Could not save: ' + ((e && e.message) || e), true);
+    }
+  });
 
   document.getElementById('spinBtn').addEventListener('click', (e)=>{
     spin = !spin; e.target.classList.toggle('on', spin); closeMenu();
@@ -226,6 +326,13 @@
     if(model) model.traverse(o => { if(o.isMesh && o.material) o.material.wireframe = wire; });
   });
   document.getElementById('fitBtn').addEventListener('click', ()=>{ frame(); closeMenu(); });
+  document.getElementById('bgBtn').addEventListener('click', (e)=>{
+    backdrop = !backdrop; closeMenu();
+    e.target.classList.toggle('on', backdrop);
+    document.body.classList.toggle('backdrop', backdrop);
+    if(floorGrid) floorGrid.visible = backdrop;
+    try{ localStorage.setItem(BG_KEY, backdrop ? 'on' : 'off'); }catch(err){}
+  });
 
   /* GESTURE ZOOM, directly. The camera window tracks his two pinches and,
      when this viewer is the window in front, sends the zoom here as a

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "model",
-  "description": "The 3D viewer window, and nothing else. It has no title bar, so it closes itself from its own right-click menu and moves itself on Shift-drag, and it listens for gesture zoom from the camera window. That is all it may do. No opener, no shell, no filesystem.",
+  "description": "The 3D viewer window, and nothing else. It has no title bar, so it closes itself from its own right-click menu, moves itself on Shift-drag and goes full screen from that menu, and it listens for gesture zoom from the camera window. Saving a model goes through the app's own save_model_file command, which writes only .glb files into the JARVIS folder. No opener, no shell, no filesystem.",
   "windows": [
     "model"
   ],
@@ -11,6 +11,8 @@
     "core:window:allow-start-dragging",
     "core:window:allow-set-focus",
     "core:event:allow-listen",
-    "core:event:allow-unlisten"
+    "core:event:allow-unlisten",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen"
   ]
 }

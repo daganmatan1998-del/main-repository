@@ -320,6 +320,68 @@ actually forwarded where it should be, actually stripped where it must be, that
 the warning fires only in the second case, and that a blind primary is overtaken
 in the chain by a fallback that can see.
 
+## Page 2.11.0: "make it a 3D model", a refresh button, and the blueprint viewer
+
+**"Make it a 3D model", locked.** Say it after JARVIS has described a
+picture to you (a photo you sent, a camera look, your screen, anything he
+was shown in the last 15 minutes). He then builds exactly that picture:
+
+- there is no conversation with the model about it, so there is nothing to
+  argue with;
+- the microphone is shut, so nothing said is heard;
+- nothing is spoken, not even a progress line;
+- nothing typed is taken, and no scheduled task or camera remark starts;
+- the stop button, Esc and the stall watchdog cannot cut it short.
+
+The orb shows it the whole time: a steady blue dot and "building 3D".
+Behind that, one silent model call studies the picture together with the
+description he gave you (all six sides, proportions, materials, symmetry,
+a crop). If that study fails, the description itself is the study, so the
+build still goes ahead. The picture then goes to the 3D service exactly as
+with `photo_to_3d`. When the model's window is open he says "Here it is,
+sir." (or "הנה הוא, אדוני.") and listens again. A failure is said the same
+way, in one line, and he listens again too. After 12 minutes with no answer
+from the service he gives up and says so.
+
+Said with nothing described, the sentence does nothing at all. Its
+variants work too: "turn it/this into a 3D model", "make that 3D", and in
+Hebrew "תעשה מזה מודל תלת מימדי", "תהפוך את זה למודל תלת מימדי". "Make a
+3D model of it" is deliberately not one of them. It stays the studied
+`photo_to_3d` turn it has been since 2.9.3, because while he watches your
+screen every turn has a picture in it, and that wording would otherwise
+have replaced that flow completely. A new photo attached to the same
+message is a new picture and also goes to the model as before.
+
+**A refresh button for when he is stuck.** Right-click the orb →
+**Refresh JARVIS**, or the tray menu's **Refresh JARVIS**, or
+**Ctrl+Shift+F5** from anywhere. It leaves full screen, puts the orb back
+on top and reloads the page. The conversation and the unlock survive it,
+and the log says "Refreshed." afterwards. It is also the way out of a locked
+3D build.
+
+**The 3D window** (`model.html`):
+
+- The model stands on a deep-blue blueprint backdrop with fine and coarse
+  grid lines and a floor grid under it. BACKDROP in the right-click menu
+  turns this off (back to the model floating on the desktop), and the
+  choice is remembered.
+- **FULL SCREEN** is in the menu, and a double-click or F11 does the same.
+  Esc comes back.
+- **SAVE** writes the `.glb` into your JARVIS folder. That is the first
+  folder named JARVIS (or Jarvis / ג'רוויס) found on the Desktop, in
+  Documents, OneDrive, your home folder, Downloads, Pictures, or at the root
+  of C:, D: or E:; if there is none, one is made on the Desktop. The file is
+  named after the model ("white-ceramic-mug.glb"), and an existing file is
+  never overwritten ("white-ceramic-mug (2).glb"). The window says where the
+  file went, or why it could not save.
+- The gesture zoom reaches it directly, in full screen too.
+
+This needs the app rebuilt: `refresh_orb`, `save_model_file`, the
+Ctrl+Shift+F5 shortcut, the tray item and the viewer's full-screen
+permission are all in Rust. Tested in `lock.e2e.mjs` (47), `makeit.test.mjs`
+(74) and `viewer.e2e.mjs` (28, the real viewer in WebGL); `main.rs`
+type-checks for Windows.
+
 ## Page 2.10.4: the camera starts whichever camera works; the hands zoom by movement
 
 **"The camera would not start. Timeout starting video source."** Windows
