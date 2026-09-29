@@ -10,9 +10,10 @@
                         with hysteresis, a fist guard and debouncing
        -> DISTANCE      between the two pinch points, over hand size, so
                         leaning toward the camera is not a zoom
-       -> SMOOTHING     One Euro filter, dead zone, slew limit, easing
+       -> SMOOTHING     One Euro filter
        -> GESTURE       idle -> arming (fresh baseline) -> armed -> zooming,
-                        ended the moment either hand lets go
+                        one zoom step per ~1 cm the hands move apart or
+                        together; ended the moment either hand lets go
        -> FOREGROUND    Rust's zoom_target: which window, which program
        -> ADAPTER       browser / document / image / 3D / our own viewer /
                         generic, chosen from the program, never hard-coded
@@ -33,16 +34,16 @@
   ------------------------------------------------------------------ */
   const DEFAULTS = Object.freeze({
     enabled: true,      // runs whenever the camera window is open
-    sensitivity: 1.0,   // multiplier on how much zoom a stretch buys
-    threshold: 8,       // % change in hand distance before anything moves
+    sensitivity: 1.0,   // zoom steps per centimetre the hands move apart or together
+    threshold: 5,       // millimetres of movement ignored at the start of each pinch
     smoothing: 0.5,     // 0 = raw and quick, 1 = very smooth and a little late
-    maxSpeed: 3,        // the zoom can change by at most this factor per second
+    maxSpeed: 6,        // at most this many zoom steps a second
     maxZoom: 5,         // 500 %, relative to where JARVIS first found the window
     minZoom: 0.25       // 25 %
   });
   const LIMITS = {
-    sensitivity: [0.25, 3], threshold: [2, 30], smoothing: [0, 1],
-    maxSpeed: [1.2, 10], maxZoom: [1.2, 20], minZoom: [0.05, 0.9]
+    sensitivity: [0.25, 3], threshold: [0, 30], smoothing: [0, 1],
+    maxSpeed: [1, 15], maxZoom: [1.2, 20], minZoom: [0.05, 0.9]
   };
   const STORE_KEY = 'jarvis_store:gesture_zoom';
 
@@ -148,41 +149,52 @@
   }
 
   /* ------------------------------------------------------------------
-     THE GESTURE.
+     THE GESTURE (2.10.4: steps, not positions).
 
-     Both hands pinched -> ARMING: ~150 ms of samples become the baseline
-     (their median, so one bad frame cannot set it). Nothing zooms yet.
-     ARMED: waiting for a real stretch — the hands must move past the dead
-     zone (8 % by default) before ZOOMING begins, and the dead zone is
-     subtracted, so crossing it starts from zero instead of jumping.
+     Both hands pinched -> ARMING: ~150 ms of samples become the starting
+     distance (their median, so one bad frame cannot set it). Nothing zooms.
 
-     It is POSITION control, like a touch screen: the zoom follows the
-     ratio of the current distance to the baseline — 250/200 a little,
-     350/200 more, 500/200 a lot — and bringing the hands back to where
-     they started brings the zoom back too. What reaches the application
-     ("applied") eases toward that target and never faster than maxSpeed.
+     From there it is the MOVEMENT that zooms, not where the hands are:
+     every centimetre or so the two pinches travel APART is one step in,
+     every centimetre they travel TOGETHER is one step out, and hands held
+     still — close together or far apart — do nothing at all. That is what
+     he asked for, and it is also why it feels slow and exact: a step is a
+     small, fixed amount of movement, counted one by one.
 
-     Either hand letting go ends it at once; the next pinch builds a new
-     baseline from scratch.
+     Centimetres come from the hands themselves: distance is measured in
+     palm lengths (wrist to the middle knuckle, about PALM_CM = 9 cm on an
+     adult), so leaning toward the camera, which makes the hands AND the gap
+     bigger together, is not a zoom. Sensitivity is steps per centimetre;
+     the threshold is how many millimetres of movement are ignored at the
+     start, before the first step — pinching itself moves the hands a
+     little.
+
+     Each frame reports `steps`, how many whole steps were crossed since the
+     last frame (+ in, - out), and `level`, the total for this gesture.
+     Either hand letting go ends it at once; the next pinch starts again
+     from wherever the hands are.
   ------------------------------------------------------------------ */
-  const GAIN = 1.5, ARM_MS = 150;
+  const PALM_CM = 9, ARM_MS = 150;
 
   class TwoHandZoom {
     constructor(settings){
       this.pins = [new PinchState(), new PinchState()];
       this.slots = [null, null];          // last pinch point per slot, to keep hands apart
       this.configure(settings);
-      this.limits = [-Infinity, Infinity];
       this.resetGesture();
     }
     configure(settings){
       this.s = normaliseSettings(settings);
       this.filter = new OneEuro(lerp(3.0, 0.5, this.s.smoothing), 0.08, 1.0);
     }
-    setLimits(lo, hi){ this.limits = [lo, hi]; }
+    /* Kept for callers from before 2.10.4; the limits now live in the
+       manager, which knows the window's zoom level. */
+    setLimits(){}
+    stepSize(){ return (1 / PALM_CM) / this.s.sensitivity; }            // palm lengths per step
+    deadZone(){ return (this.s.threshold / 10) / PALM_CM; }             // mm -> palm lengths
     resetGesture(){
       this.state = 'idle'; this.samples = []; this.baseline = null; this.armStart = 0;
-      this.target = 0; this.applied = 0; this.lastT = null; this.lastD = null; this.lr = 0;
+      this.anchor = null; this.level = 0; this.lastD = null;
       if(this.filter) this.filter.reset();
     }
 
@@ -204,7 +216,7 @@
     }
 
     /* frame = { t (ms), hands: [{ landmarks }], width, height }.
-       Returns what happened: { type: 'none'|'start'|'move'|'end'|'cancel', ... } */
+       Returns what happened: { type: 'none'|'start'|'move'|'end'|'cancel', steps, level, ... } */
     update(frame){
       const t = frame.t;
       const ms = (frame.hands || []).map(h => handMetrics(h.landmarks || h, frame.width, frame.height)).filter(Boolean);
@@ -212,11 +224,11 @@
       const e0 = this.pins[0].update(slot[0], t), e1 = this.pins[1].update(slot[1], t);
       const a = this.pins[0].last, b = this.pins[1].last;
       const both = e0 && e1 && a && b;
-      const base = { state: this.state, points: [a && a.point, b && b.point], engaged: [e0, e1] };
+      const base = { state: this.state, points: [a && a.point, b && b.point], engaged: [e0, e1], steps: 0, level: this.level };
 
       if(!both){
         if(this.state === 'armed' || this.state === 'zooming'){
-          const ev = Object.assign(base, { type: 'end', applied: this.applied, target: this.target });
+          const ev = Object.assign(base, { type: 'end', level: this.level });
           this.resetGesture();
           ev.state = 'idle';
           return ev;
@@ -241,29 +253,34 @@
         if(t - this.armStart >= ARM_MS && this.samples.length >= 3){
           this.baseline = median(this.samples);
           this.state = 'armed';
-          this.lastT = t;
           return Object.assign(base, { type: 'start', state: 'armed', baseline: this.baseline, distance: Ds });
         }
         return Object.assign(base, { type: 'none', state: 'arming', distance: Ds });
       }
 
-      /* armed or zooming */
-      const dz = Math.log(1 + this.s.threshold / 100);
-      const lr = Math.log(Ds / this.baseline);
-      this.lr = lr;
-      if(this.state === 'armed' && Math.abs(lr) > dz) this.state = 'zooming';
-      const raw = this.state === 'zooming' ? Math.sign(lr) * Math.max(0, Math.abs(lr) - dz) * GAIN * this.s.sensitivity : 0;
-      this.target = clamp(raw, this.limits[0], this.limits[1]);
-
-      const dt = clamp((t - (this.lastT === null ? t : this.lastT)) / 1000, 0, 0.25);
-      this.lastT = t;
-      const tau = lerp(0.05, 0.3, this.s.smoothing);
-      const k = dt > 0 ? 1 - Math.exp(-dt / tau) : 0;
-      const maxStep = Math.log(this.s.maxSpeed) * dt;
-      this.applied += clamp((this.target - this.applied) * k, -maxStep, maxStep);
-
+      /* armed: the first few millimetres are ignored; the steps are counted
+         from where they end, so crossing them never jumps. */
+      if(this.anchor === null){
+        const dz = this.deadZone();
+        if(Math.abs(Ds - this.baseline) <= dz){
+          return Object.assign(base, { type: 'move', state: 'armed', baseline: this.baseline, distance: Ds });
+        }
+        this.anchor = this.baseline + Math.sign(Ds - this.baseline) * dz;
+      }
+      /* zooming: whole steps of movement since the last one, either way.
+         The anchor moves by exactly one step each time, so a hand that
+         trembles around a step's edge cannot tick in and out: going back
+         takes a whole step of real movement. */
+      const step = this.stepSize();
+      let steps = 0;
+      while(Ds - this.anchor >= step){ this.anchor += step; steps++; }
+      while(this.anchor - Ds >= step){ this.anchor -= step; steps--; }
+      this.level += steps;
+      /* "zooming" from the first real step — the tracker's own tremble past
+         the threshold is not a zoom, and the overlay should not say it is. */
+      if(steps) this.state = 'zooming';
       return Object.assign(base, { type: 'move', state: this.state, baseline: this.baseline, distance: Ds,
-                                   ratio: Ds / this.baseline, target: this.target, applied: this.applied });
+                                   cm: (Ds - this.baseline) * PALM_CM, steps, level: this.level });
     }
   }
 
@@ -357,24 +374,23 @@
   }
 
   /* ------------------------------------------------------------------
-     THE ZOOM MANAGER — from "the gesture wants this much zoom" to what
-     the foreground program actually receives.
+     THE ZOOM MANAGER — from "the hands moved a step" to what the program
+     in front actually receives: one wheel notch, one key press, or (our
+     own 3D viewer) one factor of STEP_3D, per step.
 
-     The gesture's applied value is continuous; wheel notches and key
-     presses are not. So the manager keeps what it has already sent, and
-     sends another notch only when the gesture is at least 70 % of a notch
-     ahead — which is also the hysteresis: after a notch in, the next
-     notch out is 1.4 notches of hand movement away, so a hand held still
-     at a boundary never makes the content twitch in and out.
-
-     Our own 3D viewer gets the continuous value itself.
+     Steps are sent one at a time, no faster than the program's rate and
+     the maximum-speed setting, so it moves gradually however fast the
+     hands do; at most about a second's worth waits, so a fast sweep does
+     not leave a long tail of zoom behind it after the hands have stopped.
 
      The foreground is re-read at the start of every gesture and every
      half second during one, so switching programs mid-stretch hands the
-     gesture to the new one without a jump. "Zoom level" is tracked per
-     window from where JARVIS first found it, which is what the min/max
-     zoom settings limit.
+     gesture to the new one. The zoom level is tracked per window from
+     where JARVIS first found it, and the minimum and maximum zoom stop the
+     steps at those levels.
   ------------------------------------------------------------------ */
+  const STEP_3D = 1.1;
+
   class ZoomManager {
     constructor(opts){
       this.invoke = opts.invoke;              // (cmd, args) => Promise
@@ -388,12 +404,13 @@
     }
     configure(s){ this.settings = normaliseSettings(s); }
     reset(){
-      this.active = false; this.target = null; this.adapter = null; this.sent = 0; this.offset = 0;
+      this.active = false; this.target = null; this.adapter = null; this.sent = 0; this.pending = 0;
       this.busy = false; this.lastSendAt = 0; this.lastCheck = 0; this.checking = false; this.startLevel = 1;
       this.generation = (this.generation || 0) + 1;
     }
     keyOf(info){ return info ? String(info.hwnd) + '|' + (info.exe || '') : ''; }
-    levelNow(){ return this.startLevel * Math.exp(this.sent - this.offset); }
+    stepFactor(){ return !this.adapter ? 1 : this.adapter.method === 'direct' ? STEP_3D : (this.adapter.step || 1.1); }
+    levelNow(){ return this.startLevel * Math.pow(this.stepFactor(), this.sent); }
 
     async handle(ev){
       if(!ev || !this.settings.enabled) return;
@@ -407,7 +424,7 @@
       catch(e){ return { hwnd: 0, error: String((e && e.message) || e) }; }
     }
 
-    useTarget(info, applied){
+    useTarget(info){
       const adapter = selectAdapter(info);
       this.target = info; this.adapter = adapter;
       if(!adapter.supported){
@@ -417,11 +434,7 @@
       }
       this.active = true;
       this.startLevel = this.levels.get(this.keyOf(info)) || 1;
-      /* From here, only what the hands do next counts for this window. */
-      this.offset = applied || 0; this.sent = applied || 0;
-      const s = this.settings;
-      if(this.gesture) this.gesture.setLimits(Math.log(s.minZoom / this.startLevel) + this.offset,
-                                              Math.log(s.maxZoom / this.startLevel) + this.offset);
+      this.sent = 0;
       this.onStatus({ kind: 'target', adapter: adapter.id, method: adapter.method, name: adapter.name, app: adapter.app });
       return true;
     }
@@ -432,7 +445,7 @@
       const info = await this.readTarget();
       if(gen !== this.generation) return;           // released while we were looking
       this.lastCheck = this.now();
-      this.useTarget(info, 0);
+      this.useTarget(info);
     }
 
     remember(){
@@ -441,9 +454,16 @@
       }
     }
 
+    /* One more step in direction n (+1/-1) would leave the allowed range. */
+    atLimit(n){
+      const next = this.levelNow() * Math.pow(this.stepFactor(), n);
+      return (n > 0 && next > this.settings.maxZoom * 1.0001) || (n < 0 && next < this.settings.minZoom * 0.9999);
+    }
+
     move(ev){
-      const applied = ev.applied || 0;
       const now = this.now();
+      const cap = Math.max(1, Math.round(this.settings.maxSpeed));
+      this.pending = clamp(this.pending + (ev.steps || 0), -cap, cap);
       /* Which window is in front, every half second, without holding the frame. */
       if(!this.checking && now - this.lastCheck > 500 && this.target !== null){
         this.checking = true; this.lastCheck = now;
@@ -451,33 +471,35 @@
         this.readTarget().then(info => {
           this.checking = false;
           if(gen !== this.generation) return;
-          if(this.keyOf(info) !== this.keyOf(this.target)){ this.remember(); this.useTarget(info, applied); }
+          if(this.keyOf(info) !== this.keyOf(this.target)){ this.remember(); this.pending = 0; this.useTarget(info); }
         });
       }
-      if(!this.active || !this.adapter) return;
+      if(!this.active || !this.adapter){ if(this.target) this.pending = 0; return; }
+      if(!this.pending || this.busy) return;
       const a = this.adapter;
+      const rate = Math.min(a.method === 'direct' ? 20 : (a.rate || 8), this.settings.maxSpeed);
+      if(now - this.lastSendAt < 1000 / rate) return;
+      const n = Math.sign(this.pending);
+      if(this.atLimit(n)){
+        this.pending = 0;
+        this.onStatus({ kind: 'limit', level: this.levelNow(), name: a.name, app: a.app });
+        return;
+      }
+      this.pending -= n;
+      this.lastSendAt = now;
 
       if(a.method === 'direct'){
-        const d = applied - this.sent;
-        if(Math.abs(d) >= 0.002){
-          this.sent = applied;
-          this.emit('jarvis://model-zoom', { factor: Math.exp(d), level: this.levelNow() });
-        }
+        this.sent += n;
+        this.emit('jarvis://model-zoom', { factor: Math.pow(STEP_3D, n), level: this.levelNow() });
+        this.onStatus({ kind: 'zoom', level: this.levelNow(), adapter: a.id, name: a.name, app: a.app });
         return;
       }
 
-      if(this.busy) return;
-      const stepLog = Math.log(a.step);
-      const pending = applied - this.sent;
-      if(Math.abs(pending) < 0.7 * stepLog) return;
-      if(now - this.lastSendAt < 1000 / a.rate) return;
-      const n = Math.sign(pending) * Math.min(2, Math.max(1, Math.round(Math.abs(pending) / stepLog)));
       this.busy = true;
       const gen = this.generation, target = this.target;
       this.invoke('zoom_send', { hwnd: target.hwnd, method: a.method, notches: n }).then(() => {
         if(gen !== this.generation) return;
-        this.sent += n * stepLog;
-        this.lastSendAt = this.now();
+        this.sent += n;
         this.onStatus({ kind: 'zoom', level: this.levelNow(), adapter: a.id, name: a.name, app: a.app });
       }).catch((e) => {
         if(gen !== this.generation) return;
@@ -600,6 +622,7 @@
     const status = (s) => {
       if(s.kind === 'target') label = 'ZOOM · ' + (s.name || '');
       else if(s.kind === 'zoom') label = 'ZOOM · ' + (s.name || '') + ' ×' + s.level.toFixed(2);
+      else if(s.kind === 'limit') label = 'ZOOM · ' + (s.name || '') + ' ×' + s.level.toFixed(2) + ' (limit)';
       else if(s.kind === 'unsupported') label = 'NO ZOOM · ' + s.reason;
       else if(s.kind === 'error') label = 'ZOOM FAILED · ' + s.reason;
       else if(s.kind === 'idle') label = '';
@@ -696,6 +719,6 @@
   root.JarvisGestureZoom = {
     DEFAULTS, LIMITS, STORE_KEY, normaliseSettings, OneEuro, handMetrics, PinchState, TwoHandZoom,
     ADAPTERS, selectAdapter, ZoomManager, createTracker, drawOverlay, startGestureZoom,
-    constants: { PINCH_ON, PINCH_OFF, FIST_GUARD, GAIN, ARM_MS }
+    constants: { PINCH_ON, PINCH_OFF, FIST_GUARD, PALM_CM, ARM_MS, STEP_3D }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

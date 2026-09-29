@@ -320,6 +320,55 @@ actually forwarded where it should be, actually stripped where it must be, that
 the warning fires only in the second case, and that a blind primary is overtaken
 in the chain by a fallback that can see.
 
+## Page 2.10.4: the camera starts whichever camera works; the hands zoom by movement
+
+**"The camera would not start. Timeout starting video source."** Windows
+opened a camera that never delivered a first frame. JARVIS himself is not
+the cause: the only camera request while the app runs is the camera
+window's own. The usual reasons are:
+
+- the wrong camera: the infrared Windows Hello camera, which a request for
+  "the front camera" can land on;
+- a camera still being released after the window closed and reopened;
+- a camera busy in another program.
+
+`camera.html` now tries, in order:
+
+1. the camera that worked last time;
+2. the ordinary request;
+3. every camera on the machine by name, infrared and Hello ones last, each
+   at 720p and then at any size.
+
+If the whole round times out or finds the cameras busy, it tries once more
+after two seconds. The camera that works is remembered. A privacy refusal
+or no camera at all stops at once. A failure now says what to do and has a
+**Try again** button. A camera that opens but sends nothing no longer
+leaves the window stuck on "asking…". Tested in `camstart.e2e.mjs` (13).
+
+**The zoom follows the hands' movement, not their distance**
+(`gesture-zoom.js`):
+
+- every centimetre or so the two pinches move **apart** is one step in, and
+  every centimetre **together** is one step out;
+- hands held still, close together or far apart, do nothing;
+- the same 3 cm is the same 3 steps wherever the hands start (before, it
+  was a ratio of the starting distance);
+- centimetres come from the hands themselves (palm ≈ 9 cm), so leaning in
+  is still not a zoom.
+
+Each step is one wheel notch or key press in the program in front, or ×1.1
+in JARVIS's own 3D viewer. Steps go out one at a time, at most 6 a second,
+with at most a second's worth waiting, so it stays gradual and a fast sweep
+leaves no long tail. The first 5 mm of each pinch are ignored, because
+pinching itself moves the hands. "Zooming" (green) starts only at the first
+real step.
+
+Settings: sensitivity is now **steps per cm**, shown as "1 / 1.0 cm". The
+threshold is in **mm** and the maximum speed in **steps a second**. Minimum
+and maximum zoom are unchanged. Tested in `gesturezoom.test.mjs` (78, real
+landmarks) and `gesture.e2e.mjs` (27, the real tracker in the real camera
+window).
+
 ## Page 2.10.3: he understands what you mean, not only the sentence he was taught
 
 "hey can you open my camera please" already worked. But "I want to see the

@@ -66,6 +66,8 @@
     letter-spacing:0.6px; text-transform:none; background:var(--ink);
   }
   #err.show{ display:grid; }
+  #err div{ white-space:pre-line; }
+  #err #retry{ justify-self:center; margin-top:14px; padding:5px 14px; }
 </style>
 </head>
 <body>
@@ -190,9 +192,19 @@
   function emit(name, payload){
     try{ if(ev.emit) ev.emit(name, payload); }catch(e){}
   }
-  function fail(message, detail){
+  function fail(message, detail, retry){
     if(timer){ clearInterval(timer); timer = null; }
-    errBox.textContent = message;
+    errBox.textContent = '';
+    var text = document.createElement('div');
+    text.textContent = message;
+    errBox.appendChild(text);
+    if(retry){
+      var again = document.createElement('button');
+      again.id = 'retry';
+      again.textContent = 'try again';
+      again.addEventListener('click', function(){ start(); });
+      errBox.appendChild(again);
+    }
     errBox.classList.add('show');
     say('not available', false);
     emit('jarvis://camera-error', String(detail || message));
@@ -247,22 +259,62 @@
     }catch(e){ /* one dropped frame is not worth reporting */ }
   }
 
-  function start(){
-    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      return fail('This window cannot reach a camera.', 'no getUserMedia');
-    }
-    say('asking for the camera…', false);
-    navigator.mediaDevices.getUserMedia({
-      video: { width:{ ideal:1280 }, height:{ ideal:720 }, facingMode:'user' },
-      audio: false
-    }).then(function(s){
-      stream = s;
-      feed.srcObject = s;
-      feed.classList.toggle('mirrored', mirrored);
-      return feed.play().catch(function(){});
-    }).then(function(){
-      var track = stream.getVideoTracks()[0];
-      var st = (track && track.getSettings) ? track.getSettings() : {};
+  /* STARTING THE CAMERA — WHICHEVER CAMERA ACTUALLY WORKS (2.10.4).
+
+     "The camera would not start. Timeout starting video source." is the
+     picture from his machine. It is Windows opening a camera that never
+     delivers a first frame, and the three usual reasons are all things a
+     single getUserMedia with one set of constraints cannot get past:
+
+     - the wrong camera. A laptop with Windows Hello has an infrared camera
+       beside the ordinary one, and asking for "the front camera" can land
+       on it; it sends no ordinary picture and the start times out;
+     - a camera still being let go — this window closed and opened again
+       quickly, or another program releasing it;
+     - a camera busy in another program (Zoom, Teams, OBS, the Windows
+       Camera app, a browser tab).
+
+     So: the camera that worked last time first, then the ordinary request,
+     then every camera on the machine by name (anything infrared or Hello
+     last), each at 720p and then at whatever it offers; and if they all
+     time out or are busy, the whole round once more after a pause. The one
+     that works is remembered. Only a real refusal (privacy settings) or no
+     camera at all stops at once, and the failure says what to do, with a
+     button to try again. */
+  var CAM_KEY = 'jarvis:camdev';
+  var startGen = 0;
+  function isInfrared(label){ return /\b(?:ir|infrared)\b|hello|depth/i.test(label || ''); }
+  function rememberedCamera(){ try{ return localStorage.getItem(CAM_KEY) || ''; }catch(e){ return ''; } }
+  function cameraAttempts(devices){
+    var remembered = rememberedCamera();
+    var list = [];
+    if(remembered) list.push({ why: 'the camera that worked last time', video: { deviceId:{ exact: remembered }, width:{ ideal:1280 }, height:{ ideal:720 } } });
+    list.push({ why: 'the front camera', video: { width:{ ideal:1280 }, height:{ ideal:720 }, facingMode:'user' } });
+    var cams = (devices || []).filter(function(d){ return d.kind === 'videoinput' && d.deviceId && d.deviceId !== 'default'; });
+    cams.sort(function(a, b){ return isInfrared(a.label) - isInfrared(b.label); });
+    cams.forEach(function(d, i){
+      var name = d.label || ('camera ' + (i + 1));
+      list.push({ why: name, video: { deviceId:{ exact: d.deviceId }, width:{ ideal:1280 }, height:{ ideal:720 } } });
+      list.push({ why: name + ' (any size)', video: { deviceId:{ exact: d.deviceId } } });
+    });
+    list.push({ why: 'any camera', video: true });
+    return list;
+  }
+  function stopStream(s){ try{ s.getTracks().forEach(function(t){ t.stop(); }); }catch(e){} }
+
+  function started(s, gen){
+    if(gen !== startGen){ stopStream(s); return; }   // a later attempt already won
+    stream = s;
+    errBox.classList.remove('show');
+    feed.srcObject = s;
+    feed.classList.toggle('mirrored', mirrored);
+    var track = s.getVideoTracks()[0];
+    var st = (track && track.getSettings) ? track.getSettings() : {};
+    try{ if(st.deviceId) localStorage.setItem(CAM_KEY, st.deviceId); }catch(e){}
+    /* play() settles on the first frame; a camera that opened and sends
+       nothing must not leave the window saying "asking" forever. */
+    return Promise.race([feed.play().catch(function(){}), new Promise(function(r){ setTimeout(r, 2500); })]).then(function(){
+      if(gen !== startGen) return;
       liveText = (st.width || '?') + '×' + (st.height || '?') + ' — live';
       showState();
       emit('jarvis://camera-open', true);
@@ -270,22 +322,76 @@
       if(timer) clearInterval(timer);
       timer = setInterval(pushFrame, PUSH_MS);
       pushFrame();
-    }).catch(function(e){
-      var name = (e && e.name) || '';
-      if(name === 'NotAllowedError' || name === 'SecurityError'){
-        fail('Windows is blocking the camera for desktop apps.\n\n' +
-             'Settings → Privacy & security → Camera → turn on ' +
-             '"Let desktop apps access your camera", then open this again.', name);
-      } else if(name === 'NotReadableError' || name === 'TrackStartError'){
-        fail('Another application is using the camera.\n\n' +
-             'Close Zoom, Teams, Chrome or whatever has it, then open this again.', name);
-      } else if(name === 'NotFoundError'){
-        fail('No camera found on this machine.', name);
-      } else {
-        fail('The camera would not start.\n\n' + ((e && e.message) || name || 'unknown'), name);
-      }
     });
   }
+
+  function failedToStart(e){
+    var name = (e && e.name) || '';
+    if(name === 'NotAllowedError' || name === 'SecurityError'){
+      fail('Windows is blocking the camera for desktop apps.\n\n' +
+           'Settings → Privacy & security → Camera → turn on ' +
+           '"Let desktop apps access your camera", then press Try again.', name, true);
+    } else if(name === 'NotFoundError' || name === 'DevicesNotFoundError'){
+      fail('No camera found on this machine.\n\nPlug one in, then press Try again.', name, true);
+    } else {
+      fail('The camera did not start.\n\n' +
+           'It is most likely in use by another program — Zoom, Teams, OBS, the Windows Camera app ' +
+           'or a browser tab — or switched off by the privacy switch or camera key on the laptop. ' +
+           'Every camera on this machine was tried. Close whatever has it, then press Try again.\n\n(' +
+           ((e && e.message) || name || 'unknown') + ')', name || 'start failed', true);
+    }
+  }
+
+  function start(){
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      return fail('This window cannot reach a camera.', 'no getUserMedia');
+    }
+    var gen = ++startGen;
+    errBox.classList.remove('show');
+    say('asking for the camera…', false);
+    var lastError = null, round = 0, tried = {};
+    function stop(e){ return e && (e.name === 'NotAllowedError' || e.name === 'SecurityError'); }
+    function runRound(list){
+      var i = 0;
+      function next(){
+        if(gen !== startGen) return Promise.resolve();
+        while(i < list.length && tried[round + ':' + JSON.stringify(list[i].video)]) i++;
+        if(i >= list.length) return Promise.reject(lastError || new Error('no camera answered'));
+        var a = list[i++];
+        tried[round + ':' + JSON.stringify(a.video)] = true;
+        if(i > 1) say('trying ' + a.why + '…', false);
+        return navigator.mediaDevices.getUserMedia({ video: a.video, audio: false })
+          .then(function(s){ return started(s, gen); })
+          .catch(function(e){
+            lastError = e;
+            if(stop(e)) throw e;
+            /* The first failures are before the camera list has names in
+               it (it has them once access is granted): fetch it now. */
+            if(i === Math.min(2, list.length) && list.length <= 3){
+              return navigator.mediaDevices.enumerateDevices().then(function(devs){
+                list = cameraAttempts(devs); i = 0;
+                return next();
+              }, next);
+            }
+            return next();
+          });
+      }
+      return next();
+    }
+    navigator.mediaDevices.enumerateDevices().catch(function(){ return []; }).then(function(devs){
+      return runRound(cameraAttempts(devs)).catch(function(e){
+        if(stop(e) || gen !== startGen) throw e;
+        /* Everything timed out or was busy: a camera being released takes a
+           moment. Once more, after one. */
+        round = 1;
+        say('the camera is busy — trying again…', false);
+        return new Promise(function(r){ setTimeout(r, 2000); })
+          .then(function(){ return navigator.mediaDevices.enumerateDevices().catch(function(){ return []; }); })
+          .then(function(devs){ return runRound(cameraAttempts(devs)); });
+      });
+    }).catch(function(e){ if(gen === startGen) failedToStart(e || lastError); });
+  }
+
 
   document.getElementById('mirror').addEventListener('click', function(){
     mirrored = !mirrored;

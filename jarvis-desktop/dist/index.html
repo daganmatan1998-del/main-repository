@@ -1675,10 +1675,10 @@
       <span id="gestureStatus"></span>
     </div>
     <div class="vsHint" id="gestureHint">Pinch thumb and index finger on BOTH hands in front of the camera, then pull your hands apart to zoom in and bring them together to zoom out — on whatever is in front: a web page, a PDF, a picture, a 3D model. Let go with either hand and it stops; the next pinch starts fresh. Needs the camera window open.</div>
-    <div class="gzRow"><label for="gzSensitivity" id="gzSensitivityLabel">Sensitivity</label><input id="gzSensitivity" type="range" min="0.25" max="3" step="0.05"><span class="gzVal" id="gzSensitivityVal"></span></div>
-    <div class="gzRow"><label for="gzThreshold" id="gzThresholdLabel">Movement before it zooms</label><input id="gzThreshold" type="range" min="2" max="30" step="1"><span class="gzVal" id="gzThresholdVal"></span></div>
+    <div class="gzRow"><label for="gzSensitivity" id="gzSensitivityLabel">Steps per cm</label><input id="gzSensitivity" type="range" min="0.25" max="3" step="0.05"><span class="gzVal" id="gzSensitivityVal"></span></div>
+    <div class="gzRow"><label for="gzThreshold" id="gzThresholdLabel">Movement before it zooms</label><input id="gzThreshold" type="range" min="0" max="30" step="1"><span class="gzVal" id="gzThresholdVal"></span></div>
     <div class="gzRow"><label for="gzSmoothing" id="gzSmoothingLabel">Smoothing</label><input id="gzSmoothing" type="range" min="0" max="1" step="0.05"><span class="gzVal" id="gzSmoothingVal"></span></div>
-    <div class="gzRow"><label for="gzMaxSpeed" id="gzMaxSpeedLabel">Maximum zoom speed</label><input id="gzMaxSpeed" type="range" min="1.2" max="10" step="0.1"><span class="gzVal" id="gzMaxSpeedVal"></span></div>
+    <div class="gzRow"><label for="gzMaxSpeed" id="gzMaxSpeedLabel">Maximum steps a second</label><input id="gzMaxSpeed" type="range" min="1" max="15" step="1"><span class="gzVal" id="gzMaxSpeedVal"></span></div>
     <div class="gzRow"><label for="gzMaxZoom" id="gzMaxZoomLabel">Maximum zoom</label><input id="gzMaxZoom" type="range" min="1.2" max="20" step="0.1"><span class="gzVal" id="gzMaxZoomVal"></span></div>
     <div class="gzRow"><label for="gzMinZoom" id="gzMinZoomLabel">Minimum zoom</label><input id="gzMinZoom" type="range" min="0.05" max="0.9" step="0.01"><span class="gzVal" id="gzMinZoomVal"></span></div>
     <div class="vsRow vsActions">
@@ -2049,8 +2049,8 @@ const I18N = {
     gestureOn: '✋ GESTURE ZOOM: ON',
     gestureOff: '✋ GESTURE ZOOM: OFF',
     gestureHint: 'Pinch thumb and index finger on BOTH hands in front of the camera, then pull your hands apart to zoom in and bring them together to zoom out — on whatever is in front: a web page, a PDF, a picture, a 3D model. Let go with either hand and it stops; the next pinch starts fresh. Needs the camera window open.',
-    gzSensitivityLabel: 'Sensitivity', gzThresholdLabel: 'Movement before it zooms', gzSmoothingLabel: 'Smoothing',
-    gzMaxSpeedLabel: 'Maximum zoom speed', gzMaxZoomLabel: 'Maximum zoom', gzMinZoomLabel: 'Minimum zoom',
+    gzSensitivityLabel: 'Steps per cm', gzThresholdLabel: 'Movement before it zooms', gzSmoothingLabel: 'Smoothing',
+    gzMaxSpeedLabel: 'Maximum steps a second', gzMaxZoomLabel: 'Maximum zoom', gzMinZoomLabel: 'Minimum zoom',
     gestureResetBtn: 'DEFAULTS',
     actNote: 'Every tool he ran, newest first. Click a row for the full arguments and result. This is what actually happened — not what he said happened.',
     actEmpty: 'Nothing yet. This fills up the moment he actually does something.',
@@ -2303,7 +2303,7 @@ const I18N = {
     gestureOff: '✋ זום בידיים: כבוי',
     gestureHint: 'תצמיד אגודל ואצבע בשתי הידיים מול המצלמה, ואז תרחיק את הידיים זו מזו כדי להגדיל ותקרב אותן כדי להקטין — בכל מה שפתוח מלפנים: דף אינטרנט, PDF, תמונה, מודל תלת-ממד. שחרור של יד אחת עוצר; הצביטה הבאה מתחילה מחדש. צריך שחלון המצלמה יהיה פתוח.',
     gzSensitivityLabel: 'רגישות', gzThresholdLabel: 'תנועה לפני שמתחיל זום', gzSmoothingLabel: 'החלקה',
-    gzMaxSpeedLabel: 'מהירות זום מרבית', gzMaxZoomLabel: 'זום מרבי', gzMinZoomLabel: 'זום מזערי',
+    gzMaxSpeedLabel: 'מקסימום צעדים בשנייה', gzMaxZoomLabel: 'זום מרבי', gzMinZoomLabel: 'זום מזערי',
     gestureResetBtn: 'ברירת מחדל',
     actNote: 'כל כלי שהוא הריץ, החדש למעלה. לחץ על שורה לפרטים המלאים. זה מה שבאמת קרה — לא מה שהוא אמר שקרה.',
     actEmpty: 'עדיין כלום. זה יתמלא ברגע שהוא באמת יעשה משהו.',
@@ -2477,7 +2477,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.10.3';
+const APP_VERSION = '2.10.4';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -7314,12 +7314,15 @@ gestureBtn.addEventListener('click', ()=> toggleSubPanel(gesturePanel, gestureBt
    Saved under the key the camera window reads at start, and pushed to it
    live, so a change applies without reopening anything. --- */
 var GZ_STORE = 'gesture_zoom';   // jarvis_store:gesture_zoom, with Store's prefix
-var GZ_DEFAULTS = { enabled:true, sensitivity:1, threshold:8, smoothing:0.5, maxSpeed:3, maxZoom:5, minZoom:0.25 };
+var GZ_DEFAULTS = { enabled:true, sensitivity:1, threshold:5, smoothing:0.5, maxSpeed:6, maxZoom:5, minZoom:0.25 };
 var GZ_FIELDS = [
-  ['sensitivity', 'gzSensitivity', v => '×' + v.toFixed(2)],
-  ['threshold',   'gzThreshold',   v => Math.round(v) + '%'],
+  /* Since 2.10.4 the hands' MOVEMENT zooms, a step at a time: sensitivity
+     is steps per centimetre, the threshold millimetres ignored at the start,
+     the speed steps per second (gesture-zoom.js). */
+  ['sensitivity', 'gzSensitivity', v => '1 / ' + (1 / v).toFixed(1) + ' cm'],
+  ['threshold',   'gzThreshold',   v => Math.round(v) + ' mm'],
   ['smoothing',   'gzSmoothing',   v => Math.round(v * 100) + '%'],
-  ['maxSpeed',    'gzMaxSpeed',    v => '×' + v.toFixed(1) + '/s'],
+  ['maxSpeed',    'gzMaxSpeed',    v => Math.round(v) + '/s'],
   ['maxZoom',     'gzMaxZoom',     v => Math.round(v * 100) + '%'],
   ['minZoom',     'gzMinZoom',     v => Math.round(v * 100) + '%']
 ];
@@ -7389,7 +7392,7 @@ async function setGestureZoom(on){
 
 const GESTURE_ZOOM_TOOL = {
   name: 'gesture_zoom',
-  description: "Turn two-hand gesture zoom on or off. When it is on, he pinches thumb and index finger on BOTH hands in front of the camera and pulls his hands apart to zoom in, or together to zoom out, on whatever program is in front — a web page, a PDF, a picture, a 3D model; letting go with either hand stops it. Use it for \"turn on gesture zoom\", \"let me zoom with my hands\", \"תפעיל זום עם הידיים\", and with on=false for \"turn off gesture zoom\". Turning it on opens the camera, which it needs. Confirm in one short line, and tell him the gesture if he may not know it.",
+  description: "Turn two-hand gesture zoom on or off. When it is on, he pinches thumb and index finger on BOTH hands in front of the camera, and every centimetre or so he moves his hands APART zooms in one step, every centimetre TOGETHER zooms out one step, on whatever program is in front (holding them still does nothing) — a web page, a PDF, a picture, a 3D model; letting go with either hand stops it. Use it for \"turn on gesture zoom\", \"let me zoom with my hands\", \"תפעיל זום עם הידיים\", and with on=false for \"turn off gesture zoom\". Turning it on opens the camera, which it needs. Confirm in one short line, and tell him the gesture if he may not know it.",
   input_schema: {
     type: 'object',
     properties: { on: { type:'boolean', description:'true to turn it on (opening the camera if it is off), false to turn it off.' } },

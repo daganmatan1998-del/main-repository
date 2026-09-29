@@ -194,9 +194,15 @@ single file `dist/index.html`.
   index tip over palm length (on < 0.30, off > 0.42, two frames each way)
   AND the fist guard (index tip and thumb tip both > 0.33 palm from the
   index knuckle — a fist reads 0.20 on the pinch alone). Distance is over
-  hand size, so leaning in is not a zoom. Position control from a fresh
-  median baseline, 8 % dead zone subtracted, eased and slew-limited; either
-  hand letting go ends it. Rust does only the OS half: `zoom_target`
+  hand size, so leaning in is not a zoom. Since 2.10.4 it is MOVEMENT
+  control, not position: each ~1 cm (1/PALM_CM of a palm, PALM_CM = 9) the
+  pinches move apart is one step in, together one step out, counted from an
+  anchor that moves one step at a time (no twitching); hands held still do
+  nothing; the first `threshold` mm are ignored; "zooming" starts at the
+  first real step. ZoomManager sends one notch per step (×STEP_3D = 1.1 for
+  our viewer), at most maxSpeed a second, at most a second's worth queued,
+  and stops at min/maxZoom. Settings: sensitivity = steps per cm, threshold
+  mm, maxSpeed steps/s. Either hand letting go ends it. Rust does only the OS half: `zoom_target`
   (foreground, else the last non-orb/camera window; exe via
   QueryFullProcessImageName, UWP child exe; class; full screen) and
   `zoom_send` (verified-foreground, WindowFromPoint-aimed Ctrl/Alt/plain
@@ -265,6 +271,16 @@ single file `dist/index.html`.
   same thing he asked about (verb directly on it, not negated, not a
   question) is carried out by the app before any corrective round.
   planRequests drops a courtesy-only part ("could you do me a favour").
+- **The camera window tries every camera (2.10.4).** "Timeout starting
+  video source" is Windows opening a camera that never sends a frame —
+  usually the infrared Windows Hello camera picked for "facingMode: user",
+  a camera still being released, or one busy elsewhere. camera.html start():
+  remembered deviceId (jarvis:camdev) → the ordinary request → every
+  videoinput by deviceId, IR/Hello last, 720p then any size → the whole
+  round again after 2 s; NotAllowed/NotFound stop at once; the failure has
+  a Try again button; play() is raced with 2.5 s so a frameless camera does
+  not hang the window. The main window never holds the camera (its
+  getUserMedia video calls are click-only website features).
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.
