@@ -308,6 +308,18 @@ single file `dist/index.html`.
   one on the Desktop; never overwrites; Windows reserved names get
   "model-"). open_model_window takes an optional name (the caption) for
   the file. lock.e2e.mjs, makeit.test.mjs and viewer.e2e.mjs cover it.
+- **The Meshy key is read through meshyKey(env) (worker 2.6.7), never
+  env.MESHY_API_KEY directly.** It takes MESHY_API_KEY, then MESHY_KEY /
+  MESHY_API_TOKEN / MESHY_TOKEN / MESHY, and cleans it (spaces, quotes,
+  "Bearer ", a pasted label; an msy_ key is extracted). Meshy refusals go
+  through meshyFailure: coded meshy_key / meshy_credits / meshy_busy /
+  meshy_down (meshy_missing when absent), each with error (the fix) and
+  tell_the_user (a short spoken line), returned as 502, NEVER 401 (the page
+  reads 401 as its own session expiring and would show the PIN screen).
+  GET /model3d/check reads only the balance (no credit spent); /health
+  reports model3d_key set|missing|not_msy and the name, never the value.
+  Page: meshyReason carries code/tell_the_user/fix out of runModel3dJob;
+  check_3d_service is offered only when health says model3d_check.
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.

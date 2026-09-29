@@ -2494,7 +2494,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.11.0';
+const APP_VERSION = '2.11.1';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -10548,6 +10548,31 @@ const MODEL_WINDOW_TOOL = {
   input_schema: { type:'object', properties: {}, required: [] }
 };
 
+const CHECK3D_TOOL = {
+  name: 'check_3d_service',
+  description: "Check whether the 3D service works, without making anything or spending a credit: whether the worker has a Meshy key, whether Meshy accepts it, and how many credits are left. Use it when he asks about the Meshy key, the 3D credits, or why 3D models fail, and after a 3D job failed with a key or credit error, before telling him what to do. Say what it found in one or two sentences: the key works and N credits are left; or it is refused / missing / out of credits, and the fix it names. Never read out or guess at the key itself.",
+  input_schema: { type:'object', properties: {}, required: [] }
+};
+
+async function callCheck3dTool(){
+  if(!backendUrl) return { error: '3D generation needs your backend to be connected' };
+  try{
+    const res = await fetch(backendUrl + '/model3d/check', { headers: jarvisHeaders() });
+    if(res.status === 401){ await forceReauth(); return { error: 'session expired' }; }
+    if(res.status === 404) return { error: 'this worker is older than 2.6.7 and cannot check the key',
+                                    tell_the_user: 'The worker needs redeploying before I can check the Meshy key.' };
+    const r = await res.json();
+    if(r.ok){
+      return { ok: true, key_works: true, credits: r.balance, key_name: r.key_name, key_was_cleaned: !!r.key_was_cleaned,
+               note: r.note || ('The Meshy key works' + (typeof r.balance === 'number' ? ' and ' + r.balance + ' credits are left.' : '.')) };
+    }
+    return Object.assign({ key_works: false }, meshyReason(r, 'the check failed'),
+                         { key_name: r.key_name || null, key_looks_right: !!r.key_looks_right });
+  }catch(err){
+    return { error: 'could not reach the worker: ' + ((err && err.message) || err) };
+  }
+}
+
 const PHOTO3D_TOOL = {
   name: 'photo_to_3d',
   description: "Turn something he is SHOWING you into a real 3D model — the object in front of the camera, on his screen, or in a photo he sent — with its own shape and its own colours rather than an invented lookalike. Use it for every \"make a 3D model of it\", \"turn this into 3D\", \"model this\", \"תעשה מזה מודל תלת מימדי\", in any wording. Never build_3d_model or generate_3d_model for a thing he is showing you.\n\nIT HAS TWO STEPS, AND NEITHER IS OPTIONAL. First call it WITHOUT analysis: it takes the picture and shows you exactly what will be sent. Then study that picture the way a 3D artist would — what the object is, how it looks from the front, back, left, right, top and bottom (seen, or inferred and from what), its proportions, every part's material, finish and colour, its symmetry, and what is hidden — and call it again with image_id and that analysis. Only the second call sends anything, and it refuses an analysis with a side missing. No shortcut: an object sent unstudied comes back guessed.\n\nINFER, NEVER INTERVIEW. Everything the study needs, you work out from the picture yourself: the length, width and height from its proportions and whatever gives scale (a hand, a desk, a label, a cable), the sides you cannot see from its symmetry and from how such things are made, the materials from how the light sits on them. Do not ask him for measurements, for the other side, or for anything the picture already answers \u2014 that is the whole point of you looking. Make the call, send it, and state your main assumption in one short sentence (\"I took it as about 15 cm tall, the back plain\"); he will say if it is wrong. Only when nothing at all can be seen do you say so.\n\nsource: 'auto' (default) picks what he is showing you — a photo sent this turn, else the live camera, else his screen while you are watching it, else the last photo he sent. Or name it: 'camera', 'screen', 'attached'. If there is nothing to take, say so rather than inventing an object.\n\nRoughly a minute, one credit. When it is done the model opens in its own frameless window on his screen; he closes it by right-clicking it, or from the taskbar.",
@@ -10814,8 +10839,16 @@ async function runLockedModel3d(seen, text){
     line = (IS_DESKTOP && !result.window) ? T('lockNoWindow')
          : result.textured === false ? T('lockReadyBare') : T('lockReady');
   } else {
-    const why = timedOut ? (he ? 'לקח יותר מדי זמן' : 'it took too long') : String((result && result.error) || 'unknown');
-    line = T('lockFailed').replace('{why}', why);
+    if(!timedOut && result && result.tell_the_user && !he){
+      line = result.tell_the_user;   // "Meshy refused the API key..." — the detail is in the log
+    } else {
+      const why = timedOut ? (he ? 'לקח יותר מדי זמן' : 'it took too long')
+                : (he && result && result.code === 'meshy_key') ? 'Meshy דחה את המפתח. צריך מפתח Meshy חדש ב-worker'
+                : (he && result && result.code === 'meshy_missing') ? 'אין מפתח Meshy ב-worker'
+                : (he && result && result.code === 'meshy_credits') ? 'נגמרו הקרדיטים בחשבון Meshy'
+                : String((result && result.error) || 'unknown');
+      line = T('lockFailed').replace('{why}', why);
+    }
   }
   line = addressHim(line, he);
   addMessage('assistant', line);
@@ -11084,6 +11117,19 @@ function whereShown(inWindow){
                   : 'It is displayed in the chat and he can rotate it.';
 }
 
+function meshyReason(r, fallback){
+  const out = { error: (r && r.error) || fallback };
+  if(r && r.code) out.code = r.code;
+  if(r && r.tell_the_user) out.tell_the_user = r.tell_the_user;
+  if(r && /^meshy_(key|missing|credits)$/.test(r.code || '')){
+    out.fix = r.code === 'meshy_credits'
+      ? 'Top up the Meshy account at meshy.ai.'
+      : 'Cloudflare dashboard, the jarvis worker, Settings, Variables and Secrets: set MESHY_API_KEY to a key made at meshy.ai (Settings, API), then Deploy. check_3d_service then says whether Meshy accepts it.';
+    addMessage('system', '3D: ' + out.error);
+  }
+  return out;
+}
+
 async function runModel3dJob(body, firstLabel, caption){
   try{
     const startRes = await fetch(backendUrl + '/model3d', {
@@ -11091,7 +11137,10 @@ async function runModel3dJob(body, firstLabel, caption){
     });
     if(startRes.status === 401){ await forceReauth(); return { error:'session expired' }; }
     const started = await startRes.json();
-    if(!startRes.ok || !started.taskId) return { error: started.error || 'could not start the 3D job' };
+    /* Worker 2.6.7 names what Meshy refused (code, and a short line to
+       say); both ride along so neither he nor the model is left with
+       "a problem with the key" and no fix. */
+    if(!startRes.ok || !started.taskId) return meshyReason(started, 'could not start the 3D job');
 
     const note = addMessage('system', firstLabel);
     hudFollow(note);
@@ -11122,7 +11171,7 @@ async function runModel3dJob(body, firstLabel, caption){
       });
       if(pollRes.status === 401){ note.remove(); await forceReauth(); return { error:'session expired' }; }
       const st = await pollRes.json();
-      if(!pollRes.ok){ note.remove(); return { error: st.error || 'status check failed' }; }
+      if(!pollRes.ok){ note.remove(); return meshyReason(st, 'status check failed'); }
 
       // The mesh is done and the texture pass has started on a new task id.
       if(st.status === 'TEXTURING' && st.taskId){
@@ -14628,6 +14677,9 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
        already avoids. */
     if(agentRegistryCache) everydayTools.push(MULTI_AGENT_TOOL, AGENT_SYSTEM_TOOL);
     const advancedTools = [BUILD3D_TOOL, MODEL3D_TOOL, PHOTO3D_TOOL, GENERATE_IMAGE_TOOL, MAKE_ZIP_TOOL];
+    /* Only from a worker that has the check (2.6.7): offered to an older
+       one it could only ever answer "not found". */
+    if(caps.model3d_check) advancedTools.push(CHECK3D_TOOL);
     if(IS_DESKTOP) advancedTools.push(MODEL_WINDOW_TOOL);
     requestBody.tools = fullCapability()
       ? everydayTools.concat(advancedTools)
@@ -15153,6 +15205,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callModel3dTool(tu.input);
           } else if(tu.name === 'photo_to_3d'){
             payload = await callPhoto3dTool(tu.input);
+          } else if(tu.name === 'check_3d_service'){
+            payload = await callCheck3dTool();
           } else if(tu.name === 'show_model_in_window'){
             payload = await openModelWindow(null);
           } else if(tu.name === 'open_workspace'){

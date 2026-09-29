@@ -27,6 +27,32 @@ ones came up.
 Voice input needs `/stt`, which this worker has. WebView2 carries no Web Speech
 API, so on the desktop app transcription has nowhere else to come from.
 
+## The Meshy key (3D models)
+
+3D models are made by Meshy, and the key lives on the worker, never in the
+app:
+
+1. At meshy.ai, go to Settings → API and create a key. It starts with `msy_`.
+2. In the Cloudflare dashboard, open the jarvis worker → Settings →
+   Variables and Secrets → add a **Secret** named `MESHY_API_KEY` with that
+   key as its value.
+3. Deploy the worker.
+
+Then ask JARVIS "is my Meshy key working?". He checks with Meshy itself
+(`GET /model3d/check`, which only reads the balance, so it makes nothing
+and costs no credit) and says whether the key works and how many credits
+are left, or what is wrong. Since worker 2.6.7:
+
+- A key stored with a space or newline, in quotes, with "Bearer " in front
+  or with its label pasted in is cleaned before use.
+- The names `MESHY_KEY`, `MESHY_API_TOKEN` and `MESHY_TOKEN` work too.
+- A refused key (401) is said as "Meshy refused the API key", with these
+  steps as the fix, not as raw "meshy 401". It also notes when the stored
+  key does not start with `msy_` and is probably another service's.
+- No credits (402), rate-limited (429) and Meshy down are each named.
+- `/health` shows `model3d_key` (`set`, `missing` or `not_msy`) and which
+  name it was found under, never the key.
+
 ## Connecting Google Calendar
 
 Two secrets on the worker, then one sentence to JARVIS. Once:
@@ -319,6 +345,22 @@ Checked across eleven real provider configurations — that the picture is
 actually forwarded where it should be, actually stripped where it must be, that
 the warning fires only in the second case, and that a blind primary is overtaken
 in the chain by a fallback that can see.
+
+## Page 2.11.1 / worker 2.6.7: "a problem with the Meshy key"
+
+JARVIS reported a problem with the Meshy key and could say no more, because
+the worker passed Meshy's refusal on raw and sent the key exactly as stored.
+Now:
+
+- the key is cleaned and read under its common names;
+- every refusal is coded and names its fix;
+- `check_3d_service` (offered only by a worker that has `/model3d/check`)
+  lets him test the key without making anything;
+- the locked "make it a 3D model" build says the short reason out loud,
+  with the fix in the log.
+
+See "The Meshy key" above for setting it. Tested in `meshykey.test.mjs`
+(41, the real worker) and `meshy.e2e.mjs` (13, the real page).
 
 ## Page 2.11.0: "make it a 3D model", a refresh button, and the blueprint viewer
 

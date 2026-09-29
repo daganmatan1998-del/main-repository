@@ -77,7 +77,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.6.6';
+const WORKER_VERSION = '2.6.7';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -112,6 +112,7 @@ export default {
       if (path === '/tts')                         return await handleTts(request, env);
       if (path === '/model3d')                     return await handleModel3d(request, env);
       if (path === '/model3d/status')              return await handleModel3dStatus(request, env);
+      if (path === '/model3d/check')               return await handleModel3dCheck(request, env);
       if (path === '/image')                       return await handleImage(request, env);
       if (path === '/stt')                         return await handleStt(request, env);
       if (path === '/fetch')                       return await handleFetch(request, env);
@@ -299,7 +300,15 @@ async function health(env) {
     vision_describer: env.AI ? describersFor(env)[0].model : null,
     voice: !!(env.CARTESIA_API_KEY || env.AI),
     voice_via: env.CARTESIA_API_KEY ? 'cartesia' : (env.AI ? 'workers-ai' : false),
-    model3d: !!env.MESHY_API_KEY,
+    model3d: !!meshyKey(env).key,
+    /* Whether the key LOOKS right, never the key: missing, set, or set but
+       not shaped like a Meshy key (they begin msy_). The name it was found
+       under, and whether it had to be cleaned (quotes, spaces, "Bearer"),
+       so a secret stored slightly wrong can be seen from the page. */
+    model3d_key: (() => { const k = meshyKey(env); return !k.key ? 'missing' : k.looksRight ? 'set' : 'not_msy'; })(),
+    model3d_key_name: meshyKey(env).name || null,
+    model3d_key_cleaned: meshyKey(env).cleaned,
+    model3d_check: true,      // present only on workers that carry /model3d/check
     images: !!env.AI,
     stt: !!env.AI,
     read_page: true,          // present only on workers that carry /fetch
@@ -833,6 +842,65 @@ const MESHY_IMAGE_BASE = 'https://api.meshy.ai/openapi/v1/image-to-3d';
 function meshyBaseFor(kind){
   return kind === 'image' ? MESHY_IMAGE_BASE : MESHY_BASE;
 }
+const MESHY_BALANCE_URL = 'https://api.meshy.ai/openapi/v1/balance';
+
+/* THE KEY, AS MESHY NEEDS IT (2.6.7). It was sent exactly as stored, so a
+   key pasted with a trailing space or newline, in quotes, with "Bearer "
+   in front, or with its label ("MESHY_API_KEY=msy_...") was refused by
+   Meshy as a wrong key — and that reached him only as "a problem with the
+   key". Cleaned the way googleClient cleans the Google values, and read
+   under the names it is commonly given. The value itself is never shown
+   anywhere; only whether it looks right. */
+const MESHY_KEY_NAMES = ['MESHY_API_KEY', 'MESHY_KEY', 'MESHY_API_TOKEN', 'MESHY_TOKEN', 'MESHY'];
+function meshyKey(env) {
+  const name = MESHY_KEY_NAMES.find(n => String(env[n] || '').trim());
+  if (!name) return { key: '', name: '', cleaned: false, looksRight: false };
+  const raw = String(env[name]);
+  let key = raw.trim()
+    .replace(/^[A-Za-z_]*(?:MESHY|KEY|TOKEN)[A-Za-z_]*\s*[=:]\s*/i, '')
+    .replace(/^['"`]+|['"`]+$/g, '').trim()
+    .replace(/^Bearer\s+/i, '').trim();
+  const m = /msy_[A-Za-z0-9_-]+/.exec(key);
+  if (m) key = m[0];
+  key = key.replace(/\s+/g, '');
+  return { key, name, cleaned: key !== raw, looksRight: /^msy_[A-Za-z0-9_-]{8,}$/.test(key) };
+}
+
+/* What Meshy's refusal means, in words that name the fix. Never a 401 to
+   the page: the page reads 401 as its own session having expired and
+   would send him back to the PIN screen for Meshy's reason. */
+function meshyFailure(status, text, env) {
+  const k = meshyKey(env);
+  const shape = k.looksRight ? '' :
+    ' The key the worker holds' + (k.name ? ' (' + k.name + ')' : '') + ' does not start with msy_, so it is probably not a Meshy API key at all.';
+  if (status === 401 || status === 403) {
+    return { code: 'meshy_key', http: status,
+      error: 'Meshy refused the API key (' + status + ').' + shape +
+             ' Make a new key at meshy.ai (Settings, then API), set it on the worker as the secret MESHY_API_KEY, and deploy.',
+      tell_the_user: 'Meshy refused the API key, so no model was made. It needs a new Meshy key in the worker.' };
+  }
+  if (status === 402) {
+    return { code: 'meshy_credits', http: status,
+      error: 'The Meshy account has no credits left (402). Top it up at meshy.ai; nothing was made or charged.',
+      tell_the_user: 'The Meshy account is out of credits, so no model was made.' };
+  }
+  if (status === 429) {
+    return { code: 'meshy_busy', http: status,
+      error: 'Meshy is rate-limiting this key (429). Wait a minute and try again.',
+      tell_the_user: 'Meshy is busy right now. Try again in a minute.' };
+  }
+  if (status >= 500) {
+    return { code: 'meshy_down', http: status,
+      error: 'Meshy itself failed (' + status + '): ' + String(text || '').slice(0, 200),
+      tell_the_user: 'The 3D service is having trouble right now.' };
+  }
+  return { code: 'meshy_error', http: status, error: 'meshy ' + status + ': ' + String(text || '').slice(0, 300) };
+}
+function meshyNotConfigured() {
+  return { code: 'meshy_missing',
+    error: '3D generation is not configured: the worker has no MESHY_API_KEY. Make a key at meshy.ai (Settings, then API), add it to the worker as the secret MESHY_API_KEY, and deploy.',
+    tell_the_user: 'The 3D service has no Meshy key yet, so no model was made.' };
+}
 
 /* Meshy's text-to-3D is two jobs, not one. `preview` produces the mesh: the
    right shape, but bare geometry with no surface on it. `refine` takes that
@@ -850,12 +918,12 @@ async function startMeshyTask(payload, env, kind) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + env.MESHY_API_KEY
+      'Authorization': 'Bearer ' + meshyKey(env).key
     },
     body: JSON.stringify(payload)
   });
   const text = await res.text();
-  if (!res.ok) return { error: 'meshy ' + res.status + ': ' + text.slice(0, 300) };
+  if (!res.ok) return meshyFailure(res.status, text, env);
   let data; try { data = JSON.parse(text); } catch (err) { data = {}; }
   const taskId = data.result || data.id;
   if (!taskId) return { error: 'meshy did not return a task id: ' + text.slice(0, 200) };
@@ -864,9 +932,7 @@ async function startMeshyTask(payload, env, kind) {
 
 async function handleModel3d(request, env) {
   if (request.method !== 'POST') return json({ error: 'POST only' }, 405, env, request);
-  if (!env.MESHY_API_KEY) {
-    return json({ error: '3D generation is not configured: add MESHY_API_KEY to the worker' }, 503, env, request);
-  }
+  if (!meshyKey(env).key) return json(meshyNotConfigured(), 503, env, request);
   const body = await request.json().catch(() => ({}));
 
   /* A picture, if one came. Meshy takes it as a data URI, which is what the
@@ -898,7 +964,7 @@ async function handleModel3d(request, env) {
     const symmetry = String((body && body.symmetry_mode) || '').trim();
     if (symmetry === 'on' || symmetry === 'off' || symmetry === 'auto') meshyImage.symmetry_mode = symmetry;
     const startedImg = await startMeshyTask(meshyImage, env, 'image');
-    if (startedImg.error) return json({ error: startedImg.error }, 502, env, request);
+    if (startedImg.error) return json(startedImg, 502, env, request);
     return json({ taskId: startedImg.taskId, kind: 'image', stage: 'single' }, 200, env, request);
   }
 
@@ -911,25 +977,47 @@ async function handleModel3d(request, env) {
     art_style: body.style === 'sculpture' ? 'sculpture' : 'realistic',
     should_remesh: true
   }, env);
-  if (started.error) return json({ error: started.error }, 502, env, request);
+  if (started.error) return json(started, 502, env, request);
 
   return json({ taskId: started.taskId, kind: 'text', stage: 'preview' }, 200, env, request);
 }
 
 async function readMeshyTask(id, env, kind) {
   const res = await fetch(meshyBaseFor(kind) + '/' + encodeURIComponent(id), {
-    headers: { 'Authorization': 'Bearer ' + env.MESHY_API_KEY }
+    headers: { 'Authorization': 'Bearer ' + meshyKey(env).key }
   });
   const text = await res.text();
-  if (!res.ok) return { httpError: 'meshy ' + res.status + ': ' + text.slice(0, 300) };
+  if (!res.ok) { const f = meshyFailure(res.status, text, env); return { httpError: f.error, failure: f }; }
   let data; try { data = JSON.parse(text); } catch (err) { data = {}; }
   return { data: data };
 }
 
-async function handleModel3dStatus(request, env) {
-  if (!env.MESHY_API_KEY) {
-    return json({ error: '3D generation is not configured' }, 503, env, request);
+/* "Is my Meshy key all right?" answered by Meshy itself, without making
+   anything: the balance endpoint costs nothing and needs the same key. */
+async function handleModel3dCheck(request, env) {
+  const k = meshyKey(env);
+  const about = { key_name: k.name || null, key_looks_right: k.looksRight, key_was_cleaned: k.cleaned };
+  if (!k.key) return json(Object.assign({ ok: false }, meshyNotConfigured(), about), 200, env, request);
+  let res, text;
+  try {
+    res = await fetch(MESHY_BALANCE_URL, { headers: { 'Authorization': 'Bearer ' + k.key } });
+    text = await res.text();
+  } catch (err) {
+    return json(Object.assign({ ok: false, code: 'meshy_unreachable',
+      error: 'Meshy could not be reached from the worker: ' + ((err && err.message) || err),
+      tell_the_user: 'The 3D service could not be reached just now.' }, about), 200, env, request);
   }
+  if (!res.ok) return json(Object.assign({ ok: false }, meshyFailure(res.status, text, env), about), 200, env, request);
+  let data = {}; try { data = JSON.parse(text); } catch (e) {}
+  const balance = typeof data.balance === 'number' ? data.balance
+                : typeof data.credits === 'number' ? data.credits : null;
+  return json(Object.assign({ ok: true, balance,
+    note: balance === 0 ? 'The key works, but the account has no credits: every model will fail with 402 until it is topped up.' : null
+  }, about), 200, env, request);
+}
+
+async function handleModel3dStatus(request, env) {
+  if (!meshyKey(env).key) return json(meshyNotConfigured(), 503, env, request);
   const params = new URL(request.url).searchParams;
   const id = params.get('id');
   if (!id) return json({ error: 'missing id' }, 400, env, request);
@@ -941,7 +1029,7 @@ async function handleModel3dStatus(request, env) {
   const wantsTexture = kind === 'image' ? false : params.get('refine') !== '0';
 
   const read = await readMeshyTask(id, env, kind);
-  if (read.httpError) return json({ error: read.httpError }, 502, env, request);
+  if (read.httpError) return json(read.failure || { error: read.httpError }, 502, env, request);
   const data = read.data;
 
   const status = String(data.status || '').toUpperCase();
