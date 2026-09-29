@@ -430,6 +430,9 @@
     white-space:nowrap;
   }
   .hudLine b{ font-weight:normal; color:#cfeeff; }
+  /* The task line while something is running: brighter, and breathing, so
+     a two-minute job reads as alive rather than as a stuck label. */
+  .hudTaskLine.busy b{ color:#8ff3ff; text-shadow:0 0 10px rgba(95,232,255,0.55); animation:hudBreathe 2.4s ease-in-out infinite; }
   .hudDash{
     width:22px; height:1px; margin-top:1.1em;
     background:rgba(120,195,235,0.55);
@@ -1524,6 +1527,7 @@
     <div class="hudLine">STATUS: <b id="hudStatus">—</b></div>
     <div class="hudLine">ENGINE: <b id="hudEngine">—</b></div>
     <div class="hudLine">MIC: <b id="hudMic">—</b></div>
+    <div class="hudLine hudTaskLine">TASK: <b id="hudTask">—</b></div>
     <div class="hudLine">VERSION: <b id="hudVersion">—</b></div>
     <div class="hudDash"></div>
   </div>
@@ -2473,7 +2477,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.10.1';
+const APP_VERSION = '2.10.2';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -8213,6 +8217,7 @@ function setToolStatus(label){
   if(!toolStatusEl || !toolStatusEl.isConnected){
     toolStatusEl = addMessage('system', label);
     toolStatusEl.classList.add('toolStatus');
+    hudFollow(toolStatusEl);
   } else {
     toolStatusEl.textContent = label;
   }
@@ -9236,6 +9241,7 @@ function cameraWindowUsable(){
 
 async function startLiveWindow(){
   const invoke = window.__TAURI__.core.invoke;
+  await makeRoomForOwnWindow();
   try{
     await invoke('open_camera_window');
   }catch(err){
@@ -10461,6 +10467,22 @@ async function callBuild3dTool(input){
     return { error:'the code threw while building: ' + (err.message || err) };
   }
   addModelBubble({ build: builder }, name);
+  /* On the desktop the chat is not on screen at all — not in the small orb
+     and not full screen — so a model shown only there was never seen. It
+     goes to the 3D viewer window, like one from the 3D service. */
+  if(IS_DESKTOP){
+    let url = null, why = '';
+    try{ url = await builtModelUrl(builder(THREE)); }
+    catch(err){ why = (err && err.message) || String(err); }
+    if(url) lastModelUrl = url;
+    const inWindow = url ? await showModelWindowToo(url) : false;
+    if(!inWindow){
+      return { error: 'the model was built but could not be shown: ' + (why || 'the 3D window did not open'),
+               tell_the_user: 'Say the model was built but its window would not open, and why. Do not describe it as on his screen.' };
+    }
+    return { ok:true, shown:true, window:true,
+             note:'The model is open in its own frameless window on his screen (he turns it by dragging, and closes it by right-clicking it or from the taskbar). Describe it briefly; do not repeat the code.' };
+  }
   return { ok:true, shown:true,
            note:'The model is displayed in the chat and the user can rotate it. Describe it briefly; do not repeat the code.' };
 }
@@ -10478,6 +10500,7 @@ async function openModelWindow(url){
   if(!IS_DESKTOP) return { error: 'a separate window is only possible in the desktop app' };
   const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
   if(!invoke) return { error: 'the desktop bridge is unavailable' };
+  await makeRoomForOwnWindow();
   try{
     const how = await invoke('open_model_window', { url: glb });
     addMessage('system', t('modelWindowOpen'));
@@ -10741,6 +10764,91 @@ async function callModel3dTool(input){
    orb there is no chat to show the bubble in, so without this he would be
    told it is ready and see nothing. Not awaited for the answer's sake: a
    window that fails to open still leaves the model in the chat. */
+/* FULL SCREEN AND JARVIS'S OWN WINDOWS (2.10.2).
+
+   Full screen, the orb is one opaque window over the whole monitor, and it
+   used to be always-on-top as well: the 3D viewer opened behind it and the
+   camera window went under it the moment the orb was clicked. orb_layer
+   (main.rs) fixes the order. A build without it cannot, so there the orb
+   leaves full screen before one of its own windows opens, rather than
+   opening it where nobody can see it. */
+async function makeRoomForOwnWindow(){
+  try{
+    if(!(window.__orbExpanded && window.__orbExpanded())) return false;
+    if(!(window.__orbLayerOk && window.__orbLayerOk() === false)) return false;
+    if(!window.__orbExpand) return false;
+    await window.__orbExpand(false);
+    addMessage('system', currentLang === 'he'
+      ? 'יצאתי ממסך מלא כדי שהחלון יהיה גלוי (הגרסה הזו של האפליקציה לא יודעת להעלות אותו מעליה)'
+      : 'Left full screen so the window can be seen (this build cannot raise it above full screen)');
+    return true;
+  }catch(err){ return false; }
+}
+
+/* THE HUD'S TASK LINE. On the desktop the chat is not on screen at all, so
+   the status of a long job — "3D model: texturing 45%" — was written where
+   nobody could read it, and full screen showed nothing for two minutes. The
+   HUD mirrors whichever status line is current, and clears when it goes. */
+let hudTaskEl = null, hudTaskObs = null;
+function hudFollow(el){
+  const line = document.getElementById('hudTask');
+  if(!line || !el || typeof MutationObserver === 'undefined') return;
+  if(hudTaskObs){ hudTaskObs.disconnect(); hudTaskObs = null; }
+  hudTaskEl = el;
+  const row = line.parentElement;
+  const paint = ()=>{
+    if(hudTaskEl !== el) return;
+    if(!el.isConnected){
+      line.textContent = '—';
+      if(row) row.classList.remove('busy');
+      if(hudTaskObs){ hudTaskObs.disconnect(); hudTaskObs = null; }
+      hudTaskEl = null;
+      return;
+    }
+    const s = String(el.textContent || '').replace(/^[▸\s]+/, '').trim();
+    line.textContent = s ? (s.length > 40 ? s.slice(0, 39) + '…' : s) : '—';
+    if(row) row.classList.toggle('busy', !!s);
+  };
+  hudTaskObs = new MutationObserver(paint);
+  hudTaskObs.observe(el, { characterData:true, childList:true, subtree:true });
+  if(el.parentNode) hudTaskObs.observe(el.parentNode, { childList:true });
+  paint();
+}
+
+/* A model built in code, as something the 3D viewer window can load. The
+   .glb is left with the app (stash_model) and the viewer asks for it by
+   key — any size. A build without the stash gets a data: URL instead, which
+   the viewer decodes without fetching anything, up to about 900 KB: past
+   that, base64 and percent-encoding take the address over Chromium's 2 MB
+   limit. */
+function builtModelUrl(object){
+  return new Promise((resolve, reject)=>{
+    if(!THREE.GLTFExporter){ reject(new Error('the GLB exporter did not load')); return; }
+    try{
+      new THREE.GLTFExporter().parse(object, (result)=>{
+        try{
+          if(!(result instanceof ArrayBuffer)){ reject(new Error('the exporter did not produce a binary model')); return; }
+          const r = new FileReader();
+          r.onerror = ()=> reject(new Error('could not encode the model'));
+          r.onload = async ()=>{
+            const b64 = String(r.result).split(',')[1] || '';
+            try{
+              const key = await window.__TAURI__.core.invoke('stash_model', { b64 });
+              if(key){ resolve('stash:' + key); return; }
+            }catch(err){ /* an older build: the address has to carry it */ }
+            if(result.byteLength > 900 * 1024){
+              reject(new Error('the model is too large to open in a window in this build of the app'));
+              return;
+            }
+            resolve('data:model/gltf-binary;base64,' + b64);
+          };
+          r.readAsDataURL(new Blob([result], { type:'model/gltf-binary' }));
+        }catch(err){ reject(err); }
+      }, { binary:true });
+    }catch(err){ reject(err); }
+  });
+}
+
 async function showModelWindowToo(glb){
   if(!IS_DESKTOP || !glb) return false;
   try{ const r = await openModelWindow(glb); return !!(r && r.ok); }catch(e){ return false; }
@@ -10760,6 +10868,7 @@ async function runModel3dJob(body, firstLabel, caption){
     if(!startRes.ok || !started.taskId) return { error: started.error || 'could not start the 3D job' };
 
     const note = addMessage('system', firstLabel);
+    hudFollow(note);
 
     /* Two jobs run back to back now — the mesh, then the texture pass over it
        — and the worker says which one is being polled. The page's only job is
@@ -16703,12 +16812,27 @@ adjustLayout();
      view, where there is room for it and where you go precisely when you
      want to check on things. */
   let expanded = false;
+  /* Full screen the orb stops being always-on-top and JARVIS's own windows
+     float above it; small again, the orb is back on top (orb_layer in
+     main.rs, and makeRoomForOwnWindow for a build without it). */
+  let orbLayerOk = null;
+  async function orbLayer(on){
+    try{
+      await window.__TAURI__.core.invoke('orb_layer', { expanded: !!on });
+      orbLayerOk = true;
+    }catch(err){
+      orbLayerOk = false;
+      console.info('JARVIS: no orb_layer in this build -', (err && err.message) || err);
+    }
+  }
+  window.__orbLayerOk = ()=> orbLayerOk;
   async function setExpanded(on){
     expanded = !!on;
     root.classList.toggle('orb-expanded', expanded);
     const w = tauriWindow();
     if(!w) return;
     fsTransitionUntil = Date.now() + FS_TRANSITION_MS;
+    if(expanded) await orbLayer(true);
     try{
       await w.setFullscreen(expanded);
       if(!expanded){
@@ -16719,6 +16843,7 @@ adjustLayout();
         setTimeout(()=>{ try{ restoreOrbPlace(); }catch(err){} }, 60);
       }
     }catch(err){ console.warn('expand failed', err); }
+    if(!expanded) await orbLayer(false);
   }
 
   /* ------------------------------------------------------------------

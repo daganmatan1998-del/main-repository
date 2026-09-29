@@ -64,6 +64,11 @@ const PTT_LABEL: &str = "\\ (backslash)";
    that would be a JARVIS who cannot hear anything and no way to find out. */
 static PTT_REGISTERED: AtomicBool = AtomicBool::new(false);
 
+/* Whether the orb is filling the screen (see orb_layer). Read when the 3D
+   viewer or a workspace pane is created, so one opened while he is in the
+   full-screen environment is born above it instead of behind it. */
+static ORB_EXPANDED: AtomicBool = AtomicBool::new(false);
+
 /* Park the panel against the right-hand edge, vertically centred — the corner
    of the screen you are least likely to be working in. Done in code rather
    than as fixed coordinates in the config because the right edge depends on
@@ -1121,8 +1126,60 @@ fn bring_window_here(
    Captures the primary monitor only. Multi-monitor selection would need a
    way to say which one, and there is no obvious vocabulary for that by
    voice — "the left one" means nothing to a display index. */
+/* JARVIS DOES NOT SEE HIMSELF.
+
+   The capture below is the composed desktop, so with the orb full screen it
+   was a picture of JARVIS's own interface: "look at my screen" and "make a
+   3D model of what is on my screen" got the HUD instead of his work. For
+   the moment of a capture the orb is excluded from it
+   (WDA_EXCLUDEFROMCAPTURE, Windows 10 2004 and later) and put back straight
+   after. Nothing changes on screen, and his own screenshots and screen
+   shares are untouched. On an older Windows the call fails and the capture
+   is simply what it always was. */
+#[cfg(target_os = "windows")]
+struct OrbOutOfCapture(isize);
+
+#[cfg(target_os = "windows")]
+impl OrbOutOfCapture {
+    fn new(app: &tauri::AppHandle) -> Self {
+        use windows_sys::Win32::Foundation::HWND;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            IsWindowVisible, SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE,
+        };
+        let h = app
+            .get_webview_window("main")
+            .and_then(|w| w.hwnd().ok())
+            .map(|h| h.0 as isize)
+            .unwrap_or(0);
+        unsafe {
+            if h != 0
+                && IsWindowVisible(h as HWND) != 0
+                && SetWindowDisplayAffinity(h as HWND, WDA_EXCLUDEFROMCAPTURE) != 0
+            {
+                // One composition pass for DWM to apply it (~16 ms a frame).
+                std::thread::sleep(std::time::Duration::from_millis(70));
+                return OrbOutOfCapture(h);
+            }
+        }
+        OrbOutOfCapture(0)
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for OrbOutOfCapture {
+    fn drop(&mut self) {
+        use windows_sys::Win32::Foundation::HWND;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{SetWindowDisplayAffinity, WDA_NONE};
+        if self.0 != 0 {
+            unsafe {
+                SetWindowDisplayAffinity(self.0 as HWND, WDA_NONE);
+            }
+        }
+    }
+}
+
 #[tauri::command]
-fn take_screenshot() -> Result<String, String> {
+fn take_screenshot(app: tauri::AppHandle) -> Result<String, String> {
     use base64::{engine::general_purpose::STANDARD, Engine};
     use std::io::Cursor;
     use dirs_next;
@@ -1134,9 +1191,15 @@ fn take_screenshot() -> Result<String, String> {
         .find(|m| m.is_primary())
         .ok_or_else(|| "no primary monitor found".to_string())?;
 
+    #[cfg(target_os = "windows")]
+    let hidden = OrbOutOfCapture::new(&app);
+    #[cfg(not(target_os = "windows"))]
+    let _ = &app;
     let image = monitor
         .capture_image()
         .map_err(|e| format!("capture failed: {e}"))?;
+    #[cfg(target_os = "windows")]
+    drop(hidden);
 
     /* Scaled down before encoding. A 4K screenshot is several megabytes of
        PNG, which is slow to encode, slow to upload and far more detail than
@@ -1190,7 +1253,7 @@ fn take_screenshot() -> Result<String, String> {
  * screen full of photograph stays well inside the 5MB an image may be. PNG,
  * because the image crate is built with PNG only (see Cargo.toml). */
 #[tauri::command]
-fn capture_screen_frame() -> Result<String, String> {
+fn capture_screen_frame(app: tauri::AppHandle) -> Result<String, String> {
     use base64::{engine::general_purpose::STANDARD, Engine};
     use std::io::Cursor;
     use xcap::Monitor;
@@ -1201,9 +1264,15 @@ fn capture_screen_frame() -> Result<String, String> {
         .find(|m| m.is_primary())
         .ok_or_else(|| "no primary monitor found".to_string())?;
 
+    #[cfg(target_os = "windows")]
+    let hidden = OrbOutOfCapture::new(&app);
+    #[cfg(not(target_os = "windows"))]
+    let _ = &app;
     let image = monitor
         .capture_image()
         .map_err(|e| format!("capture failed: {e}"))?;
+    #[cfg(target_os = "windows")]
+    drop(hidden);
 
     let (w, h) = (image.width(), image.height());
     let image = if w > 1280 {
@@ -1273,13 +1342,28 @@ async fn open_model_window(app: tauri::AppHandle, url: String) -> Result<String,
         .resizable(true)
         .decorations(false)
         .shadow(false)
-        .always_on_top(false)
+        /* Above the orb while the orb fills the screen: that window is
+           opaque edge to edge, and a model opened behind it was a model
+           nobody ever saw. Ordinary otherwise. */
+        .always_on_top(ORB_EXPANDED.load(Ordering::SeqCst))
         .skip_taskbar(false);
     // A see-through webview needs the private API on macOS; everywhere else
     // it is an ordinary window attribute.
     #[cfg(not(target_os = "macos"))]
     let builder = builder.transparent(true);
-    builder.build().map_err(|e| e.to_string())?;
+    let win = builder.build().map_err(|e| e.to_string())?;
+    /* Centred on the screen the orb is on, not always on the primary one:
+       with the orb full screen on a second monitor, the model opened on
+       the other, out of sight. */
+    if let Some(main) = app.get_webview_window("main") {
+        if let (Ok(Some(mon)), Ok(size)) = (main.current_monitor(), win.outer_size()) {
+            let (mp, ms) = (mon.position(), mon.size());
+            let x = mp.x + (ms.width as i32 - size.width as i32) / 2;
+            let y = mp.y + (ms.height as i32 - size.height as i32) / 2;
+            let _ = win.set_position(tauri::PhysicalPosition { x, y });
+        }
+    }
+    let _ = win.set_focus();
     Ok("opened".into())
 }
 
@@ -1431,7 +1515,7 @@ async fn open_service_window(
         .min_inner_size(320.0, 260.0)
         .resizable(true)
         .decorations(true)
-        .always_on_top(false)
+        .always_on_top(ORB_EXPANDED.load(Ordering::SeqCst))
         .skip_taskbar(false)
         .build()
         .map_err(|e| e.to_string())?;
@@ -1534,6 +1618,79 @@ fn close_camera_window(app: tauri::AppHandle) -> bool {
 #[tauri::command]
 fn camera_window_open(app: tauri::AppHandle) -> bool {
     app.get_webview_window("camera").is_some()
+}
+
+/* A MODEL BUILT IN CODE, HANDED TO THE 3D VIEWER.
+
+   build_3d_model makes its mesh in the orb's page; the viewer is another
+   window. A data: URL in the viewer's address stops at about a megabyte
+   (Chromium's 2 MB limit, after base64 and percent-encoding), and a blob:
+   URL depends on two windows sharing one in-memory store. So the page
+   leaves the .glb here, as base64, and the viewer (model.html?glb=stash:KEY)
+   asks for it. The last few are kept, so "show it in a window" again still
+   finds the latest; older ones are dropped. */
+static MODEL_STASH: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+static MODEL_STASH_N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+#[tauri::command]
+fn stash_model(b64: String) -> Result<String, String> {
+    if b64.is_empty() || b64.len() > 64 * 1024 * 1024 {
+        return Err("no model, or one too large to hold".into());
+    }
+    let key = format!("m{}", MODEL_STASH_N.fetch_add(1, Ordering::SeqCst) + 1);
+    let mut s = MODEL_STASH.lock().map_err(|_| "the model store is unavailable".to_string())?;
+    s.push((key.clone(), b64));
+    let n = s.len();
+    if n > 3 {
+        s.drain(0..n - 3);
+    }
+    Ok(key)
+}
+
+#[tauri::command]
+fn stashed_model(key: String) -> Result<String, String> {
+    let s = MODEL_STASH.lock().map_err(|_| "the model store is unavailable".to_string())?;
+    s.iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, v)| v.clone())
+        .ok_or_else(|| "that model is no longer held — ask JARVIS to build it again".into())
+}
+
+/* WHO IS ON TOP WHILE THE ORB FILLS THE SCREEN.
+
+   The orb is always-on-top, which is right for a 180 px circle floating over
+   his work. Full screen, the same flag put an opaque, monitor-sized window
+   above everything: the 3D viewer (an ordinary window) opened behind it and
+   was never seen, and the camera window (also always-on-top) went under it
+   the moment the orb was clicked or spoken to — which is what "the camera
+   and the 3D models do not work in full screen" was. Nothing was broken
+   except the order.
+
+   So, full screen: the orb is an ordinary window, and JARVIS's own windows
+   (the camera, the 3D viewer, the workspace panes) float above it. Small
+   again: the orb goes back on top and the others back to normal. The page
+   calls this around setFullscreen; the flag it leaves is what a viewer or
+   pane created later is born with. */
+#[tauri::command]
+fn orb_layer(app: tauri::AppHandle, expanded: bool) -> Result<serde_json::Value, String> {
+    ORB_EXPANDED.store(expanded, Ordering::SeqCst);
+    let mut raised: Vec<String> = Vec::new();
+    for (label, w) in app.webview_windows() {
+        if label == "main" {
+            w.set_always_on_top(!expanded).map_err(|e| e.to_string())?;
+        } else if label == "camera" {
+            /* Always on top in both states. What puts it above the full-
+               screen orb is the orb leaving the always-on-top band, not
+               anything done here (tao only reorders when the flag changes). */
+            raised.push(label);
+        } else if label == "model" || label.starts_with("ws-") {
+            let _ = w.set_always_on_top(expanded);
+            if expanded {
+                raised.push(label);
+            }
+        }
+    }
+    Ok(serde_json::json!({ "expanded": expanded, "above": raised }))
 }
 
 /* The push-to-talk key's name, or nothing if it could not be registered.
@@ -1779,7 +1936,10 @@ fn main() {
             list_processes,
             zoom_target,
             zoom_send,
-            bring_window_here
+            bring_window_here,
+            orb_layer,
+            stash_model,
+            stashed_model
         ])
         .setup(|app| {
             let window = app

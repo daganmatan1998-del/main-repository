@@ -234,6 +234,23 @@ single file `dist/index.html`.
   SW_SHOWNOACTIVATE + SWP_NOACTIVATE, never stealing focus. Camera
   not_open → opened first (or its window put back if the page thinks it is
   on). Needs Win32_Graphics_Dwm for the cloaked check.
+- **Full screen, the orb must not be on top of its own windows (2.10.2).**
+  The orb is alwaysOnTop (tauri.conf); expanded it is opaque and
+  monitor-sized, so the 3D viewer (not topmost) opened behind it and the
+  camera (topmost) fell under it on every click — "camera and 3D do not
+  work in full screen". setExpanded calls `orb_layer` (main.rs) before
+  setFullscreen(true) and after setFullscreen(false): expanded, the orb is
+  not topmost and model/ws-* windows are; ORB_EXPANDED makes a viewer or
+  pane created meanwhile start above it. tao only reorders when the flag
+  CHANGES. No orb_layer (old build) → makeRoomForOwnWindow leaves full
+  screen before opening the camera or viewer. The desktop has NO chat on
+  screen (html.tauri #commPanel is display:none), so anything shown only
+  there is invisible: build_3d_model now exports a .glb → `stash_model` →
+  model.html?glb=stash:KEY → `stashed_model` (data: URL ≤ 900 KB as the
+  fallback), and the HUD's TASK line (hudFollow) mirrors the tool status and
+  3D job notes. take_screenshot/capture_screen_frame exclude the orb for the
+  capture (OrbOutOfCapture, WDA_EXCLUDEFROMCAPTURE) so JARVIS never captures
+  himself. fullscreen.e2e.mjs covers the page half.
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.

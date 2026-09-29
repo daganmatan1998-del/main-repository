@@ -320,6 +320,65 @@ actually forwarded where it should be, actually stripped where it must be, that
 the warning fires only in the second case, and that a blind primary is overtaken
 in the chain by a fallback that can see.
 
+## Page 2.10.2: the camera and 3D models in full screen
+
+Full screen, the camera "did not work" and 3D models "were never made".
+Both were being made. They were just out of sight. Everything that differs
+between the small orb and full screen was checked. Four real causes:
+
+1. **The orb covered its own windows.** The orb is always-on-top, which is
+   right for a 180 px circle. Full screen, the same flag put an opaque,
+   monitor-sized window above everything:
+   - the 3D viewer is an ordinary window, so it opened behind the orb;
+   - the camera window is also always-on-top, so it went under the orb as
+     soon as you clicked or spoke to the orb.
+
+   Now, full screen, the orb is an ordinary window, and the camera, the 3D
+   viewer and the workspace panes float above it. Small again, everything
+   goes back as before. This is `orb_layer` in `main.rs`, called on each
+   side of `setFullscreen`. A viewer or pane created while full screen
+   starts above the orb, and the viewer opens centred on the orb's monitor.
+   A build without `orb_layer` leaves full screen before opening one of
+   these windows, rather than opening it where it cannot be seen.
+
+2. **A model he built himself went only to the chat, and the desktop has no
+   chat on screen.** That is true in the small orb and in full screen, so a
+   `build_3d_model` result was never visible on the desktop. It now goes to
+   the 3D viewer window too:
+   - the page exports a `.glb` and leaves it with the app (`stash_model`);
+   - `model.html?glb=stash:KEY` asks for it (`stashed_model`), at any size;
+   - an older build gets a `data:` URL instead, which works up to about
+     900 KB, and past that he says so honestly.
+
+   The tool result no longer says "displayed in the chat".
+
+3. **Screen captures were of JARVIS.** A capture is the composed desktop, so
+   with the orb full screen, "look at my screen" and "a 3D model of what is
+   on my screen" got the HUD. For the moment of each capture the orb is
+   excluded from it (`WDA_EXCLUDEFROMCAPTURE`, Windows 10 2004 and later)
+   and put back straight after. Nothing changes on screen, and your own
+   screenshots are untouched.
+
+4. **Nothing showed the work.** A 3D job's progress was written to the
+   chat, which is not on the desktop. The full-screen HUD now has a TASK
+   line under MIC: it mirrors the current status ("3D model: texturing
+   45 %"), glows while a job runs, and clears when the job is done.
+
+**Tested** (`fullscreen.e2e.mjs`, the real page and the real `model.html`,
+26 checks):
+
+- `orb_layer` is called before the window fills the screen and after it
+  leaves.
+- The camera opens without leaving full screen.
+- A built model reaches the viewer through the stash, and `model.html`
+  renders it. So does one over a megabyte.
+- A stash key that has expired is reported, not left as a blank window.
+- The `data:` fallback works, and an oversized model is refused honestly.
+- The TASK line lights up at 40 % and clears.
+- An old build leaves full screen first.
+
+The Rust half is type-checked for Windows. Needs the app rebuilt.
+
 ## Page 2.10.1: long 3D turns finish, he infers instead of asking, "bring the camera to this window"
 
 **A 3D model no longer starts over halfway through.** The watchdog that

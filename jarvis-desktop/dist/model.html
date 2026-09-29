@@ -189,7 +189,7 @@
     controls.update();
   }
 
-  new THREE.GLTFLoader().load(glb, (gltf)=>{
+  const shown = (gltf)=>{
     model = gltf.scene;
     scene.add(model);
     resize();
@@ -197,11 +197,26 @@
     note.style.display = 'none';
     hint.classList.add('show');
     setTimeout(() => hint.classList.remove('show'), 4500);
-  }, (ev)=>{
-    if(ev && ev.total) note.textContent = 'loading… ' + Math.round(ev.loaded / ev.total * 100) + '%';
-  }, ()=>{
+  };
+  const lost = ()=>{
     fail('The model could not be loaded. The link may have expired — ask JARVIS to make it again.');
-  });
+  };
+  /* A model JARVIS built in code is not at an address: the orb left the
+     .glb with the app (stash_model in main.rs) and it is asked for here. */
+  if(glb.indexOf('stash:') === 0){
+    const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+    if(!invoke) lost();
+    else invoke('stashed_model', { key: glb.slice(6) }).then((b64)=>{
+      const bin = atob(String(b64 || ''));
+      const bytes = new Uint8Array(bin.length);
+      for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      new THREE.GLTFLoader().parse(bytes.buffer, '', shown, lost);
+    }).catch(lost);
+  } else {
+    new THREE.GLTFLoader().load(glb, shown, (ev)=>{
+      if(ev && ev.total) note.textContent = 'loading… ' + Math.round(ev.loaded / ev.total * 100) + '%';
+    }, lost);
+  }
 
   document.getElementById('spinBtn').addEventListener('click', (e)=>{
     spin = !spin; e.target.classList.toggle('on', spin); closeMenu();
