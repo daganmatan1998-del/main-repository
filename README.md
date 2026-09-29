@@ -320,6 +320,66 @@ actually forwarded where it should be, actually stripped where it must be, that
 the warning fires only in the second case, and that a blind primary is overtaken
 in the chain by a fallback that can see.
 
+## Page 2.10.3: he understands what you mean, not only the sentence he was taught
+
+"hey can you open my camera please" already worked. But "I want to see the
+camera", "can I get the camera up", "camera on please jarvis", "i need the
+camera", and even "אתה יכול לפתוח לי את המצלמה בבקשה" did not. None of them
+fit a command's shape, so they went to the model. A model that answered
+"Sure, opening your camera now." without calling anything left the camera
+shut. Listing every sentence cannot be done, so three layers replace it:
+
+1. **Reading for meaning** (`understandCommand`).
+   - Courtesy and framing are removed wherever they appear: "hey", "can you",
+     "could you do me a favour and", "please", "for me", "I want you to",
+     "בבקשה", "אתה יכול", "תעשה לי טובה", and his name.
+   - What is left must be made only of command words: a thing (the camera,
+     full screen, the workspace, a site he names) and what to do with it
+     (open, turn on, show, get… up, close, get rid of, תפתח, להדליק, תכבה,
+     לצאת…).
+   - Any order, any tense, and Hebrew prefixes (ה ל ו ש מ ב) are accepted.
+   - One word from outside that vocabulary makes it conversation, not a
+     command. "I need a new camera for product shots" goes to the model as
+     before.
+   - Long polite sentences over 12 words still get this reading.
+   - A part before "and" that is only courtesy ("could you do me a favour
+     and…") is no longer sent to the model as a second request.
+
+2. **Hearing the promise.**
+   - "Sure, opening your camera now." now counts as a claim that has to be
+     backed by a real action. Before, the check wanted the gerund at the very
+     start of the reply.
+   - So do "I'll open the camera", "let me turn it on", "אפתח לך את
+     המצלמה" and "בסדר, פותח את המצלמה".
+   - Offers and conditions are not claims: "if you want I'll open it", "want
+     me to open it?", "אם תרצה אפתח". Neither is "I will not".
+
+3. **The model understood, so the app does it** (`impliedLocalFlow`).
+   - This applies when a turn ends with such a claim and no tool call.
+   - What he asked and what the model promised must name the same thing, in
+     the same direction. The verb has to act on the thing directly
+     ("opening your camera", not "opening a guide to camera settings"), and
+     it must not be negated.
+   - Then the app performs that action itself, and the sentence he hears
+     becomes true.
+   - A question ("what camera should I buy") never qualifies. Anything else
+     still gets the corrective round.
+
+**Tested:**
+
+- `understand.test.mjs` (97): about 70 phrasings in English and Hebrew, 25
+  sentences that only mention these things, a compound request, and the
+  model-understood cases.
+- `promise.test.mjs` (34).
+- `understand.e2e.mjs` (15), on the real page:
+  - spoken and typed commands open the camera with no model call;
+  - a model that only talks still gets the camera opened, and his sentence
+    is spoken with no correction;
+  - a question about cameras switches nothing on.
+
+**Unchanged on purpose:** while he is dozing (a minute of quiet), only a
+sentence with his name is for him.
+
 ## Page 2.10.2: the camera and 3D models in full screen
 
 Full screen, the camera "did not work" and 3D models "were never made".

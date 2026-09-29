@@ -2477,7 +2477,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.10.2';
+const APP_VERSION = '2.10.3';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -11202,6 +11202,213 @@ function siteFromText(text){
   return best;
 }
 
+/* UNDERSTANDING HIM, NOT MATCHING SENTENCES (2.10.3).
+
+   Every local command used to be a set of sentence shapes. Said close to a
+   shape, it ran; said any other natural way — "I want to see the camera",
+   "can I get the camera up", "camera on please jarvis", "אתה יכול לפתוח
+   לי את המצלמה בבקשה" — it went to the model, and a model that answered
+   "Sure, opening your camera now" and called nothing left him with a
+   camera that stayed shut. Listing every sentence he might say cannot be
+   done.
+
+   So this reads the sentence the way a person would. Courtesy and framing
+   ("hey", "can you", "please", "for me", "I want you to", "בבקשה", "אתה
+   יכול", his name) are taken out wherever they are. What is left has to be
+   made ONLY of command words — a thing (the camera, full screen, the
+   workspace, a site he names) and what to do with it (open, turn on, show,
+   close, get rid of, תפתח, להדליק, תכבה...), in any order, any tense, with
+   the Hebrew prefixes (ה, ל, ו, ש, מ, ב) that stick to them. One word that
+   belongs to none of them and it is conversation, not a command, and the
+   model answers it as before — "I need a new camera for product shots" has
+   "a", "new", "for", "product" and "shots" in it, and is not a request to
+   switch anything on. */
+const LOOSE_FILLER_PHRASES = [
+  'would you mind', 'do me a favor and', 'do me a favour and', 'do me a favor', 'do me a favour', 'do me a quick favor',
+  'go ahead and', 'try to', 'try and',
+  'i want you to', 'i need you to', 'i would like you to', 'id like you to', 'i would like to', 'id like to',
+  'can you please', 'could you please', 'would you please', 'will you please',
+  'can you', 'could you', 'would you', 'will you', 'can i', 'could i', 'may i', 'can we', 'could we',
+  'i want to', 'i wanna', 'i need to', 'for me', 'for us', 'right now', 'real quick', 'if you can', 'if you could',
+  'thank you', 'lets', 'let us',
+  'אם אפשר', 'אם תוכל', 'תעשה לי טובה', 'תעשי לי טובה', 'תעשה טובה', 'אתה יכול', 'את יכולה', 'אתה יכולה',
+  'אני רוצה ש', 'אני צריך ש'
+].map(normaliseHeard).sort((a, b) => b.length - a.length);
+const LOOSE_FILLER_WORDS = new Set([
+  'please', 'pls', 'plz', 'kindly', 'hey', 'hi', 'hello', 'ok', 'okay', 'so', 'um', 'uh', 'uhh', 'erm', 'hmm', 'well',
+  'just', 'now', 'quickly', 'quick', 'sir', 'bro', 'man', 'yo', 'again', 'also', 'maybe', 'actually', 'thanks',
+  'בבקשה', 'תוכל', 'תוכלי', 'יכול', 'יכולה', 'אפשר', 'תנסה', 'תנסי', 'בוא', 'בואי', 'בואו', 'יאללה', 'רק', 'עכשיו', 'כבר', 'שוב',
+  'אדוני', 'תודה', 'מהר', 'רגע', 'נו', 'היי', 'הי', 'אחי', 'אוקיי', 'טוב'
+]);
+
+/* phrase -> role. O:<thing> is what to act on; ON / OFF the direction; N a
+   verb with no direction of its own ("turn", "put", "get", "תעשה"), which
+   means on unless something says off; WANT likewise ("I need the camera");
+   P the small words that carry nothing (the, my, את, של, לי). */
+const LOOSE_LEXICON = new Map();
+(function buildLexicon(){
+  const add = (role, list) => list.forEach(p => LOOSE_LEXICON.set(normaliseHeard(p), role));
+  add('O:camera', ['camera', 'cameras', 'cam', 'webcam', 'web cam', 'camera feed', 'camra', 'camara', 'kamera', 'live camera',
+                   'מצלמה', 'המצלמה', 'מצלמת רשת', 'וובקאם', 'הוובקאם', 'קמרה', 'הקמרה']);
+  add('O:fs', ['full screen', 'fullscreen', 'full screen mode', 'מסך מלא', 'המסך המלא', 'מסך המלא']);
+  add('O:ws', ['workspace', 'work space', 'work environment', 'working environment', 'dashboards', 'my dashboards',
+               'סביבת עבודה', 'סביבת העבודה']);
+  OPEN_SITES.forEach((site, i) => site.names.forEach(n => LOOSE_LEXICON.set(normaliseHeard(n), 'O:site:' + i)));
+  add('ON', ['open', 'open up', 'start', 'start up', 'turn on', 'switch on', 'activate', 'enable', 'show', 'show me',
+             'see', 'let me see', 'view', 'bring up', 'pull up', 'fire up', 'boot up', 'launch', 'load', 'put on',
+             'go', 'go to', 'go into', 'enter', 'visit', 'take me to', 'navigate to', 'switch to', 'display', 'run',
+             'begin', 'on', 'up', 'maximize', 'maximise', 'expand', 'set up', 'setup', 'prepare',
+             'opening', 'starting', 'turning on', 'switching on', 'showing', 'bringing up', 'pulling up', 'launching',
+             'putting on', 'going', 'setting up',
+             'פתח', 'תפתח', 'תפתחי', 'לפתוח', 'נפתח', 'פתחי', 'תפעיל', 'הפעל', 'להפעיל', 'תפעילי', 'נפעיל',
+             'תדליק', 'הדלק', 'להדליק', 'תדליקי', 'נדליק', 'תעלה', 'העלה', 'להעלות', 'תראה', 'תראה לי', 'תראי לי',
+             'להראות', 'לראות', 'תכנס', 'תיכנס', 'כנס', 'להיכנס', 'תיכנסי', 'נכנס', 'תעבור', 'עבור', 'לעבור', 'נעבור',
+             'תגדיל', 'להגדיל', 'תציג', 'להציג', 'הצג', 'תכין', 'להכין', 'תסדר', 'לסדר', 'תקפיץ', 'דלוקה', 'פתוחה']);
+  add('OFF', ['close', 'shut', 'shut down', 'shut off', 'turn off', 'switch off', 'stop', 'kill', 'disable', 'deactivate',
+              'hide', 'end', 'exit', 'leave', 'quit', 'get out of', 'go out of', 'get rid of', 'put away', 'cancel',
+              'minimize', 'minimise', 'off', 'down', 'out of', 'away',
+              'closing', 'turning off', 'switching off', 'shutting', 'shutting down', 'stopping', 'killing', 'hiding',
+              'סגור', 'תסגור', 'תסגרי', 'לסגור', 'נסגור', 'כבה', 'תכבה', 'תכבי', 'לכבות', 'נכבה', 'תפסיק', 'להפסיק',
+              'הפסק', 'תעצור', 'לעצור', 'עצור', 'תוריד', 'להוריד', 'תסתיר', 'להסתיר', 'צא', 'תצא', 'לצאת', 'צאי', 'נצא',
+              'תבטל', 'לבטל', 'בטל', 'תקטין', 'להקטין', 'כבויה', 'סגורה']);
+  add('N', ['turn', 'switch', 'put', 'get', 'bring', 'pull', 'fire', 'make', 'make it', 'make yourself', 'give me', 'get me',
+            'תעשה', 'לעשות', 'עשה', 'תביא', 'להביא', 'הבא', 'תשים', 'לשים', 'שים']);
+  add('WANT', ['want', 'need', 'i want', 'i need', 'i wanna', 'i would like', 'id like',
+               'רוצה', 'אני רוצה', 'צריך', 'אני צריך', 'צריכה', 'אני צריכה']);
+  add('P', ['the', 'my', 'your', 'our', 'this', 'that', 'to', 'into', 'in', 'mode', 'window', 'app', 'site', 'website',
+            'page', 'tab', 'a new tab', 'feed', 'back', 'chrome', 'browser', 'the browser',
+            'את', 'של', 'שלי', 'שלך', 'לי', 'לנו', 'מצב', 'חלון', 'האתר', 'אתר', 'עם']);
+})();
+const LOOSE_KNOWN = new Set([...LOOSE_LEXICON.keys()].flatMap(k => k.split(' ')));
+/* Hebrew glues ה, ל, ו, ש, מ, ב, כ onto the word: "למסך", "והמצלמה",
+   "שתפתח", "ליוטיוב". Taken off only when the word as heard is unknown. */
+function looseWord(w){
+  if(LOOSE_KNOWN.has(w) || !/^[א-ת]/.test(w)) return w;
+  let s = w;
+  for(let i = 0; i < 2 && s.length > 2 && /^[הלושמבכ]/.test(s); i++){
+    s = s.slice(1);
+    if(LOOSE_KNOWN.has(s)) return s;
+  }
+  return w;
+}
+function looseTokens(text){
+  let s = ' ' + normaliseHeard(text) + ' ';
+  for(const f of LOOSE_FILLER_PHRASES){
+    while(s.indexOf(' ' + f + ' ') >= 0) s = s.replace(' ' + f + ' ', ' ');
+  }
+  return s.split(' ').filter(Boolean)
+    .filter(w => !LOOSE_FILLER_WORDS.has(w) && !wordIsName(w))
+    .map(looseWord);
+}
+const LOOSE_FLOWS = { camera: { on: 'camera_on', off: 'camera_off' }, fs: { on: 'fullscreen', off: 'fullscreen_exit' },
+                      ws: { on: 'workspace' }, site: { on: 'open_site' } };
+function understandCommand(text){
+  const words = looseTokens(text);
+  if(!words.length || words.length > 12) return null;
+  const roles = [];
+  for(let i = 0; i < words.length;){
+    let hit = null;
+    for(let len = Math.min(4, words.length - i); len >= 1 && !hit; len--){
+      const role = LOOSE_LEXICON.get(words.slice(i, i + len).join(' '));
+      if(role) hit = { role, len };
+    }
+    if(!hit) return null;              // a word no command is made of: this is conversation
+    roles.push(hit.role);
+    i += hit.len;
+  }
+  const things = [...new Set(roles.filter(r => r.indexOf('O:') === 0))];
+  if(things.length !== 1) return null; // nothing to act on, or two things (planRequests splits "and")
+  const on = roles.includes('ON'), off = roles.includes('OFF');
+  let dir = on && off ? null : on ? 'on' : off ? 'off'
+          : (roles.includes('N') || roles.includes('WANT')) ? 'on' : null;
+  if(!dir) return null;                // "the camera" alone: the strict rules, or the model
+  const kind = things[0].split(':')[1];
+  const flow = LOOSE_FLOWS[kind] && LOOSE_FLOWS[kind][dir];
+  if(!flow) return null;
+  return { flow, words, site: kind === 'site' ? OPEN_SITES[+things[0].split(':')[2]] : null };
+}
+
+/* THE MODEL UNDERSTOOD HIM; THE APP DOES IT (2.10.3).
+
+   A request too far from any local command still goes to the model, and
+   the model almost always understands it. What failed was the last step:
+   a fallback engine answered "Sure, opening your camera now" and called
+   nothing. When a turn ends like that — no tool, a claim — and what he
+   asked and what the model promised name the same thing (the camera, full
+   screen, the workspace, a site), the app does exactly that itself, and the
+   claim becomes true. Only those local actions, only in that direction,
+   only when both sides agree; anything else still gets the corrective
+   pass that tells the model it did nothing. */
+const IMPLIED_THINGS = {
+  camera: /\b(?:camera|cam|webcam)s?\b|מצלמ/i,
+  fs:     /\bfull[\s-]?screen\b|מסך\s+(?:ה)?מלא/i,
+  ws:     /\bwork\s?space\b|סביבת\s+(?:ה)?עבודה/i
+};
+const IMPLIED_ON = /\b(?:open(?:ing|ed)?|turn(?:ing|ed)?\s+(?:it\s+|the\s+\w+\s+)?on|switch(?:ing|ed)?\s+(?:it\s+)?on|start(?:ing|ed)?|launch(?:ing|ed)?|bring(?:ing)?\s+up|pull(?:ing)?\s+up|fir(?:e|ing)\s+up|activat(?:e|ing|ed)|enabl(?:e|ing|ed)|go(?:ing)?\s+(?:to|into)|enter(?:ing)?|set(?:ting)?\s+up)\b|(?:פותח|אפתח|פתחתי|מפעיל|אפעיל|הפעלתי|מדליק|אדליק|הדלקתי|עובר|אעבור|נכנס|אכנס|מכין|אכין)/i;
+const IMPLIED_OFF = /\b(?:clos(?:e|ing|ed)|turn(?:ing|ed)?\s+(?:it\s+|the\s+\w+\s+)?off|switch(?:ing|ed)?\s+(?:it\s+)?off|shut(?:ting)?|stop(?:ping|ped)?|exit(?:ing|ed)?|leav(?:e|ing)|disabl(?:e|ing|ed)|hid(?:e|ing))\b|(?:סוגר|אסגור|סגרתי|מכבה|אכבה|כיביתי|יוצא|אצא)/i;
+const IMPLIED_GAP = /^(?:[\s,]|\b(?:the|my|your|his|its|it|up|on|off|now|for\s+you|back|again|sir)\b|\u05d0\u05ea|\u05dc\u05da|\u05dc\u05d5|\u05e2\u05db\u05e9\u05d9\u05d5|\u05e2\u05d1\u05d5\u05e8\u05da)*[\u05d4\u05dc\u05d1\u05d5]?$/i;   // and the ה/ל/ב/ו stuck to the thing itself
+const IMPLIED_NEGATED = /\b(?:not|cannot|can'?t|won'?t|unable\s+to|couldn'?t|don'?t|never)\s+$|(?:\u05dc\u05d0|\u05d0\u05dc)\s+(?:\u05d9\u05db\u05d5\u05dc\s+(?:\u05dc)?)?$/i;
+function impliedLocalFlow(asked, reply){
+  const said = String(asked || '').replace(/^\[Already done[^\]]*\]\s*/, '');
+  const answer = String(reply || '');
+  if(!said.trim() || !answer.trim()) return null;
+  const nsaid = normaliseHeard(said);
+  if(FLOW_LATER.test(nsaid) || FLOW_NOT.test(nsaid)) return null;
+  /* A question about the thing is not a request to act on it, whatever
+     the reply says ("what camera should I buy?"). */
+  if(/^(?:what|which|why|how|where|who|whose|is|are|was|were|does|do|did|has|have)\b|^\u05d4\u05d0\u05dd(?![\u0590-\u05FF])|^(?:\u05de\u05d4|\u05d0\u05d9\u05d6\u05d4|\u05d0\u05d9\u05d6\u05d5|\u05dc\u05de\u05d4|\u05d0\u05d9\u05da|\u05d0\u05d9\u05e4\u05d4)(?![\u0590-\u05FF])/.test(nsaid)) return null;
+  const site = siteFromText(said);
+  const things = Object.assign({}, IMPLIED_THINGS);
+  if(site){
+    const names = site.names.concat([site.en, site.he]).map(n => String(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    things.site = new RegExp(names.join('|'), 'i');
+  }
+  /* The verb and the thing in the same sentence of the reply, a few words
+     apart — "opening your camera", "הדלקתי את המצלמה" — so that "opening
+     its product page" in a reply that also mentions a camera is not read
+     as switching his camera on. */
+  const found = [];
+  for(const k of Object.keys(things)){
+    if(!things[k].test(said)) continue;
+    for(const sentence of answer.split(/(?<=[.!?\u2026\n])\s+/)){
+      const o = sentence.search(things[k]);
+      if(o < 0) continue;
+      for(const [dir, re] of [['on', IMPLIED_ON], ['off', IMPLIED_OFF]]){
+        const g = new RegExp(re.source, 'gi');
+        let m;
+        while((m = g.exec(sentence))){
+          const end = m.index + m[0].length;
+          /* The thing is what the verb acts on: inside the match ("turning
+             the camera on") or right after it with only small words between
+             ("opening your camera", "פותח לך את המצלמה") — not "opening a
+             guide to camera settings". And not negated: "I can't open". */
+          const gap = o >= end ? sentence.slice(end, o) : null;
+          const direct = (o >= m.index && o < end) || (gap !== null && IMPLIED_GAP.test(gap));
+          const negated = IMPLIED_NEGATED.test(sentence.slice(Math.max(0, m.index - 14), m.index));
+          if(direct && !negated) found.push(k + ':' + dir);
+          if(g.lastIndex === m.index) g.lastIndex++;
+        }
+      }
+    }
+  }
+  const uniq = [...new Set(found)];
+  if(uniq.length !== 1) return null;
+  const [kind, dir] = uniq[0].split(':');
+  const flow = LOOSE_FLOWS[kind] && LOOSE_FLOWS[kind][dir];
+  return flow ? { flow, site: kind === 'site' ? site : null } : null;
+}
+async function doImpliedFlow(implied){
+  switch(implied.flow){
+    case 'camera_on':       return { tool: 'open_camera', input: {}, res: await callCameraTool({}) };
+    case 'camera_off':      return { tool: 'open_camera', input: { close: true }, res: await callCameraTool({ close: true }) };
+    case 'fullscreen':      return { tool: 'set_full_screen', input: { on: true }, res: await setFullScreen(true) };
+    case 'fullscreen_exit': return { tool: 'set_full_screen', input: { on: false }, res: await exitFullScreenLayer() };
+    case 'workspace':       return { tool: 'open_workspace', input: {}, res: await callWorkspaceTool({}) };
+    case 'open_site':       return { tool: 'open_url', input: { url: implied.site.url }, res: await callOpenUrlTool({ url: implied.site.url }) };
+  }
+  return null;
+}
+
 /* "BRING THE CAMERA TO THIS WINDOW" (2.10.1).
 
    He moves between programs and wants the camera — or any window — to come
@@ -11573,7 +11780,15 @@ function detectWorkflowCommand(text, state){
   const norm = normaliseHeard(raw);
   if(!norm) return null;
   let words = norm.split(' ').filter(Boolean);
-  if(words.length > 12) return null;
+  /* Too long for any rule below — but courtesy makes a command long ("hey
+     jarvis could you do me a favor and open up the camera for me right
+     now"), so the loose reading, which counts only the command's own
+     words, still gets it. */
+  if(words.length > 12){
+    if(words.length > 30 || FLOW_LATER.test(norm) || FLOW_NOT.test(norm)) return null;
+    const long = understandCommand(norm);
+    return long ? long.flow : null;
+  }
 
   /* "ג'רוויס, מסך מלא" opens by addressing him. The name is not part of
      the command, and leaving it in makes every pattern need a prefix. */
@@ -11624,6 +11839,10 @@ function detectWorkflowCommand(text, state){
     if(asking && !rule.ignoresAsking) continue;
     for(const re of rule.contextual){ if(re.test(rest) || re.test(restNamed)) return rule.flow; }
   }
+  /* And last, the sentence as he actually said it, read for its meaning
+     rather than its shape (understandCommand). */
+  const loose = understandCommand(restNamed);   // its own courtesy list, so "can I get..." keeps its "can I"
+  if(loose) return loose.flow;
   return null;
 }
 
@@ -11679,8 +11898,10 @@ function planRequests(text, state){
   for(const part of parts){
     const flow = detectWorkflowCommand(part, state);
     if(flow && SELF_CONTAINED_FLOWS.has(flow)) steps.push({ flow, part });
+    /* "could you do me a favour" before the "and" is courtesy, not a
+       second request for the model to answer. */
     else if(normaliseHeard(part).split(' ').some(w => w && !wordIsName(w) &&
-            WAKE_FILLER.indexOf(w) < 0 && !LANG_COURTESY.has(w))) rest.push(part);
+            WAKE_FILLER.indexOf(w) < 0 && !LANG_COURTESY.has(w)) && looseTokens(part).length) rest.push(part);
   }
   if(!steps.length) return null;
   /* One command with a word or two hanging off it — "open shopify and
@@ -14395,7 +14616,30 @@ const ACTION_CLAIM_HE = new RegExp(ACTION_CLAIM_HE_I.source.slice(0, -1) + '|\u0
    It has to stay off ordinary prose that happens to start the same way, so a
    finite verb later in the sentence disqualifies it: "Opening hours are nine
    to five" is a fact, "Opening Spotify" is a claim. */
-const ACTION_CLAIM_GERUND = /^\s*(?:just\s+|now\s+)?(?:opening|closing|launching|searching|creating|saving|adding|generating|building|making|sending|updating|scheduling|booking|running|downloading|pulling up|setting up)\b(?![^.!?\n]*\b(?:is|are|was|were|will|would|can|could|should|may|might|do|does|did|has|have|had|takes|means|requires)\b)/i;
+const ACTION_CLAIM_GERUND = /^\s*(?:just\s+|now\s+)?(?:opening|closing|launching|searching|creating|saving|adding|generating|building|making|sending|updating|scheduling|booking|running|downloading|pulling up|setting up|turning (?:on|off)|switching (?:on|off)|starting|bringing up|firing up|activating|shutting down)\b(?![^.!?\n]*\b(?:is|are|was|were|will|would|can|could|should|may|might|do|does|did|has|have|had|takes|means|requires)\b)/i;
+/* "Sure, opening your camera now." The gerund above has to open the reply,
+   and a reply that opens with "Sure," / "Of course," / "Right away, sir." is
+   the commonest shape a fallback engine answers a request in — so the claim
+   went through unchecked, was read aloud, and nothing opened (2.10.3). The
+   same gerund rule, after any run of those lead-ins. */
+const CLAIM_LEAD_IN = '(?:(?:sure(?:\\s+thing)?|ok(?:ay)?|alright|all\\s+right|right|of\\s+course|certainly|absolutely|' +
+  'no\\s+problem|will\\s+do|got\\s+it|you\\s+got\\s+it|yes|yep|right\\s+away|coming\\s+(?:right\\s+)?up|understood)' +
+  '(?:,?\\s*sir)?\\s*[,.!\\u2014-]+\\s*)+';
+const ACTION_CLAIM_GERUND_LED = new RegExp('^\\s*' + CLAIM_LEAD_IN + ACTION_CLAIM_GERUND.source.replace(/^\^\\s\*/, ''), 'i');
+
+/* "I'll open it." "Let me turn on the camera." "אפתח לך את המצלמה." A promise
+   of an action in this turn is the same claim as "I opened it" if no tool
+   follows — and was the other half of "he says it and nothing happens".
+   An offer is not a promise: anything conditional or asked ("if you want,
+   I'll open it", "want me to open it?", "אם תרצה אפתח") is left alone, and
+   so is "I will not". */
+const ACTION_PROMISE_EN = /\b(?:I(?:'ll|\s+will)|let\s+me|I(?:'m|\s+am)\s+(?:going\s+to|gonna))\s+(?:go\s+ahead\s+and\s+|just\s+|now\s+|quickly\s+)?(?:open|close|launch|start|turn\s+(?:on|off)|switch\s+(?:on|off)|show|pull\s+up|bring\s+up|set\s+up|search|look\s+up|create|save|add|build|make|send|update|schedule|book|put|play|enable|disable|activate|shut|fire\s+up)\b/i;
+const ACTION_PROMISE_HE = /(?:^|[\s,.!?—-])(?<!לא\s)(?<!אל\s)(?:אני\s+)?(?:אפתח|אסגור|אפעיל|אדליק|אכבה|אחפש|אצור|אבנה|אשלח|אשמור|אוסיף|אעדכן|אקבע)(?![֐-׿])|(?:^|[.!?,—]\s*)(?:פותח|פותחת|מפעיל|מפעילה|מדליק|מדליקה|מכבה|מחפש|מחפשת)(?![֐-׿])/;
+const PROMISE_NOT = /\bif\b|\bunless\b|\bwhen(?:ever)?\s+you\b|\bonce\s+you\b|\bwant\s+me\b|\bwould\s+you\b|\bshall\b|\bshould\s+I\b|\blater\b|\btomorrow\b|\bnot\b|\?|(?:^|\s)(?:אם|כש|כאשר|מחר)(?![֐-׿])|אחר\s+כך|רוצה\s+ש/i;
+function claimsPromise(text){
+  return String(text || '').split(/(?<=[.!?…\n])\s+/)
+    .some(s => (ACTION_PROMISE_EN.test(s) || ACTION_PROMISE_HE.test(s)) && !PROMISE_NOT.test(s));
+}
 /* The shape that escaped every one of the patterns above, and the one that
    matters most: a bare past participle standing alone. "Opened." "Closed."
    "Saved." "Sent." The English pattern demands an "I" before the verb and
@@ -14514,7 +14758,7 @@ function claimsAnAction(text, looking){
            ACTION_CLAIM_TOOL.test(t) || ACTION_CLAIM_DONE_BARE.test(t) || ACTION_CLAIM_DONE_HE_BARE.test(t);
   }
   return ACTION_CLAIM_EN.test(t) || claimsInHebrew(t) || ACTION_CLAIM_TOOL.test(t) ||
-         ACTION_CLAIM_GERUND.test(t) ||
+         ACTION_CLAIM_GERUND.test(t) || ACTION_CLAIM_GERUND_LED.test(t) || claimsPromise(t) ||
          ACTION_CLAIM_DONE.test(t) || ACTION_CLAIM_DONE_HE.test(t);
 }
 
@@ -14832,6 +15076,23 @@ async function askJarvis(userText, images, onText, tag){
       if(data.stop_reason === 'tool_use') break;     // out of rounds, handled below
       if(corrections >= 1) break;                    // one correction, never a loop
       if(!claimsAnAction(collected, turnIsLook)) break;          // he claimed nothing
+
+      /* He claimed it and called nothing — but if what was asked and what
+         he said name the same local action, the app does it (see
+         impliedLocalFlow), and the claim is true after all. */
+      const implied = (IS_DESKTOP && corrections === 0) ? impliedLocalFlow(userText, collected) : null;
+      if(implied){
+        let done = null;
+        const entry = logActionStart(implied.flow, {}, 'local');
+        try{ done = await doImpliedFlow(implied); }catch(err){ done = { res: { error: String((err && err.message) || err) } }; }
+        const res = done ? done.res : { error: 'nothing to do' };
+        logActionEnd(entry, res);
+        turnToolRan = true;
+        if(res && !res.error){ turnToolSucceeded = true; break; }
+        turnToolFailures.push({ tool: (done && done.tool) || implied.flow, error: String((res && res.error) || 'no result'),
+                                tell_the_user: (res && res.tell_the_user) || null });
+        break;
+      }
 
       corrections++;
       setToolStatus(t('doingItForReal'));

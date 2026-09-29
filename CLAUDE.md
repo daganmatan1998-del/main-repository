@@ -251,6 +251,20 @@ single file `dist/index.html`.
   3D job notes. take_screenshot/capture_screen_frame exclude the orb for the
   capture (OrbOutOfCapture, WDA_EXCLUDEFROMCAPTURE) so JARVIS never captures
   himself. fullscreen.e2e.mjs covers the page half.
+- **Local commands are understood by meaning, not shape (2.10.3).**
+  understandCommand (last step of detectWorkflowCommand, on restNamed, and
+  the only step for a sentence over 12 words): LOOSE_FILLER_PHRASES/WORDS
+  and his name removed ANYWHERE; every remaining word must be in
+  LOOSE_LEXICON (O:thing, ON, OFF, N, WANT, P) — one outside word and it is
+  conversation for the model; exactly one thing and one direction → a flow
+  in LOOSE_FLOWS. Hebrew prefixes via looseWord. Add a new local action by
+  adding its thing and verbs to the lexicon and LOOSE_FLOWS, not by writing
+  sentence regexes. Claims: ACTION_CLAIM_GERUND_LED (lead-ins like "Sure,")
+  and claimsPromise ("I'll open", אפתח — never offers or conditionals).
+  impliedLocalFlow + doImpliedFlow: a no-tool turn whose claim names the
+  same thing he asked about (verb directly on it, not negated, not a
+  question) is carried out by the app before any corrective round.
+  planRequests drops a courtesy-only part ("could you do me a favour").
 - **The level meter reads 8-bit samples with a floor of about 0.0055.** Any
   live signal, however faint, reads one step of the scale; "room 0.0056" in
   mic-test is that floor, not the room.
