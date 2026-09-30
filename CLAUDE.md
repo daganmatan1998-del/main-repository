@@ -324,6 +324,13 @@ single file `dist/index.html`.
   fields were written from its published API WITHOUT a live key: if the
   first real model fails, read the error text first (it quotes Tripo's own
   message) before changing the flow.
+- **The desktop app and the website are two copies of the page (2.11.3).**
+  The app bakes `dist/` in at build time (tauri.conf frontendDist), so a
+  page change reaches it only after a rebuild, and it keeps its own saved
+  conversation and memory. Anything JARVIS "knows" about the backend (which
+  3D service, which keys) must therefore be given to him per request from
+  /health, not left to his memory: model3dServiceNote() does that for the
+  3D provider, appended in cameraSystemExtras().
 - **The Meshy key is read through meshyKey(env) (worker 2.6.7), never
   env.MESHY_API_KEY directly.** It takes MESHY_API_KEY, then MESHY_KEY /
   MESHY_API_TOKEN / MESHY_TOKEN / MESHY, and cleans it (spaces, quotes,

@@ -377,6 +377,22 @@ actually forwarded where it should be, actually stripped where it must be, that
 the warning fires only in the second case, and that a blind primary is overtaken
 in the chain by a fallback that can see.
 
+## Page 2.11.3: the desktop app still said "Meshy"
+
+The desktop app has the page baked into it when it is built
+(`frontendDist: ../dist`), and keeps its own conversation and memory, so
+uploading a new `index.html` to the website changes only the website. Two
+things follow, and this version addresses the second:
+
+- the desktop app shows a new page only after it is **rebuilt**;
+- what JARVIS says about his 3D service came from that saved history, never
+  from the worker, because the page did not tell him. It now adds one line
+  to every request, read from `/health` (`model3d_provider`): "3D models are
+  made by Tripo ... if your memory names a different service, that is out
+  of date". A worker that does not report a provider adds nothing.
+
+Tested in `tripo.e2e.mjs`.
+
 ## Page 2.11.2 / worker 2.7.0: Tripo as the 3D service
 
 Meshy needs a paid plan to make an API key, so the worker can now use

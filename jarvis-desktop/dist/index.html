@@ -2494,7 +2494,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.11.2';
+const APP_VERSION = '2.11.3';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -14584,7 +14584,22 @@ async function readMessageStream(response, onText){
 /* Either he is being looked at this turn, or he is being remembered from
    the last one. Never both: a look replaces the note it is about to write. */
 function cameraSystemExtras(){
-  return (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '');
+  return (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote();
+}
+
+/* WHICH 3D SERVICE, AS THE WORKER SAYS RIGHT NOW (2.11.3). The page never
+   told him, so what he said about it came from whatever his saved
+   conversation and memory held — and on the desktop, whose memory is its
+   own, that was still "Meshy" after the worker had moved to Tripo. This
+   line is read from /health on every request, and says the notes lose. */
+function model3dServiceNote(){
+  const c = backendCapabilities;
+  if(!c || typeof c !== 'object' || !c.model3d_provider) return '';
+  const name = c.model3d_provider === 'tripo' ? 'Tripo' : c.model3d_provider === 'meshy' ? 'Meshy' : '';
+  if(!name) return '';
+  return '\n\nTHE 3D SERVICE, RIGHT NOW: 3D models are made by ' + name + ' (the worker reported this just now' +
+         (c.model3d_key === 'set' ? ', with its key in place' : '') + '). If your memory or an earlier message ' +
+         'names a different service, that is out of date: when he asks which service makes his 3D models, say ' + name + ', and name no other.';
 }
 
 /* Counted in and out around every request, so the stall check knows one
