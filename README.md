@@ -27,10 +27,41 @@ ones came up.
 Voice input needs `/stt`, which this worker has. WebView2 carries no Web Speech
 API, so on the desktop app transcription has nowhere else to come from.
 
-## The Meshy key (3D models)
+## The 3D service: Tripo (recommended) or Meshy
 
-3D models are made by Meshy, and the key lives on the worker, never in the
-app:
+Since worker 2.7.0 3D models can be made by **Tripo** or by **Meshy**. The
+worker uses Tripo whenever it has a Tripo key, and Meshy otherwise, so
+nothing changes for a worker that only has a Meshy key. Both keys live on
+the worker, never in the app.
+
+**Tripo** has no subscription: a new API account starts with free credits
+(2,000 at the time of writing, roughly 40 to 65 textured models), and after
+that credits cost $1 per 100. To set it up:
+
+1. Sign up at platform.tripo3d.ai and open **API Keys**. Creating the first
+   key is what gives the starting credits. The key starts with `tsk_`.
+2. In the Cloudflare dashboard, open the jarvis worker → Settings →
+   Variables and Secrets → add a **Secret** named `TRIPO_API_KEY`.
+3. Deploy the worker, then ask JARVIS "is my 3D key working?". He reads the
+   balance from Tripo itself (nothing is made, nothing is spent) and says
+   whether the key works and how many credits are left.
+
+Details: a picture is uploaded to Tripo and turned into a textured model
+(the picture carries the colour, so the texture prompt and symmetry hints
+that Meshy takes are not sent); a sentence becomes a text-to-model task.
+Tripo task ids travel as `tripo:<id>`, so a job already running finishes on
+its own service even if the keys change. `MODEL3D_PROVIDER=meshy` (or
+`tripo`) prefers one service when both keys are set. `/health` reports
+`model3d_provider`. Errors are named the same way as Meshy's:
+`tripo_key`, `tripo_credits`, `tripo_busy`, `tripo_down`, `tripo_content`.
+Written from Tripo's published API without a live key, so the first real
+model is worth watching: `/model3d/check` and the error text are there to
+make a mismatch quick to see.
+
+### The Meshy key
+
+Meshy needs a paid plan to create a key of your own. The key lives on the
+worker:
 
 1. At meshy.ai, go to Settings → API and create a key. It starts with `msy_`.
 2. In the Cloudflare dashboard, open the jarvis worker → Settings →
@@ -345,6 +376,16 @@ Checked across eleven real provider configurations — that the picture is
 actually forwarded where it should be, actually stripped where it must be, that
 the warning fires only in the second case, and that a blind primary is overtaken
 in the chain by a fallback that can see.
+
+## Page 2.11.2 / worker 2.7.0: Tripo as the 3D service
+
+Meshy needs a paid plan to make an API key, so the worker can now use
+Tripo, which starts with free credits and has no subscription. See "The 3D
+service" above for setup. The page did not need a new flow, only to know
+the new error codes and to take the fix text from the worker. Tested in
+`tripo.test.mjs` (63, the real worker against a stub that behaves like
+Tripo's API, including multipart upload and both services side by side) and
+`tripo.e2e.mjs` (16, the real page, task id with a colon, both languages).
 
 ## Page 2.11.1 / worker 2.6.7: "a problem with the Meshy key"
 

@@ -77,7 +77,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.6.7';
+const WORKER_VERSION = '2.7.0';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -300,14 +300,17 @@ async function health(env) {
     vision_describer: env.AI ? describersFor(env)[0].model : null,
     voice: !!(env.CARTESIA_API_KEY || env.AI),
     voice_via: env.CARTESIA_API_KEY ? 'cartesia' : (env.AI ? 'workers-ai' : false),
-    model3d: !!meshyKey(env).key,
+    model3d: !!model3dProvider(env),
+    /* Which service makes the models (2.7.0): 'tripo', 'meshy', or null. */
+    model3d_provider: model3dProvider(env),
     /* Whether the key LOOKS right, never the key: missing, set, or set but
-       not shaped like a Meshy key (they begin msy_). The name it was found
-       under, and whether it had to be cleaned (quotes, spaces, "Bearer"),
-       so a secret stored slightly wrong can be seen from the page. */
-    model3d_key: (() => { const k = meshyKey(env); return !k.key ? 'missing' : k.looksRight ? 'set' : 'not_msy'; })(),
-    model3d_key_name: meshyKey(env).name || null,
-    model3d_key_cleaned: meshyKey(env).cleaned,
+       not shaped like that service's keys (Tripo's begin tsk_, Meshy's
+       msy_). The name it was found under, and whether it had to be cleaned
+       (quotes, spaces, "Bearer"), so a secret stored slightly wrong can be
+       seen from the page. Describes the ACTIVE provider's key. */
+    model3d_key: (() => { const k = model3dKeyInfo(env); return !k.key ? 'missing' : k.looksRight ? 'set' : (k.provider === 'tripo' ? 'not_tsk' : 'not_msy'); })(),
+    model3d_key_name: model3dKeyInfo(env).name || null,
+    model3d_key_cleaned: model3dKeyInfo(env).cleaned,
     model3d_check: true,      // present only on workers that carry /model3d/check
     images: !!env.AI,
     stt: !!env.AI,
@@ -896,10 +899,192 @@ function meshyFailure(status, text, env) {
   }
   return { code: 'meshy_error', http: status, error: 'meshy ' + status + ': ' + String(text || '').slice(0, 300) };
 }
-function meshyNotConfigured() {
-  return { code: 'meshy_missing',
-    error: '3D generation is not configured: the worker has no MESHY_API_KEY. Make a key at meshy.ai (Settings, then API), add it to the worker as the secret MESHY_API_KEY, and deploy.',
-    tell_the_user: 'The 3D service has no Meshy key yet, so no model was made.' };
+function model3dNotConfigured() {
+  return { code: 'model3d_missing',
+    error: '3D generation is not configured: the worker has no 3D key. Make a Tripo key at platform.tripo3d.ai (API Keys), add it to the worker as the secret TRIPO_API_KEY, and deploy. (MESHY_API_KEY from meshy.ai also works, but Meshy needs a paid plan for keys.)',
+    fix: 'Cloudflare dashboard, the jarvis worker, Settings, Variables and Secrets: add the secret TRIPO_API_KEY (a key from platform.tripo3d.ai, API Keys; a new account starts with free credits), then Deploy.',
+    tell_the_user: 'The 3D service has no key yet, so no model was made.' };
+}
+
+/* ---------------------------------------------------------------------
+   TRIPO (2.7.0). A new Tripo API account starts with free credits and
+   there is no subscription (a textured model from a picture is roughly
+   30 credits, 100 credits cost $1), which made it the way to get 3D
+   models for someone whose Meshy account cannot make keys. The worker
+   picks it whenever a Tripo key is present, and keeps using Meshy when
+   only a Meshy key is. The contract the page sees does not change:
+   POST /model3d answers { taskId, kind, stage } and /model3d/status
+   answers { status, progress, glb, textured }. A Tripo task id travels as
+   "tripo:<id>" so the stateless status call knows whose task it is.
+
+   Written from Tripo's published API (Bearer key; POST /upload for a
+   picture; POST /task; GET /task/{id}; GET /user/balance). Only the
+   parameters that are certain are sent; texture and pbr default to on.
+   --------------------------------------------------------------------- */
+const TRIPO_BASE = 'https://api.tripo3d.ai/v2/openapi';
+const TRIPO_KEY_NAMES = ['TRIPO_API_KEY', 'TRIPO_KEY', 'TRIPO_API_TOKEN', 'TRIPO_TOKEN', 'TRIPO'];
+function tripoKey(env) {
+  const name = TRIPO_KEY_NAMES.find(n => String(env[n] || '').trim());
+  if (!name) return { key: '', name: '', cleaned: false, looksRight: false };
+  const raw = String(env[name]);
+  let key = raw.trim()
+    .replace(/^[A-Za-z_]*(?:TRIPO|KEY|TOKEN)[A-Za-z_]*\s*[=:]\s*/i, '')
+    .replace(/^['"`]+|['"`]+$/g, '').trim()
+    .replace(/^Bearer\s+/i, '').trim();
+  const m = /tsk_[A-Za-z0-9_-]+/.exec(key);
+  if (m) key = m[0];
+  key = key.replace(/\s+/g, '');
+  return { key, name, cleaned: key !== raw, looksRight: /^tsk_[A-Za-z0-9_-]{8,}$/.test(key) };
+}
+
+/* Which service makes the models. Tripo when it has a key, else Meshy.
+   MODEL3D_PROVIDER=meshy|tripo prefers one when both are set; a preferred
+   service with no key of its own is ignored rather than breaking 3D. */
+function model3dProvider(env) {
+  const t = !!tripoKey(env).key, m = !!meshyKey(env).key;
+  const want = String(env.MODEL3D_PROVIDER || '').trim().toLowerCase();
+  if (want === 'meshy' && m) return 'meshy';
+  if (want === 'tripo' && t) return 'tripo';
+  return t ? 'tripo' : m ? 'meshy' : null;
+}
+function model3dKeyInfo(env) {
+  const p = model3dProvider(env);
+  if (p === 'tripo') return Object.assign({ provider: 'tripo' }, tripoKey(env));
+  if (p === 'meshy') return Object.assign({ provider: 'meshy' }, meshyKey(env));
+  return { provider: null, key: '', name: '', cleaned: false, looksRight: false };
+}
+
+function tripoFailure(status, text, env) {
+  let body = {}; try { body = JSON.parse(text); } catch (e) {}
+  const code = body && typeof body.code === 'number' ? body.code : null;
+  const msg = String((body && (body.message || body.error)) || text || '').slice(0, 300);
+  const k = tripoKey(env);
+  const shape = k.looksRight ? '' :
+    ' The key the worker holds' + (k.name ? ' (' + k.name + ')' : '') + ' does not start with tsk_, so it is probably not a Tripo API key.';
+  const keyFix = 'Cloudflare dashboard, the jarvis worker, Settings, Variables and Secrets: set TRIPO_API_KEY to a key made at platform.tripo3d.ai (API Keys), then Deploy. check_3d_service then says whether Tripo accepts it.';
+  if (code === 2010 || /credit/i.test(msg)) {
+    return { code: 'tripo_credits', http: status,
+      error: 'The Tripo account has no credits left (' + status + '): ' + msg + ' Top up at platform.tripo3d.ai; nothing was made.',
+      fix: 'Top up credits at platform.tripo3d.ai (100 credits cost $1).',
+      tell_the_user: 'The Tripo account is out of credits, so no model was made.' };
+  }
+  if (status === 401 || status === 403 || /api ?key|unauthori[sz]ed|authenticat|invalid (?:token|key)/i.test(msg)) {
+    return { code: 'tripo_key', http: status,
+      error: 'Tripo refused the API key (' + status + '): ' + msg + '.' + shape + ' Make a key at platform.tripo3d.ai (API Keys), set it on the worker as the secret TRIPO_API_KEY, and deploy.',
+      fix: keyFix,
+      tell_the_user: 'Tripo refused the API key, so no model was made. It needs a new Tripo key in the worker.' };
+  }
+  if (code === 2008 || /content|policy|sensitive|violat/i.test(msg)) {
+    return { code: 'tripo_content', http: status,
+      error: 'Tripo would not make a model from that picture (content policy): ' + msg,
+      tell_the_user: 'Tripo refused that picture, so no model was made.' };
+  }
+  if (status === 429 || code === 2000 || /rate|too many|exceeded the limit/i.test(msg)) {
+    return { code: 'tripo_busy', http: status,
+      error: 'Tripo is limiting this key (' + status + '): ' + msg + ' Wait a minute and try again.',
+      tell_the_user: 'Tripo is busy right now. Try again in a minute.' };
+  }
+  if (status >= 500) {
+    return { code: 'tripo_down', http: status,
+      error: 'Tripo itself failed (' + status + '): ' + msg,
+      tell_the_user: 'The 3D service is having trouble right now.' };
+  }
+  return { code: 'tripo_error', http: status, error: 'tripo ' + status + (code != null ? ' (' + code + ')' : '') + ': ' + msg };
+}
+
+function tripoFetch(path, env, opt) {
+  opt = opt || {};
+  return fetch(TRIPO_BASE + path, Object.assign({}, opt, {
+    headers: Object.assign({ 'Authorization': 'Bearer ' + tripoKey(env).key }, opt.headers || {})
+  }));
+}
+
+/* Tripo answers { code, data } and reports most problems inside that body,
+   so a 200 with a non-zero code is a failure too. */
+async function tripoRead(res, env) {
+  const text = await res.text();
+  let body = {}; try { body = JSON.parse(text); } catch (e) {}
+  if (!res.ok || (typeof body.code === 'number' && body.code !== 0)) {
+    return { failure: tripoFailure(res.ok ? 400 : res.status, text, env) };
+  }
+  return { body, data: (body && body.data) || {} };
+}
+
+function dataUriBytes(uri) {
+  const m = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=\s]+)$/i.exec(uri);
+  if (!m) return null;
+  let bin;
+  try { bin = atob(m[2].replace(/\s+/g, '')); } catch (e) { return null; }
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const t = m[1].toLowerCase();
+  const ext = (t === 'jpeg' || t === 'jpg') ? 'jpg' : t;
+  return { bytes, ext, mime: 'image/' + (ext === 'jpg' ? 'jpeg' : ext) };
+}
+
+async function startTripo(image, prompt, env) {
+  let payload;
+  if (image) {
+    const pic = dataUriBytes(image);
+    if (!pic) return { failure: { code: 'tripo_error', error: 'that picture could not be read' } };
+    const fd = new FormData();
+    fd.append('file', new Blob([pic.bytes], { type: pic.mime }), 'picture.' + pic.ext);
+    const up = await tripoFetch('/upload', env, { method: 'POST', body: fd });
+    const u = await tripoRead(up, env);
+    if (u.failure) return u;
+    const token = u.data.image_token || u.data.file_token;
+    if (!token) return { failure: { code: 'tripo_error', error: 'Tripo did not take the picture (no upload token): ' + JSON.stringify(u.body).slice(0, 200) } };
+    payload = { type: 'image_to_model', file: { type: pic.ext, file_token: token } };
+  } else {
+    payload = { type: 'text_to_model', prompt };
+  }
+  const res = await tripoFetch('/task', env, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+  });
+  const t = await tripoRead(res, env);
+  if (t.failure) return t;
+  const id = t.data.task_id;
+  if (!id) return { failure: { code: 'tripo_error', error: 'Tripo did not return a task id: ' + JSON.stringify(t.body).slice(0, 200) } };
+  return { taskId: 'tripo:' + id };
+}
+
+function tripoUrl(v) {
+  return typeof v === 'string' && v ? v : (v && typeof v.url === 'string' && v.url ? v.url : null);
+}
+
+async function handleTripoStatus(id, env, request) {
+  const res = await tripoFetch('/task/' + encodeURIComponent(id), env);
+  const r = await tripoRead(res, env);
+  if (r.failure) return json(r.failure, 502, env, request);
+  const d = r.data;
+  const status = String(d.status || '').toLowerCase();
+  const progress = Math.max(0, Math.min(100, typeof d.progress === 'number' ? Math.round(d.progress) : 0));
+  if (status === 'queued' || status === 'running' || status === '') {
+    return json({ status: status === 'queued' ? 'PENDING' : 'IN_PROGRESS', stage: 'single', progress, glb: null, error: null }, 200, env, request);
+  }
+  if (status === 'success') {
+    const out = d.output || {}, result = d.result || {};
+    const textured = tripoUrl(out.pbr_model) || tripoUrl(result.pbr_model) || tripoUrl(out.model) || tripoUrl(result.model);
+    const bare = tripoUrl(out.base_model) || tripoUrl(result.base_model);
+    const glb = textured || bare;
+    if (!glb) {
+      return json({ status: 'FAILED', stage: 'single', progress, glb: null,
+        error: 'Tripo finished but returned no model file' }, 200, env, request);
+    }
+    return json({
+      status: 'SUCCEEDED', stage: 'single', progress: 100, glb,
+      textured: !!textured,
+      note: textured ? undefined : 'Tripo returned the untextured mesh',
+      thumbnail: tripoUrl(out.rendered_image) || tripoUrl(result.rendered_image),
+      credits_used: typeof d.consumed_credit === 'number' ? d.consumed_credit : null,
+      error: null
+    }, 200, env, request);
+  }
+  const why = status === 'banned' ? 'Tripo refused it (content policy)'
+            : status === 'expired' ? 'the Tripo task expired'
+            : status === 'cancelled' ? 'the Tripo task was cancelled'
+            : 'Tripo could not make a model from that (' + (status || 'failed') + ')';
+  return json({ status: 'FAILED', stage: 'single', progress, glb: null, error: why }, 200, env, request);
 }
 
 /* Meshy's text-to-3D is two jobs, not one. `preview` produces the mesh: the
@@ -932,23 +1117,35 @@ async function startMeshyTask(payload, env, kind) {
 
 async function handleModel3d(request, env) {
   if (request.method !== 'POST') return json({ error: 'POST only' }, 405, env, request);
-  if (!meshyKey(env).key) return json(meshyNotConfigured(), 503, env, request);
+  const provider = model3dProvider(env);
+  if (!provider) return json(model3dNotConfigured(), 503, env, request);
   const body = await request.json().catch(() => ({}));
 
-  /* A picture, if one came. Meshy takes it as a data URI, which is what the
-     page already holds for every attachment and every camera frame, so
-     nothing has to be uploaded anywhere first. */
+  /* A picture, if one came, as a data URI, which is what the page already
+     holds for every attachment and every camera frame. */
   const image = String((body && body.image) || '').trim();
   if (image) {
     if (!/^data:image\/(png|jpe?g|webp);base64,/i.test(image)) {
       return json({ error: 'the image must be a png, jpeg or webp data URI' }, 400, env, request);
     }
-    /* Meshy's own ceiling is generous but a request this size is worth
-       refusing early with a readable reason rather than as a 413 from
-       somewhere downstream. */
+    /* A request this size is worth refusing early with a readable reason
+       rather than as a 413 from somewhere downstream. */
     if (image.length > 12 * 1024 * 1024) {
       return json({ error: 'that image is too large; send one under about 8MB' }, 413, env, request);
     }
+  }
+
+  if (provider === 'tripo') {
+    const tripoPrompt = String((body && body.prompt) || '').trim().slice(0, 600);
+    if (!image && !tripoPrompt) return json({ error: 'no prompt and no image' }, 400, env, request);
+    /* The picture carries the colour, so the texture prompt and symmetry
+       hints Meshy takes are not sent: nothing here is guessed at. */
+    const t = await startTripo(image, tripoPrompt, env);
+    if (t.failure) return json(t.failure, 502, env, request);
+    return json({ taskId: t.taskId, kind: image ? 'image' : 'text', stage: image ? 'single' : 'preview', provider: 'tripo' }, 200, env, request);
+  }
+
+  if (image) {
     /* What JARVIS worked out by studying the picture from every side (page
        2.9.3): the materials and colours steer the texture pass, and the
        symmetry tells Meshy to mirror what it can see onto the side it
@@ -995,9 +1192,26 @@ async function readMeshyTask(id, env, kind) {
 /* "Is my Meshy key all right?" answered by Meshy itself, without making
    anything: the balance endpoint costs nothing and needs the same key. */
 async function handleModel3dCheck(request, env) {
-  const k = meshyKey(env);
-  const about = { key_name: k.name || null, key_looks_right: k.looksRight, key_was_cleaned: k.cleaned };
-  if (!k.key) return json(Object.assign({ ok: false }, meshyNotConfigured(), about), 200, env, request);
+  const k = model3dKeyInfo(env);
+  const about = { provider: k.provider, provider_label: k.provider === 'tripo' ? 'Tripo' : k.provider === 'meshy' ? 'Meshy' : null,
+                  key_name: k.name || null, key_looks_right: k.looksRight, key_was_cleaned: k.cleaned };
+  if (!k.key) return json(Object.assign({ ok: false }, model3dNotConfigured(), about), 200, env, request);
+  if (k.provider === 'tripo') {
+    let res;
+    try {
+      res = await tripoFetch('/user/balance', env);
+    } catch (err) {
+      return json(Object.assign({ ok: false, code: 'tripo_unreachable',
+        error: 'Tripo could not be reached from the worker: ' + ((err && err.message) || err),
+        tell_the_user: 'The 3D service could not be reached just now.' }, about), 200, env, request);
+    }
+    const r = await tripoRead(res, env);
+    if (r.failure) return json(Object.assign({ ok: false }, r.failure, about), 200, env, request);
+    const balance = typeof r.data.balance === 'number' ? r.data.balance : null;
+    return json(Object.assign({ ok: true, balance,
+      note: balance === 0 ? 'The key works, but the account has no credits: every model will fail until it is topped up.' : null
+    }, about), 200, env, request);
+  }
   let res, text;
   try {
     res = await fetch(MESHY_BALANCE_URL, { headers: { 'Authorization': 'Bearer ' + k.key } });
@@ -1017,9 +1231,15 @@ async function handleModel3dCheck(request, env) {
 }
 
 async function handleModel3dStatus(request, env) {
-  if (!meshyKey(env).key) return json(meshyNotConfigured(), 503, env, request);
   const params = new URL(request.url).searchParams;
   const id = params.get('id');
+  /* Whose task it is travels in its id ("tripo:..."), so a job already
+     running finishes on its own service even if the key set changes. */
+  if (id && id.indexOf('tripo:') === 0) {
+    if (!tripoKey(env).key) return json(model3dNotConfigured(), 503, env, request);
+    return await handleTripoStatus(id.slice(6), env, request);
+  }
+  if (!meshyKey(env).key) return json(model3dNotConfigured(), 503, env, request);
   if (!id) return json({ error: 'missing id' }, 400, env, request);
 
   const kind = params.get('kind') === 'image' ? 'image' : 'text';

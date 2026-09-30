@@ -308,6 +308,22 @@ single file `dist/index.html`.
   one on the Desktop; never overwrites; Windows reserved names get
   "model-"). open_model_window takes an optional name (the caption) for
   the file. lock.e2e.mjs, makeit.test.mjs and viewer.e2e.mjs cover it.
+- **Two 3D services, one contract (worker 2.7.0).** model3dProvider(env)
+  picks Tripo when tripoKey(env) has a key, else Meshy (MODEL3D_PROVIDER
+  prefers one; a preferred service without a key is ignored). The page sees
+  the same { taskId, kind, stage } / { status, progress, glb, textured }
+  either way. A Tripo task id is "tripo:<id>" and handleModel3dStatus routes
+  on that prefix, so a running job finishes on its own service; keep the
+  colon URL-encoded and never strip it in the page. Tripo is upload
+  (multipart, no Content-Type of ours) -> POST /task (only type + file or
+  prompt: texture and pbr default on) -> GET /task/{id}; a 200 whose body
+  has code != 0 is a failure. Its errors are tripo_key / tripo_credits /
+  tripo_busy / tripo_down / tripo_content, and model3d_missing when neither
+  key exists; every failure object carries `fix` and `tell_the_user`, and
+  the page (meshyReason) just passes them on. The Tripo endpoints and
+  fields were written from its published API WITHOUT a live key: if the
+  first real model fails, read the error text first (it quotes Tripo's own
+  message) before changing the flow.
 - **The Meshy key is read through meshyKey(env) (worker 2.6.7), never
   env.MESHY_API_KEY directly.** It takes MESHY_API_KEY, then MESHY_KEY /
   MESHY_API_TOKEN / MESHY_TOKEN / MESHY, and cleans it (spaces, quotes,
