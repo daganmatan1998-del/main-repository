@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { CameraControls } from '@react-three/drei';
 import type CameraControlsImpl from 'camera-controls';
@@ -17,7 +17,8 @@ export function CameraRig() {
   const set = useThree((s) => s.set);
   const size = useThree((s) => s.size);
   const projection = useEditor((s) => s.camera?.projection ?? 'perspective');
-  const ref = useRef<CameraControlsImpl>(null);
+  // Callback ref: the setup effect runs whenever a controls instance actually exists.
+  const [controls, setControls] = useState<CameraControlsImpl | null>(null);
 
   const persp = useMemo(() => new THREE.PerspectiveCamera(DEFAULT_CAMERA.fov, 1, 0.01, 5000), []);
   const ortho = useMemo(() => new THREE.OrthographicCamera(-1, 1, 1, -1, -20000, 20000), []);
@@ -40,7 +41,7 @@ export function CameraRig() {
 
   // Configure + restore whenever a controls instance is created (mount, projection switch).
   useEffect(() => {
-    const c = ref.current;
+    const c = controls;
     if (!c) return;
     viewport.controls = c;
     c.smoothTime = 0.16;
@@ -73,12 +74,12 @@ export function CameraRig() {
       c.removeEventListener('controlend', save);
       if (viewport.controls === c) viewport.controls = null;
     };
-  }, [active, projection, persp]);
+  }, [controls, projection, persp]);
 
   // Depth range follows the orbit distance: close-up inspection without z-fighting far away.
   const tgt = useMemo(() => new THREE.Vector3(), []);
   useFrame(() => {
-    const c = ref.current;
+    const c = controls;
     if (!c || projection !== 'perspective') return;
     c.getTarget(tgt);
     const dist = persp.position.distanceTo(tgt);
@@ -91,7 +92,7 @@ export function CameraRig() {
     }
   });
 
-  return <CameraControls ref={ref} camera={active} makeDefault />;
+  return <CameraControls ref={setControls} camera={active} makeDefault />;
 }
 
 /** Switches projection while keeping the framing as close as possible. */

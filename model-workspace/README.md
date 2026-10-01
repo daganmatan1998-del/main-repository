@@ -98,8 +98,13 @@ view, autosave, close the browser, reopen, find the project (with thumbnail) on
 the home screen, open it by save code and compare the restored scene, plus
 "Project not found." / "Unable to load project." paths.
 
+`tests/features.mjs` covers the rest: sample assets and instancing, animation
+playback, orthographic camera, all three quality modes, environment presets,
+undo of scene settings, and project rename / duplicate / delete from both the
+editor and the home screen.
+
 ```
-bash tests/fetch-fixtures.sh      # Khronos glTF samples + three.js example models
-npm run dev -- --port 5199 &
-node tests/e2e.mjs                # needs `playwright` resolvable
+npm run test:fixtures             # Khronos glTF samples + three.js example models
+npm run build && npx vite preview --port 5199 &
+npm run test:e2e                  # needs `playwright` resolvable (npm i -D playwright)
 ```

@@ -212,19 +212,19 @@ const rotY = page.locator('[data-testid=instance-props] .num-field.y input').nth
 await rotY.fill('45');
 await rotY.press('Enter');
 const scaleX = page.locator('[data-testid=instance-props] .num-field.x input').nth(2);
-await scaleX.fill('2');
+await scaleX.fill(String(before.scale[0] * 2));
 await scaleX.press('Enter');
 s = await state(page);
 const after = s.instances.find((i) => i.id === ids[1]);
 check(Math.abs(after.position[0] - (before.position[0] + 1.5)) < 1e-3, 'moved +1.5 on X');
 check(Math.abs(after.rotation[1] - Math.PI / 4) < 1e-4, 'rotated 45° on Y');
-check(after.scale.every((v) => Math.abs(v - 2) < 1e-6), 'scaled uniformly to 2×');
+check(after.scale.every((v, k) => Math.abs(v - before.scale[k] * 2) < 1e-6), 'scaled uniformly to 2× (all axes linked)');
 check(JSON.stringify(s.instances.filter((i) => i.id !== ids[1])) === JSON.stringify(othersBefore), 'other models untouched');
 const obj = await page.evaluate((id) => {
   const o = window.__workspace.registry.get(id);
   return { p: o.position.toArray(), r: o.rotation.y, s: o.scale.toArray() };
 }, ids[1]);
-check(Math.abs(obj.r - Math.PI / 4) < 1e-4 && Math.abs(obj.s[0] - 2) < 1e-6, 'rendered object matches the edited transform');
+check(Math.abs(obj.r - Math.PI / 4) < 1e-4 && Math.abs(obj.s[0] - before.scale[0] * 2) < 1e-6, 'rendered object matches the edited transform');
 
 step('Move with the gizmo (mouse drag on the free-move handle)');
 await page.click(`[data-testid=tree-row][data-id="${ids[3]}"]`);
@@ -291,6 +291,8 @@ await page.keyboard.press('Control+Shift+z');
 await waitLoaded(page, 9);
 
 step('Arrange: place side by side');
+// Locked models are deliberately left where they are by arrange tools; unlock first.
+await page.click(`[data-testid=tree-row][data-id="${ids[4]}"] [data-testid=lock]`);
 await page.keyboard.press('Control+a');
 s = await state(page);
 check(s.selection.length >= 2, `Ctrl+A selected ${s.selection.length} models`);
@@ -300,7 +302,8 @@ check(geo.overlaps === 0, `side by side: no overlaps (${geo.overlaps})`);
 await page.keyboard.press('Escape');
 
 step('Camera views / focus / orbit');
-const camPos = () => page.evaluate(() => window.__workspace.viewport.camera.position.toArray());
+// Read the controls' end-of-transition values, so a slow software renderer can't catch it mid-flight.
+const camPos = () => page.evaluate(() => window.__workspace.viewport.controls.getPosition(window.__workspace.viewport.camera.position.clone(), true).toArray());
 const views = {};
 for (const v of ['front', 'back', 'left', 'right', 'top', 'bottom']) {
   await page.click(`[data-testid=view-${v}]`);
@@ -391,6 +394,7 @@ await page.fill('.modal input', saveCode.toLowerCase().replace(/-/g, ' '));
 await page.keyboard.press('Enter');
 await page.waitForSelector('.viewport-canvas canvas', { timeout: 30000 });
 await waitLoaded(page, 9, 180000);
+await page.waitForFunction(() => !!window.__workspace.viewport.controls);
 const restored = await state(page);
 const strip = (arr) => JSON.stringify(arr.map(({ id, assetId, name, position, rotation, scale, visible, locked }) => ({ id, assetId, name, position, rotation, scale, visible, locked })));
 check(strip(restored.instances) === strip(savedState.instances), 'all instances restored exactly (ids, names, transforms, visibility, lock)');

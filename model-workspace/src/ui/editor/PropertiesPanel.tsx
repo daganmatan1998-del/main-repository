@@ -99,7 +99,7 @@ function TransformSection({ inst }: { inst: InstanceState }) {
         <span className="k">Position</span>
         <div className="vec3">
           {axes.map((a, i) => (
-            <NumberField key={a} label={a.toUpperCase()} axis={a} value={t.position[i]} step={0.01} disabled={dis} onChange={(v) => live('position', i, v)} onCommit={(v) => setAxis('position', i, v)} />
+            <NumberField key={a} label={a.toUpperCase()} axis={a} value={t.position[i]} step={0.01} precision={2} disabled={dis} onChange={(v) => live('position', i, v)} onCommit={(v) => setAxis('position', i, v)} />
           ))}
         </div>
       </div>

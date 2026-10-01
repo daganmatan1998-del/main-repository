@@ -46,10 +46,25 @@ function frame(box: THREE.Box3, dir?: THREE.Vector3, smooth = true) {
     c.setLookAt(center.x + d.x * dist, center.y + d.y * dist, center.z + d.z * dist, center.x, center.y, center.z, smooth);
     c.zoomTo(Math.min(w, h) / (radius * 2.3), smooth);
   } else {
+    // Tight fit: every box corner must land inside the frustum (with a margin).
     const p = cam as THREE.PerspectiveCamera;
-    const fov = THREE.MathUtils.degToRad(p.fov);
-    const hfov = 2 * Math.atan(Math.tan(fov / 2) * p.aspect);
-    const dist = (radius * 1.15) / Math.sin(Math.min(fov, hfov) / 2);
+    const tanV = Math.tan(THREE.MathUtils.degToRad(p.fov) / 2) * 0.86;
+    const tanH = tanV * p.aspect;
+    const fwd = d.clone().negate();
+    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
+    if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
+    right.normalize();
+    const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+    let dist = 0;
+    const corner = new THREE.Vector3();
+    for (let i = 0; i < 8; i++) {
+      corner.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(center);
+      const x = Math.abs(corner.dot(right));
+      const y = Math.abs(corner.dot(up));
+      const z = corner.dot(d); // towards the camera
+      dist = Math.max(dist, x / tanH + z, y / tanV + z);
+    }
+    dist = Math.max(dist, radius * 0.6, 0.1);
     c.setLookAt(center.x + d.x * dist, center.y + d.y * dist, center.z + d.z * dist, center.x, center.y, center.z, smooth);
   }
 }

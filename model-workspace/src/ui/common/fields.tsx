@@ -114,7 +114,8 @@ export function NumberField({
 
 function fmt(v: number, p: number): string {
   if (!Number.isFinite(v)) return '0';
-  const s = v.toFixed(p);
+  let s = v.toFixed(p);
+  if (/^-0\.?0*$/.test(s)) s = '0';
   return s.includes('.') ? s.replace(/\.?0+$/, '') || '0' : s;
 }
 

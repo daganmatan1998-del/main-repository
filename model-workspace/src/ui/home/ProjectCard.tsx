@@ -37,6 +37,7 @@ export const ProjectCard = memo(function ProjectCard({
             {p.corrupted ? <AlertTriangle /> : <Box />}
           </div>
         )}
+        <span className="code-chip pc-code">{p.saveCode}</span>
         <div className="pc-open">
           <span>Open</span>
           <ArrowUpRight size={14} />
@@ -69,7 +70,6 @@ export const ProjectCard = memo(function ProjectCard({
               </span>
             </>
           )}
-          <span className="code-chip pc-code">{p.saveCode}</span>
         </div>
       </div>
     </article>

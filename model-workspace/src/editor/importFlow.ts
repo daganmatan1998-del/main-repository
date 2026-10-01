@@ -210,14 +210,14 @@ export async function addAssetInstance(assetId: string, name?: string): Promise<
 /**
  * Unit normalisation: files authored in centimetres / millimetres (common for FBX,
  * STL, PLY) arrive 100–1000× larger than metre-based glTF. A power-of-ten scale
- * brings them into a 0.05–40 unit range, so models sit together sensibly while
+ * brings them into a 0.05–12 unit range (metres: anything from a ring to a bus), so models sit together sensibly while
  * proportions within the same unit system are preserved. Geometry is untouched.
  */
 export function unitScaleFor(bounds: { min: Vec3; max: Vec3 }): number {
   const size = Math.max(...bounds.max.map((v, i) => v - bounds.min[i]));
   if (!Number.isFinite(size) || size <= 0) return 1;
   let scale = 1;
-  while (size * scale > 40 && scale > 1e-6) scale /= 10;
+  while (size * scale > 12 && scale > 1e-6) scale /= 10;
   while (size * scale < 0.05 && scale < 1e6) scale *= 10;
   return Number(scale.toPrecision(1));
 }
