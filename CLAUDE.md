@@ -236,6 +236,18 @@ single file `dist/index.html`.
   controls.target (axis = camUp*dx - camRight*dy) and the spin is now a
   turn about world-up through the same pivot. The cut-out hands in the
   e2e scenes are big: keep two hands far apart or the tracker sees one.
+- **Every camera frame, once (2.13.1).** The gesture controller is driven
+  by video.requestVideoFrameCallback (rAF + currentTime change where it is
+  missing), never a timer: a timer missed frames between ticks, read some
+  twice and idled at 110 ms. stats() has missed (presentedFrames gaps),
+  repeats, fps, handsAt. camera.html asks frameRate {ideal:60} on every
+  attempt (ideal never refuses a camera) and encodes the orb's frame with
+  toBlob, every third push while hands were seen in the last second.
+  frames.e2e.mjs measures it with a captureStream(0) camera at a rate the
+  sandbox tracker (~125 ms a frame on CPU) can keep up with; a uniform test
+  background is "blank" to frameLooksBlank and never pushed.
+  Keep the tracker confidences at 0.55/0.5/0.5: 0.4 broke gesture.e2e and
+  rotate.e2e (real OK signs read as open hands).
 - **The stall breaker counts work, not text (2.10.1).** lastThinkStart is
   the last sign of life: every stream chunk (readMessageStream), every
   answered request (the callClaude wrapper around callClaudeOnce) and every

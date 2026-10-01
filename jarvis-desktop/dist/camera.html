@@ -242,8 +242,18 @@
     }catch(e){}
   }
 
+  /* The frame for the orb is encoded off this window's thread (toBlob),
+     and while his hands are in view it goes every third tick: a JPEG
+     encoded here every 400 ms stalled the hand tracker for a frame or two
+     each time (2.13.0). "Look at this" still gets a picture under 1.2 s
+     old. */
+  var pushN = 0, encoding = false;
   function pushFrame(){
-    if(!stream || !feed.videoWidth) return;
+    if(!stream || !feed.videoWidth || encoding) return;
+    pushN++;
+    try{
+      if(gz && pushN % 3 && performance.now() - gz.stats().handsAt < 1000) return;
+    }catch(e){}
     /* A blank frame is skipped rather than sent: the interval tries again
        in PUSH_MS, and the orb simply keeps whichever real frame it had
        before (or none yet, which it is told honestly rather than shown
@@ -259,8 +269,16 @@
          frame that gets analysed is not, because text comes out backwards.
          The picture that leaves here is always the true way round. */
       ctx.drawImage(feed, 0, 0, c.width, c.height);
-      emit('jarvis://frame', c.toDataURL('image/jpeg', 0.75));
-    }catch(e){ /* one dropped frame is not worth reporting */ }
+      if(!c.toBlob || typeof FileReader === 'undefined'){ emit('jarvis://frame', c.toDataURL('image/jpeg', 0.75)); return; }
+      encoding = true;
+      c.toBlob(function(b){
+        if(!b){ encoding = false; return; }
+        var r = new FileReader();
+        r.onload = function(){ encoding = false; emit('jarvis://frame', r.result); };
+        r.onerror = function(){ encoding = false; };
+        r.readAsDataURL(b);
+      }, 'image/jpeg', 0.75);
+    }catch(e){ encoding = false; /* one dropped frame is not worth reporting */ }
   }
 
   /* STARTING THE CAMERA — WHICHEVER CAMERA ACTUALLY WORKS (2.10.4).
@@ -292,16 +310,19 @@
   function cameraAttempts(devices){
     var remembered = rememberedCamera();
     var list = [];
-    if(remembered) list.push({ why: 'the camera that worked last time', video: { deviceId:{ exact: remembered }, width:{ ideal:1280 }, height:{ ideal:720 } } });
-    list.push({ why: 'the front camera', video: { width:{ ideal:1280 }, height:{ ideal:720 }, facingMode:'user' } });
+    /* frameRate 60 (2.13.0): hand tracking reads every frame the camera
+       sends, so more frames is smoother tracking. "ideal" never refuses a
+       camera: one that cannot do 60 gives the most it can. */
+    if(remembered) list.push({ why: 'the camera that worked last time', video: { deviceId:{ exact: remembered }, width:{ ideal:1280 }, height:{ ideal:720 }, frameRate:{ ideal:60 } } });
+    list.push({ why: 'the front camera', video: { width:{ ideal:1280 }, height:{ ideal:720 }, frameRate:{ ideal:60 }, facingMode:'user' } });
     var cams = (devices || []).filter(function(d){ return d.kind === 'videoinput' && d.deviceId && d.deviceId !== 'default'; });
     cams.sort(function(a, b){ return isInfrared(a.label) - isInfrared(b.label); });
     cams.forEach(function(d, i){
       var name = d.label || ('camera ' + (i + 1));
-      list.push({ why: name, video: { deviceId:{ exact: d.deviceId }, width:{ ideal:1280 }, height:{ ideal:720 } } });
-      list.push({ why: name + ' (any size)', video: { deviceId:{ exact: d.deviceId } } });
+      list.push({ why: name, video: { deviceId:{ exact: d.deviceId }, width:{ ideal:1280 }, height:{ ideal:720 }, frameRate:{ ideal:60 } } });
+      list.push({ why: name + ' (any size)', video: { deviceId:{ exact: d.deviceId }, frameRate:{ ideal:60 } } });
     });
-    list.push({ why: 'any camera', video: true });
+    list.push({ why: 'any camera', video: { frameRate:{ ideal:60 } } });
     return list;
   }
   function stopStream(s){ try{ s.getTracks().forEach(function(t){ t.stop(); }); }catch(e){} }
@@ -319,7 +340,7 @@
        nothing must not leave the window saying "asking" forever. */
     return Promise.race([feed.play().catch(function(){}), new Promise(function(r){ setTimeout(r, 2500); })]).then(function(){
       if(gen !== startGen) return;
-      liveText = (st.width || '?') + '×' + (st.height || '?') + ' — live';
+      liveText = (st.width || '?') + '×' + (st.height || '?') + (st.frameRate ? ' · ' + Math.round(st.frameRate) + ' fps' : '') + ' — live';
       showState();
       emit('jarvis://camera-open', true);
       gzStart();

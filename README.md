@@ -1251,3 +1251,35 @@ remembered. If it cannot be found, he says so: put a shortcut named
 "Open workspace" on its own is still the Shopify/Instagram dashboards. A
 question about the app ("what is 3D workspace"), "close 3D workspace", or
 "don't open it" is never taken as the command.
+
+## Page 2.13.1: hand tracking reads every camera frame (needs the app rebuilt)
+
+**Before.** The tracker ran on a timer: 30 ms after the last detection while
+hands were in view, 110 ms when there were none. The timer knew nothing of
+the camera, so:
+
+- frames that arrived between two ticks were never looked at;
+- the same frame was sometimes read twice;
+- a hand coming into view first waited out the slow idle tick.
+
+That was the missed frames and the stutter. Measured on the same camera
+feed, the old loop read 33 times for 17 frames.
+
+**Now.**
+
+- The video calls the tracker for every frame it shows
+  (`requestVideoFrameCallback`), and each frame is read exactly once, with
+  hands in view or not. In the same test: 24 frames, 24 reads, none missed,
+  none twice.
+- The camera is asked for 60 frames a second (`frameRate: { ideal: 60 }`).
+  A camera that cannot do 60 gives the most it can, and is never refused.
+  The camera window's status line shows the rate it got (for example
+  "1280×720 · 60 fps — live").
+- The picture sent to the orb every 400 ms used to be JPEG-encoded on the
+  camera window's own thread, which stalled the tracker each time. It is
+  now encoded off that thread. While your hands are in view it goes every
+  1.2 s instead, which is still fresh for "look at this".
+- The tracker's confidence thresholds stay at 0.55 / 0.5 / 0.5. Lowering
+  them to 0.4 was tried and measured: on the real hand photos it read OK
+  signs as open hands, so it was not kept.
+- `stats()` reports frames read, missed and the rate (`fps`), for checking.

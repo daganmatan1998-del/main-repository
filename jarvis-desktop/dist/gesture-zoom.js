@@ -728,6 +728,8 @@
         lm = await V.HandLandmarker.createFromOptions(fileset, {
           baseOptions: { modelAssetPath: base + '/hand_landmarker.task', delegate },
           runningMode: 'VIDEO', numHands: 2,
+          /* 0.55 / 0.5 / 0.5, measured: 0.4 (tried in 2.13.1) kept a
+             degraded track and read real OK signs as open hands. */
           minHandDetectionConfidence: 0.55, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5
         });
         used = delegate; break;
@@ -826,10 +828,21 @@
   }
 
   /* ------------------------------------------------------------------
-     THE CONTROLLER — camera frames in, zoom out. Detection runs about 30
-     times a second while hands are in view and drops to about 9 when
-     none have been for a second and a half, so an idle camera costs
-     little. Nothing runs at all while the feature is off.
+     THE CONTROLLER — camera frames in, zoom out.
+
+     EVERY FRAME, ONCE (2.13.0). Detection used to run on a timer: 30 ms
+     after the last detection with hands in view, 110 ms without. A timer
+     knows nothing of the camera, so frames that arrived between two ticks
+     were never looked at, the same frame was sometimes read twice, and a
+     hand coming into view waited out the slow idle tick first — what he
+     saw as the tracking missing frames and stuttering. Now the video
+     itself calls in (requestVideoFrameCallback) for every frame it
+     presents, and that frame, and only that one, goes to the tracker, at
+     whatever rate the camera runs; with hands or without. Where the
+     callback does not exist, animation frames read the video whenever
+     its picture changed. stats() counts frames read, frames the video
+     presented that were never read (missed), and the rate.
+     Nothing runs at all while the feature is off.
   ------------------------------------------------------------------ */
   function startGestureZoom(o){
     const video = o.video, overlay = o.overlay;
@@ -892,13 +905,43 @@
       }
       return loading;
     }
+    const byFrame = typeof video.requestVideoFrameCallback === 'function';
+    const raf = root.requestAnimationFrame ? root.requestAnimationFrame.bind(root) : (f) => setTimeout(() => f(now()), 16);
+    const unraf = root.cancelAnimationFrame ? root.cancelAnimationFrame.bind(root) : clearTimeout;
+    let missed = 0, repeats = 0, lastPresented = -1, lastMedia = -1, fpsAt = 0, fpsN = 0, fps = 0;
     function schedule(){
+      if(!running || timer) return;
+      timer = byFrame ? { vfc: video.requestVideoFrameCallback(onFrame) } : { raf: raf(onPaint) };
+    }
+    function unschedule(){
+      if(!timer) return;
+      try{
+        if(timer.vfc != null) video.cancelVideoFrameCallback(timer.vfc);
+        if(timer.raf != null) unraf(timer.raf);
+      }catch(e){}
+      timer = null;
+    }
+    function onFrame(_, meta){
+      timer = null;
       if(!running) return;
-      const idle = now() - handsAt > 1500;
-      timer = setTimeout(tick, idle ? 110 : 30);
+      const n = meta && typeof meta.presentedFrames === 'number' ? meta.presentedFrames : -1;
+      if(n >= 0 && tracker){
+        if(lastPresented >= 0 && n > lastPresented + 1) missed += n - lastPresented - 1;
+        if(n === lastPresented) repeats++;
+        lastPresented = n;
+      }
+      tick();
+      schedule();
+    }
+    function onPaint(){
+      timer = null;
+      if(!running) return;
+      /* Only a new picture: the same one twice is wasted work. */
+      const m = video.currentTime;
+      if(m !== lastMedia){ lastMedia = m; tick(); }
+      schedule();
     }
     function tick(){
-      timer = null;
       if(!running) return;
       try{
         if(tracker && video.readyState >= 2 && video.videoWidth){
@@ -906,6 +949,8 @@
           const hands = tracker.detect(video, t);
           const t2 = now();
           frames++; spent += t2 - t;
+          fpsN++;
+          if(t2 - fpsAt >= 1000){ fps = fpsAt ? fpsN * 1000 / (t2 - fpsAt) : 0; fpsAt = t2; fpsN = 0; }
           if(hands.length) handsAt = t2;
           /* A GPU path that is slow — a machine with no real GPU, or a
              broken driver, runs it in software — is worse than the CPU one.
@@ -924,7 +969,6 @@
           drawOverlay(overlay, video, ev, label || (ev.state === 'armed' ? 'ZOOM · READY' : '') || turnLabel);
         }
       }catch(e){ if(o.onStatus) o.onStatus({ kind: 'error', reason: String((e && e.message) || e) }); }
-      schedule();
     }
     const api = {
       gesture, manager, relay,
@@ -933,11 +977,11 @@
         running = true;
         /* Whether a 3D model is open, every two seconds, for precise control. */
         if(!pingTimer && o.listen){ relay.ping(); pingTimer = setInterval(() => relay.ping(), 2000); }
-        return ensureTracker().then(() => { if(running && !timer) schedule(); return true; }, () => { running = false; return false; });
+        return ensureTracker().then(() => { if(running) schedule(); return true; }, () => { running = false; return false; });
       },
       stop(){
         running = false;
-        if(timer){ clearTimeout(timer); timer = null; }
+        unschedule();
         if(pingTimer){ clearInterval(pingTimer); pingTimer = null; }
         relay.handle({ type: 'end', state: 'idle' });
         if(gesture.state !== 'idle'){ manager.handle({ type: 'end' }); }
@@ -949,7 +993,8 @@
         gesture.configure(settings); manager.configure(settings);
         if(settings.enabled) api.start(); else api.stop();
       },
-      stats(){ return { frames, avgMs: frames ? spent / frames : 0, running, delegate: tracker && tracker.delegate, switched, last: lastEv }; }
+      stats(){ return { frames, avgMs: frames ? spent / frames : 0, running, delegate: tracker && tracker.delegate, switched,
+                        missed, repeats, fps, everyFrame: byFrame, handsAt, last: lastEv }; }
     };
     return api;
   }
