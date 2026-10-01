@@ -1690,7 +1690,7 @@
       <button id="gestureTurnBtn" type="button">☝ PRECISE CONTROL: ON</button>
     </div>
     <div class="vsHint" id="gestureTurnHint">Pinch with ONE hand while a 3D model is open: move the hand and the model turns with it — right, left, up, down and every way between, all the way round. Two pinched hands are still the zoom. STRAIGHTEN in the model's right-click menu puts it back.</div>
-    <div class="gzRow"><label for="gzTurnSpeed" id="gzTurnSpeedLabel">Turn per cm</label><input id="gzTurnSpeed" type="range" min="3" max="40" step="1"><span class="gzVal" id="gzTurnSpeedVal"></span></div>
+    <div class="gzRow"><label for="gzTurnScreen" id="gzTurnScreenLabel">Full turn across</label><input id="gzTurnScreen" type="range" min="0.25" max="1.5" step="0.05"><span class="gzVal" id="gzTurnScreenVal"></span></div>
     <div class="vsRow vsActions">
       <button id="gestureResetBtn" type="button">DEFAULTS</button>
     </div>
@@ -2067,7 +2067,7 @@ const I18N = {
     gestureHint: 'Pinch thumb and index finger on BOTH hands in front of the camera, then pull your hands apart to zoom in and bring them together to zoom out — on whatever is in front: a web page, a PDF, a picture, a 3D model. Let go with either hand and it stops; the next pinch starts fresh. Needs the camera window open.',
     gzSensitivityLabel: 'Steps per cm', gzThresholdLabel: 'Movement before it zooms', gzSmoothingLabel: 'Smoothing',
     gzMaxSpeedLabel: 'Maximum steps a second', gzMaxZoomLabel: 'Maximum zoom', gzMinZoomLabel: 'Minimum zoom',
-    gestureTurnOn: '☝ PRECISE CONTROL: ON', gestureTurnOff: '☝ PRECISE CONTROL: OFF', gzTurnSpeedLabel: 'Turn per cm',
+    gestureTurnOn: '☝ PRECISE CONTROL: ON', gestureTurnOff: '☝ PRECISE CONTROL: OFF', gzTurnScreenLabel: 'Full turn across',
     gestureTurnHint: 'Pinch with ONE hand while a 3D model is open: move the hand and the model turns with it — right, left, up, down and every way between, all the way round. Two pinched hands are still the zoom. STRAIGHTEN in the model\'s right-click menu puts it back.',
     gestureResetBtn: 'DEFAULTS',
     actNote: 'Every tool he ran, newest first. Click a row for the full arguments and result. This is what actually happened — not what he said happened.',
@@ -2328,7 +2328,7 @@ const I18N = {
     gestureHint: 'תצמיד אגודל ואצבע בשתי הידיים מול המצלמה, ואז תרחיק את הידיים זו מזו כדי להגדיל ותקרב אותן כדי להקטין — בכל מה שפתוח מלפנים: דף אינטרנט, PDF, תמונה, מודל תלת-ממד. שחרור של יד אחת עוצר; הצביטה הבאה מתחילה מחדש. צריך שחלון המצלמה יהיה פתוח.',
     gzSensitivityLabel: 'רגישות', gzThresholdLabel: 'תנועה לפני שמתחיל זום', gzSmoothingLabel: 'החלקה',
     gzMaxSpeedLabel: 'מקסימום צעדים בשנייה', gzMaxZoomLabel: 'זום מרבי', gzMinZoomLabel: 'זום מזערי',
-    gestureTurnOn: '☝ שליטה מדויקת: פועלת', gestureTurnOff: '☝ שליטה מדויקת: כבויה', gzTurnSpeedLabel: 'סיבוב לכל ס״מ',
+    gestureTurnOn: '☝ שליטה מדויקת: פועלת', gestureTurnOff: '☝ שליטה מדויקת: כבויה', gzTurnScreenLabel: 'סיבוב שלם לאורך',
     gestureTurnHint: 'צביטה ביד אחת כשמודל תלת-ממד פתוח: תזיז את היד והמודל מסתובב איתה — ימינה, שמאלה, למעלה, למטה וכל כיוון שביניהם, סיבוב מלא. צביטה בשתי ידיים היא עדיין הזום. "STRAIGHTEN" בתפריט הקליק הימני של המודל מחזיר אותו למצב ההתחלתי.',
     gestureResetBtn: 'ברירת מחדל',
     actNote: 'כל כלי שהוא הריץ, החדש למעלה. לחץ על שורה לפרטים המלאים. זה מה שבאמת קרה — לא מה שהוא אמר שקרה.',
@@ -2447,7 +2447,7 @@ function applyLanguage(lang){
     actionsBtn:'actionsBtn',
     gestureBtn:'gestureBtn', gestureHint:'gestureHint', gzSensitivityLabel:'gzSensitivityLabel', gzThresholdLabel:'gzThresholdLabel',
     gzSmoothingLabel:'gzSmoothingLabel', gzMaxSpeedLabel:'gzMaxSpeedLabel', gzMaxZoomLabel:'gzMaxZoomLabel',
-    gzMinZoomLabel:'gzMinZoomLabel', gestureResetBtn:'gestureResetBtn', gestureTurnHint:'gestureTurnHint', gzTurnSpeedLabel:'gzTurnSpeedLabel',
+    gzMinZoomLabel:'gzMinZoomLabel', gestureResetBtn:'gestureResetBtn', gestureTurnHint:'gestureTurnHint', gzTurnScreenLabel:'gzTurnScreenLabel',
     readyMsg:'readyMsg', authEnterBtn:'authEnterBtn', decoySendBtn:'decoySendBtn'
   };
   Object.keys(textMap).forEach(id=>{
@@ -2503,7 +2503,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.13.1';
+const APP_VERSION = '2.14.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -7347,7 +7347,7 @@ gestureBtn.addEventListener('click', ()=> toggleSubPanel(gesturePanel, gestureBt
    live, so a change applies without reopening anything. --- */
 var GZ_STORE = 'gesture_zoom';   // jarvis_store:gesture_zoom, with Store's prefix
 var GZ_DEFAULTS = { enabled:true, sensitivity:1, threshold:5, smoothing:0.5, maxSpeed:6, maxZoom:5, minZoom:0.25,
-                    turnEnabled:true, turnSpeed:12 };
+                    turnEnabled:true, turnScreen:0.75 };
 var GZ_FIELDS = [
   /* Since 2.10.4 the hands' MOVEMENT zooms, a step at a time: sensitivity
      is steps per centimetre, the threshold millimetres ignored at the start,
@@ -7358,9 +7358,9 @@ var GZ_FIELDS = [
   ['maxSpeed',    'gzMaxSpeed',    v => Math.round(v) + '/s'],
   ['maxZoom',     'gzMaxZoom',     v => Math.round(v * 100) + '%'],
   ['minZoom',     'gzMinZoom',     v => Math.round(v * 100) + '%'],
-  /* Precise control (2.12.0): one pinched hand turns a 3D model, this many
-     degrees for every centimetre the hand moves. */
-  ['turnSpeed',   'gzTurnSpeed',   v => Math.round(v) + '°/cm']
+  /* Precise control: one pinched hand turns a 3D model; crossing this
+     share of the screen is one full turn (2.13.1, was degrees per cm). */
+  ['turnScreen',  'gzTurnScreen',  v => Math.round(v * 100) + '% ' + (currentLang === 'he' ? '\u05de\u05e1\u05da' : 'of screen')]
 ];
 /* var, not let: applyLanguage can render this panel before this line has
    run, and a let read that early throws. */

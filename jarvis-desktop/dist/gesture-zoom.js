@@ -53,11 +53,11 @@
     maxZoom: 5,         // 500 %, relative to where JARVIS first found the window
     minZoom: 0.25,      // 25 %
     turnEnabled: true,  // precise control: one pinch turns a 3D model
-    turnSpeed: 12       // degrees the model turns per centimetre the hand moves
+    turnScreen: 0.75    // the share of the picture the hand crosses for one full turn (360°)
   });
   const LIMITS = {
     sensitivity: [0.25, 3], threshold: [0, 30], smoothing: [0, 1],
-    maxSpeed: [1, 15], maxZoom: [1.2, 20], minZoom: [0.05, 0.9], turnSpeed: [3, 40]
+    maxSpeed: [1, 15], maxZoom: [1.2, 20], minZoom: [0.05, 0.9], turnScreen: [0.25, 1.5]
   };
   const STORE_KEY = 'jarvis_store:gesture_zoom';
 
@@ -327,9 +327,12 @@
      Exactly ONE hand pinched (the other open, or not in view), held for
      TURN_ARM_MS, and nothing turns yet: the first TURN_DEAD_MM of movement
      are ignored, as pinching moves the hand. From there the palm centre is
-     the handle: every centimetre it moves turns the model turnSpeed degrees
-     the same way — right is right, up is up, and every direction between,
-     all the way round. Mirror-proof: right means HIS right, which on the
+     the handle, and the turn is measured ON THE SCREEN (2.13.1): crossing
+     turnScreen of the picture (3/4 by default) is one full turn, 360°,
+     however near or far the hand is — across, 3/4 of the width; up and
+     down, 3/4 of the height. So the nearer the hand is to the camera, the
+     less it has to move for the same turn. Right is right, up is up, and
+     every direction between, all the way round. Mirror-proof: right means HIS right, which on the
      raw camera picture is to the left.
 
      Living beside the zoom:
@@ -341,7 +344,7 @@
      A tracking glitch that throws the hand across the picture in one frame
      is not a movement; the turn starts again from wherever the hand is.
   ------------------------------------------------------------------ */
-  const TURN_ARM_MS = 220, TURN_DEAD_MM = 4, TURN_JUMP = 2.5, TURN_MAX_FRAME = 45;
+  const TURN_ARM_MS = 220, TURN_DEAD_MM = 4, TURN_JUMP = 2.5, TURN_MAX_FRAME = 90;
 
   class HandGestures {
     constructor(settings){
@@ -374,7 +377,7 @@
       const e = ev.engaged || [false, false];
       if(e[0] && e[1]) this.latch = true;
       if(!e[0] && !e[1]) this.latch = false;
-      ev.turn = this.turnStep(frame.t, e);
+      ev.turn = this.turnStep(frame.t, e, frame.width, frame.height);
       ev.latched = this.latch;
       return ev;
     }
@@ -386,7 +389,7 @@
                state: 'idle', dx: 0, dy: 0, total };
     }
 
-    turnStep(t, e){
+    turnStep(t, e, width, height){
       const single = !!e[0] !== !!e[1];
       if(!this.s.turnEnabled || !single || this.latch) return this.endTurn();
       const slot = e[0] ? 0 : 1;
@@ -425,9 +428,14 @@
         T.state = 'turning'; T.last = { x, y };
         return view({ type: 'move' });
       }
-      const k = this.s.turnSpeed;
-      const dx = clamp(-(x - T.last.x) * PALM_CM * k, -TURN_MAX_FRAME, TURN_MAX_FRAME);
-      const dy = clamp(-(y - T.last.y) * PALM_CM * k, -TURN_MAX_FRAME, TURN_MAX_FRAME);
+      /* x and y are in palms of T.scale pixels (filtered there, so the
+         smoothing is the same whatever the camera's size); times T.scale
+         they are pixels again, over the picture's width or height the
+         share of the screen crossed. */
+      const per = 360 / this.s.turnScreen;
+      const W = width > 0 ? width : 1280, H = height > 0 ? height : 720;
+      const dx = clamp(-(x - T.last.x) * T.scale / W * per, -TURN_MAX_FRAME, TURN_MAX_FRAME);
+      const dy = clamp(-(y - T.last.y) * T.scale / H * per, -TURN_MAX_FRAME, TURN_MAX_FRAME);
       T.last = { x, y };
       T.total.x += dx; T.total.y += dy;
       return view({ type: 'move', dx, dy });

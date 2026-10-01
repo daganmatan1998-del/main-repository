@@ -1283,3 +1283,25 @@ feed, the old loop read 33 times for 17 frames.
   them to 0.4 was tried and measured: on the real hand photos it read OK
   signs as open hands, so it was not kept.
 - `stats()` reports frames read, missed and the rate (`fps`), for checking.
+
+## Page 2.14.0: a full turn is 3/4 of the screen
+
+Precise control (one pinched hand turning a 3D model) is now measured on
+the screen, not in centimetres. Moving the hand across **3/4 of the
+picture is one full turn (360°)**, however far the hand is from the camera
+and however fast it moves:
+
+- across: 3/4 of the width is 360°, so a quarter of the width is 120°;
+- up and down: 3/4 of the height is 360°;
+- diagonally: both at once, in proportion.
+
+Because it is the distance on the screen that counts, the nearer your hands
+are to the camera, the less real movement a turn needs. Your hand looks
+bigger and covers the screen faster. In the test, a hand near the camera
+turned about 3 times more per real centimetre than one far away, for the
+same 240° over half the screen.
+
+The orb's GESTURES tab replaces "Turn per cm" with **"Full turn across"**:
+25% to 150% of the screen, 75% by default. An old saved "turn per cm"
+value is ignored. The dead zone (the first 4 mm after pinching) and the
+glitch guard are unchanged.

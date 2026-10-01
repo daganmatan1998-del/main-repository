@@ -234,7 +234,10 @@ single file `dist/index.html`.
   jarvis://model-rotate {phase, dx, dy} only while a model-pong is under
   TURN_PRESENT_MS old; model.html applies it as a trackball about
   controls.target (axis = camUp*dx - camRight*dy) and the spin is now a
-  turn about world-up through the same pivot. The cut-out hands in the
+  turn about world-up through the same pivot. Since 2.14.0 the turn is ON
+  THE SCREEN: turnScreen (default 0.75) of the picture's width or height
+  = 360° (palm-unit filtered x/y times T.scale over width/height), so a
+  near hand turns more per real cm; turnSpeed (deg/cm) is gone. The cut-out hands in the
   e2e scenes are big: keep two hands far apart or the tracker sees one.
 - **Every camera frame, once (2.13.1).** The gesture controller is driven
   by video.requestVideoFrameCallback (rAF + currentTime change where it is
