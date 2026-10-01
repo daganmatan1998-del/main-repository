@@ -1749,23 +1749,10 @@ fn model_file_stem(name: &str) -> String {
 
 #[tauri::command]
 fn save_model_file(b64: String, name: String) -> Result<serde_json::Value, String> {
-    use base64::{engine::general_purpose::STANDARD, Engine};
-    let bytes = STANDARD
-        .decode(b64.trim())
-        .map_err(|e| format!("that is not a model file ({e})"))?;
-    if bytes.len() < 12 || &bytes[0..4] != b"glTF" {
-        return Err("that is not a .glb model".into());
-    }
     let dir = jarvis_folder().ok_or("could not find or make a JARVIS folder")?;
-    let stem = model_file_stem(&name);
-    let mut path = dir.join(format!("{}.glb", stem));
-    let mut n = 2;
-    while path.exists() {
-        path = dir.join(format!("{} ({}).glb", stem, n));
-        n += 1;
-    }
-    std::fs::write(&path, &bytes).map_err(|e| format!("could not write {}: {e}", path.display()))?;
-    Ok(serde_json::json!({ "path": path.display().to_string(), "folder": dir.display().to_string(), "bytes": bytes.len() }))
+    let path = write_glb(&dir, &b64, &name)?;
+    let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    Ok(serde_json::json!({ "path": path.display().to_string(), "folder": dir.display().to_string(), "bytes": bytes }))
 }
 
 /* A MODEL BUILT IN CODE, HANDED TO THE 3D VIEWER.
@@ -1802,6 +1789,264 @@ fn stashed_model(key: String) -> Result<String, String> {
         .find(|(k, _)| *k == key)
         .map(|(_, v)| v.clone())
         .ok_or_else(|| "that model is no longer held — ask JARVIS to build it again".into())
+}
+
+/* HIS OWN APP, "3D WORKSPACE".
+
+   He built a program of his own called 3D WORKSPACE and wants JARVIS to open
+   it ("open 3d workspace"), or to open it with the model JARVIS just made
+   ("open a new project at 3d workspace with this model"). Nothing here knows
+   how he installed it, so it is FOUND by name where Windows keeps programs
+   and the shortcuts to them: a path he gave before (the page remembers it),
+   the Start menu (his and everyone's), the desktop (and OneDrive's), his
+   per-user Programs folder, Program Files. A name counts when, squeezed to
+   letters and digits, it holds "3d" and "workspace" — "3D WORKSPACE.lnk",
+   "3D-Workspace.exe", "3D Model Workspace" — and never an uninstaller.
+
+   With a model, the .glb is written first into JARVIS\3D Workspace (the same
+   glTF check as Save, never overwriting), beside a small handoff file naming
+   it, and the program is started with the model's full path as its one
+   argument — what Windows does for "Open with". Started through
+   ShellExecuteW, so a shortcut, a program, a .url or a script all open the
+   way a double-click would, with no command line to quote. */
+fn write_glb(dir: &std::path::Path, b64: &str, name: &str) -> Result<std::path::PathBuf, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let bytes = STANDARD
+        .decode(b64.trim())
+        .map_err(|e| format!("that is not a model file ({e})"))?;
+    if bytes.len() < 12 || &bytes[0..4] != b"glTF" {
+        return Err("that is not a .glb model".into());
+    }
+    std::fs::create_dir_all(dir).map_err(|e| format!("could not make {}: {e}", dir.display()))?;
+    let stem = model_file_stem(name);
+    let mut path = dir.join(format!("{}.glb", stem));
+    let mut n = 2;
+    while path.exists() {
+        path = dir.join(format!("{} ({}).glb", stem, n));
+        n += 1;
+    }
+    std::fs::write(&path, &bytes).map_err(|e| format!("could not write {}: {e}", path.display()))?;
+    Ok(path)
+}
+
+fn ws3d_squeeze(s: &str) -> String {
+    s.chars().filter(|c| c.is_alphanumeric()).flat_map(|c| c.to_lowercase()).collect()
+}
+
+/* How well a file or folder name says "3D WORKSPACE": 0 is not at all. */
+fn ws3d_score(file_name: &str) -> i32 {
+    let lower = file_name.to_lowercase();
+    let (stem, ext) = match lower.rfind('.') {
+        Some(i) if i > 0 => (&lower[..i], &lower[i + 1..]),
+        _ => (lower.as_str(), ""),
+    };
+    let s = ws3d_squeeze(stem);
+    if s.contains("uninstall") || s.contains("unins") || s.contains("setup") || s.contains("installer") {
+        return 0;
+    }
+    let named = s == "3dworkspace" || s == "workspace3d";
+    let loose = s.contains("3d") && (s.contains("workspace") || s.contains("workspce"));
+    if !named && !loose {
+        return 0;
+    }
+    let kind = match ext {
+        "lnk" => 30,
+        "exe" => 28,
+        "appref-ms" => 26,
+        "url" => 24,
+        "bat" | "cmd" => 20,
+        "" => 10,
+        _ => return 0,
+    };
+    kind + if named { 50 } else { 20 }
+}
+
+fn ws3d_places() -> Vec<(std::path::PathBuf, usize)> {
+    let mut v: Vec<(std::path::PathBuf, usize)> = Vec::new();
+    let env = |k: &str| std::env::var_os(k).map(std::path::PathBuf::from);
+    if let Some(a) = env("APPDATA") {
+        v.push((a.join("Microsoft").join("Windows").join("Start Menu").join("Programs"), 3));
+    }
+    if let Some(p) = env("ProgramData") {
+        v.push((p.join("Microsoft").join("Windows").join("Start Menu").join("Programs"), 3));
+    }
+    if let Some(d) = dirs_next::desktop_dir() {
+        v.push((d, 2));
+    }
+    if let Some(h) = dirs_next::home_dir() {
+        v.push((h.join("OneDrive").join("Desktop"), 2));
+    }
+    if let Some(p) = env("PUBLIC") {
+        v.push((p.join("Desktop"), 2));
+    }
+    if let Some(l) = env("LOCALAPPDATA") {
+        v.push((l.join("Programs"), 2));
+        v.push((l.clone(), 1));
+    }
+    for k in ["ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"] {
+        if let Some(p) = env(k) {
+            v.push((p, 2));
+        }
+    }
+    if let Some(d) = dirs_next::document_dir() {
+        v.push((d, 2));
+    }
+    v
+}
+
+/* The best match under one place, looking `depth` folders down. A matching
+   FOLDER (an install directory) counts through the program inside it: an
+   .exe named like the folder, or the only .exe there is. */
+fn ws3d_search(dir: &std::path::Path, depth: usize, best: &mut Option<(i32, std::path::PathBuf)>) {
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    for entry in rd.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        let score = ws3d_score(&name);
+        if is_dir {
+            if score > 0 {
+                if let Some(exe) = ws3d_exe_in(&path) {
+                    let s = score + 15;
+                    if best.as_ref().map_or(true, |(b, _)| s > *b) {
+                        *best = Some((s, exe));
+                    }
+                }
+            }
+            if depth > 1 {
+                ws3d_search(&path, depth - 1, best);
+            }
+        } else if score > 0 && best.as_ref().map_or(true, |(b, _)| score > *b) {
+            *best = Some((score, path));
+        }
+    }
+}
+
+fn ws3d_exe_in(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    let exes: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().map_or(false, |e| e.eq_ignore_ascii_case("exe")))
+        .filter(|p| {
+            let n = ws3d_squeeze(&p.file_name().unwrap_or_default().to_string_lossy());
+            !n.contains("unins") && !n.contains("setup") && !n.contains("update") && !n.contains("crash")
+        })
+        .collect();
+    exes.iter()
+        .find(|p| ws3d_score(&p.file_name().unwrap_or_default().to_string_lossy()) > 0)
+        .cloned()
+        .or_else(|| if exes.len() == 1 { exes.into_iter().next() } else { None })
+}
+
+fn find_3d_workspace(given: Option<&str>) -> Result<std::path::PathBuf, Vec<String>> {
+    if let Some(g) = given.map(str::trim).filter(|g| !g.is_empty()) {
+        let p = std::path::PathBuf::from(g.trim_matches('"'));
+        if p.is_file() {
+            return Ok(p);
+        }
+        if p.is_dir() {
+            if let Some(exe) = ws3d_exe_in(&p) {
+                return Ok(exe);
+            }
+        }
+    }
+    let places = ws3d_places();
+    let mut best: Option<(i32, std::path::PathBuf)> = None;
+    for (dir, depth) in &places {
+        ws3d_search(dir, *depth, &mut best);
+    }
+    match best {
+        Some((_, p)) => Ok(p),
+        None => Err(places.iter().map(|(d, _)| d.display().to_string()).collect()),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn shell_open(target: &std::path::Path, arg: Option<&std::path::Path>) -> Result<(), String> {
+    use windows_sys::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE};
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    fn wide(s: &std::ffi::OsStr) -> Vec<u16> {
+        use std::os::windows::ffi::OsStrExt;
+        s.encode_wide().chain(std::iter::once(0)).collect()
+    }
+    let verb = wide(std::ffi::OsStr::new("open"));
+    let file = wide(target.as_os_str());
+    /* One argument, quoted as a whole: a path with spaces arrives as one. */
+    let params = arg.map(|a| wide(std::ffi::OsStr::new(&format!("\"{}\"", a.display()))));
+    let cwd = target.parent().map(|d| wide(d.as_os_str()));
+    let code = unsafe {
+        /* The shell wants COM on the calling thread; an already-initialised
+           thread answers S_FALSE or RPC_E_CHANGED_MODE, both harmless here. */
+        CoInitializeEx(std::ptr::null(), (COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) as u32);
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            file.as_ptr(),
+            params.as_ref().map_or(std::ptr::null(), |p| p.as_ptr()),
+            cwd.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+            SW_SHOWNORMAL,
+        )
+    } as isize;
+    if code > 32 {
+        Ok(())
+    } else {
+        Err(format!("Windows would not start {} (code {code})", target.display()))
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn shell_open(target: &std::path::Path, arg: Option<&std::path::Path>) -> Result<(), String> {
+    let mut cmd = std::process::Command::new(if cfg!(target_os = "macos") { "open" } else { "xdg-open" });
+    cmd.arg(target);
+    if let Some(a) = arg {
+        if cfg!(target_os = "macos") {
+            cmd.arg("--args");
+        }
+        cmd.arg(a);
+    }
+    cmd.spawn().map(|_| ()).map_err(|e| format!("could not start {}: {e}", target.display()))
+}
+
+#[tauri::command]
+async fn launch_3d_workspace(
+    path: Option<String>,
+    b64: Option<String>,
+    name: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let model = match b64.as_deref().filter(|b| !b.trim().is_empty()) {
+        Some(b) => {
+            let dir = jarvis_folder().ok_or("could not find or make a JARVIS folder")?.join("3D Workspace");
+            let p = write_glb(&dir, b, name.as_deref().unwrap_or("model"))?;
+            let handoff = serde_json::json!({
+                "model": p.display().to_string(),
+                "name": name.clone().unwrap_or_default(),
+                "from": "JARVIS",
+            });
+            let _ = std::fs::write(dir.join("latest-model.json"), handoff.to_string());
+            Some(p)
+        }
+        None => None,
+    };
+    let model_path = model.as_ref().map(|p| p.display().to_string());
+    let app = match find_3d_workspace(path.as_deref()) {
+        Ok(a) => a,
+        Err(searched) => {
+            return Ok(serde_json::json!({
+                "launched": false,
+                "reason": "not_found",
+                "searched": searched,
+                "model_path": model_path,
+            }))
+        }
+    };
+    shell_open(&app, model.as_deref())?;
+    Ok(serde_json::json!({
+        "launched": true,
+        "app_path": app.display().to_string(),
+        "model_path": model_path,
+    }))
 }
 
 /* WHO IS ON TOP WHILE THE ORB FILLS THE SCREEN.
@@ -2089,7 +2334,8 @@ fn main() {
             stash_model,
             stashed_model,
             refresh_orb,
-            save_model_file
+            save_model_file,
+            launch_3d_workspace
         ])
         .setup(|app| {
             let window = app

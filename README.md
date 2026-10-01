@@ -1210,3 +1210,44 @@ reaches the store, whatever is asked for. Store Manager, which does hold a
 write permission, stays deliberately off any timer. A daily summary — built
 from what actually happened, sent once, silent on a quiet day — goes out the
 same way, through the WhatsApp outbox already documented above.
+
+## Page 2.13.0: your own 3D WORKSPACE app (needs the app rebuilt)
+
+**"Open 3D workspace"** starts your own program, 3D WORKSPACE. It works
+with the wording loose: "open the 3D workspace", "launch 3-D work space",
+"start 3D workspace", "can you open 3D workspace please",
+"תפתח את ה-3D workspace", "תפתח את סביבת העבודה התלת מימדית".
+
+**"Open a new project at 3D model workspace with this model"** starts it
+with the last 3D model JARVIS made. Other wordings work too:
+
+- "put this model in 3D workspace", "open it in 3D workspace";
+- "new project in 3D workspace with the model you just made";
+- "תפתח פרויקט חדש ב-3D workspace עם המודל הזה", "תעביר את המודל ל-3D workspace".
+
+How it works:
+
+- The model is saved as a `.glb` in `JARVIS\3D Workspace\` (next to it,
+  `latest-model.json` names the newest one).
+- The program is started with that file's full path as its one argument,
+  the same way Windows does "Open with". If your app reads its first
+  command-line argument, it opens the model straight away.
+- With no model made yet, it opens the program and says so.
+
+**Finding the program.** JARVIS looks for a name containing "3D" and
+"workspace" (a shortcut, an .exe, or an install folder) in these places:
+
+- the Start menu (yours and everyone's);
+- the desktop (including OneDrive's);
+- `%LOCALAPPDATA%\Programs`;
+- Program Files;
+- Documents.
+
+Uninstallers and setups are never picked. The place it was found is
+remembered. If it cannot be found, he says so: put a shortcut named
+**3D WORKSPACE** on the desktop, or tell him where the program is (the
+`open_3d_workspace` tool takes the path, and remembers it).
+
+"Open workspace" on its own is still the Shopify/Instagram dashboards. A
+question about the app ("what is 3D workspace"), "close 3D workspace", or
+"don't open it" is never taken as the command.

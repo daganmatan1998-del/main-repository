@@ -2503,7 +2503,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.12.0';
+const APP_VERSION = '2.13.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -11607,6 +11607,85 @@ function looseTokens(text){
     .filter(w => !LOOSE_FILLER_WORDS.has(w) && !wordIsName(w))
     .map(looseWord);
 }
+/* ------------------------------------------------------------------
+   HIS OWN APP, "3D WORKSPACE" (2.13.0)
+
+   A program he built himself. "Open 3D workspace" starts it; "open a new
+   project at 3D model workspace with this model" starts it with the last
+   model JARVIS made, saved as a .glb in JARVIS\3D Workspace and handed to
+   it as its one argument (launch_3d_workspace in main.rs, which also finds
+   the program: Start menu, desktop, Programs, Program Files, by a name
+   holding "3D" and "workspace"). Matched here, before any rule can read
+   "workspace" as the dashboards, and only as a whole sentence made of
+   command words — anything else about it goes to the model, which has the
+   open_3d_workspace tool for wordings this does not know.
+------------------------------------------------------------------ */
+const WS3D_VERBS = new Set(('open launch start run load fire boot bring go switch take put send move import add drop ' +
+  'place transfer export upload get give show begin create make set up work ' +
+  'תפתח תפתחי פתח לפתוח תפעיל תפעילי הפעל להפעיל תריץ הרץ להריץ תעלה תכניס הכנס להכניס תעביר העבר להעביר ' +
+  'תשים שים לשים תייבא ייבא לייבא תטען טען לטעון תוסיף הוסף תשלח שלח לשלוח תביא הבא להביא תעבור תיכנס תתחיל תיצור תצור צור תכין תקפיץ').split(' '));
+/* The model, or the project made of it. */
+const WS3D_MODEL_WORDS = new Set(('model models mesh object it this that project file glb ' +
+  'מודל המודל מזה זה אותו פרויקט הפרויקט קובץ הקובץ דגם הדגם').split(' '));
+/* Everything else a command to open it can be made of. One word outside
+   this and the verbs, and it is conversation. */
+const WS3D_OTHER_WORDS = new Set(('a an the my our your up it this that these those one new fresh empty blank at in into ' +
+  'inside on onto to with from for me app application program software please now again last latest recent ' +
+  'you just made created built generated so there here called named current same then over ' +
+  'i can could want would like start working on let lets us 3d APP ' +
+  'את ה זה הזה הזאת זאת חדש חדשה עם ב ל אותה לי עכשיו בבקשה האחרון האחרונה ' +
+  'שיצרת שעשית שבנית שהכנת אפליקציה האפליקציה תוכנה התוכנה של אליו לתוך בתוך עליו ' +
+  'לעבוד שאוכל אוכל ש עכשיו שוב על שם אותו').split(' '));
+
+/* The sentence squeezed to its words, with every way of saying the app's
+   name turned into the one token APP. */
+function ws3dCanon(text){
+  let s = ' ' + looseTokens(text).join(' ') + ' ';
+  s = s.replace(/ (?:3 ?d|three ?d|three dimensional|3 dimensional)(?= )/g, ' 3d');
+  s = s.replace(/ [הבלו]{0,2}(?:תלת ?מי?מד(?:י|ית|יים|ים)?|3d)(?= )/g, ' 3d');
+  s = s.replace(/ [הבלו] 3d(?= )/g, ' 3d');
+  s = s.replace(/ (?:work ?spaces?|work ?place)(?= )/g, ' workspace');
+  s = s.replace(/ [הבלו]{0,2}(?:וו?רק ?ספיי?ס|ווקרספייס)(?= )/g, ' workspace');
+  s = s.replace(/ [הבלו]{0,2}סביבת ה?עבודה(?= )/g, ' workspace');
+  s = s.replace(/ 3dworkspace(?= )/g, ' 3d workspace');
+  s = s.replace(/ 3d(?: models?| מודל(?:ים)?)? workspace(?= )/g, ' APP');
+  s = s.replace(/ workspace(?: של)?(?: ה)? 3d(?= )/g, ' APP');
+  return s.trim();
+}
+
+/* 'project' (with the model), 'open' (just the app), or null. */
+function workspace3dCommand(text){
+  const s = ws3dCanon(text);
+  if(!/(?:^| )APP(?: |$)/.test(s)) return null;
+  const words = s.split(' ').filter(Boolean);
+  if(words.length > 16) return null;
+  if(/^(?:what|whats|how|why|when|where|which|who|is|are|does|did|should|מה|איך|למה|מתי|איפה|האם|מי) /.test(s)) return null;
+  if(/(?:^| )(?:dont|don't|do not|not|never|no|stop|close|quit|exit|אל|לא|תסגור|סגור)(?: |$)/.test(s)) return null;
+  if(/(?:^| )(?:and|then|also|ואז|וגם)(?: |$)/.test(s)) return null;
+  const strip = w => {
+    for(let i = 0; i < 2 && w.length > 2 && /^[הבלומשכ]/.test(w); i++){
+      w = w.slice(1);
+      if(WS3D_VERBS.has(w) || WS3D_MODEL_WORDS.has(w) || WS3D_OTHER_WORDS.has(w)) return w;
+    }
+    return null;
+  };
+  let verb = false, model = false;
+  for(const raw of words){
+    const w = (WS3D_VERBS.has(raw) || WS3D_MODEL_WORDS.has(raw) || WS3D_OTHER_WORDS.has(raw)) ? raw : strip(raw);
+    if(!w) return null;
+    if(WS3D_VERBS.has(w)) verb = true;
+    if(WS3D_MODEL_WORDS.has(w)) model = true;
+  }
+  /* "Open it" alone is the app; "it" counts once something else is said
+     about a model or a project. */
+  const first = words[0];
+  if(!verb && !/^(?:new|פרויקט)$/.test(first)) return null;
+  if(!WS3D_VERBS.has(first) && !WS3D_VERBS.has(strip(first) || '') && !/^(?:new|lets|let|i|פרויקט)$/.test(first)) return null;
+  const rest = words.filter(w => w !== 'APP');
+  const bareOpen = rest.length <= 2 && rest.every(w => WS3D_VERBS.has(w) || /^(?:the|my|up|app|program|את|ה|לי)$/.test(w));
+  return model && !bareOpen ? 'project' : 'open';
+}
+
 const LOOSE_FLOWS = { camera: { on: 'camera_on', off: 'camera_off' }, fs: { on: 'fullscreen', off: 'fullscreen_exit' },
                       ws: { on: 'workspace' }, site: { on: 'open_site' } };
 function understandCommand(text){
@@ -12086,6 +12165,14 @@ function detectWorkflowCommand(text, state){
      one. Twelve words is roughly twice the longest phrasing on his list. */
   const norm = normaliseHeard(raw);
   if(!norm) return null;
+  /* His own 3D WORKSPACE program (2.13.0), before every rule: the
+     dashboards' rules read "open ... workspace" as theirs. A sentence that
+     names it and is not a plain command goes to the model, never to them. */
+  if(!FLOW_LATER.test(norm) && !FLOW_NOT.test(norm)){
+    const ws3d = workspace3dCommand(raw);
+    if(ws3d) return ws3d === 'project' ? 'workspace3d_project' : 'workspace3d';
+  }
+  if(/(?:^| )APP(?: |$)/.test(ws3dCanon(raw))) return null;
   let words = norm.split(' ').filter(Boolean);
   /* Too long for any rule below — but courtesy makes a command long ("hey
      jarvis could you do me a favor and open up the camera for me right
@@ -12189,7 +12276,8 @@ function splitRequests(text){
 /* The commands that finish on their own. Looking and the store report need
    the model, so in a compound sentence they go to it with the rest. */
 const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'fullscreen', 'fullscreen_exit',
-                                      'live_full', 'live_full_exit', 'workspace', 'open_site', 'bring_window']);
+                                      'live_full', 'live_full_exit', 'workspace', 'open_site', 'bring_window',
+                                      'workspace3d', 'workspace3d_project']);
 
 /* { steps: [{flow, part}], rest: [parts for the model] }, or null when the
    sentence is one request (or none) and the ordinary path should have it. */
@@ -12934,6 +13022,93 @@ function addressHim(line, he){
   return s.replace(/([.!?\u2026])?\s*$/, (m, p) => (he ? ', \u05d0\u05d3\u05d5\u05e0\u05d9' : ', sir') + (p || '.'));
 }
 
+const WS3D_PATH_KEY = 'workspace3d_path';
+
+/* The last model's .glb as base64, whichever way it is held. */
+async function lastModelBase64(){
+  const url = lastModelUrl;
+  if(!url) return null;
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(url.indexOf('stash:') === 0){
+    if(!invoke) throw new Error('the desktop bridge is unavailable');
+    return await invoke('stashed_model', { key: url.slice(6) });
+  }
+  if(url.indexOf('data:') === 0) return url.slice(url.indexOf(',') + 1);
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('the model’s file is no longer there (HTTP ' + res.status + ') — make it again');
+  const u = new Uint8Array(await res.arrayBuffer());
+  let bin = '';
+  for(let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+const WORKSPACE3D_TOOL = {
+  name: 'open_3d_workspace',
+  description: "Open \"3D WORKSPACE\", the user's own 3D program on this computer — not the Shopify/Instagram dashboards, which are open_workspace. with_model: true when he wants the model you made in it (\"open a new project in 3D workspace with this model\", \"put it in 3D workspace\", \"תפתח פרויקט חדש ב-3D workspace עם המודל\"): the last 3D model is saved as a .glb and the program is started with it. false for just opening it. app_path only when he tells you where the program is (a .exe or shortcut path); it is remembered. Say in a few words what happened; if it was not found, pass on where to put a shortcut.",
+  input_schema: { type:'object', properties: {
+    with_model: { type:'boolean', description:'Bring the last 3D model into it as a new project.' },
+    app_path: { type:'string', description:'Only if he named it: the full path of the program or its shortcut.' }
+  }, required: [] }
+};
+
+async function callWorkspace3dTool(input){
+  input = input || {};
+  if(!IS_DESKTOP) return { error: '3D Workspace is a program on his computer; only the desktop app can open it' };
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!invoke) return { error: 'the desktop bridge is unavailable' };
+  const want = !!input.with_model;
+  let b64 = null, modelMissing = false;
+  if(want){
+    if(!lastModelUrl) modelMissing = true;
+    else {
+      try{ b64 = await lastModelBase64(); }
+      catch(err){ return { error: 'could not get the model: ' + ((err && err.message) || err) }; }
+    }
+  }
+  let path = String(input.app_path || '').trim();
+  if(!path){ try{ path = (await Store.get(WS3D_PATH_KEY)).value || ''; }catch(err){} }
+  const args = { path: path || null, b64: b64 || null, name: (b64 && lastModelName) || null };
+  let r;
+  try{ r = await invoke('launch_3d_workspace', args); }
+  catch(err){
+    const msg = String((err && err.message) || err);
+    if(/not found|unknown command|launch_3d_workspace/i.test(msg) && !/could not|would not|not a/i.test(msg)){
+      return { error: 'old_app', tell_the_user: 'This needs the rebuilt desktop app before I can open 3D Workspace.' };
+    }
+    return { error: msg };
+  }
+  if(r && r.launched){
+    try{ await Store.set(WS3D_PATH_KEY, r.app_path); }catch(err){}
+    return { ok: true, app_path: r.app_path, model_path: r.model_path || null, with_model: !!r.model_path,
+             model_missing: modelMissing,
+             note: r.model_path ? 'It is opening with the model as a new project. Confirm in a few words.'
+                                : modelMissing ? 'It is opening, but there is no model of yours from this session to bring. Say so.'
+                                               : 'It is opening. Confirm in a few words.' };
+  }
+  /* A remembered path that has gone stale is forgotten, so the next try searches again. */
+  if(path && !input.app_path){ try{ await Store.delete(WS3D_PATH_KEY); }catch(err){} }
+  return { error: 'not_found', searched: (r && r.searched) || [], model_path: (r && r.model_path) || null,
+           tell_the_user: 'I could not find 3D Workspace on this computer. Put a shortcut named "3D WORKSPACE" on the desktop, or tell me where the program is.' };
+}
+
+function workspace3dLine(res, he){
+  if(res && res.ok){
+    if(res.with_model) return he ? 'פותח את 3D Workspace עם המודל כפרויקט חדש.' : 'Opening 3D Workspace with the model as a new project.';
+    if(res.model_missing) return he ? 'פותח את 3D Workspace. עוד לא יצרתי מודל שאפשר להכניס אליו.'
+                                  : 'Opening 3D Workspace. I have not made a model yet to bring into it.';
+    return he ? 'פותח את 3D Workspace.' : 'Opening 3D Workspace.';
+  }
+  if(res && res.error === 'not_found'){
+    const saved = res.model_path ? (he ? ' המודל נשמר בתיקיית JARVIS, תחת 3D Workspace.' : ' The model is saved in the JARVIS folder, under 3D Workspace.') : '';
+    return (he ? 'לא הצלחתי למצוא את 3D Workspace במחשב. שים קיצור דרך בשם "3D WORKSPACE" על שולחן העבודה, או תגיד לי איפה התוכנה.'
+               : 'I could not find 3D Workspace on this computer. Put a shortcut named "3D WORKSPACE" on the desktop, or tell me where the program is.') + saved;
+  }
+  if(res && res.error === 'old_app') return he ? 'לא הצלחתי: צריך לבנות מחדש את אפליקציית המחשב כדי לפתוח את 3D Workspace.'
+                                               : 'I could not: the desktop app needs rebuilding before I can open 3D Workspace.';
+  const why = (res && res.error) || 'unknown';
+  return he ? 'לא הצלחתי לפתוח את 3D Workspace: ' + why : 'I could not open 3D Workspace: ' + why;
+}
+
 async function runWorkflowCommand(flow, text){
   const he = flowLang(text) === 'he';
   const say = (line) => {
@@ -13038,6 +13213,11 @@ async function runWorkflowCommand(flow, text){
       say(he ? 'לא הצלחתי להביא את ' + label + ': ' + ((res && res.error) || '')
              : 'I could not bring ' + label + ' over: ' + ((res && res.error) || ''));
     }
+    return true;
+  }
+
+  if(flow === 'workspace3d' || flow === 'workspace3d_project'){
+    say(workspace3dLine(await callWorkspace3dTool({ with_model: flow === 'workspace3d_project' }), he));
     return true;
   }
 
@@ -14728,6 +14908,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
        one it could only ever answer "not found". */
     if(caps.model3d_check) advancedTools.push(CHECK3D_TOOL);
     if(IS_DESKTOP) advancedTools.push(MODEL_WINDOW_TOOL);
+    if(IS_DESKTOP) advancedTools.push(WORKSPACE3D_TOOL);
     requestBody.tools = fullCapability()
       ? everydayTools.concat(advancedTools)
       : everydayTools;
@@ -15256,6 +15437,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callCheck3dTool();
           } else if(tu.name === 'show_model_in_window'){
             payload = await openModelWindow(null);
+          } else if(tu.name === 'open_3d_workspace'){
+            payload = await callWorkspace3dTool(tu.input);
           } else if(tu.name === 'open_workspace'){
             payload = await callWorkspaceTool(tu.input);
           } else if(tu.name === 'note_what_you_see'){

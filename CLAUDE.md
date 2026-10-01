@@ -351,6 +351,23 @@ single file `dist/index.html`.
   3D service, which keys) must therefore be given to him per request from
   /health, not left to his memory: model3dServiceNote() does that for the
   3D provider, appended in cameraSystemExtras().
+- **His own "3D WORKSPACE" program (2.13.0).** workspace3dCommand (on
+  ws3dCanon: looseTokens with every spelling of the name — 3-D/three d/
+  תלת מימד, work space/וורקספייס/סביבת העבודה, either order — squeezed to
+  the token APP) runs FIRST in detectWorkflowCommand, because the
+  dashboards' workspace rule reads "open ... workspace" as its own; a
+  sentence naming APP that is not a plain command returns null there, never
+  'workspace'. Every word must be a verb, a model word or in
+  WS3D_OTHER_WORDS (one outside word = conversation for the model, which has
+  open_3d_workspace). Flows workspace3d / workspace3d_project are
+  self-contained (compound sentences). Rust launch_3d_workspace finds the
+  program by name (ws3d_score: "3d"+"workspace", never an uninstaller or
+  setup; Start menu, desktops, LocalAppData\Programs, Program Files,
+  Documents), writes the model through write_glb into JARVIS\3D Workspace,
+  and starts it via ShellExecuteW (Win32_UI_Shell + Win32_System_Com) with
+  the model path as its one argument. The found path is kept in Store
+  workspace3d_path and dropped when it stops working. Not-found is
+  {launched:false}, not an error, so the saved model is still reported.
 - **The Meshy key is read through meshyKey(env) (worker 2.6.7), never
   env.MESHY_API_KEY directly.** It takes MESHY_API_KEY, then MESHY_KEY /
   MESHY_API_TOKEN / MESHY_TOKEN / MESHY, and cleans it (spaces, quotes,
