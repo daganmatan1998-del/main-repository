@@ -19,6 +19,11 @@
   back, SAVE writes the .glb into his JARVIS folder, and the only ways to
   close it are right-click → Close and the taskbar.
 
+  Since 2.12.0 one pinched hand in front of the camera turns the model
+  (precise control, gesture-zoom.js): right, left, up, down and every way
+  between, all the way round, about the model's own centre. STRAIGHTEN in
+  the menu puts it back the way it arrived.
+
   The model to show arrives in the query string: model.html?glb=<url>.
 -->
 <style>
@@ -92,6 +97,7 @@
   <button id="spinBtn" class="on" role="menuitem">SPIN</button>
   <button id="wireBtn" role="menuitem">WIREFRAME</button>
   <button id="fitBtn" role="menuitem">FIT</button>
+  <button id="straightBtn" role="menuitem">STRAIGHTEN</button>
   <button id="bgBtn" class="on" role="menuitem">BACKDROP</button>
   <button id="fsBtn" role="menuitem">FULL SCREEN</button>
   <hr>
@@ -215,6 +221,10 @@
   controls.enablePan = false;          // the right button belongs to the menu
 
   let model = null, spin = true, wire = false, bytes = null, floorGrid = null;
+  /* Precise control: degrees still to turn (eased in over a few frames),
+     and the model's pose as it arrived, for STRAIGHTEN. */
+  const turnPending = { x: 0, y: 0 };
+  let home = null;
   /* Gesture zoom's distance, eased toward (see below). */
   let fitDist = 0, wantDist = 0;
 
@@ -268,8 +278,10 @@
   const shown = (gltf)=>{
     model = gltf.scene;
     scene.add(model);
+    home = { position: model.position.clone(), quaternion: model.quaternion.clone() };
     resize();
     frame();
+    announce();
     note.style.display = 'none';
     hint.classList.add('show');
     setTimeout(() => hint.classList.remove('show'), 4500);
@@ -318,8 +330,17 @@
     }
   });
 
-  document.getElementById('spinBtn').addEventListener('click', (e)=>{
-    spin = !spin; e.target.classList.toggle('on', spin); closeMenu();
+  function setSpin(on){
+    spin = !!on;
+    document.getElementById('spinBtn').classList.toggle('on', spin);
+  }
+  document.getElementById('spinBtn').addEventListener('click', ()=>{ setSpin(!spin); closeMenu(); });
+  document.getElementById('straightBtn').addEventListener('click', ()=>{
+    closeMenu();
+    if(!model || !home) return;
+    turnPending.x = 0; turnPending.y = 0;
+    model.position.copy(home.position); model.quaternion.copy(home.quaternion);
+    frame();
   });
   document.getElementById('wireBtn').addEventListener('click', (e)=>{
     wire = !wire; e.target.classList.toggle('on', wire); closeMenu();
@@ -346,6 +367,38 @@
     const from = wantDist || now;
     wantDist = Math.min(controls.maxDistance, Math.max(controls.minDistance, from / factor));
   }
+  /* PRECISE CONTROL (2.12.0). One pinched hand turns the model: dx degrees
+     to the right, dy up, as the camera window measures them. A trackball,
+     not an orbit: the turn is about an axis in the plane of the screen,
+     square to the way the hand moved, through the model's centre (the
+     orbit target), so any direction works and nothing stops at the top or
+     the bottom — every angle, all the way round, from wherever the camera
+     is looking. His hand takes it, so the spin stops. */
+  function turnBy(dx, dy){
+    if(!model) return;
+    dx = Number(dx) || 0; dy = Number(dy) || 0;
+    if(!dx && !dy) return;
+    if(spin) setSpin(false);
+    turnPending.x += dx; turnPending.y += dy;
+  }
+  const _axis = new THREE.Vector3(), _right = new THREE.Vector3(), _up = new THREE.Vector3(), _q = new THREE.Quaternion();
+  function applyTurn(dxDeg, dyDeg){
+    const ang = Math.hypot(dxDeg, dyDeg) * Math.PI / 180;
+    if(!model || !ang) return;
+    _right.set(1, 0, 0).applyQuaternion(camera.quaternion);
+    _up.set(0, 1, 0).applyQuaternion(camera.quaternion);
+    _axis.copy(_up).multiplyScalar(dxDeg).addScaledVector(_right, -dyDeg).normalize();
+    _q.setFromAxisAngle(_axis, ang);
+    turnAbout(_q);
+  }
+  /* About the model's centre, in the world: its place swings round the
+     centre and its orientation turns by the same amount. */
+  function turnAbout(q){
+    const pivot = controls.target;
+    model.position.sub(pivot).applyQuaternion(q).add(pivot);
+    model.quaternion.premultiply(q);
+  }
+
   (function listenForGestures(){
     const ev = window.__TAURI__ && window.__TAURI__.event;
     if(!ev || !ev.listen) return;
@@ -354,8 +407,26 @@
       if(p.end){ return; }
       zoomBy(Number(p.factor));
     }).catch(() => {});
+    ev.listen('jarvis://model-rotate', (e) => {
+      const p = (e && e.payload) || {};
+      if(p.phase === 'move') turnBy(p.dx, p.dy);
+    }).catch(() => {});
+    /* "Is there a model to turn?" — asked by the camera window every two
+       seconds; answered only once a model is actually on screen. */
+    ev.listen('jarvis://model-ping', () => { announce(); }).catch(() => {});
   })();
+  function announce(){
+    const ev = window.__TAURI__ && window.__TAURI__.event;
+    if(!ev || !ev.emit || !model) return;
+    try{ const p = ev.emit('jarvis://model-pong', { loaded: true }); if(p && p.catch) p.catch(() => {}); }catch(e){}
+  }
+  addEventListener('pagehide', () => {
+    const ev = window.__TAURI__ && window.__TAURI__.event;
+    try{ if(ev && ev.emit) ev.emit('jarvis://model-gone', {}); }catch(e){}
+  });
   window.__jarvisModelZoom = zoomBy;   // the same entry point, for tests
+  window.__jarvisModelTurn = turnBy;   // and for precise control
+  window.__jarvisModelPose = () => model ? { q: model.quaternion.toArray(), p: model.position.toArray(), spin } : null;
 
   resize();
   (function tick(){
@@ -370,7 +441,15 @@
       camera.updateProjectionMatrix();
       if(Math.abs(wantDist - next) < wantDist * 0.002) wantDist = 0;
     }
-    if(spin && model) model.rotation.y += 0.004;
+    /* Precise control's turn, eased in: a third of what is left, each frame. */
+    if(model && (Math.abs(turnPending.x) > 0.01 || Math.abs(turnPending.y) > 0.01)){
+      const tx = turnPending.x * 0.35, ty = turnPending.y * 0.35;
+      turnPending.x -= tx; turnPending.y -= ty;
+      applyTurn(tx, ty);
+    }
+    /* The spin turns about the model's centre and the world's up, so it
+       stays a clean turntable after his hand has tilted the model. */
+    if(spin && model){ _q.setFromAxisAngle(_up.set(0, 1, 0), 0.004); turnAbout(_q); }
     controls.update();
     renderer.render(scene, camera);
   })();

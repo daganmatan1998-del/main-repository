@@ -101,7 +101,8 @@
 
   /* GESTURE ZOOM (gesture-zoom.js). Two hands, thumb and index pinched on
      each, stretched apart to zoom in and brought together to zoom out —
-     whatever program is in front. It runs here because this is the one
+     whatever program is in front. One hand pinched (precise control, 2.12.0)
+     turns JARVIS's 3D model, and only that. It runs here because this is the one
      window that has the camera. Settings come from the orb: saved where
      both windows can read them, and pushed live when they change. */
   var GZ = window.JarvisGestureZoom;
@@ -125,6 +126,9 @@
         return (T.core && T.core.invoke) ? T.core.invoke(cmd, args) : Promise.reject(new Error('no desktop bridge'));
       },
       emit: emit,
+      /* Precise control (2.12.0) asks whether a 3D model is open, and the
+         viewer answers on jarvis://model-pong. */
+      listen: ev.listen ? function(name, fn){ return ev.listen(name, fn); } : null,
       onStatus: function(s){
         if(s.kind === 'ready') gzNote = '✋ zoom';
         else if(s.kind === 'foreground') gzNote = '✋ zoom' + (s.supported && s.name ? ' · ' + s.name : '');

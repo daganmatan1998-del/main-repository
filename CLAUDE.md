@@ -192,8 +192,8 @@ single file `dist/index.html`.
   and is tested in Node with REAL landmarks (scratchpad handimgs/
   landmarks.json, from MediaPipe's own test photos). Pinch = thumb tip to
   index tip over palm length (on < 0.30, off > 0.42, two frames each way)
-  AND the fist guard (index tip and thumb tip both > 0.33 palm from the
-  index knuckle — a fist reads 0.20 on the pinch alone). Distance is over
+  AND the fist guard (index tip and thumb tip both > 0.38 palm from the
+  index knuckle since 2.12.0 — a fist reads 0.20 on the pinch alone). Distance is over
   hand size, so leaning in is not a zoom. Since 2.10.4 it is MOVEMENT
   control, not position: each ~1 cm (1/PALM_CM of a palm, PALM_CM = 9) the
   pinches move apart is one step in, together one step out, counted from an
@@ -216,6 +216,26 @@ single file `dist/index.html`.
   `jarvis://gesture-settings` event. In the sandbox the GPU delegate runs
   in software at ~600 ms a frame, so tests force `delegate: 'CPU'`; the
   controller itself falls back to CPU when the GPU path averages > 70 ms.
+- **Whole hands and precise control (2.12.0).** handMetrics measures the
+  WHOLE hand: scale = mean of wrist->knuckles 5/9/13/17 (x PALM_RAY 1.03,
+  so the unit is still ~ wrist->middle knuckle) in 3D when landmarks carry
+  z (z * width), palm centre = wrist + 4 knuckles, pts = all 21 for the
+  overlay. FIST_GUARD is 0.38 (with depth a fist reaches 0.31). Slots are
+  assigned by palm centre. The inter-hand zoom distance stays 2D between
+  pinch points (per-hand z is relative to its own wrist, so cross-hand z
+  means nothing). landmarks.json (2D) and landmarks3d.json (with z and
+  world) are the real data; the world landmarks are NOT usable for pinch
+  (an OK sign reads 7 cm). HandGestures wraps TwoHandZoom (gesture.state is
+  still the zoom's) and adds the turn: exactly one pinch, not latched, held
+  TURN_ARM_MS, past TURN_DEAD_MM -> dx (his right = picture LEFT, hence
+  the minus) and dy in degrees from the One Euro-filtered palm centre;
+  LATCH = any moment with both pinched, cleared only when both open; a
+  jump > TURN_JUMP palms in a frame is a glitch. TurnRelay emits
+  jarvis://model-rotate {phase, dx, dy} only while a model-pong is under
+  TURN_PRESENT_MS old; model.html applies it as a trackball about
+  controls.target (axis = camUp*dx - camRight*dy) and the spin is now a
+  turn about world-up through the same pivot. The cut-out hands in the
+  e2e scenes are big: keep two hands far apart or the tracker sees one.
 - **The stall breaker counts work, not text (2.10.1).** lastThinkStart is
   the last sign of life: every stream chunk (readMessageStream), every
   answered request (the callClaude wrapper around callClaudeOnce) and every

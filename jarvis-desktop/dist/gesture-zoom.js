@@ -1,5 +1,6 @@
 /* =====================================================================
-   JARVIS GESTURE ZOOM — two hands, two pinches, stretch to zoom.
+   JARVIS GESTURE ZOOM — two hands, two pinches, stretch to zoom; and
+   PRECISE CONTROL (2.12.0) — one hand, one pinch, turn a 3D model.
 
    Loaded by camera.html, the one window that owns the camera stream (two
    webviews cannot share a MediaStream, so hand tracking has to live where
@@ -20,6 +21,17 @@
        -> CONTENT ZOOM  Rust's zoom_send (the OS input that program reads
                         as zoom), or straight into our own 3D viewer
 
+   PRECISE CONTROL (2.12.0): ONE pinch, the other hand open or out of view,
+   held a moment -> the palm centre's movement turns JARVIS's 3D model the
+   same way, in any direction (jarvis://model-rotate). Two pinches are
+   always a zoom, and after a zoom nothing turns until both hands open.
+   Only 3D models: with no model window open it does nothing.
+
+   Hands are measured WHOLE (2.12.0): size from the wrist to all four
+   knuckles, in 3D when the tracker gives depth, so a tilted hand is not a
+   smaller hand; position from the palm centre, which holds still while
+   the fingers move; and all 21 points drawn over the picture.
+
    The window itself is never moved or resized: every adapter changes the
    zoom of what is INSIDE the window.
 
@@ -39,11 +51,13 @@
     smoothing: 0.5,     // 0 = raw and quick, 1 = very smooth and a little late
     maxSpeed: 6,        // at most this many zoom steps a second
     maxZoom: 5,         // 500 %, relative to where JARVIS first found the window
-    minZoom: 0.25       // 25 %
+    minZoom: 0.25,      // 25 %
+    turnEnabled: true,  // precise control: one pinch turns a 3D model
+    turnSpeed: 12       // degrees the model turns per centimetre the hand moves
   });
   const LIMITS = {
     sensitivity: [0.25, 3], threshold: [0, 30], smoothing: [0, 1],
-    maxSpeed: [1, 15], maxZoom: [1.2, 20], minZoom: [0.05, 0.9]
+    maxSpeed: [1, 15], maxZoom: [1.2, 20], minZoom: [0.05, 0.9], turnSpeed: [3, 40]
   };
   const STORE_KEY = 'jarvis_store:gesture_zoom';
 
@@ -51,6 +65,7 @@
     const out = Object.assign({}, DEFAULTS);
     if(s && typeof s === 'object'){
       if(typeof s.enabled === 'boolean') out.enabled = s.enabled;
+      if(typeof s.turnEnabled === 'boolean') out.turnEnabled = s.turnEnabled;
       for(const k of Object.keys(LIMITS)){
         const v = Number(s[k]);
         if(isFinite(v)) out[k] = Math.min(LIMITS[k][1], Math.max(LIMITS[k][0], v));
@@ -94,31 +109,50 @@
   }
 
   /* ------------------------------------------------------------------
-     ONE HAND — measured in units of its own palm (wrist to the middle
-     finger's knuckle), so the numbers mean the same near the camera and
-     far from it. Measured on real MediaPipe landmarks:
-       OK sign (a real pinch)   pinch 0.14-0.17
-       relaxed open hands       0.38-0.46
+     ONE HAND — measured WHOLE, in units of its own palm, so the numbers
+     mean the same near the camera and far from it.
+
+     Since 2.12.0 the palm is not one finger's bone: it is the wrist to all
+     four knuckles, averaged (x PALM_RAY, so the unit is still about a palm
+     length, wrist to the middle knuckle, PALM_CM), and measured in 3D when
+     the tracker gives depth (z is on the same scale as x). A hand tilted
+     toward or away from the camera is foreshortened on the picture, not in
+     3D: on a real side-on hand the 2D length-to-width ratio read 5.6
+     against 1.3 for a hand facing the camera, and 1.26 with depth. So a
+     tilt is no longer a smaller hand, a pinch that is no pinch, or a zoom.
+
+     Measured on real MediaPipe landmarks, with depth:
+       OK sign (a real pinch)   pinch 0.13-0.23
+       relaxed open hands       0.39-0.46
        open / pointing          1.0 and up
-       a FIST                   0.20 — which is why the fist guard exists:
+       a FIST                   0.19 — which is why the fist guard exists:
      in a pinch the index tip is away from its own knuckle and the thumb
-     tip away from the index knuckle (0.52-0.68 on the OK signs); a fist
-     folds both in (0.16-0.19).
+     tip away from the index knuckle (0.52-0.73 on the OK signs); a fist
+     folds both in (0.14-0.19 flat, up to 0.31 with depth), hence the
+     guard at 0.38, between the two.
+
+     The palm CENTRE (wrist and the four knuckles) is where the hand is: it
+     holds still while the fingers pinch and curl, which the pinch point
+     does not. Hands are told apart and precise control follows it.
   ------------------------------------------------------------------ */
-  const PINCH_ON = 0.30, PINCH_OFF = 0.42, FIST_GUARD = 0.33;
+  const PINCH_ON = 0.30, PINCH_OFF = 0.42, FIST_GUARD = 0.38, PALM_RAY = 1.03;
 
   function handMetrics(landmarks, width, height){
     if(!landmarks || landmarks.length < 21) return null;
-    const P = (i) => ({ x: landmarks[i].x * width, y: landmarks[i].y * height });
-    const wrist = P(0), thumbTip = P(4), indexMcp = P(5), indexTip = P(8), middleMcp = P(9);
-    const scale = dist(wrist, middleMcp);
+    const deep = typeof landmarks[0].z === 'number' && typeof landmarks[8].z === 'number';
+    const P = landmarks.map(p => ({ x: p.x * width, y: p.y * height, z: deep ? (Number(p.z) || 0) * width : 0 }));
+    const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    const scale = (d(P[0], P[5]) + d(P[0], P[9]) + d(P[0], P[13]) + d(P[0], P[17])) / 4 * PALM_RAY;
     if(!(scale > 1)) return null;
+    const C = [0, 5, 9, 13, 17];
     return {
-      scale,
-      pinch: dist(thumbTip, indexTip) / scale,
-      indexReach: dist(indexTip, indexMcp) / scale,
-      thumbReach: dist(thumbTip, indexMcp) / scale,
-      point: { x: (thumbTip.x + indexTip.x) / 2, y: (thumbTip.y + indexTip.y) / 2 }
+      scale, deep,
+      pinch: d(P[4], P[8]) / scale,
+      indexReach: d(P[8], P[5]) / scale,
+      thumbReach: d(P[4], P[5]) / scale,
+      point: { x: (P[4].x + P[8].x) / 2, y: (P[4].y + P[8].y) / 2 },
+      center: { x: C.reduce((a, i) => a + P[i].x, 0) / 5, y: C.reduce((a, i) => a + P[i].y, 0) / 5 },
+      pts: P.map(p => ({ x: p.x, y: p.y }))
     };
   }
 
@@ -199,19 +233,21 @@
     }
 
     /* Two hands to two slots: by x when both are seen, by nearness to the
-       last known slot when one is. */
+       last known slot when one is — both by the palm centre (2.12.0), which
+       does not jump when the fingers move. */
     assign(ms){
       const out = [null, null];
+      const at = (m) => m.center || m.point;
       if(ms.length >= 2){
-        const two = ms.slice(0, 2).sort((a, b) => a.point.x - b.point.x);
+        const two = ms.slice(0, 2).sort((a, b) => at(a).x - at(b).x);
         out[0] = two[0]; out[1] = two[1];
       } else if(ms.length === 1){
         const m = ms[0];
-        const d0 = this.slots[0] ? dist(m.point, this.slots[0]) : Infinity;
-        const d1 = this.slots[1] ? dist(m.point, this.slots[1]) : Infinity;
+        const d0 = this.slots[0] ? dist(at(m), this.slots[0]) : Infinity;
+        const d1 = this.slots[1] ? dist(at(m), this.slots[1]) : Infinity;
         out[d0 <= d1 ? 0 : 1] = m;
       }
-      for(let i = 0; i < 2; i++) if(out[i]) this.slots[i] = out[i].point;
+      for(let i = 0; i < 2; i++) if(out[i]){ this.slots[i] = at(out[i]); out[i].slot = i; }
       return out;
     }
 
@@ -221,6 +257,7 @@
       const t = frame.t;
       const ms = (frame.hands || []).map(h => handMetrics(h.landmarks || h, frame.width, frame.height)).filter(Boolean);
       const slot = this.assign(ms);
+      this.lastMetrics = ms;
       const e0 = this.pins[0].update(slot[0], t), e1 = this.pins[1].update(slot[1], t);
       const a = this.pins[0].last, b = this.pins[1].last;
       const both = e0 && e1 && a && b;
@@ -281,6 +318,158 @@
       if(steps) this.state = 'zooming';
       return Object.assign(base, { type: 'move', state: this.state, baseline: this.baseline, distance: Ds,
                                    cm: (Ds - this.baseline) * PALM_CM, steps, level: this.level });
+    }
+  }
+
+  /* ------------------------------------------------------------------
+     PRECISE CONTROL (2.12.0) — one pinch turns a 3D model.
+
+     Exactly ONE hand pinched (the other open, or not in view), held for
+     TURN_ARM_MS, and nothing turns yet: the first TURN_DEAD_MM of movement
+     are ignored, as pinching moves the hand. From there the palm centre is
+     the handle: every centimetre it moves turns the model turnSpeed degrees
+     the same way — right is right, up is up, and every direction between,
+     all the way round. Mirror-proof: right means HIS right, which on the
+     raw camera picture is to the left.
+
+     Living beside the zoom:
+       - two pinches are always a zoom: a second pinch ends the turn;
+       - TURN_ARM_MS is longer than the gap between two hands closing when
+         he starts a zoom, and the dead zone covers the moment before;
+       - after a zoom (LATCH), the hand still pinched does not start
+         turning when the other lets go — both must open first.
+     A tracking glitch that throws the hand across the picture in one frame
+     is not a movement; the turn starts again from wherever the hand is.
+  ------------------------------------------------------------------ */
+  const TURN_ARM_MS = 220, TURN_DEAD_MM = 4, TURN_JUMP = 2.5, TURN_MAX_FRAME = 45;
+
+  class HandGestures {
+    constructor(settings){
+      this.zoom = new TwoHandZoom(settings);
+      this.latch = false;
+      this.configure(settings);
+      this.resetTurn();
+    }
+    configure(settings){
+      this.s = normaliseSettings(settings);
+      this.zoom.configure(settings);
+      const mc = lerp(2.5, 0.6, this.s.smoothing);
+      this.fx = new OneEuro(mc, 1.2, 1.0);
+      this.fy = new OneEuro(mc, 1.2, 1.0);
+    }
+    /* The zoom's state, as before: callers and tests read gesture.state. */
+    get state(){ return this.zoom.state; }
+    get pins(){ return this.zoom.pins; }
+    setLimits(){}
+    resetGesture(){ this.zoom.resetGesture(); this.resetTurn(); this.latch = false; }
+    resetTurn(){
+      this.turn = { state: 'idle', slot: -1, armStart: 0, scale: 0, origin: null, last: null,
+                    prevRaw: null, originPx: null, total: { x: 0, y: 0 } };
+      if(this.fx){ this.fx.reset(); this.fy.reset(); }
+    }
+
+    update(frame){
+      const ev = this.zoom.update(frame);
+      ev.hands = (this.zoom.lastMetrics || []).map(m => ({ pts: m.pts, center: m.center, slot: m.slot }));
+      const e = ev.engaged || [false, false];
+      if(e[0] && e[1]) this.latch = true;
+      if(!e[0] && !e[1]) this.latch = false;
+      ev.turn = this.turnStep(frame.t, e);
+      ev.latched = this.latch;
+      return ev;
+    }
+
+    endTurn(){
+      const T = this.turn, was = T.state, total = { x: T.total.x, y: T.total.y };
+      this.resetTurn();
+      return { type: (was === 'armed' || was === 'turning') ? 'end' : was === 'arming' ? 'cancel' : 'none',
+               state: 'idle', dx: 0, dy: 0, total };
+    }
+
+    turnStep(t, e){
+      const single = !!e[0] !== !!e[1];
+      if(!this.s.turnEnabled || !single || this.latch) return this.endTurn();
+      const slot = e[0] ? 0 : 1;
+      const m = this.zoom.pins[slot].last;
+      if(!m || !m.center) return this.endTurn();
+      let T = this.turn;
+      if(T.state !== 'idle' && T.slot !== slot){ const ended = this.endTurn(); if(ended.type === 'end') return ended; T = this.turn; }
+      const raw = m.center;
+      const view = (extra) => Object.assign({ state: T.state, slot, center: raw, origin: T.originPx, dx: 0, dy: 0,
+                                              total: { x: T.total.x, y: T.total.y } }, extra || {});
+      if(T.state === 'idle'){
+        T.state = 'arming'; T.slot = slot; T.armStart = t; T.scale = m.scale;
+        return view({ type: 'none' });
+      }
+      if(T.state === 'arming'){
+        T.scale = T.scale * 0.7 + m.scale * 0.3;
+        if(t - T.armStart < TURN_ARM_MS) return view({ type: 'none' });
+        const x = this.fx.filter(raw.x / T.scale, t), y = this.fy.filter(raw.y / T.scale, t);
+        T.state = 'armed'; T.origin = { x, y }; T.last = { x, y }; T.prevRaw = raw; T.originPx = raw;
+        return view({ type: 'start', origin: raw });
+      }
+      /* A jump of several palms in one frame is the tracker losing the
+         hand, not the hand moving: start again from where it is now. */
+      if(T.prevRaw && Math.hypot(raw.x - T.prevRaw.x, raw.y - T.prevRaw.y) / T.scale > TURN_JUMP){
+        T.prevRaw = raw; this.fx.reset(); this.fy.reset();
+        const x0 = this.fx.filter(raw.x / T.scale, t), y0 = this.fy.filter(raw.y / T.scale, t);
+        T.last = { x: x0, y: y0 };
+        if(T.state === 'armed'){ T.origin = { x: x0, y: y0 }; T.originPx = raw; }
+        return view({ type: 'move', glitch: true });
+      }
+      T.prevRaw = raw;
+      const x = this.fx.filter(raw.x / T.scale, t), y = this.fy.filter(raw.y / T.scale, t);
+      if(T.state === 'armed'){
+        const mm = Math.hypot(x - T.origin.x, y - T.origin.y) * PALM_CM * 10;
+        if(mm < TURN_DEAD_MM) return view({ type: 'move' });
+        T.state = 'turning'; T.last = { x, y };
+        return view({ type: 'move' });
+      }
+      const k = this.s.turnSpeed;
+      const dx = clamp(-(x - T.last.x) * PALM_CM * k, -TURN_MAX_FRAME, TURN_MAX_FRAME);
+      const dy = clamp(-(y - T.last.y) * PALM_CM * k, -TURN_MAX_FRAME, TURN_MAX_FRAME);
+      T.last = { x, y };
+      T.total.x += dx; T.total.y += dy;
+      return view({ type: 'move', dx, dy });
+    }
+  }
+
+  /* From the turn to the model window: only when a 3D model is open. The
+     viewer answers jarvis://model-ping with jarvis://model-pong (and says
+     so by itself when a model loads, and model-gone when it closes); a
+     pong in the last TURN_PRESENT_MS means there is a model to turn. Turns
+     go out as degrees, + right and + up, on jarvis://model-rotate. */
+  const TURN_PRESENT_MS = 6000;
+  class TurnRelay {
+    constructor(o){
+      o = o || {};
+      this.emit = o.emit || (() => {});
+      this.now = o.now || (() => Date.now());
+      this.onStatus = o.onStatus || (() => {});
+      this.lastPong = -1e9; this.loaded = false;
+      this.reset();
+    }
+    reset(){ this.sentStart = false; this.pinged = false; this.armedShown = false; }
+    pong(p){ this.lastPong = this.now(); this.loaded = !(p && p.loaded === false); }
+    gone(){ this.lastPong = -1e9; this.loaded = false; }
+    present(){ return this.loaded && this.now() - this.lastPong < TURN_PRESENT_MS; }
+    ping(){ try{ this.emit('jarvis://model-ping', {}); }catch(e){} }
+    handle(turn){
+      if(!turn) return;
+      if(turn.state === 'arming' && !this.pinged){ this.pinged = true; this.ping(); }
+      if(turn.type === 'start'){ this.armedShown = true; this.onStatus(this.present() ? { kind: 'turn-ready' } : { kind: 'turn-none' }); return; }
+      if(turn.type === 'move' && (turn.dx || turn.dy)){
+        if(!this.present()) return;
+        if(!this.sentStart){ this.sentStart = true; this.emit('jarvis://model-rotate', { phase: 'start' }); }
+        this.emit('jarvis://model-rotate', { phase: 'move', dx: turn.dx, dy: turn.dy });
+        this.onStatus({ kind: 'turn', total: turn.total });
+        return;
+      }
+      if(turn.type === 'end' || turn.type === 'cancel'){
+        if(this.sentStart) this.emit('jarvis://model-rotate', { phase: 'end' });
+        if(this.armedShown || this.sentStart) this.onStatus({ kind: 'turn-idle' });
+        this.reset();
+      }
     }
   }
 
@@ -560,11 +749,16 @@
   }
 
   /* ------------------------------------------------------------------
-     THE OVERLAY — the two pinch points and the line between them, drawn
-     over the camera picture, so he can see what JARVIS sees: grey open,
-     cyan pinched, green zooming. Mapped through object-fit: cover, and
-     mirrored with the picture.
+     THE OVERLAY — every hand JARVIS sees, whole (2.12.0): all 21 points
+     and the bones between them, so he can see the hand is tracked before
+     he pinches; then the two pinch points and the line between them for a
+     zoom (grey open, cyan pinched, green zooming), and for precise control
+     the turning hand in amber with a line from where the turn began.
+     Mapped through object-fit: cover, and mirrored with the picture.
   ------------------------------------------------------------------ */
+  const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+                 [9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
+  const TURN_COL = '#ffc94d';
   function drawOverlay(canvas, video, ev, label){
     if(!canvas || !video) return;
     const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -582,6 +776,30 @@
     const pts = (ev.points || []).map(p => p && map(p));
     const zooming = ev.state === 'zooming', ready = ev.state === 'armed' || ev.state === 'arming';
     const col = zooming ? '#4dffb0' : ready ? '#00e5ff' : 'rgba(190,220,235,0.55)';
+    const turn = ev.turn || {};
+    const turningSlot = (turn.state === 'armed' || turn.state === 'turning') ? turn.slot : -1;
+    /* The whole hand, every hand in view. */
+    (ev.hands || []).forEach(h => {
+      if(!h || !h.pts || h.pts.length < 21) return;
+      const P = h.pts.map(map);
+      const engaged = ev.engaged && h.slot != null && ev.engaged[h.slot];
+      const hc = h.slot === turningSlot ? TURN_COL : engaged ? col : 'rgba(150,215,240,0.6)';
+      g.strokeStyle = hc; g.lineWidth = 1.5; g.globalAlpha = engaged || h.slot === turningSlot ? 0.9 : 0.6;
+      g.beginPath();
+      BONES.forEach(([a, b]) => { g.moveTo(P[a].x, P[a].y); g.lineTo(P[b].x, P[b].y); });
+      g.stroke();
+      g.fillStyle = hc;
+      P.forEach(p => { g.beginPath(); g.arc(p.x, p.y, 2.2, 0, Math.PI * 2); g.fill(); });
+      g.globalAlpha = 1;
+    });
+    /* Precise control: where the turn began, and where the hand is now. */
+    if(turningSlot >= 0 && turn.origin && turn.center){
+      const o = map(turn.origin), c = map(turn.center);
+      g.strokeStyle = TURN_COL; g.lineWidth = 2;
+      g.setLineDash([4, 4]); g.beginPath(); g.arc(o.x, o.y, 11, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      g.beginPath(); g.moveTo(o.x, o.y); g.lineTo(c.x, c.y); g.stroke();
+      g.beginPath(); g.arc(c.x, c.y, 7, 0, Math.PI * 2); g.fillStyle = TURN_COL; g.globalAlpha = 0.5; g.fill(); g.globalAlpha = 1; g.stroke();
+    }
     if(pts[0] && pts[1] && (ready || zooming)){
       g.strokeStyle = col; g.lineWidth = 2; g.setLineDash(zooming ? [] : [6, 5]);
       g.beginPath(); g.moveTo(pts[0].x, pts[0].y); g.lineTo(pts[1].x, pts[1].y); g.stroke();
@@ -602,7 +820,7 @@
       g.font = '10px "Courier New", monospace';
       const w = g.measureText(label).width + 12;
       g.fillStyle = 'rgba(3,8,15,0.72)'; g.fillRect(8, 8, w, 18);
-      g.fillStyle = col; g.fillText(label, 14, 21);
+      g.fillStyle = /^TURN/.test(label) ? TURN_COL : col; g.fillText(label, 14, 21);
       g.restore();
     }
   }
@@ -617,8 +835,8 @@
     const video = o.video, overlay = o.overlay;
     const now = () => (root.performance && root.performance.now ? root.performance.now() : Date.now());
     let settings = normaliseSettings(o.settings);
-    const gesture = new TwoHandZoom(settings);
-    let label = '';
+    const gesture = new HandGestures(settings);
+    let label = '', turnLabel = '';
     const status = (s) => {
       if(s.kind === 'target') label = 'ZOOM · ' + (s.name || '');
       else if(s.kind === 'zoom') label = 'ZOOM · ' + (s.name || '') + ' ×' + s.level.toFixed(2);
@@ -629,6 +847,20 @@
       if(o.onStatus) o.onStatus(s);
     };
     const manager = new ZoomManager({ invoke: o.invoke, emit: o.emit, gesture, settings, onStatus: status });
+    const relay = new TurnRelay({ emit: o.emit, onStatus: (s) => {
+      if(s.kind === 'turn-ready') turnLabel = 'TURN · READY';
+      else if(s.kind === 'turn-none') turnLabel = 'TURN · no 3D model open';
+      else if(s.kind === 'turn') turnLabel = 'TURN · 3D model';
+      else if(s.kind === 'turn-idle') turnLabel = '';
+      if(o.onStatus) o.onStatus(s);
+    } });
+    if(o.listen){
+      try{
+        Promise.resolve(o.listen('jarvis://model-pong', (e) => relay.pong(e && e.payload))).catch(() => {});
+        Promise.resolve(o.listen('jarvis://model-gone', () => relay.gone())).catch(() => {});
+      }catch(e){}
+    }
+    let pingTimer = null;
     let tracker = null, loading = null, running = false, timer = null, handsAt = -1e9, lastEv = null, frames = 0, spent = 0;
     /* Which program is in front, about once a second even between
        gestures. Rust remembers the last program he was in only when it is
@@ -688,22 +920,28 @@
           lastEv = ev;
           if(ev.state === 'idle') probeForeground(t2);
           manager.handle(ev);
-          drawOverlay(overlay, video, ev, label || (ev.state === 'armed' ? 'ZOOM · READY' : ''));
+          if(settings.turnEnabled) relay.handle(ev.turn);
+          drawOverlay(overlay, video, ev, label || (ev.state === 'armed' ? 'ZOOM · READY' : '') || turnLabel);
         }
       }catch(e){ if(o.onStatus) o.onStatus({ kind: 'error', reason: String((e && e.message) || e) }); }
       schedule();
     }
     const api = {
-      gesture, manager,
+      gesture, manager, relay,
       start(){
         if(running || !settings.enabled) return Promise.resolve(false);
         running = true;
+        /* Whether a 3D model is open, every two seconds, for precise control. */
+        if(!pingTimer && o.listen){ relay.ping(); pingTimer = setInterval(() => relay.ping(), 2000); }
         return ensureTracker().then(() => { if(running && !timer) schedule(); return true; }, () => { running = false; return false; });
       },
       stop(){
         running = false;
         if(timer){ clearTimeout(timer); timer = null; }
-        if(gesture.state !== 'idle'){ manager.handle({ type: 'end' }); gesture.resetGesture(); }
+        if(pingTimer){ clearInterval(pingTimer); pingTimer = null; }
+        relay.handle({ type: 'end', state: 'idle' });
+        if(gesture.state !== 'idle'){ manager.handle({ type: 'end' }); }
+        gesture.resetGesture();
         drawOverlay(overlay, video, null, '');
       },
       configure(s){
@@ -718,7 +956,9 @@
 
   root.JarvisGestureZoom = {
     DEFAULTS, LIMITS, STORE_KEY, normaliseSettings, OneEuro, handMetrics, PinchState, TwoHandZoom,
+    HandGestures, TurnRelay, BONES,
     ADAPTERS, selectAdapter, ZoomManager, createTracker, drawOverlay, startGestureZoom,
-    constants: { PINCH_ON, PINCH_OFF, FIST_GUARD, PALM_CM, ARM_MS, STEP_3D }
+    constants: { PINCH_ON, PINCH_OFF, FIST_GUARD, PALM_CM, PALM_RAY, ARM_MS, STEP_3D,
+                 TURN_ARM_MS, TURN_DEAD_MM, TURN_JUMP, TURN_MAX_FRAME, TURN_PRESENT_MS }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -377,6 +377,66 @@ actually forwarded where it should be, actually stripped where it must be, that
 the warning fires only in the second case, and that a blind primary is overtaken
 in the chain by a fallback that can see.
 
+## Page 2.12.0: whole hands, and precise control (one hand turns a 3D model)
+
+**The whole hand.** The camera window now draws every hand it sees in full,
+all 21 points and the bones between them, before any pinch, so you can see
+the hand is being tracked. The measuring changed with it:
+
+- a hand's size is the wrist to all four knuckles, in 3D, using the depth
+  the tracker gives;
+- its position is the palm centre, not the fingertips.
+
+On a real side-on hand from the test photos, the old flat measure read the
+hand's length as 5.6 times its width; with depth it reads 1.26, as a hand
+facing the camera does. In practice:
+
+- tilting your hands toward or away from the camera is no longer a zoom.
+  In the test, a 55° tilt gave 0 zoom steps with depth, and at least 3 with
+  the old measure;
+- a fist is still never a pinch: the fist guard moved from 0.33 to 0.38,
+  because with depth a fist reads up to 0.31. Every real pinch reads 0.52
+  and up.
+
+The two-hand zoom itself is unchanged: both pinches, then the hands moving
+apart or together, with the line between the pinch points.
+
+**Precise control.** Pinch with ONE hand (the other open or out of view)
+while a 3D model is open, and the model turns with your hand. Right turns
+it right, left left, up up, down down, and every direction in between
+turns it that way too. It goes all the way round, over the top as well; the
+viewer turns it like a trackball about the model's own centre. Details:
+
+- it turns 12° for every centimetre the hand moves (the "Turn per cm"
+  slider, 3 to 40);
+- the hand's position is its palm centre, smoothed, so a still hand turns
+  nothing.
+
+It does not fight the zoom:
+
+- a single pinch has to be held 0.22 s, and then move more than 4 mm,
+  before anything turns;
+- a second pinch always makes it a zoom;
+- after a zoom, the hand still pinched does not start turning when the
+  other lets go, until both hands open.
+
+Only 3D models: the camera window asks every two seconds whether a model is
+open (`jarvis://model-ping`, answered by the viewer with `model-pong`). With
+none open, a single pinch does nothing, and the camera says "no 3D model
+open". When your hand takes the model, the spin stops. **STRAIGHTEN** in
+the model's right-click menu puts it back the way it arrived. Precise
+control has its own switch and speed slider in the orb's GESTURES tab. The
+`gesture_zoom` tool takes `turn` to switch it on or off by voice.
+
+This needs the app rebuilt: the camera and viewer pages are inside it, and
+the viewer has a new permission to answer the camera window
+(`core:event:allow-emit` in `capabilities/model.json`). Tested in:
+
+- `turn.test.mjs` (50, real hands with depth);
+- `rotate.e2e.mjs` (25, the real hand tracker in the real camera window);
+- `viewer.e2e.mjs` (43, the real viewer in WebGL);
+- `gesturepanel.e2e.mjs` (27).
+
 ## Page 2.11.3: the desktop app still said "Meshy"
 
 The desktop app has the page baked into it when it is built
