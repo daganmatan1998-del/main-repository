@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "test:e2e": "node tests/e2e.mjs && node tests/features.mjs",
-    "test:fixtures": "bash tests/fetch-fixtures.sh"
+    "test:fixtures": "bash tests/fetch-fixtures.sh",
+    "tauri": "tauri",
+    "desktop:build": "tauri build",
+    "desktop:dev": "tauri dev"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
@@ -25,6 +28,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.186.0",

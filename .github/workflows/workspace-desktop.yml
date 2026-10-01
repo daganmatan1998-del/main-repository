@@ -1,0 +1,68 @@
+# Builds the 3D Workspace desktop app (Tauri) on a Windows runner and publishes
+# the installer as a GitHub Release, so it can be downloaded and installed
+# without any local tooling.
+name: 3D Workspace — Windows installer
+
+on:
+  push:
+    branches: [main, claude/3d-model-workspace]
+    paths:
+      - 'model-workspace/**'
+      - '.github/workflows/workspace-desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: workspace-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: model-workspace
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: model-workspace/src-tauri -> target
+
+      # `npm install` (not `ci`): the lockfile was produced on Linux, and npm
+      # must resolve the Windows-native optional packages for this runner.
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build installer and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: model-workspace
+          tauriScript: npx tauri
+          tagName: workspace-build-${{ github.run_number }}
+          releaseName: '3D Workspace — build ${{ github.run_number }}'
+          releaseBody: |
+            Download **3D Workspace_…_x64-setup.exe** below, double-click it and install.
+            If Windows shows "Windows protected your PC", click **More info → Run anyway**
+            (the app is not code-signed).
+          releaseDraft: false
+          prerelease: false
+          releaseCommitish: ${{ github.sha }}
+
+      - name: Keep the installers as a workflow artifact too
+        uses: actions/upload-artifact@v4
+        with:
+          name: 3D-Workspace-Windows
+          path: |
+            model-workspace/src-tauri/target/release/bundle/nsis/*.exe
+            model-workspace/src-tauri/target/release/bundle/msi/*.msi
