@@ -1,0 +1,65 @@
+# Builds JARVIS Agent Atlas (Tauri) on a Windows runner and publishes the
+# installer as a GitHub Release — no local tooling needed to install it.
+name: JARVIS Agent Atlas — Windows installer
+
+on:
+  push:
+    branches: [main, claude/3d-model-workspace]
+    paths:
+      - 'jarvis-atlas-desktop/**'
+      - '.github/workflows/atlas-desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: atlas-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: jarvis-atlas-desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: jarvis-atlas-desktop/src-tauri -> target
+
+      - name: Install the Tauri CLI
+        run: npm install --no-audit --no-fund
+
+      - name: Build installer and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: jarvis-atlas-desktop
+          tauriScript: npx tauri
+          tagName: atlas-build-${{ github.run_number }}
+          releaseName: 'JARVIS Agent Atlas — build ${{ github.run_number }}'
+          releaseBody: |
+            Download **JARVIS Agent Atlas_…_x64-setup.exe** below, double-click it and install.
+            If Windows shows "Windows protected your PC", click **More info → Run anyway**
+            (the app is not code-signed).
+          releaseDraft: false
+          prerelease: false
+          releaseCommitish: ${{ github.sha }}
+
+      - name: Keep the installers as a workflow artifact too
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-Agent-Atlas-Windows
+          path: |
+            jarvis-atlas-desktop/src-tauri/target/release/bundle/nsis/*.exe
+            jarvis-atlas-desktop/src-tauri/target/release/bundle/msi/*.msi

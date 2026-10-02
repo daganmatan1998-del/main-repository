@@ -1,0 +1,1263 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>JARVIS Agent Atlas</title>
+<link rel="stylesheet" href="./fonts/fonts.css">
+<style>
+/* One visual world on purpose: a command-centre at night. No light theme —
+   every colour below is set explicitly so the page reads the same on any host. */
+:root{
+  color-scheme: dark;
+  --void:#04070c;
+  --ink:#dcecf1;
+  --muted:#86a2ad;
+  --faint:#4e6671;
+  --panel:rgba(6,13,21,.88);
+  --panel-edge:rgba(125,220,255,.16);
+  --rule:rgba(125,220,255,.12);
+  --jarvis:#00e5ff;
+  --amber:#ffb938;
+  --crit:#ff5a5a;
+  --live:#43f59b;
+  --planned:#8ea6b0;
+  --f-display:'Chakra Petch','Segoe UI',system-ui,sans-serif;
+  --f-body:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;
+  --gx:max(16px, env(safe-area-inset-left, 0px));
+  --gr:max(16px, env(safe-area-inset-right, 0px));
+  --gt:calc(16px + env(safe-area-inset-top, 0px));
+  --gb:calc(16px + env(safe-area-inset-bottom, 0px));
+}
+html,body{height:100%}
+body{margin:0;background:var(--void);color:var(--ink);font:14px/1.5 var(--f-body);overflow:hidden;-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--jarvis);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+#stage{position:fixed;inset:0}
+#stage canvas{display:block;width:100%;height:100%;touch-action:none}
+.labels{position:absolute;top:0;left:0;pointer-events:none}
+
+/* ---------- world labels ---------- */
+.lbl{pointer-events:auto;cursor:pointer;white-space:nowrap;transition:opacity .25s ease}
+.lbl.dim{opacity:.16}
+.lbl.far{opacity:0;pointer-events:none}
+.lbl .tag{display:inline-flex;align-items:center;gap:6px;font:500 11.5px/1 var(--f-display);letter-spacing:.05em;
+  padding:4px 8px 4px 7px;border-radius:5px;background:rgba(3,8,13,.74);color:#eaf7fa;
+  border:1px solid color-mix(in srgb, var(--c) 45%, transparent);transform:translateY(24px)}
+.lbl .tag i{width:6px;height:6px;border-radius:50%;background:var(--c);box-shadow:0 0 8px var(--c)}
+.lbl.hot .tag{background:var(--c);color:#03070b;border-color:var(--c)}
+.lbl.hot .tag i{background:#03070b;box-shadow:none}
+.lbl-tool .tag{font:400 10.5px/1 var(--f-mono);letter-spacing:0;padding:3px 6px;transform:translateY(15px);color:#cfe6ec}
+.lbl-lead .tag{border-style:dashed;color:var(--planned);background:rgba(3,8,13,.55);transform:translateY(-30px)}
+.lbl-lead .tag em{font-style:normal;font-family:var(--f-mono);font-size:10px;opacity:.8}
+.lbl-coord .tag{transform:translateY(-30px)}
+.lbl-core{text-align:center;transform:translateY(-58px)}
+.lbl-core b{display:block;font:700 22px/1 var(--f-display);letter-spacing:.34em;color:var(--jarvis);
+  text-shadow:0 0 18px rgba(0,229,255,.55);padding-left:.34em}
+.lbl-core small{display:block;margin-top:6px;font:400 10.5px/1 var(--f-mono);letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+.lbl-plat{text-align:center}
+.lbl-plat .pname{display:inline-flex;align-items:center;gap:8px;font:700 15px/1 var(--f-display);letter-spacing:.2em;
+  text-transform:uppercase;color:var(--c);text-shadow:0 0 14px color-mix(in srgb, var(--c) 60%, transparent)}
+.lbl-plat svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.lbl-plat .pmeta{display:block;margin-top:5px;font:400 10.5px/1 var(--f-mono);color:var(--muted);letter-spacing:.04em}
+
+/* ---------- chrome ---------- */
+.chrome{position:fixed;z-index:5}
+.glass{background:var(--panel);border:1px solid var(--panel-edge);border-radius:12px;
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+
+.brand{top:var(--gt);left:var(--gx);padding:14px 16px 14px;max-width:min(420px, calc(100vw - 32px))}
+.eyebrow{font:500 10.5px/1.2 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.brand h1{margin:6px 0 10px;font:700 26px/1 var(--f-display);letter-spacing:.06em;text-wrap:balance}
+.brand h1 span{color:var(--jarvis)}
+.stats{display:grid;grid-template-columns:repeat(5,auto);gap:4px 16px;margin:0}
+.stats div{display:grid;gap:2px}
+.stats dt{font:500 9.5px/1.1 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.stats dd{margin:0;font:600 19px/1 var(--f-display);font-variant-numeric:tabular-nums}
+.stats dd.pl{color:var(--planned)}
+.stats dd.am{color:var(--amber)}
+
+.topright{top:var(--gt);right:var(--gr);display:flex;gap:8px;align-items:flex-start}
+.search{position:relative;width:min(300px, calc(100vw - 32px))}
+.search input{width:100%;box-sizing:border-box;height:40px;padding:0 38px 0 14px;border-radius:10px;
+  background:var(--panel);border:1px solid var(--panel-edge);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.search input::placeholder{color:var(--faint)}
+.search kbd{position:absolute;right:10px;top:10px;font:500 11px/18px var(--f-mono);padding:0 6px;border-radius:4px;
+  border:1px solid var(--panel-edge);color:var(--muted)}
+.results{position:absolute;top:46px;left:0;right:0;margin:0;padding:6px;list-style:none;max-height:min(360px,50vh);overflow:auto}
+.results li button{display:flex;align-items:center;gap:10px;width:100%;padding:7px 9px;border:0;border-radius:7px;background:none;cursor:pointer;text-align:left}
+.results li button:hover,.results li button[aria-selected="true"]{background:rgba(125,220,255,.08)}
+.results .k{margin-left:auto;font:400 10.5px/1 var(--f-mono);color:var(--muted)}
+.btn{height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--panel-edge);background:var(--panel);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);cursor:pointer;font:500 12.5px/1 var(--f-display);letter-spacing:.06em;white-space:nowrap}
+.btn:hover{border-color:rgba(0,229,255,.45)}
+.btn[aria-pressed="true"]{border-color:var(--jarvis);color:var(--jarvis)}
+
+.dock{left:var(--gx);bottom:var(--gb);display:grid;gap:8px;width:min(280px, calc(100vw - 32px))}
+details.glass>summary{list-style:none;cursor:pointer;padding:11px 14px;font:600 11.5px/1 var(--f-display);letter-spacing:.16em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+details.glass>summary::-webkit-details-marker{display:none}
+details.glass>summary::after{content:'';margin-left:auto;width:7px;height:7px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(-135deg) translate(-2px,-2px)}
+details.glass[open]>summary::after{transform:rotate(45deg)}
+.dept-list{list-style:none;margin:0;padding:0 6px 8px;display:grid;gap:1px}
+.dept-list button{display:flex;align-items:center;gap:10px;width:100%;padding:6px 8px;border:0;border-radius:7px;background:none;cursor:pointer;text-align:left}
+.dept-list button:hover{background:rgba(125,220,255,.06)}
+.hex{width:12px;height:13px;background:var(--c);clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);box-shadow:0 0 10px var(--c);flex:none}
+.dept-list .n{margin-left:auto;font:400 11px/1 var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.layers{padding:0 14px 12px;display:grid;gap:10px}
+.sw{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px}
+.sw input{appearance:none;width:30px;height:17px;border-radius:9px;background:#1a2a33;position:relative;cursor:pointer;flex:none;margin:0}
+.sw input::after{content:'';position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#6c8791;transition:transform .15s}
+.sw input:checked{background:rgba(0,229,255,.28)}
+.sw input:checked::after{transform:translateX(13px);background:var(--jarvis)}
+.key{display:grid;gap:6px;padding-top:10px;border-top:1px solid var(--rule)}
+.key div{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+.key svg{width:22px;height:14px;flex:none;overflow:visible}
+
+.panel{right:var(--gr);top:calc(var(--gt) + 50px);bottom:var(--gb);width:min(380px, calc(100vw - 32px));
+  overflow:auto;padding:18px 18px 20px;box-sizing:border-box;overscroll-behavior:contain}
+.panel .close{position:sticky;top:0;float:right;width:30px;height:30px;margin:-6px -6px 0 0;border-radius:8px;border:1px solid var(--panel-edge);background:var(--panel);cursor:pointer;font-size:16px;line-height:1}
+.p-eyebrow{display:flex;align-items:center;gap:8px;font:500 10.5px/1.2 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.p-eyebrow .hex{width:10px;height:11px}
+.panel h2{margin:8px 0 10px;font:700 22px/1.1 var(--f-display);letter-spacing:.03em;text-wrap:balance}
+.panel h2.mono{font:500 18px/1.2 var(--f-mono);letter-spacing:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{font:500 11px/1 var(--f-mono);padding:5px 8px;border-radius:999px;border:1px solid var(--rule);color:var(--ink);background:rgba(255,255,255,.02)}
+.chip.live{color:var(--live);border-color:rgba(67,245,155,.35)}
+.chip.planned{color:var(--planned);border-style:dashed;border-color:rgba(142,166,176,.5)}
+.chip.high{color:var(--crit);border-color:rgba(255,90,90,.4)}
+.chip.medium{color:var(--amber);border-color:rgba(255,185,56,.4)}
+.chip.sched{color:var(--amber);border-color:rgba(255,185,56,.4)}
+.chip.never{color:var(--crit);border-color:rgba(255,90,90,.35)}
+.chip.lock::before{content:'\25C6 ';color:var(--amber)}
+.desc{margin:0 0 6px;color:#c3d7dd;max-width:62ch}
+.note{margin:8px 0 0;font-size:12.5px;color:var(--muted)}
+.panel section{margin-top:16px;padding-top:14px;border-top:1px solid var(--rule)}
+.panel h3{margin:0 0 8px;font:600 10.5px/1 var(--f-display);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.rels{display:grid;gap:2px}
+.rel{display:flex;align-items:center;gap:9px;width:100%;padding:6px 8px;margin:0 -8px;border:1px solid transparent;border-radius:8px;background:none;cursor:pointer;text-align:left;width:calc(100% + 16px)}
+.rel:hover{background:rgba(125,220,255,.05);border-color:var(--rule)}
+.rel .hex{width:9px;height:10px}
+.rel .s{margin-left:auto;font:400 10.5px/1 var(--f-mono);color:var(--muted);text-align:right}
+.rel.planned{color:var(--planned)}
+.mono{font-family:var(--f-mono)}
+.bundle{margin-bottom:10px}
+.bundle b{display:block;font:600 13px/1.3 var(--f-display);letter-spacing:.03em;margin-bottom:4px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font-size:13px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;font-variant-numeric:tabular-nums}
+
+.hint{left:50%;transform:translateX(-50%);bottom:var(--gb);font:400 11.5px/1 var(--f-mono);color:var(--faint);letter-spacing:.03em;pointer-events:none;white-space:nowrap}
+
+#listView{position:fixed;inset:0;z-index:4;overflow:auto;background:var(--void);
+  padding:calc(var(--gt) + 150px) var(--gr) calc(var(--gb) + 20px) var(--gx);box-sizing:border-box}
+#listView .inner{max-width:820px;margin:0 auto}
+#listView p.lead{color:var(--muted);max-width:62ch}
+.tree,.tree ul{list-style:none;margin:0;padding:0}
+.tree ul{margin-left:14px;padding-left:14px;border-left:1px dashed var(--rule)}
+.tree li{margin:2px 0}
+.tree button{display:inline-flex;align-items:center;gap:8px;padding:4px 8px;border:0;border-radius:6px;background:none;cursor:pointer;text-align:left}
+.tree button:hover{background:rgba(125,220,255,.06)}
+.tree .t{font:400 11px/1 var(--f-mono);color:var(--muted)}
+.tree .dept>button{font:700 13px/1 var(--f-display);letter-spacing:.14em;text-transform:uppercase;color:var(--c);margin-top:10px}
+.tree .pl{color:var(--planned)}
+
+.fail{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;padding:16px 18px;max-width:420px;display:none}
+
+@media (max-width:900px){
+  .panel{top:auto;left:var(--gx);right:var(--gr);width:auto;max-height:54vh;bottom:var(--gb)}
+  .hint{display:none}
+}
+@media (max-width:720px){
+  .lbl-plat .pname{font-size:11.5px;letter-spacing:.12em;gap:6px}
+  .lbl-plat svg{width:13px;height:13px}
+  .lbl-plat .pmeta{font-size:9.5px}
+  .lbl-core b{font-size:17px}
+  .brand{padding:10px 12px}
+  .brand h1{font-size:20px;margin:4px 0 8px}
+  .stats{grid-template-columns:repeat(5,auto);gap:2px 10px}
+  .stats dd{font-size:15px}
+  .stats dt{font-size:8.5px}
+  .topright{top:calc(var(--gt) + 118px);left:var(--gx);right:var(--gr)}
+  .search{flex:1;width:auto}
+  .search kbd{display:none}
+  #listView{padding-top:calc(var(--gt) + 180px)}
+}
+@media (prefers-reduced-motion:reduce){ .lbl{transition:none} }
+</style>
+
+<div id="stage" aria-hidden="true"></div>
+
+<header class="chrome brand glass">
+  <div class="eyebrow">JARVIS · registry snapshot · worker 2.6.1</div>
+  <h1>Agent <span>Atlas</span></h1>
+  <dl class="stats" id="stats"></dl>
+</header>
+
+<div class="chrome topright">
+  <div class="search">
+    <label for="q" class="sr">Find an agent or tool</label>
+    <input id="q" type="search" autocomplete="off" placeholder="Find an agent or tool" aria-controls="results" aria-expanded="false">
+    <kbd>/</kbd>
+    <ul id="results" class="results glass" role="listbox" hidden></ul>
+  </div>
+  <button class="btn" id="resetBtn" type="button">Reset view</button>
+  <button class="btn" id="listBtn" type="button" aria-pressed="false">List</button>
+</div>
+
+<div class="chrome dock">
+  <details class="glass" id="deptBox" open>
+    <summary>Departments</summary>
+    <ul class="dept-list" id="deptList"></ul>
+  </details>
+  <details class="glass" id="layerBox">
+    <summary>Layers &amp; key</summary>
+    <div class="layers">
+      <label class="sw"><input type="checkbox" id="tPlanned" checked> Planned department leads</label>
+      <label class="sw"><input type="checkbox" id="tTools" checked> Tools tier</label>
+      <label class="sw"><input type="checkbox" id="tSched" checked> Schedule links</label>
+      <label class="sw"><input type="checkbox" id="tLabels" checked> Agent labels</label>
+      <div class="key" aria-label="Key">
+        <div><svg viewBox="0 0 22 14"><circle cx="11" cy="7" r="5.5" fill="none" stroke="#00e5ff" stroke-width="1.6"/><circle cx="11" cy="7" r="2.4" fill="#00e5ff"/></svg>Main agent</div>
+        <div><svg viewBox="0 0 22 14"><path d="M11 1.5 16 7 11 12.5 6 7z" fill="#bff6ff"/></svg>Coordinator (live)</div>
+        <div><svg viewBox="0 0 22 14"><path d="M11 1.5 16 7 11 12.5 6 7z" fill="none" stroke="#8ea6b0" stroke-dasharray="2 2"/></svg>Coordinator (planned)</div>
+        <div><svg viewBox="0 0 22 14"><circle cx="11" cy="7" r="4" fill="#4da3ff"/></svg>Specialist agent</div>
+        <div><svg viewBox="0 0 22 14"><path d="M11 4 14 7 11 10 8 7z" fill="#9fd0ff"/></svg>Tool it can call</div>
+        <div><svg viewBox="0 0 22 14"><path d="M1 7h20" stroke="#00e5ff" stroke-width="2"/></svg>Live link</div>
+        <div><svg viewBox="0 0 22 14"><path d="M1 7h20" stroke="#8ea6b0" stroke-width="1.4" stroke-dasharray="3 3"/></svg>Planned link</div>
+        <div><svg viewBox="0 0 22 14"><path d="M1 7h20" stroke="#ffb938" stroke-width="2"/></svg>Runs on a timer</div>
+      </div>
+    </div>
+  </details>
+</div>
+
+<aside class="chrome panel glass" id="panel" aria-live="polite" hidden></aside>
+<div class="chrome hint" id="hint">Drag to orbit · right-drag to pan · scroll to zoom · click anything</div>
+
+<section id="listView" hidden aria-label="Agent hierarchy as a list">
+  <div class="inner">
+    <p class="lead" id="listLead">The same hierarchy as the map, as a list. Choose any item to see its details.</p>
+    <ul class="tree" id="tree"></ul>
+  </div>
+</section>
+<div class="fail glass" id="fail">This browser could not start 3D rendering, so the atlas is showing as a list.</div>
+
+<script src="./vendor/three/three.min.js"></script>
+<script src="./vendor/three/controls/OrbitControls.js"></script>
+<script src="./vendor/three/renderers/CSS2DRenderer.js"></script>
+<script src="./vendor/three/shaders/CopyShader.js"></script>
+<script src="./vendor/three/shaders/LuminosityHighPassShader.js"></script>
+<script src="./vendor/three/postprocessing/EffectComposer.js"></script>
+<script src="./vendor/three/postprocessing/RenderPass.js"></script>
+<script src="./vendor/three/postprocessing/ShaderPass.js"></script>
+<script src="./vendor/three/postprocessing/UnrealBloomPass.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* =====================================================================
+   DATA — AGENT_REGISTRY exactly as jarvis-worker.js 2.6.1 defines it,
+   plus the facts about it that live elsewhere in the code. Nothing below
+   is invented: where the brief asked for a tier the system does not have
+   yet (department leads), those nodes are marked planned and drawn as such.
+   ===================================================================== */
+const REGISTRY = [{"id": "research", "name": "Research Agent", "description": "General research and information gathering. Compare sources, track where each claim came from, and say plainly when the evidence is thin rather than presenting a guess as a fact. Structure the answer as findings, sources, a confidence level, the conclusions that actually follow, and what is still an open question.", "capabilities": ["web search", "source comparison", "summarization"], "tools": ["search_web", "read_page"], "permissions": ["internet.read", "memory.write"], "riskLevel": "low", "memoryNamespace": "PROJECT_MEMORY", "triggers": ["on_demand"], "schedule": null}, {"id": "competitor", "name": "Competitor Intelligence Agent", "description": "Monitor named ecommerce competitors: products, prices, discounts, promotions, new listings, positioning, and anything a storefront page says about shipping. Build a short profile per competitor and report only what actually changed since the last pass — a re-statement of everything unchanged is noise, not intelligence. Cannot see reviews or social activity that are not on the page itself.", "capabilities": ["competitor tracking", "change detection"], "tools": ["search_web", "read_page"], "permissions": ["internet.read", "memory.write", "memory.read"], "riskLevel": "low", "memoryNamespace": "BUSINESS_MEMORY", "triggers": ["on_demand", "schedule"], "schedule": {"every": "hours", "hours": 24}}, {"id": "product", "name": "Product Development Agent", "description": "Help develop products and collections: ideas, specifications, variants, materials, naming, SKU suggestions, packaging concepts, and how a new product differs from what is already in the store. Ground every suggestion in the store’s actual catalog and in research already gathered — never propose a product as if the catalog were empty.", "capabilities": ["product ideation", "specification", "differentiation analysis"], "tools": ["search_web", "read_page", "shopify_admin_query"], "permissions": ["internet.read", "shopify.read", "memory.read"], "riskLevel": "low", "memoryNamespace": "BUSINESS_MEMORY", "triggers": ["on_demand"], "schedule": null}, {"id": "creative", "name": "Creative Director Agent", "description": "Own the creative direction of the brand: campaign concepts, visual concepts described in words, product-photography concepts, creative briefs, social concepts, and collection themes. Every idea must fit BRAND_PROFILE — its voice, its visual identity, its words to use and to avoid — rather than a generic ecommerce aesthetic.", "capabilities": ["campaign concepts", "visual direction", "brand consistency"], "tools": [], "permissions": ["memory.read"], "riskLevel": "low", "memoryNamespace": "BRAND_MEMORY", "triggers": ["on_demand"], "schedule": null}, {"id": "copywriter", "name": "Copywriter Agent", "description": "Write all brand copy: product descriptions, headlines, landing pages, ads, emails, SMS, WhatsApp messages, Instagram captions, TikTok scripts, campaign copy. Follow BRAND_PROFILE’s voice and word lists exactly. Produces text only — it does not send anything itself; sending is the Personal Assistant’s or JARVIS’s own tool, kept separate so a copy draft can never become an outgoing message without somebody choosing to send it.", "capabilities": ["product copy", "ad copy", "email/SMS copy", "social captions"], "tools": [], "permissions": ["memory.read"], "riskLevel": "low", "memoryNamespace": "BRAND_MEMORY", "triggers": ["on_demand"], "schedule": null}, {"id": "store", "name": "Store Manager Agent", "description": "Inspect and manage the Shopify store: products, inventory, orders, pricing, discounts, collections, product status. Reads by default. A write is still possible through shopify_admin_query exactly as it always was — the caller states allow_writes: true and it is logged, not held for approval, which is the existing design this project already shipped and this agent does not change.", "capabilities": ["product management", "order inspection", "store health"], "tools": ["shopify_admin_query"], "permissions": ["shopify.read", "shopify.write", "memory.write"], "riskLevel": "medium", "memoryNamespace": "BUSINESS_MEMORY", "triggers": ["on_demand"], "schedule": null}, {"id": "inventory", "name": "Inventory Agent", "description": "Monitor inventory and demand from the store’s own data: current stock, sales velocity, low stock, out of stock, slow-moving products, seasonal patterns. Cannot see supplier lead times or reorder rules that are not recorded in Shopify — say so rather than inventing a number.", "capabilities": ["stock monitoring", "demand tracking", "anomaly flags"], "tools": ["shopify_admin_query"], "permissions": ["shopify.read", "memory.write"], "riskLevel": "low", "memoryNamespace": "BUSINESS_MEMORY", "triggers": ["on_demand", "schedule"], "schedule": {"every": "hours", "hours": 24}}, {"id": "analytics", "name": "Analytics Agent", "description": "Analyze ecommerce performance from Shopify order and product data: revenue, order count, average order value, product performance, returns. Actively flag a meaningful change against the recent baseline rather than only reporting a number. No ad-platform or web-analytics integration exists, so conversion rate, traffic, cart abandonment and CAC/ROAS are out of reach until one is connected — say that plainly instead of estimating them.", "capabilities": ["revenue analysis", "anomaly detection", "product performance"], "tools": ["shopify_admin_query", "search_web"], "permissions": ["shopify.read", "internet.read", "memory.write"], "riskLevel": "low", "memoryNamespace": "BUSINESS_MEMORY", "triggers": ["on_demand", "schedule"], "schedule": {"every": "hours", "hours": 24}}, {"id": "marketing", "name": "Marketing Agent", "description": "Plan marketing strategy: campaign ideas, audience segmentation, a marketing calendar (using the same Google Calendar the Personal Assistant uses), creative briefs, experiment proposals, and after-the-fact performance analysis from whatever Analytics has. May recommend a budget change. Must never spend money or launch a paid campaign itself — there is no tool that could do either, by design.", "capabilities": ["campaign planning", "audience segmentation", "marketing calendar"], "tools": ["search_web", "get_calendar_events", "create_calendar_event"], "permissions": ["internet.read", "calendar.read", "calendar.write", "memory.read"], "riskLevel": "medium", "memoryNamespace": "BUSINESS_MEMORY", "triggers": ["on_demand"], "schedule": null}, {"id": "social", "name": "Social Media Agent", "description": "Plan social content: a content calendar, post ideas, reel/TikTok concepts, stories, captions, hashtags where they genuinely fit. Works from what the Creative Director and Copywriter produce rather than writing final copy itself. Does not post anything — no platform-posting tool exists.", "capabilities": ["content calendar", "post concepts", "campaign coordination"], "tools": ["get_calendar_events", "create_calendar_event"], "permissions": ["calendar.read", "calendar.write", "memory.read"], "riskLevel": "low", "memoryNamespace": "BRAND_MEMORY", "triggers": ["on_demand"], "schedule": null}, {"id": "finance", "name": "Finance Agent", "description": "Analyze the business financially from Shopify data alone: revenue, product-level margin where cost is recorded, returns, contribution by product. Strictly READ ONLY — there is no payments tool, no way to move money, and none should be built for this agent; it explains numbers, it never changes them.", "capabilities": ["revenue analysis", "margin analysis", "profitability by product"], "tools": ["shopify_admin_query"], "permissions": ["shopify.read", "memory.read"], "riskLevel": "low", "memoryNamespace": "BUSINESS_MEMORY", "triggers": ["on_demand"], "schedule": null}, {"id": "support", "name": "Customer Support Agent", "description": "Handle order, shipping, return and product questions using Shopify order lookup and whatever is on the store’s own pages. If it cannot resolve something confidently, it says so and hands the conversation back to JARVIS/him rather than guessing at a policy. No refund, credit or cancellation tool exists for it to misuse — those stay human decisions.", "capabilities": ["order lookup", "FAQ", "escalation"], "tools": ["shopify_admin_query", "read_page"], "permissions": ["shopify.read", "internet.read"], "riskLevel": "low", "memoryNamespace": "AGENT_MEMORY", "triggers": ["on_demand"], "schedule": null}, {"id": "coding", "name": "Coding Agent", "description": "Read, analyze and write code inside a workspace folder set aside for it, and work with git there — status, diff, log, add, commit. It has no shell and cannot run arbitrary commands; workspace_git and workspace_write_file are the whole of what it can do to a filesystem, and both are confined to that one folder. A write never reaches production on its own: implement, then it says what it changed and why, then he approves.", "capabilities": ["read code", "write code", "git status/diff/log/commit", "propose changes"], "tools": ["workspace_read_file", "workspace_write_file", "workspace_list_dir", "workspace_git", "run_code"], "permissions": ["filesystem.read", "filesystem.write", "git.read", "git.write"], "riskLevel": "high", "memoryNamespace": "PROJECT_MEMORY", "triggers": ["on_demand"], "schedule": null}, {"id": "system", "name": "System Monitor Agent", "description": "Monitor the computer JARVIS is running on: CPU, RAM, disk. Reports a threshold breach (CPU_HIGH, MEMORY_HIGH, DISK_LOW) as an event rather than a running dashboard nobody is watching. Cannot see GPU load, Docker, or anything outside this one process’s view of the machine — those need OS access this app does not have.", "capabilities": ["CPU/RAM/disk monitoring", "threshold events"], "tools": ["system_metrics"], "permissions": ["system.read", "memory.write"], "riskLevel": "low", "memoryNamespace": "EVENT_MEMORY", "triggers": ["schedule"], "schedule": {"every": "minutes", "minutes": 15}}, {"id": "security", "name": "Security Agent", "description": "Watch for an agent acting outside the permission it was given — read AGENT_MEMORY/the action log for a denied-permission attempt — and for an unfamiliar process in the list system_metrics/list_processes can see. May raise an alert and may pause another agent (flip its own registry entry’s paused flag, which every agent checks before it runs) but cannot stop a process, delete a file, or touch the network. It has no capability that could do any of those things.", "capabilities": ["permission-violation detection", "process anomaly flags", "agent pause"], "tools": ["list_processes"], "permissions": ["system.read", "agent.pause", "memory.read"], "riskLevel": "medium", "memoryNamespace": "EVENT_MEMORY", "triggers": ["on_demand", "schedule"], "schedule": {"every": "minutes", "minutes": 30}}, {"id": "qa", "name": "QA / Website Testing Agent", "description": "Test the storefront the way read_page and qa_check_page allow: fetch a page, report its status code, look for broken internal links and images, and check that a product page’s markup contains an add-to-cart control. This is NOT browser automation — it cannot click, fill a form, add anything to a real cart, or run a checkout, and it says so rather than reporting a pass on a step it never performed. Real end-to-end checkout testing needs a browser-automation integration this project does not have.", "capabilities": ["broken-link/image scan", "page reachability", "markup-level checks"], "tools": ["read_page", "qa_check_page"], "permissions": ["internet.read", "memory.write"], "riskLevel": "low", "memoryNamespace": "PROJECT_MEMORY", "triggers": ["on_demand"], "schedule": null}, {"id": "personal", "name": "Personal Assistant Agent", "description": "Handle his personal productivity: standing tasks, calendar, reminders, project tracking. Reads and writes only PERSONAL_MEMORY and PROJECT_MEMORY by default — it does not read BUSINESS_MEMORY or BRAND_MEMORY unless a request explicitly asks it to cross into one of them.", "capabilities": ["tasks", "reminders", "calendar", "project tracking"], "tools": ["get_calendar_events", "create_calendar_event", "remember_to_do", "list_standing_tasks", "cancel_standing_task", "remember"], "permissions": ["calendar.read", "calendar.write", "memory.read", "memory.write"], "riskLevel": "low", "memoryNamespace": "PERSONAL_MEMORY", "triggers": ["on_demand"], "schedule": null}, {"id": "news", "name": "News / Intelligence Agent", "description": "Watch topics relevant to him and the business — ecommerce, AI, the categories this store sells in, competitors, tools — and produce ONE short digest, not a stream of articles. Silence is the correct output on a day nothing worth his attention happened.", "capabilities": ["topic monitoring", "digest synthesis"], "tools": ["search_web"], "permissions": ["internet.read", "memory.write"], "riskLevel": "low", "memoryNamespace": "EVENT_MEMORY", "triggers": ["schedule"], "schedule": {"every": "daily", "time": "07:00"}}, {"id": "memory", "name": "Memory Agent", "description": "Long-term structured memory for every other agent and for JARVIS itself. Not a conversation partner — it is the retrieval and relevance layer behind USER_MEMORY, BUSINESS_MEMORY, BRAND_MEMORY, PROJECT_MEMORY, AGENT_MEMORY, DECISION_MEMORY and EVENT_MEMORY. Retrieves only what a request is actually relevant to rather than dumping everything stored, and never writes to BRAND_MEMORY or DECISION_MEMORY on another agent’s behalf — those two are written only by an agent whose own registry entry names that namespace, or by him directly.", "capabilities": ["structured storage", "relevance-scoped retrieval"], "tools": [], "permissions": ["memory.read", "memory.write"], "riskLevel": "low", "memoryNamespace": "AGENT_MEMORY", "triggers": ["on_demand"], "schedule": null}];
+
+// jarvis-worker.js: SERVER_RUNNABLE_SCHEDULED_AGENTS
+const SERVER_RUN = ['competitor','news','analytics','inventory'];
+// jarvis-worker.js: NEVER_GRANTED
+const NEVER = ['shell.execute','payments.read','payments.write','production.deploy'];
+// What actually waits for your approval: the page queues these two before running them.
+const APPROVAL = ['filesystem.write','git.write'];
+// index.html: SUPERVISOR_PRESETS (the bundles multi_agent_analysis runs in parallel)
+const PRESETS = [
+  { id:'launch_decision', name:'Launch decision', agents:['research','competitor','product','finance'] },
+  { id:'business_review', name:'Business review', agents:['analytics','inventory','finance','competitor'] },
+  { id:'marketing_push',  name:'Marketing push',  agents:['marketing','creative','copywriter','social'] },
+  { id:'site_health',     name:'Site health',     agents:['qa','system','security'] }
+];
+// Tools and the capability each one exercises (TOOL_CAPABILITY in the worker).
+const TOOLS = {
+  search_web:{cap:'internet.read', what:'Searches the web and returns titles, links and snippets.'},
+  read_page:{cap:'internet.read', what:'Fetches one public page and returns its readable text. Private and internal addresses are refused.'},
+  qa_check_page:{cap:'internet.read', what:'Checks one storefront page’s markup for missing links and images and an add-to-cart control. Nothing is clicked and no cart is used.'},
+  shopify_admin_query:{cap:'shopify.read', what:'Runs a Shopify Admin GraphQL query. A query that changes the store needs shopify.write as well.'},
+  get_calendar_events:{cap:'calendar.read', what:'Reads upcoming Google Calendar events.'},
+  create_calendar_event:{cap:'calendar.write', what:'Adds an event to Google Calendar.'},
+  remember:{cap:'memory.write', what:'Saves a short fact to long-term memory.'},
+  remember_to_do:{cap:'memory.write', what:'Sets up a standing task that repeats while the app is open.'},
+  list_standing_tasks:{cap:'memory.read', what:'Lists standing tasks and when each one last ran.'},
+  cancel_standing_task:{cap:'memory.write', what:'Stops a standing task.'},
+  run_code:{cap:null, what:'Runs JavaScript in a locked sandbox with no access to files or your data.'},
+  workspace_read_file:{cap:'filesystem.read', desktop:true, what:'Reads a file inside the Coding Agent’s own workspace folder, and nowhere else on disk.'},
+  workspace_write_file:{cap:'filesystem.write', desktop:true, approval:'always', what:'Writes a file inside the workspace folder. It is queued until you approve it.'},
+  workspace_list_dir:{cap:'filesystem.read', desktop:true, what:'Lists a folder inside the workspace.'},
+  workspace_git:{cap:'git.read', desktop:true, approval:'add and commit', what:'Runs git in the workspace. status, diff, log and init run at once; add and commit wait for your approval. There is no shell.'},
+  system_metrics:{cap:'system.read', desktop:true, what:'Reads CPU, RAM and disk use on this computer.'},
+  list_processes:{cap:'system.read', desktop:true, what:'Lists running processes, heaviest first. It cannot stop any of them.'}
+};
+
+/* Departments. The grouping is this page's; the members are the registry's.
+   Order around the ring is chosen so neighbouring platforms never share a hue family. */
+const DEPTS = [
+  { id:'research', name:'Research', color:'#4da3ff', agents:['research','competitor','news'],
+    blurb:'Finding, comparing and watching information on the public web.' },
+  { id:'commerce', name:'Commerce', color:'#ffb938', agents:['store','inventory','finance'],
+    blurb:'The Shopify store: products, stock, orders and money.' },
+  { id:'coding', name:'Coding', color:'#2dffb0', agents:['coding'],
+    blurb:'Code and git, inside one sandboxed workspace folder.' },
+  { id:'marketing', name:'Marketing', color:'#ff4f9a', agents:['marketing','social','copywriter'],
+    blurb:'Campaigns, social planning and brand copy.' },
+  { id:'data', name:'Data', color:'#c8f23c', agents:['analytics','memory'],
+    blurb:'Performance numbers and long-term memory.' },
+  { id:'communication', name:'Communication', color:'#ff7a45', agents:['support','personal'],
+    blurb:'Your customers and your own day: support, calendar, reminders.' },
+  { id:'design', name:'Design', color:'#a58bff', agents:['creative','product'],
+    blurb:'Creative direction and product development.' },
+  { id:'security', name:'Security', color:'#ff4d5e', agents:['security','system','qa'],
+    blurb:'The machine, the storefront and the agents themselves.' }
+];
+const COMMAND = { id:'command', name:'Command', color:'#00e5ff',
+  blurb:'JARVIS and the two coordinators that actually hand out work today.' };
+
+const ICONS = {
+  research:'<circle cx="7" cy="7" r="4.5"/><path d="M10.4 10.4 14 14"/>',
+  commerce:'<path d="M3 5.5h10l-1 8.5H4z"/><path d="M6 5.5V4.4a2 2 0 0 1 4 0v1.1"/>',
+  coding:'<path d="M6 4 2 8l4 4M10 4l4 4-4 4"/>',
+  marketing:'<path d="M2.5 6.5v3l8 3.5V3z"/><path d="M12.5 6c1 .5 1.5 1.2 1.5 2s-.5 1.5-1.5 2"/>',
+  data:'<path d="M3 13.5V8.5M8 13.5V3M13 13.5V6"/>',
+  communication:'<path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/>',
+  design:'<path d="M8 2 13 8 8 14 3 8z"/><path d="M8 2v12"/>',
+  security:'<path d="M8 2 13 4v4c0 3-2.2 5-5 6-2.8-1-5-3-5-6V4z"/>',
+  command:'<path d="M8 1.8 13.5 5v6L8 14.2 2.5 11V5z"/><circle cx="8" cy="8" r="2"/>'
+};
+const icon = id => '<svg viewBox="0 0 16 16" aria-hidden="true">' + (ICONS[id] || '') + '</svg>';
+
+/* ---------------------------------------------------------------------
+   The graph: every node, its tier, its department, its parent.
+--------------------------------------------------------------------- */
+const byAgent = Object.fromEntries(REGISTRY.map(a => [a.id, a]));
+const deptOf = {};
+DEPTS.forEach(d => d.agents.forEach(id => { deptOf[id] = d.id; }));
+// Anything added to the registry later without a department still shows up, on its own platform.
+const loose = REGISTRY.filter(a => !deptOf[a.id]).map(a => a.id);
+if(loose.length){
+  DEPTS.push({ id:'unassigned', name:'Unassigned', color:'#9aa9b0', agents:loose,
+    blurb:'Agents in the registry that this map has no department for yet.' });
+  loose.forEach(id => { deptOf[id] = 'unassigned'; });
+}
+const deptById = Object.fromEntries(DEPTS.concat([COMMAND]).map(d => [d.id, d]));
+
+const nodes = new Map();
+function addNode(n){ nodes.set(n.id, n); }
+addNode({ id:'jarvis', kind:'core', tier:0, name:'JARVIS', dept:'command', status:'live' });
+addNode({ id:'supervisor', kind:'coord', tier:1, name:'Supervisor', dept:'command', parent:'jarvis', status:'live' });
+addNode({ id:'scheduler', kind:'coord', tier:1, name:'Scheduler', dept:'command', parent:'jarvis', status:'live' });
+DEPTS.forEach(d => addNode({ id:'lead:' + d.id, kind:'lead', tier:1, name:d.name + ' Lead', dept:d.id, parent:'jarvis', status:'planned' }));
+REGISTRY.forEach(a => addNode({ id:a.id, kind:'agent', tier:2, name:a.name, dept:deptOf[a.id], parent:'lead:' + deptOf[a.id], status:'live', agent:a }));
+REGISTRY.forEach(a => (a.tools || []).forEach(t => addNode({ id:a.id + '/' + t, kind:'tool', tier:3, name:t, dept:deptOf[a.id], parent:a.id, status:'live', tool:t })));
+
+const state = { planned:true, tools:true, sched:true, labels:true, selected:null, hover:null };
+
+function parentOf(id){
+  const n = nodes.get(id);
+  if(!n) return null;
+  if(n.kind === 'agent' && !state.planned) return 'jarvis';
+  return n.parent || null;
+}
+function isShown(id){
+  const n = nodes.get(id);
+  if(!n) return false;
+  if(n.kind === 'lead') return state.planned;
+  if(n.kind === 'tool') return state.tools;
+  return true;
+}
+function childrenOf(id){
+  const out = [];
+  nodes.forEach(n => { if(isShown(n.id) && parentOf(n.id) === id) out.push(n.id); });
+  return out;
+}
+const presetsFor = id => PRESETS.filter(p => p.agents.includes(id));
+const holdersOf = tool => REGISTRY.filter(a => (a.tools || []).includes(tool)).map(a => a.id);
+
+function relatedSet(focus){
+  if(!focus) return null;
+  const set = new Set();
+  if(focus.startsWith('dept:')){
+    const d = deptById[focus.slice(5)];
+    if(!d) return null;
+    set.add('jarvis');
+    if(d.id === 'command'){ set.add('supervisor'); set.add('scheduler'); return set; }
+    if(state.planned) set.add('lead:' + d.id);
+    d.agents.forEach(id => { set.add(id); childrenOf(id).forEach(c => set.add(c)); });
+    return set;
+  }
+  set.add(focus);
+  let p = parentOf(focus);
+  while(p){ set.add(p); p = parentOf(p); }
+  const stack = [focus];
+  while(stack.length){ const x = stack.pop(); childrenOf(x).forEach(c => { set.add(c); stack.push(c); }); }
+  if(focus === 'scheduler') SERVER_RUN.forEach(id => set.add(id));
+  if(focus === 'supervisor') PRESETS.forEach(pr => pr.agents.forEach(id => set.add(id)));
+  if(SERVER_RUN.includes(focus)) set.add('scheduler');
+  return set;
+}
+
+/* ---------------------------------------------------------------------
+   Words for the panel
+--------------------------------------------------------------------- */
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TIER_NAME = ['Main agent','Coordinator','Specialist','Tool'];
+function schedText(s){
+  if(!s) return '';
+  if(s.every === 'hours') return 'every ' + s.hours + ' h';
+  if(s.every === 'minutes') return 'every ' + s.minutes + ' min';
+  if(s.every === 'daily') return 'daily at ' + s.time + ' UTC';
+  return '';
+}
+function colorOf(id){
+  const n = nodes.get(id);
+  if(!n) return '#ffffff';
+  if(n.kind === 'core') return '#00e5ff';
+  if(n.kind === 'coord') return '#bff6ff';
+  return deptById[n.dept].color;
+}
+function runsText(a){
+  const s = schedText(a.schedule);
+  if(SERVER_RUN.includes(a.id)){
+    return 'Runs by itself: the worker’s Cron Trigger starts it ' + s + ', even with the app closed. JARVIS and the Supervisor can also call it on demand.';
+  }
+  if(a.schedule){
+    return 'On demand from the app. Its registry entry declares a schedule (' + s + '), but nothing runs it on a timer yet.';
+  }
+  return 'On demand from the app, when JARVIS or the Supervisor calls it.';
+}
+
+function relBtn(id, sub){
+  const n = nodes.get(id);
+  if(!n) return '';
+  const c = colorOf(id);
+  const planned = n.status === 'planned';
+  return '<button class="rel' + (planned ? ' planned' : '') + '" type="button" data-go="' + esc(id) + '">' +
+    '<span class="hex" style="--c:' + c + '"></span><span class="' + (n.kind === 'tool' ? 'mono' : '') + '">' + esc(n.name) + '</span>' +
+    '<span class="s">' + esc(sub || (planned ? 'planned' : TIER_NAME[n.tier])) + '</span></button>';
+}
+
+function panelHtml(focus){
+  if(!focus) return '';
+  if(focus.startsWith('dept:')) return deptPanel(deptById[focus.slice(5)]);
+  const n = nodes.get(focus);
+  if(!n) return '';
+  const d = deptById[n.dept];
+  const eyebrow = '<div class="p-eyebrow"><span class="hex" style="--c:' + d.color + '"></span>' + esc(d.name) + ' · ' + esc(TIER_NAME[n.tier]) + '</div>';
+
+  if(n.kind === 'core'){
+    const bindings = REGISTRY.reduce((s, a) => s + (a.tools || []).length, 0);
+    return eyebrow + '<h2>JARVIS</h2>' +
+      '<div class="chips"><span class="chip live">Live</span><span class="chip">Supervisor</span></div>' +
+      '<p class="desc">The main agent. He answers most things himself, with his own full set of tools, and hands a question to specialists when it spans several departments. The specialists work for him. A few things they cannot do without you.</p>' +
+      '<section><h3>Who works for him</h3><div class="rels">' +
+        relBtn('supervisor', 'live coordinator') + relBtn('scheduler', 'live coordinator') +
+        DEPTS.map(dd => relBtn('lead:' + dd.id, 'planned · ' + dd.agents.length + ' agents')).join('') +
+      '</div><p class="note">The department leads are planned, not built. Today JARVIS and the Supervisor reach the specialists directly. Turn off “Planned department leads” to see only what exists.</p></section>' +
+      '<section><h3>In numbers</h3><dl class="kv">' +
+        '<dt>Specialist agents</dt><dd>' + REGISTRY.length + '</dd>' +
+        '<dt>Tool bindings</dt><dd>' + bindings + ' (' + Object.keys(TOOLS).length + ' distinct tools)</dd>' +
+        '<dt>Run by themselves</dt><dd>' + SERVER_RUN.length + ' on the Cron Trigger</dd>' +
+        '<dt>High risk</dt><dd>' + REGISTRY.filter(a => a.riskLevel === 'high').map(a => a.name).join(', ') + '</dd>' +
+      '</dl></section>' +
+      '<section><h3>Needs your approval</h3><div class="chips">' + APPROVAL.map(c => '<span class="chip lock">' + c + '</span>').join('') + '</div>' +
+        '<p class="note">These are queued in the Approvals panel and happen only when you press Approve. Shopify and WhatsApp writes are logged but not held, as they were before.</p></section>' +
+      '<section><h3>No agent can ever hold</h3><div class="chips">' + NEVER.map(c => '<span class="chip never">' + c + '</span>').join('') + '</div>' +
+        '<p class="note">Refused in code, whatever a registry entry says.</p></section>';
+  }
+
+  if(n.kind === 'coord' && n.id === 'supervisor'){
+    return eyebrow + '<h2>Supervisor</h2>' +
+      '<div class="chips"><span class="chip live">Live</span><span class="chip">In the app</span></div>' +
+      '<p class="desc">Runs several specialists at the same time on one question and returns their findings side by side, so JARVIS can say where they agree and where they don’t. JARVIS reaches it through the multi_agent_analysis tool.</p>' +
+      '<section><h3>Bundles it runs in parallel</h3>' + PRESETS.map(p =>
+        '<div class="bundle"><b>' + esc(p.name) + '</b><div class="rels">' + p.agents.map(id => relBtn(id, deptById[deptOf[id]].name)).join('') + '</div></div>'
+      ).join('') + '</section>' +
+      '<section><h3>Reports to</h3><div class="rels">' + relBtn('jarvis') + '</div></section>';
+  }
+
+  if(n.kind === 'coord' && n.id === 'scheduler'){
+    return eyebrow + '<h2>Scheduler</h2>' +
+      '<div class="chips"><span class="chip live">Live</span><span class="chip sched">Cloudflare Cron</span></div>' +
+      '<p class="desc">The worker’s Cron Trigger. It wakes every minute, runs whichever unattended agents are due, and sends the daily summary. None of this needs your computer to be on.</p>' +
+      '<section><h3>Runs by itself</h3><div class="rels">' + SERVER_RUN.map(id => relBtn(id, schedText(byAgent[id].schedule))).join('') + '</div></section>' +
+      '<section><h3>Also sends</h3><p class="desc">One daily summary to your WhatsApp after 07:00 UTC, built from what actually happened, only if WhatsApp is set up. A quiet day gets one line.</p></section>' +
+      '<section><h3>Declared but not run</h3><div class="rels">' +
+        REGISTRY.filter(a => a.schedule && !SERVER_RUN.includes(a.id)).map(a => relBtn(a.id, schedText(a.schedule))).join('') +
+      '</div><p class="note">These two list a schedule in the registry, but the worker has no runner for them yet, so they only run when called.</p></section>' +
+      '<section><h3>Reports to</h3><div class="rels">' + relBtn('jarvis') + '</div></section>';
+  }
+
+  if(n.kind === 'lead'){
+    const dd = deptById[n.dept];
+    return eyebrow + '<h2>' + esc(n.name) + '</h2>' +
+      '<div class="chips"><span class="chip planned">Planned · not built</span></div>' +
+      '<p class="desc">A coordinator slot for this department. It does not exist in the system yet. Today JARVIS reaches these specialists directly, or through the Supervisor. It is drawn so the intended four-tier hierarchy is visible.</p>' +
+      '<section><h3>Would manage</h3><div class="rels">' + dd.agents.map(id => relBtn(id, (byAgent[id].tools || []).length + ' tools')).join('') + '</div></section>' +
+      '<section><h3>Reports to</h3><div class="rels">' + relBtn('jarvis') + '</div></section>';
+  }
+
+  if(n.kind === 'agent'){
+    const a = n.agent;
+    const chips = ['<span class="chip live">Live</span>',
+      '<span class="chip ' + a.riskLevel + '">' + a.riskLevel + ' risk</span>'];
+    if(SERVER_RUN.includes(a.id)) chips.push('<span class="chip sched">Unattended · ' + esc(schedText(a.schedule)) + '</span>');
+    const par = parentOf(a.id);
+    const parNote = state.planned
+      ? '<p class="note">The lead is planned. In practice JARVIS dispatches to this agent directly.</p>' : '';
+    const perms = (a.permissions || []).map(c =>
+      '<span class="chip' + (APPROVAL.includes(c) ? ' lock' : '') + '">' + esc(c) + '</span>').join('');
+    const needsDesktop = (a.tools || []).some(t => TOOLS[t] && TOOLS[t].desktop);
+    const bundles = presetsFor(a.id);
+    return eyebrow + '<h2>' + esc(a.name) + '</h2>' +
+      '<div class="chips">' + chips.join('') + '</div>' +
+      '<p class="desc">' + esc(a.description) + '</p>' +
+      '<section><h3>Reports to</h3><div class="rels">' + relBtn(par) + (SERVER_RUN.includes(a.id) ? relBtn('scheduler', 'runs it on a timer') : '') + '</div>' + parNote + '</section>' +
+      ((a.tools || []).length
+        ? '<section><h3>Tools it can call · ' + a.tools.length + '</h3><div class="rels">' +
+            a.tools.map(t => relBtn(a.id + '/' + t, (TOOLS[t] && TOOLS[t].cap) || 'sandboxed')).join('') + '</div>' +
+            (state.tools ? '' : '<p class="note">The tools tier is hidden. Turn it on in Layers to see these on the map.</p>') + '</section>'
+        : '<section><h3>Tools</h3><p class="desc">None. It works from its instructions and the brand profile, and writes text only.</p></section>') +
+      '<section><h3>Permissions</h3><div class="chips">' + (perms || '<span class="chip">none</span>') + '</div>' +
+        ((a.permissions || []).some(c => APPROVAL.includes(c)) ? '<p class="note">◆ waits for your approval before it happens.</p>' : '') + '</section>' +
+      '<section><h3>When it runs</h3><p class="desc">' + esc(runsText(a)) + '</p>' +
+        (needsDesktop ? '<p class="note">Its tools need the desktop app. On the website they report that they can’t run.</p>' : '') + '</section>' +
+      (bundles.length ? '<section><h3>Called together in</h3><div class="rels">' +
+        bundles.map(p => relBtn('supervisor', p.name)).join('') + '</div></section>' : '') +
+      '<section><h3>Memory</h3><p class="desc mono">' + esc(a.memoryNamespace) + '</p></section>' +
+      '<section><h3>Capabilities</h3><div class="chips">' + (a.capabilities || []).map(c => '<span class="chip">' + esc(c) + '</span>').join('') + '</div></section>';
+  }
+
+  if(n.kind === 'tool'){
+    const t = TOOLS[n.tool] || { what:'A tool in the registry.' };
+    const others = holdersOf(n.tool).filter(id => id !== n.parent);
+    const chips = ['<span class="chip">' + esc(t.cap || 'no capability gate') + '</span>'];
+    if(t.approval) chips.push('<span class="chip lock">approval: ' + esc(t.approval) + '</span>');
+    if(t.desktop) chips.push('<span class="chip">desktop app only</span>');
+    return eyebrow + '<h2 class="mono">' + esc(n.tool) + '</h2>' +
+      '<div class="chips">' + chips.join('') + '</div>' +
+      '<p class="desc">' + esc(t.what) + '</p>' +
+      '<section><h3>Held by</h3><div class="rels">' + relBtn(n.parent, deptById[n.dept].name) + '</div></section>' +
+      (others.length ? '<section><h3>Also held by</h3><div class="rels">' + others.map(id => relBtn(id + '/' + n.tool, byAgent[id].name)).join('') + '</div></section>' : '');
+  }
+  return '';
+}
+
+function deptPanel(d){
+  if(!d) return '';
+  if(d.id === 'command') return panelHtml('jarvis');
+  const tools = d.agents.reduce((s, id) => s + (byAgent[id].tools || []).length, 0);
+  return '<div class="p-eyebrow"><span class="hex" style="--c:' + d.color + '"></span>Department</div>' +
+    '<h2 style="color:' + d.color + '">' + esc(d.name) + '</h2>' +
+    '<div class="chips"><span class="chip">' + d.agents.length + ' agent' + (d.agents.length === 1 ? '' : 's') + '</span><span class="chip">' + tools + ' tool bindings</span></div>' +
+    '<p class="desc">' + esc(d.blurb) + '</p>' +
+    '<section><h3>Agents</h3><div class="rels">' + d.agents.map(id => relBtn(id, byAgent[id].riskLevel + ' risk')).join('') + '</div></section>' +
+    '<section><h3>Coordinator</h3><div class="rels">' + relBtn('lead:' + d.id, 'planned') + '</div>' +
+    '<p class="note">No lead exists yet. JARVIS reaches this department directly.</p></section>';
+}
+
+/* ---------------------------------------------------------------------
+   Chrome: stats, department list, list view, search
+--------------------------------------------------------------------- */
+const $ = id => document.getElementById(id);
+const panel = $('panel');
+
+(function stats(){
+  const bindings = REGISTRY.reduce((s, a) => s + (a.tools || []).length, 0);
+  const rows = [['Main', 1, ''], ['Coordinators', 2, ''], ['Planned leads', DEPTS.length, 'pl'], ['Specialists', REGISTRY.length, ''], ['Unattended', SERVER_RUN.length, 'am']];
+  $('stats').innerHTML = rows.map(r => '<div><dt>' + r[0] + '</dt><dd class="' + r[2] + '">' + r[1] + '</dd></div>').join('');
+  $('stats').title = bindings + ' tool bindings across ' + Object.keys(TOOLS).length + ' distinct tools';
+})();
+
+$('deptList').innerHTML = [COMMAND].concat(DEPTS).map(d =>
+  '<li><button type="button" data-dept="' + d.id + '"><span class="hex" style="--c:' + d.color + '"></span>' + esc(d.name) +
+  '<span class="n">' + (d.id === 'command' ? '3' : d.agents.length) + '</span></button></li>').join('');
+
+function buildTree(){
+  const li = (id, extra) => {
+    const n = nodes.get(id);
+    return '<button type="button" data-go="' + esc(id) + '" class="' + (n.status === 'planned' ? 'pl' : '') + '">' +
+      '<span class="hex" style="--c:' + colorOf(id) + ';width:9px;height:10px"></span>' +
+      '<span class="' + (n.kind === 'tool' ? 'mono' : '') + '">' + esc(n.name) + '</span>' +
+      '<span class="t">' + esc(extra || (n.status === 'planned' ? 'planned coordinator' : TIER_NAME[n.tier])) + '</span></button>';
+  };
+  let html = '<li>' + li('jarvis', 'main agent') + '<ul>' +
+    '<li>' + li('supervisor', 'coordinator · runs bundles in parallel') + '</li>' +
+    '<li>' + li('scheduler', 'coordinator · runs ' + SERVER_RUN.join(', ')) + '</li>';
+  DEPTS.forEach(d => {
+    html += '<li class="dept" style="--c:' + d.color + '"><button type="button" data-dept="' + d.id + '">' + esc(d.name) + '</button><ul>' +
+      '<li>' + li('lead:' + d.id) + '<ul>' +
+      d.agents.map(id => '<li>' + li(id, byAgent[id].riskLevel + ' risk' + (SERVER_RUN.includes(id) ? ' · unattended' : '')) +
+        ((byAgent[id].tools || []).length ? '<ul>' + byAgent[id].tools.map(t => '<li>' + li(id + '/' + t, (TOOLS[t] && TOOLS[t].cap) || 'sandboxed') + '</li>').join('') + '</ul>' : '') +
+        '</li>').join('') +
+      '</ul></li></ul></li>';
+  });
+  html += '</ul></li>';
+  $('tree').innerHTML = html;
+}
+buildTree();
+
+// Search
+const searchIndex = [];
+nodes.forEach(n => searchIndex.push({ id:n.id, text:(n.name + ' ' + n.id + ' ' + deptById[n.dept].name).toLowerCase(), n }));
+DEPTS.forEach(d => searchIndex.push({ id:'dept:' + d.id, text:d.name.toLowerCase() + ' department', dept:d }));
+let resultIds = [], resultPos = -1;
+function runSearch(){
+  const q = $('q').value.trim().toLowerCase();
+  const box = $('results');
+  if(!q){ box.hidden = true; $('q').setAttribute('aria-expanded', 'false'); return; }
+  const hits = searchIndex.filter(x => x.text.includes(q))
+    .sort((a, b) => (a.text.startsWith(q) ? 0 : 1) - (b.text.startsWith(q) ? 0 : 1) || (a.n ? a.n.tier : -1) - (b.n ? b.n.tier : -1))
+    .slice(0, 12);
+  resultIds = hits.map(h => h.id); resultPos = hits.length ? 0 : -1;
+  box.innerHTML = hits.length ? hits.map((h, i) => {
+    const c = h.dept ? h.dept.color : colorOf(h.id);
+    const name = h.dept ? h.dept.name : h.n.name;
+    const kind = h.dept ? 'Department' : (h.n.status === 'planned' ? 'Planned lead' : TIER_NAME[h.n.tier]);
+    const where = h.dept ? '' : ' · ' + deptById[h.n.dept].name;
+    return '<li><button type="button" role="option" aria-selected="' + (i === 0) + '" data-pick="' + esc(h.id) + '">' +
+      '<span class="hex" style="--c:' + c + ';width:9px;height:10px"></span><span class="' + (h.n && h.n.kind === 'tool' ? 'mono' : '') + '">' + esc(name) + '</span>' +
+      '<span class="k">' + esc(kind + where) + '</span></button></li>';
+  }).join('') : '<li style="padding:8px 10px;color:var(--muted)">Nothing called that.</li>';
+  box.hidden = false; $('q').setAttribute('aria-expanded', 'true');
+}
+function pick(id){
+  $('q').value = ''; $('results').hidden = true; $('q').setAttribute('aria-expanded', 'false');
+  go(id, true);
+}
+$('q').addEventListener('input', runSearch);
+$('q').addEventListener('keydown', e => {
+  const btns = [...$('results').querySelectorAll('[data-pick]')];
+  if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+    if(!btns.length) return;
+    e.preventDefault();
+    resultPos = (resultPos + (e.key === 'ArrowDown' ? 1 : -1) + btns.length) % btns.length;
+    btns.forEach((b, i) => b.setAttribute('aria-selected', String(i === resultPos)));
+  } else if(e.key === 'Enter'){
+    if(resultIds[resultPos]) pick(resultIds[resultPos]);
+  } else if(e.key === 'Escape'){
+    $('q').value = ''; runSearch(); $('q').blur();
+  }
+});
+$('results').addEventListener('click', e => { const b = e.target.closest('[data-pick]'); if(b) pick(b.dataset.pick); });
+
+/* ---------------------------------------------------------------------
+   Selection — shared by the map, the panel, the list and search
+--------------------------------------------------------------------- */
+let world = null; // set once 3D is running
+
+function go(id, fly){
+  if(id.startsWith('dept:')){ select(id, fly); return; }
+  const n = nodes.get(id);
+  if(!n) return;
+  if(n.kind === 'tool' && !state.tools){ $('tTools').checked = true; setLayer('tools', true); }
+  if(n.kind === 'lead' && !state.planned){ $('tPlanned').checked = true; setLayer('planned', true); }
+  select(id, fly);
+}
+function select(id, fly){
+  state.selected = id;
+  if(!id){ panel.hidden = true; panel.innerHTML = ''; }
+  else {
+    panel.innerHTML = '<button class="close" type="button" aria-label="Close details" data-close>×</button>' + panelHtml(id);
+    panel.hidden = false;
+    panel.scrollTop = 0;
+  }
+  if(world){
+    world.setInset(!panel.hidden && window.matchMedia('(min-width: 901px)').matches ? Math.round((panel.offsetWidth + 16) / 2) : 0);
+    world.highlight();
+    if(id && fly) world.focusOn(id);
+  }
+}
+panel.addEventListener('click', e => {
+  if(e.target.closest('[data-close]')){ select(null); return; }
+  const b = e.target.closest('[data-go]');
+  if(b) go(b.dataset.go, true);
+});
+$('deptList').addEventListener('click', e => { const b = e.target.closest('[data-dept]'); if(b) select('dept:' + b.dataset.dept, true); });
+$('deptList').addEventListener('mouseover', e => { const b = e.target.closest('[data-dept]'); if(b && world) world.preview('dept:' + b.dataset.dept); });
+$('deptList').addEventListener('mouseleave', () => { if(world) world.preview(null); });
+$('tree').addEventListener('click', e => {
+  const b = e.target.closest('[data-go],[data-dept]');
+  if(!b) return;
+  select(b.dataset.go || ('dept:' + b.dataset.dept), false);
+});
+
+function setLayer(key, on){
+  state[key] = on;
+  if(world) world.applyLayers();
+  if(state.selected && state.selected !== 'jarvis') select(state.selected, false);
+  else if(state.selected) panel.innerHTML = '<button class="close" type="button" aria-label="Close details" data-close>×</button>' + panelHtml(state.selected);
+}
+$('tPlanned').addEventListener('change', e => setLayer('planned', e.target.checked));
+$('tTools').addEventListener('change', e => setLayer('tools', e.target.checked));
+$('tSched').addEventListener('change', e => setLayer('sched', e.target.checked));
+$('tLabels').addEventListener('change', e => setLayer('labels', e.target.checked));
+
+let listOn = false;
+function setList(on){
+  listOn = on;
+  $('listView').hidden = !on;
+  $('listBtn').setAttribute('aria-pressed', String(on));
+  $('stage').style.visibility = on ? 'hidden' : '';
+  $('hint').hidden = on;
+}
+$('listBtn').addEventListener('click', () => setList(!listOn));
+$('resetBtn').addEventListener('click', () => { select(null); if(world) world.overview(true); });
+
+document.addEventListener('keydown', e => {
+  const typing = /INPUT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName);
+  if(e.key === '/' && !typing){ e.preventDefault(); $('q').focus(); }
+  else if(e.key === 'Escape' && !typing){ select(null); }
+});
+
+if(window.matchMedia('(max-width: 720px)').matches){
+  $('deptBox').open = false;
+}
+
+/* =====================================================================
+   THE WORLD
+   ===================================================================== */
+const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function startWorld(){
+  if(!window.THREE || !THREE.OrbitControls || !THREE.CSS2DRenderer || !THREE.EffectComposer || !THREE.UnrealBloomPass) throw new Error('three.js did not load');
+  const stage = $('stage');
+  const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+  if(!renderer.getContext()) throw new Error('no WebGL');
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  renderer.setSize(stage.clientWidth, stage.clientHeight);
+  renderer.setClearColor(0x04070c, 1);
+  stage.appendChild(renderer.domElement);
+
+  const labelRenderer = new THREE.CSS2DRenderer();
+  labelRenderer.setSize(stage.clientWidth, stage.clientHeight);
+  labelRenderer.domElement.className = 'labels';
+  stage.appendChild(labelRenderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x04070c, 0.0072);
+  const camera = new THREE.PerspectiveCamera(48, stage.clientWidth / stage.clientHeight, 0.5, 900);
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 8;
+  controls.maxDistance = 280;
+  controls.maxPolarAngle = Math.PI * 0.47;
+  controls.screenSpacePanning = false;
+  controls.autoRotate = !REDUCED;
+  controls.autoRotateSpeed = 0.28;
+
+  const composer = new THREE.EffectComposer(renderer);
+  composer.addPass(new THREE.RenderPass(scene, camera));
+  const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(stage.clientWidth, stage.clientHeight), 0.95, 0.5, 0.08);
+  composer.addPass(bloom);
+
+  /* ---------- layout ---------- */
+  const RING_R = 37, PLAT_R = 8.6, HUB_R = 11;
+  const Y = { core:19, coord:10.6, lead:10.6, agent:4.5, tool:2.25, top:1.2 };
+  const L = {};
+  L.jarvis = new THREE.Vector3(0, Y.core, 0);
+  L.supervisor = new THREE.Vector3(-5.4, Y.coord, 1.2);
+  L.scheduler = new THREE.Vector3(5.4, Y.coord, 1.2);
+  DEPTS.forEach((d, i) => {
+    const a = -Math.PI / 2 + Math.PI / DEPTS.length + i * (2 * Math.PI / DEPTS.length);
+    d.angle = a;
+    d.center = new THREE.Vector3(Math.cos(a) * RING_R, 0, Math.sin(a) * RING_R);
+    L['lead:' + d.id] = new THREE.Vector3(d.center.x, Y.lead, d.center.z);
+    const n = d.agents.length;
+    d.agents.forEach((id, k) => {
+      let aa = a, ax = d.center.x, az = d.center.z;
+      if(n > 1){
+        aa = a + Math.PI + (k - (n - 1) / 2) * (2 * Math.PI / n);
+        ax += Math.cos(aa) * 4.4; az += Math.sin(aa) * 4.4;
+      }
+      L[id] = new THREE.Vector3(ax, Y.agent, az);
+      const tools = byAgent[id].tools || [];
+      const m = tools.length, tr = m > 3 ? 2.0 : 1.6;
+      tools.forEach((t, j) => {
+        const ta = aa + Math.PI / Math.max(m, 1) + j * (2 * Math.PI / m);
+        L[id + '/' + t] = new THREE.Vector3(ax + Math.cos(ta) * tr, Y.tool, az + Math.sin(ta) * tr);
+      });
+    });
+  });
+
+  /* ---------- shared bits ---------- */
+  const radialTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.22, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  })();
+  const ADD = THREE.AdditiveBlending;
+  const glowMat = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent:true, opacity, blending:ADD, depthWrite:false });
+  const lineMat = (color, opacity) => new THREE.LineBasicMaterial({ color, transparent:true, opacity, blending:ADD, depthWrite:false });
+  const spinners = [];
+  const tint = (hex, k) => new THREE.Color(hex).lerp(new THREE.Color('#ffffff'), k);
+
+  /* ---------- ground ---------- */
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), new THREE.ShaderMaterial({
+    transparent:true, depthWrite:false, extensions:{ derivatives:true },
+    uniforms:{ uColor:{ value:new THREE.Color('#1b8fb0') } },
+    vertexShader:'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader:[
+      'uniform vec3 uColor; varying vec3 vW;',
+      'float grid(float s, float w){ vec2 c = vW.xz / s; vec2 g = abs(fract(c - 0.5) - 0.5) / fwidth(c); return 1.0 - min(min(g.x, g.y) / w, 1.0); }',
+      'void main(){ float d = length(vW.xz); float fade = 1.0 - smoothstep(30.0, 190.0, d);',
+      ' float a = grid(4.0, 1.0) * 0.10 + grid(20.0, 1.3) * 0.22; gl_FragColor = vec4(uColor, a * fade); }'
+    ].join('\n')
+  }));
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+
+  // A few rings on the floor so the world has a centre.
+  [22, 52, 60].forEach((r, i) => {
+    const pts = []; for(let k = 0; k <= 180; k++){ const t = k / 180 * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(t) * r, 0.02, Math.sin(t) * r)); }
+    const g = new THREE.BufferGeometry().setFromPoints(pts);
+    const m = new THREE.LineDashedMaterial({ color:'#1f7d96', dashSize:i === 0 ? 1.2 : 0.6, gapSize:i === 0 ? 0.8 : 1.4, transparent:true, opacity:0.45 });
+    const line = new THREE.Line(g, m); line.computeLineDistances(); scene.add(line);
+    if(!REDUCED) spinners.push({ o:line, y:(i % 2 ? -1 : 1) * 0.006 });
+  });
+
+  // Dust
+  (function dust(){
+    const N = 520, p = new Float32Array(N * 3);
+    for(let i = 0; i < N; i++){
+      const r = 10 + Math.random() * 120, t = Math.random() * Math.PI * 2;
+      p[i * 3] = Math.cos(t) * r; p[i * 3 + 1] = Math.random() * 40; p[i * 3 + 2] = Math.sin(t) * r;
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    const pts = new THREE.Points(g, new THREE.PointsMaterial({ size:0.28, map:radialTex, color:'#6fd8ff', transparent:true, opacity:0.35, blending:ADD, depthWrite:false }));
+    scene.add(pts);
+    if(!REDUCED) spinners.push({ o:pts, y:0.0006 });
+  })();
+
+  /* ---------- labels ---------- */
+  const labels = [];
+  function label(html, cls, pos, id, color){
+    const el = document.createElement('div');
+    el.className = 'lbl ' + cls;
+    el.style.setProperty('--c', color || '#ffffff');
+    el.innerHTML = html;
+    if(id){
+      el.dataset.id = id;
+      el.addEventListener('click', e => { e.stopPropagation(); go(id, true); });
+      el.addEventListener('pointerenter', () => preview(id));
+      el.addEventListener('pointerleave', () => preview(null));
+    }
+    const o = new THREE.CSS2DObject(el);
+    o.position.copy(pos);
+    scene.add(o);
+    const rec = { o, el, id, cls };
+    labels.push(rec);
+    return rec;
+  }
+
+  /* ---------- platforms ---------- */
+  const platformHits = [];
+  function buildHub(){
+    const col = new THREE.Color('#00e5ff');
+    const grp = new THREE.Group(); scene.add(grp);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(HUB_R, HUB_R * 1.03, 1.2, 72), new THREE.MeshBasicMaterial({ color:col.clone().multiplyScalar(0.07), transparent:true, opacity:0.95 }));
+    body.position.y = 0.6; grp.add(body);
+    body.userData.dept = 'command'; platformHits.push(body);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(HUB_R * 3.6, HUB_R * 3.6), new THREE.MeshBasicMaterial({ map:radialTex, color:col, transparent:true, opacity:0.28, blending:ADD, depthWrite:false }));
+    floor.rotation.x = -Math.PI / 2; floor.position.y = 0.04; grp.add(floor);
+    [HUB_R, HUB_R * 0.78, HUB_R * 0.5].forEach((r, i) => {
+      const pts = []; for(let k = 0; k <= 96; k++){ const t = k / 96 * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(t) * r, 1.23, Math.sin(t) * r)); }
+      const g = new THREE.BufferGeometry().setFromPoints(pts);
+      const line = i === 1
+        ? new THREE.Line(g, new THREE.LineDashedMaterial({ color:col, dashSize:0.9, gapSize:0.6, transparent:true, opacity:0.7 }))
+        : new THREE.Line(g, lineMat(col, i === 0 ? 0.9 : 0.5));
+      if(i === 1) line.computeLineDistances();
+      grp.add(line);
+      if(i === 1 && !REDUCED) spinners.push({ o:line, y:0.003 });
+    });
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.35, Y.core - 1.2, 12, 1, true), glowMat(col, 0.22));
+    beam.position.y = 1.2 + (Y.core - 1.2) / 2; grp.add(beam);
+    const lbl = label('<span class="pname">' + icon('command') + 'Command</span><span class="pmeta">JARVIS + 2 coordinators</span>',
+      'lbl-plat', new THREE.Vector3(0, 1.4, HUB_R + 2.2), null, '#00e5ff');
+    lbl.el.addEventListener('click', () => select('dept:command', true));
+  }
+  function buildPlatform(d){
+    const col = new THREE.Color(d.color);
+    const grp = new THREE.Group(); grp.position.copy(d.center); scene.add(grp);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(PLAT_R * 3.4, PLAT_R * 3.4), new THREE.MeshBasicMaterial({ map:radialTex, color:col, transparent:true, opacity:0.3, blending:ADD, depthWrite:false }));
+    floor.rotation.x = -Math.PI / 2; floor.position.y = 0.03; grp.add(floor);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(PLAT_R, PLAT_R * 1.04, 1.2, 6), new THREE.MeshBasicMaterial({ color:col.clone().multiplyScalar(0.09), transparent:true, opacity:0.94 }));
+    body.position.y = 0.6; body.userData.dept = d.id; grp.add(body); platformHits.push(body);
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(body.geometry), lineMat(col, 0.95));
+    edges.position.copy(body.position); grp.add(edges);
+    const hex = (r, y) => { const p = []; for(let k = 0; k <= 6; k++){ const t = k * Math.PI / 3; p.push(new THREE.Vector3(Math.sin(t) * r, y, Math.cos(t) * r)); } return p; };
+    grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(hex(PLAT_R * 0.8, 1.23)), lineMat(col, 0.45)));
+    const ringPts = []; for(let k = 0; k <= 72; k++){ const t = k / 72 * Math.PI * 2; ringPts.push(new THREE.Vector3(Math.cos(t) * PLAT_R * 0.62, 1.24, Math.sin(t) * PLAT_R * 0.62)); }
+    const ring = new THREE.Line(new THREE.BufferGeometry().setFromPoints(ringPts), new THREE.LineDashedMaterial({ color:col, dashSize:0.55, gapSize:0.45, transparent:true, opacity:0.75 }));
+    ring.computeLineDistances(); grp.add(ring);
+    if(!REDUCED) spinners.push({ o:ring, y:0.004 * (DEPTS.indexOf(d) % 2 ? -1 : 1) });
+    for(let k = 0; k < 6; k++){
+      const t = k * Math.PI / 3;
+      const pil = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.4, 6), glowMat(col, 0.55));
+      pil.position.set(Math.sin(t) * PLAT_R, 1.2 + 1.2, Math.cos(t) * PLAT_R); grp.add(pil);
+    }
+    const tools = d.agents.reduce((s, id) => s + (byAgent[id].tools || []).length, 0);
+    const out = d.center.clone().setY(0).normalize();
+    const lpos = d.center.clone().add(out.multiplyScalar(PLAT_R + 2.4)); lpos.y = 1.4;
+    const lbl = label('<span class="pname">' + icon(d.id) + esc(d.name) + '</span><span class="pmeta">' + d.agents.length + ' agent' + (d.agents.length === 1 ? '' : 's') + ' · ' + tools + ' tools</span>',
+      'lbl-plat', lpos, null, d.color);
+    lbl.el.addEventListener('click', () => select('dept:' + d.id, true));
+    lbl.el.addEventListener('pointerenter', () => preview('dept:' + d.id));
+    lbl.el.addEventListener('pointerleave', () => preview(null));
+  }
+  buildHub();
+  DEPTS.forEach(buildPlatform);
+
+  /* ---------- nodes ---------- */
+  const hitMeshes = [];
+  const HIT_MAT = new THREE.MeshBasicMaterial({ visible:false });
+  function track(n, mat, base){ n.mats.push({ m:mat, base }); return mat; }
+
+  nodes.forEach(n => {
+    const p = L[n.id];
+    const g = new THREE.Group(); g.position.copy(p); scene.add(g);
+    n.obj = g; n.mats = [];
+    const c = colorOf(n.id);
+    let hitR = 1.2;
+    if(n.kind === 'core'){
+      g.add(new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 16), track(n, glowMat('#9ff6ff', 1), 1)));
+      const shell = new THREE.LineSegments(new THREE.WireframeGeometry(new THREE.IcosahedronGeometry(2.7, 1)), track(n, lineMat('#00e5ff', 0.75), 0.75));
+      g.add(shell); if(!REDUCED) spinners.push({ o:shell, y:0.004, x:0.0015 });
+      [[3.7, 0.006, 0], [4.3, -0.004, 1.1], [4.9, 0.003, -0.6]].forEach(([r, s, tilt]) => {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.035, 8, 96), track(n, glowMat('#00e5ff', 0.8), 0.8));
+        ring.rotation.x = Math.PI / 2 + tilt; g.add(ring);
+        if(!REDUCED) spinners.push({ o:ring, z:s });
+      });
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map:radialTex, color:'#00e5ff', transparent:true, opacity:0.55, blending:ADD, depthWrite:false }));
+      halo.scale.set(13, 13, 1); g.add(halo); track(n, halo.material, 0.55);
+      hitR = 3.2;
+      n.label = label('<b>JARVIS</b><small>Main agent · supervisor</small>', 'lbl-core', p, n.id, '#00e5ff');
+    } else if(n.kind === 'coord'){
+      g.add(new THREE.Mesh(new THREE.OctahedronGeometry(1.15, 0), track(n, glowMat('#bff6ff', 0.95), 0.95)));
+      const shell = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.OctahedronGeometry(1.75, 0)), track(n, lineMat('#00e5ff', 0.8), 0.8));
+      g.add(shell); if(!REDUCED) spinners.push({ o:shell, y:0.01 });
+      hitR = 2;
+      n.label = label('<span class="tag"><i></i>' + esc(n.name) + '</span>', 'lbl-coord', p, n.id, '#00e5ff');
+    } else if(n.kind === 'lead'){
+      const shell = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.OctahedronGeometry(1.35, 0)), track(n, new THREE.LineDashedMaterial({ color:c, dashSize:0.25, gapSize:0.2, transparent:true, opacity:0.55 }), 0.55));
+      shell.computeLineDistances(); g.add(shell);
+      if(!REDUCED) spinners.push({ o:shell, y:0.005 });
+      hitR = 1.8;
+      n.label = label('<span class="tag">' + esc(n.name) + ' <em>planned</em></span>', 'lbl-lead', p, n.id, c);
+    } else if(n.kind === 'agent'){
+      const a = n.agent;
+      g.add(new THREE.Mesh(new THREE.SphereGeometry(0.72, 24, 12), track(n, glowMat(tint(c, 0.2), 1), 1)));
+      const shell = new THREE.LineSegments(new THREE.WireframeGeometry(new THREE.IcosahedronGeometry(1.15, 0)), track(n, lineMat(c, 0.45), 0.45));
+      g.add(shell); if(!REDUCED) spinners.push({ o:shell, y:0.008 });
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, Y.agent - Y.top, 6), track(n, glowMat(c, 0.35), 0.35));
+      beam.position.y = -(Y.agent - Y.top) / 2; g.add(beam);
+      if(a.riskLevel === 'high' || a.riskLevel === 'medium'){
+        const rr = new THREE.Mesh(new THREE.TorusGeometry(1.45, 0.045, 6, 64), track(n, glowMat(a.riskLevel === 'high' ? '#ff5a5a' : '#ffb938', 0.85), 0.85));
+        rr.rotation.x = Math.PI / 2; g.add(rr);
+      }
+      if(SERVER_RUN.includes(a.id)){
+        const N = 14, pp = new Float32Array(N * 3);
+        for(let i = 0; i < N; i++){ const t = i / N * Math.PI * 2; pp[i * 3] = Math.cos(t) * 1.85; pp[i * 3 + 1] = 0; pp[i * 3 + 2] = Math.sin(t) * 1.85; }
+        const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.BufferAttribute(pp, 3));
+        const dots = new THREE.Points(gg, track(n, new THREE.PointsMaterial({ size:0.42, map:radialTex, color:'#ffb938', transparent:true, opacity:0.95, blending:ADD, depthWrite:false }), 0.95));
+        g.add(dots); if(!REDUCED) spinners.push({ o:dots, y:-0.012 });
+      }
+      hitR = 1.5;
+      n.label = label('<span class="tag"><i></i>' + esc(a.name.replace(/ Agent$/, '')) + '</span>', 'lbl-agent', p, n.id, c);
+    } else if(n.kind === 'tool'){
+      const tc = tint(c, 0.45);
+      g.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0), track(n, glowMat(tc, 0.95), 0.95)));
+      const t = TOOLS[n.tool];
+      if(t && t.approval){
+        const rr = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.03, 6, 32), track(n, glowMat('#ffb938', 0.9), 0.9));
+        rr.rotation.x = Math.PI / 2; g.add(rr);
+      }
+      hitR = 0.62;
+      n.label = label('<span class="tag">' + esc(n.tool) + '</span>', 'lbl-tool', p, n.id, c);
+    }
+    const hit = new THREE.Mesh(new THREE.SphereGeometry(hitR, 10, 8), HIT_MAT);
+    hit.userData.id = n.id; g.add(hit); hitMeshes.push(hit); n.hit = hit;
+  });
+
+  /* ---------- links ---------- */
+  const links = [];
+  function link(a, b, kind){
+    const pa = L[a], pb = L[b];
+    const mid = pa.clone().lerp(pb, 0.5);
+    const arch = { 'core-coord':2.2, 'core-lead':5, 'lead-agent':1.4, 'core-agent':7.5, 'agent-tool':0.25, 'schedule':10, 'bundle':7 }[kind];
+    mid.y += arch;
+    const curve = new THREE.QuadraticBezierCurve3(pa.clone(), mid, pb.clone());
+    const ca = new THREE.Color(kind === 'schedule' ? '#ffb938' : kind === 'bundle' ? '#d9fbff' : colorOf(a));
+    const cb = new THREE.Color(kind === 'schedule' ? '#ffb938' : kind === 'bundle' ? '#d9fbff' : colorOf(b));
+    let obj, mat, base;
+    if(kind === 'core-lead' || kind === 'lead-agent'){
+      const pts = curve.getPoints(40);
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const cols = []; pts.forEach((_, i) => { const c = ca.clone().lerp(cb, i / (pts.length - 1)); cols.push(c.r, c.g, c.b); });
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+      base = kind === 'core-lead' ? 0.4 : 0.55;
+      mat = new THREE.LineDashedMaterial({ vertexColors:true, dashSize:0.6, gapSize:0.5, transparent:true, opacity:base });
+      obj = new THREE.Line(geo, mat); obj.computeLineDistances();
+    } else if(kind === 'agent-tool'){
+      const pts = curve.getPoints(10);
+      mat = lineMat(tint(colorOf(b), 0.2), base = 0.55);
+      obj = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
+    } else {
+      const radius = kind === 'core-coord' ? 0.07 : kind === 'schedule' ? 0.05 : 0.045;
+      const TS = 64, RS = 6;
+      const geo = new THREE.TubeGeometry(curve, TS, radius, RS, false);
+      const count = geo.attributes.position.count, cols = new Float32Array(count * 3);
+      for(let i = 0; i < count; i++){
+        const ringIdx = Math.floor(i / (RS + 1));
+        const c = ca.clone().lerp(cb, ringIdx / TS);
+        cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+      base = kind === 'core-agent' ? 0.5 : kind === 'bundle' ? 0.55 : 0.75;
+      mat = new THREE.MeshBasicMaterial({ vertexColors:true, transparent:true, opacity:base, blending:ADD, depthWrite:false });
+      obj = new THREE.Mesh(geo, mat);
+    }
+    scene.add(obj);
+    const pulse = kind === 'core-coord' || kind === 'core-agent' || kind === 'schedule' || kind === 'bundle';
+    links.push({ a, b, kind, obj, mat, base, curve, len:curve.getLength(), pulse, t:Math.random(), color:kind === 'schedule' ? new THREE.Color('#ffb938') : tint(colorOf(b), 0.35) });
+  }
+  link('jarvis', 'supervisor', 'core-coord');
+  link('jarvis', 'scheduler', 'core-coord');
+  DEPTS.forEach(d => {
+    link('jarvis', 'lead:' + d.id, 'core-lead');
+    d.agents.forEach(id => {
+      link('lead:' + d.id, id, 'lead-agent');
+      link('jarvis', id, 'core-agent');
+      (byAgent[id].tools || []).forEach(t => link(id, id + '/' + t, 'agent-tool'));
+    });
+  });
+  SERVER_RUN.forEach(id => link('scheduler', id, 'schedule'));
+  [...new Set(PRESETS.flatMap(p => p.agents))].forEach(id => link('supervisor', id, 'bundle'));
+
+  /* ---------- pulses: only where work actually flows ---------- */
+  const pulseLinks = links.filter(l => l.pulse);
+  const pulsePos = new Float32Array(pulseLinks.length * 3);
+  const pulseCol = new Float32Array(pulseLinks.length * 3);
+  pulseLinks.forEach((l, i) => { pulseCol[i * 3] = l.color.r; pulseCol[i * 3 + 1] = l.color.g; pulseCol[i * 3 + 2] = l.color.b; });
+  const pulseGeo = new THREE.BufferGeometry();
+  pulseGeo.setAttribute('position', new THREE.BufferAttribute(pulsePos, 3));
+  pulseGeo.setAttribute('color', new THREE.BufferAttribute(pulseCol, 3));
+  const pulses = new THREE.Points(pulseGeo, new THREE.PointsMaterial({ size:1.1, map:radialTex, vertexColors:true, transparent:true, opacity:1, blending:ADD, depthWrite:false }));
+  pulses.frustumCulled = false;
+  scene.add(pulses);
+
+  /* ---------- layers & highlight ---------- */
+  let related = null;
+  function linkVisible(l){
+    if(l.kind === 'core-lead' || l.kind === 'lead-agent') return state.planned;
+    if(l.kind === 'core-agent') return !state.planned;
+    if(l.kind === 'agent-tool') return state.tools;
+    if(l.kind === 'schedule') return state.sched;
+    if(l.kind === 'bundle') return currentFocus() === 'supervisor';
+    return true;
+  }
+  function currentFocus(){ return state.hover || state.selected; }
+  function applyLayers(){
+    nodes.forEach(n => {
+      const shown = isShown(n.id);
+      n.obj.visible = shown;
+      if(n.label) n.label.o.visible = shown;
+    });
+    links.forEach(l => { l.obj.visible = linkVisible(l); });
+    highlight();
+  }
+  function setOpacity(n, f){ n.mats.forEach(({ m, base }) => { m.opacity = base * f; }); }
+  function highlight(){
+    const focus = currentFocus();
+    related = relatedSet(focus);
+    nodes.forEach(n => setOpacity(n, !related || related.has(n.id) ? 1 : 0.13));
+    links.forEach(l => {
+      l.obj.visible = linkVisible(l);
+      const on = !related || (related.has(l.a) && related.has(l.b));
+      l.mat.opacity = on ? Math.min(1, l.base * (related ? 1.5 : 1)) : l.base * 0.08;
+    });
+    labels.forEach(r => {
+      if(!r.id) return;
+      r.el.classList.toggle('dim', !!related && !related.has(r.id));
+      r.el.classList.toggle('hot', r.id === focus);
+    });
+  }
+  function preview(id){ state.hover = id; highlight(); renderer.domElement.style.cursor = id ? 'pointer' : ''; }
+
+  /* ---------- camera ---------- */
+  let tween = null;
+  function flyTo(pos, target, ms){
+    if(REDUCED || ms === 0){ camera.position.copy(pos); controls.target.copy(target); controls.update(); return; }
+    tween = { t0:performance.now(), ms:ms || 1000, p0:camera.position.clone(), p1:pos, q0:controls.target.clone(), q1:target };
+  }
+  function overviewPose(){
+    const aspect = stage.clientWidth / stage.clientHeight;
+    const vfov = camera.fov * Math.PI / 180;
+    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * aspect);
+    const need = RING_R + PLAT_R + (aspect < 1 ? 17 : 6);
+    const dist = Math.max(need / Math.tan(Math.min(vfov, hfov) / 2) * (aspect < 1 ? 1 : 0.95), 70);
+    const dir = new THREE.Vector3(0, 0.76, 0.65).normalize();
+    return { pos:dir.multiplyScalar(dist).add(new THREE.Vector3(0, 4, 0)), target:new THREE.Vector3(0, 4, 0) };
+  }
+  function overview(animate){
+    const o = overviewPose();
+    flyTo(o.pos, o.target, animate ? 1100 : 0);
+    controls.autoRotate = !REDUCED;
+  }
+  function focusOn(id){
+    controls.autoRotate = false;
+    let p, d;
+    if(id.startsWith('dept:')){
+      const dd = deptById[id.slice(5)];
+      if(dd.id === 'command'){ p = new THREE.Vector3(0, 9, 0); d = 42; }
+      else { p = dd.center.clone().setY(4); d = 36; }
+    } else {
+      const n = nodes.get(id);
+      p = L[id].clone();
+      d = { core:46, coord:28, lead:30, agent:19, tool:11 }[n.kind];
+      if(n.kind === 'core') p.y -= 6;
+    }
+    const out = new THREE.Vector3(p.x, 0, p.z);
+    if(out.lengthSq() < 1) out.set(0, 0, 1); else out.normalize();
+    const pos = p.clone().add(out.multiplyScalar(d * 0.74)).add(new THREE.Vector3(0, d * 0.64, 0));
+    flyTo(pos, p, 1000);
+  }
+
+  /* ---------- picking ---------- */
+  const ray = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  let downAt = null, lastMove = null, dragging = false;
+  function pickAt(x, y){
+    const rect = renderer.domElement.getBoundingClientRect();
+    ndc.set(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const vis = hitMeshes.filter(h => isShown(h.userData.id));
+    const hit = ray.intersectObjects(vis, false)[0];
+    if(hit) return hit.object.userData.id;
+    const plat = ray.intersectObjects(platformHits, false)[0];
+    if(plat) return 'dept:' + plat.object.userData.dept;
+    return null;
+  }
+  const canvas = renderer.domElement;
+  canvas.addEventListener('pointerdown', e => { downAt = { x:e.clientX, y:e.clientY }; dragging = false; });
+  canvas.addEventListener('pointermove', e => {
+    if(downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 5) dragging = true;
+    if(e.pointerType === 'mouse' && !downAt) lastMove = { x:e.clientX, y:e.clientY };
+  });
+  canvas.addEventListener('pointerleave', () => { lastMove = null; if(state.hover) preview(null); });
+  canvas.addEventListener('pointerup', e => {
+    if(downAt && !dragging){
+      const id = pickAt(e.clientX, e.clientY);
+      if(id) select(id, true); else select(null);
+    }
+    downAt = null;
+  });
+  controls.addEventListener('start', () => { controls.autoRotate = false; tween = null; });
+
+  /* ---------- resize & loop ---------- */
+  let inset = 0;
+  function applyInset(){
+    const w = stage.clientWidth, h = stage.clientHeight;
+    if(inset > 0) camera.setViewOffset(w, h, inset, 0, w, h); else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
+  }
+  function setInset(px){ if(px !== inset){ inset = px; applyInset(); } }
+  function resize(){
+    const w = stage.clientWidth, h = stage.clientHeight;
+    camera.aspect = w / h;
+    renderer.setSize(w, h); composer.setSize(w, h); labelRenderer.setSize(w, h);
+    applyInset();
+  }
+  window.addEventListener('resize', () => { resize(); if(state.selected) select(state.selected, false); });
+
+  const tmp = new THREE.Vector3();
+  let last = performance.now();
+  function frame(now){
+    requestAnimationFrame(frame);
+    if(listOn || document.hidden) { last = now; return; }
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+
+    if(tween){
+      const k = Math.min(1, (now - tween.t0) / tween.ms);
+      const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      camera.position.lerpVectors(tween.p0, tween.p1, e);
+      controls.target.lerpVectors(tween.q0, tween.q1, e);
+      if(k >= 1) tween = null;
+    }
+    controls.update();
+
+    spinners.forEach(s => { if(s.y) s.o.rotation.y += s.y; if(s.x) s.o.rotation.x += s.x; if(s.z) s.o.rotation.z += s.z; });
+
+    // hover picking, once per frame at most
+    if(lastMove && !downAt){
+      const id = pickAt(lastMove.x, lastMove.y);
+      lastMove = null;
+      if(id !== state.hover) preview(id);
+    }
+
+    // pulses
+    pulseLinks.forEach((l, i) => {
+      const on = l.obj.visible && (!related || (related.has(l.a) && related.has(l.b)));
+      if(!on || REDUCED){ pulsePos[i * 3 + 1] = -9999; return; }
+      l.t = (l.t + dt * (l.kind === 'schedule' ? 7 : 11) / l.len) % 1;
+      l.curve.getPointAt(l.t, tmp);
+      pulsePos[i * 3] = tmp.x; pulsePos[i * 3 + 1] = tmp.y; pulsePos[i * 3 + 2] = tmp.z;
+    });
+    pulseGeo.attributes.position.needsUpdate = true;
+
+    // label density: agent and lead labels fade out far away, tool labels only up close or in focus
+    const focus = currentFocus();
+    labels.forEach(r => {
+      if(!r.id || !r.o.visible) return;
+      const n = nodes.get(r.id);
+      if(n.kind === 'core') return;
+      const d = camera.position.distanceTo(r.o.position);
+      const inFocus = related && related.has(r.id);
+      if(n.kind === 'coord'){ r.el.classList.toggle('far', d > 150 && !inFocus); return; }
+      let far;
+      if(n.kind === 'tool'){
+        const near = d < 26;
+        far = !(near || (inFocus && focus && focus !== 'jarvis' && (focus === r.id || focus === n.parent || focus.startsWith('dept:'))));
+      } else {
+        far = !state.labels || (d > (n.kind === 'lead' ? 100 : 130) && !inFocus);
+      }
+      if(!state.labels && n.kind !== 'tool') far = !(inFocus && focus && focus !== 'jarvis');
+      r.el.classList.toggle('far', far);
+    });
+
+    composer.render();
+    labelRenderer.render(scene, camera);
+  }
+
+  overview(false);
+  applyLayers();
+  requestAnimationFrame(frame);
+  return { highlight, applyLayers, focusOn, overview, preview, setInset };
+}
+
+try{
+  world = startWorld();
+}catch(err){
+  console.warn('Agent Atlas: 3D unavailable —', err && err.message);
+  $('fail').style.display = 'block';
+  setTimeout(() => { $('fail').style.display = 'none'; }, 6000);
+  setList(true);
+  $('listBtn').hidden = true;
+  $('resetBtn').hidden = true;
+}
+
+// Open in a working state: on a wide screen, JARVIS's own card is showing.
+if(window.matchMedia('(min-width: 901px)').matches) select('jarvis', false);
+})();
+</script>
+
+</body></html>
