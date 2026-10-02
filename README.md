@@ -1426,3 +1426,31 @@ after the tracker briefly saw a second hand, kept its old slot's pinch for
 a moment. That alone set the "after a zoom" latch, which locked the
 one-hand gesture out until both hands opened. Now only two hands really in
 view count as a zoom.
+
+## Page 2.17.0: the index finger is the mouse everywhere on the computer (needs the app rebuilt)
+
+The finger mouse from 2.16.0 is no longer only for the Agent Atlas. It works
+anywhere: the desktop, the taskbar, a browser, any program.
+
+- **Point:** raise your index finger, the others folded, and hold it a
+  quarter of a second (so a passing gesture while you talk does not take
+  the mouse). The fingertip then moves the real mouse pointer.
+- **The map:** the middle of the camera picture spans the whole monitor
+  the pointer was on when you started, taskbar included. The map stays on
+  that monitor while you point, so a window coming to the front never
+  moves it under your finger.
+- **Click:** fold the finger for a left click, right where you were
+  pointing; the pointer freezes while the finger bends. Straighten it and
+  fold again for the next click.
+- **Stop:** lower the hand (or open it) and the pointer stays where you
+  left it, like a mouse.
+- **On/off:** a new **👆 FINGER MOUSE** switch in the GESTURES tab. The
+  gesture tool JARVIS uses has a `pointer` option for it too, so he can
+  switch it when you ask.
+
+The one-hand pinch (turn or scroll) and the two-hand zoom are unchanged. A
+pinch on your other hand still takes over from the pointer.
+
+Tested end to end with the real tracker and real hands, in the Atlas, in a
+browser and on the bare desktop: the pointer followed the hand, a fold was
+exactly one click, and switched off nothing moved.

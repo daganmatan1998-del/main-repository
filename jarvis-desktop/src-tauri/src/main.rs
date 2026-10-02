@@ -2534,7 +2534,7 @@ fn drag_send(_hwnd: isize, _phase: String, _dx: f64, _dy: f64, _aim: Option<Vec<
 /* ------------------------------------------------------------------
    ONE HAND SCROLLS, ONE FINGER POINTS (2.16.0)
 
-   Both go only to the window asked about, only while it is in front —
+   The scroll goes only to the window asked about, only while it is in front —
    put back in front and checked if our own camera window or the orb took
    focus, refused if he switched to another program (input_target, the
    same rule as zoom_send).
@@ -2547,9 +2547,7 @@ fn drag_send(_hwnd: isize, _phase: String, _dx: f64, _dy: f64, _aim: Option<Vec<
    to the window under the pointer, so the pointer is put over this one
    first if it is not (zoom_aim_at).
 
-   pointer_send: x, y are fractions of the window's client area. "move"
-   puts the pointer there; "click" puts it there and presses and releases
-   the left button. Never where another window covers that point.
+   pointer_send (2.17.0: everywhere, not one window): see below.
 ------------------------------------------------------------------ */
 #[cfg(target_os = "windows")]
 unsafe fn input_target(app: &tauri::AppHandle, hwnd: isize) -> Result<windows_sys::Win32::Foundation::HWND, String> {
@@ -2621,46 +2619,81 @@ fn scroll_send(app: tauri::AppHandle, hwnd: isize, h: i32, v: i32) -> Result<Str
     Ok(format!("scroll {} {}", h, v))
 }
 
+/* THE FINGER IS THE MOUSE, EVERYWHERE (2.17.0). The pointer goes where
+   his finger points on the MONITOR the pointer was on when he started
+   pointing — x, y are fractions of that whole monitor, taskbar included —
+   and stays on that monitor until he stops (a window coming to the front
+   does not move the map under his finger). "click" is the left button
+   down and up where the pointer is, like a real mouse: it goes to
+   whatever is there. */
+#[cfg(target_os = "windows")]
+static POINTER_MONITOR: std::sync::Mutex<Option<(f64, f64, f64, f64)>> = std::sync::Mutex::new(None);
+
+#[cfg(target_os = "windows")]
+unsafe fn monitor_under_pointer() -> (f64, f64, f64, f64) {
+    use windows_sys::Win32::Foundation::POINT;
+    use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTOPRIMARY};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
+    unsafe {
+        let mut cur = POINT { x: 0, y: 0 };
+        GetCursorPos(&mut cur);
+        let mon = MonitorFromPoint(cur, MONITOR_DEFAULTTOPRIMARY);
+        let mut mi: MONITORINFO = std::mem::zeroed();
+        mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        if !mon.is_null() && GetMonitorInfoW(mon, &mut mi) != 0 {
+            let r = mi.rcMonitor;
+            return (r.left as f64, r.top as f64, (r.right - r.left) as f64, (r.bottom - r.top) as f64);
+        }
+        (0.0, 0.0, GetSystemMetrics(SM_CXSCREEN) as f64, GetSystemMetrics(SM_CYSCREEN) as f64)
+    }
+}
+
 #[cfg(target_os = "windows")]
 #[tauri::command]
-fn pointer_send(app: tauri::AppHandle, hwnd: isize, phase: String, x: f64, y: f64) -> Result<serde_json::Value, String> {
-    use windows_sys::Win32::Foundation::{POINT, RECT};
-    use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
+fn pointer_send(phase: String, x: Option<f64>, y: Option<f64>) -> Result<serde_json::Value, String> {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP};
-    use windows_sys::Win32::UI::WindowsAndMessaging::GetClientRect;
-    if !x.is_finite() || !y.is_finite() {
-        return Err("no place to point at".into());
-    }
+    let mut held = POINTER_MONITOR.lock().map_err(|_| "the pointer is unavailable".to_string())?;
     unsafe {
-        let w = input_target(&app, hwnd)?;
-        let mut rc: RECT = std::mem::zeroed();
-        if GetClientRect(w, &mut rc) == 0 {
-            return Err("could not read the window's size".into());
+        match phase.as_str() {
+            "start" => {
+                let m = monitor_under_pointer();
+                *held = Some(m);
+                Ok(serde_json::json!({ "phase": "start", "monitor": [m.0, m.1, m.2, m.3] }))
+            }
+            "end" => {
+                *held = None;
+                Ok(serde_json::json!({ "phase": "end" }))
+            }
+            "move" | "click" => {
+                let (x, y) = match (x, y) {
+                    (Some(x), Some(y)) if x.is_finite() && y.is_finite() => (x.clamp(0.0, 1.0), y.clamp(0.0, 1.0)),
+                    _ => return Err("no place to point at".into()),
+                };
+                let (l, t, w, h) = match *held {
+                    Some(m) => m,
+                    None => {
+                        let m = monitor_under_pointer();
+                        *held = Some(m);
+                        m
+                    }
+                };
+                let (px, py) = ((l + x * (w - 1.0)).round(), (t + y * (h - 1.0)).round());
+                let ok = if phase == "move" {
+                    drag_inputs(&mut [drag_input(px, py, 0)])
+                } else {
+                    drag_inputs(&mut [
+                        drag_input(px, py, 0),
+                        drag_input(px, py, MOUSEEVENTF_LEFTDOWN),
+                        drag_input(px, py, MOUSEEVENTF_LEFTUP),
+                    ])
+                };
+                if !ok {
+                    return Err("Windows blocked the input (an elevated program, or a secure screen)".into());
+                }
+                Ok(serde_json::json!({ "phase": phase, "x": px, "y": py }))
+            }
+            other => Err(format!("unknown pointer phase \"{}\"", other)),
         }
-        let (cw, ch) = ((rc.right - rc.left) as f64, (rc.bottom - rc.top) as f64);
-        /* A pixel in from every edge: the very edge is the window frame. */
-        let mut p = POINT {
-            x: (x.clamp(0.0, 1.0) * (cw - 3.0)).round() as i32 + 1,
-            y: (y.clamp(0.0, 1.0) * (ch - 3.0)).round() as i32 + 1,
-        };
-        ClientToScreen(w, &mut p);
-        if zoom_root_at(p) != hwnd {
-            return Err("another window covers that place".into());
-        }
-        let (px, py) = (p.x as f64, p.y as f64);
-        let ok = match phase.as_str() {
-            "move" => drag_inputs(&mut [drag_input(px, py, 0)]),
-            "click" => drag_inputs(&mut [
-                drag_input(px, py, 0),
-                drag_input(px, py, MOUSEEVENTF_LEFTDOWN),
-                drag_input(px, py, MOUSEEVENTF_LEFTUP),
-            ]),
-            other => return Err(format!("unknown pointer phase \"{}\"", other)),
-        };
-        if !ok {
-            return Err("Windows blocked the input (an elevated program, or a secure screen)".into());
-        }
-        Ok(serde_json::json!({ "phase": phase, "x": p.x, "y": p.y }))
     }
 }
 
@@ -2672,7 +2705,7 @@ fn scroll_send(_hwnd: isize, _h: i32, _v: i32) -> Result<String, String> {
 
 #[cfg(not(target_os = "windows"))]
 #[tauri::command]
-fn pointer_send(_hwnd: isize, _phase: String, _x: f64, _y: f64) -> Result<serde_json::Value, String> {
+fn pointer_send(_phase: String, _x: Option<f64>, _y: Option<f64>) -> Result<serde_json::Value, String> {
     Err("only available on Windows".into())
 }
 

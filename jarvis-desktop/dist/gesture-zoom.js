@@ -356,14 +356,16 @@
   const TURN_ARM_MS = 220, TURN_DEAD_MM = 4, TURN_JUMP = 2.5, TURN_MAX_FRAME = 90;
 
   /* ------------------------------------------------------------------
-     ONE FINGER IS THE MOUSE (2.16.0) — in the JARVIS Agent Atlas.
+     ONE FINGER IS THE MOUSE (2.16.0 in the Agent Atlas; since 2.17.0
+     everywhere on the computer).
 
      The pose: the index straight (over FINGER_STRAIGHT) and the other
-     three folded (under FINGER_FOLDED) — "pointing". Held POINT_FRAMES
-     frames and the fingertip moves the pointer: the middle of the picture
-     (POINTER_BOX, mirrored, so his right is right) spans the whole window,
-     so he never has to reach the picture's edge, and a One Euro filter
-     keeps a still finger still without lagging a moving one.
+     three folded (under FINGER_FOLDED) — "pointing". Held POINT_ARM_MS
+     (a quarter of a second, so a passing gesture while he talks does not
+     take the mouse) and the fingertip moves the pointer: the middle of
+     the picture (POINTER_BOX, mirrored, so his right is right) spans the
+     whole monitor, so he never has to reach the picture's edge, and a One
+     Euro filter keeps a still finger still without lagging a moving one.
 
      Folding the index is a left click. A bending finger's tip moves (down,
      toward the palm), so the pointer FREEZES the moment the finger stops
@@ -377,7 +379,7 @@
      come first); the pointing hand's own fold can pass close enough to its
      thumb to read as a pinch for a moment, and that is still the click.
   ------------------------------------------------------------------ */
-  const FINGER_STRAIGHT = 1.12, FINGER_FOLDED = 0.9, POINT_FRAMES = 2, FOLD_FRAMES = 2, CLICK_REARM = 2,
+  const FINGER_STRAIGHT = 1.12, FINGER_FOLDED = 0.9, POINT_ARM_MS = 250, FOLD_FRAMES = 2, CLICK_REARM = 2,
         POINT_LOST_MS = 300, POINTER_BOX = { x0: 0.2, y0: 0.12, w: 0.6, h: 0.6 };
   const isPointing = (m) => !!(m && m.fingers && m.fingers.index > FINGER_STRAIGHT &&
     m.fingers.middle < FINGER_FOLDED && m.fingers.ring < FINGER_FOLDED && m.fingers.pinky < FINGER_FOLDED);
@@ -390,7 +392,7 @@
        and a stopped one settles within a frame. */
     constructor(){ this.fx = new OneEuro(0.4, 15, 1); this.fy = new OneEuro(0.4, 15, 1); this.reset(); }
     reset(){
-      this.state = 'idle'; this.slot = -1; this.at = null; this.onRun = 0; this.foldRun = 0; this.rearm = 0;
+      this.state = 'idle'; this.slot = -1; this.at = null; this.since = null; this.foldRun = 0; this.rearm = 0;
       this.lostAt = null; this.pos = null; this.hold = null; this.hist = [];
       this.fx.reset(); this.fy.reset();
     }
@@ -419,8 +421,9 @@
       if(m){ this.at = m.center; this.slot = m.slot; }
       if(this.state === 'idle'){
         m = ms.find(isPointing);
-        if(!m){ this.onRun = 0; return out('none'); }
-        if(++this.onRun < POINT_FRAMES) return out('none');
+        if(!m){ this.since = null; return out('none'); }
+        if(this.since === null) this.since = t;
+        if(t - this.since < POINT_ARM_MS) return out('none');
         this.state = 'pointing'; this.slot = m.slot; this.at = m.center; this.fx.reset(); this.fy.reset();
         const raw = PointerTracker.toWindow(m.pts[8], width, height);
         this.pos = { x: this.fx.filter(raw.x, t), y: this.fy.filter(raw.y, t) };
@@ -497,9 +500,9 @@
       if(e[0] && e[1] && (this.zoom.lastMetrics || []).length >= 2) this.latch = true;
       if(!e[0] && !e[1]) this.latch = false;
       ev.turn = this.turnStep(frame.t, e, frame.width, frame.height);
-      ev.pointer = this.s.pointerEnabled
-        ? this.pointer.update(frame.t, this.zoom.lastMetrics, e, frame.width, frame.height)
-        : { type: 'none', state: 'idle' };
+      if(this.s.pointerEnabled) ev.pointer = this.pointer.update(frame.t, this.zoom.lastMetrics, e, frame.width, frame.height);
+      else if(this.pointer.state !== 'idle'){ this.pointer.reset(); ev.pointer = { type: 'end', state: 'idle' }; }   // switched off mid-point
+      else ev.pointer = { type: 'none', state: 'idle' };
       ev.latched = this.latch;
       return ev;
     }
@@ -724,47 +727,53 @@
     }
   }
 
-  /* The pointer, to the program in front that takes it (the Atlas): Rust's
-     pointer_send moves the real pointer to x, y of its window (fractions)
-     and clicks there. One call at a time; moves that pile up are merged
-     into the newest, a click is never dropped and goes in order. */
+  /* The finger's pointer, to Rust's pointer_send: "start" picks the monitor
+     the pointer is on, then x, y (fractions of that monitor) move the real
+     pointer, "click" is the left button there, "end" lets the monitor go.
+     Everywhere, like a mouse: no window is asked first (2.17.0). One call
+     at a time; moves that pile up are merged into the newest; a click is
+     never dropped and goes in order. */
   class PointerRelay {
     constructor(o){
       o = o || {};
       this.invoke = o.invoke || null;
       this.onStatus = o.onStatus || (() => {});
-      this.target = null; this.busy = false; this.move = null; this.clicks = []; this.active = false; this.failed = false;
+      this.busy = false; this.queue = []; this.move = null; this.active = false; this.failed = false;
     }
-    setTarget(t){ this.target = (t && t.hwnd && this.invoke) ? { hwnd: t.hwnd, name: t.name || 'the program' } : null; }
     handle(p){
-      if(!p || p.type === 'none') return;
+      if(!p || p.type === 'none' || !this.invoke) return;
       if(p.type === 'end'){
-        if(this.active) this.onStatus({ kind: 'pointer-idle' });
+        if(this.active){ this.onStatus({ kind: 'pointer-idle' }); this.queue.push({ phase: 'end' }); }
         this.active = false; this.failed = false; this.move = null;
+        this.pump();
         return;
       }
-      if(!this.target) return;
-      if(p.type === 'start'){ this.active = true; this.failed = false; this.onStatus({ kind: 'pointer', name: this.target.name }); }
+      if(p.type === 'start'){
+        this.active = true; this.failed = false;
+        this.queue.push({ phase: 'start' });
+        this.onStatus({ kind: 'pointer', name: 'the screen' });
+      }
       if(!this.active || this.failed) return;
       if(p.type === 'click'){
-        this.clicks.push({ hwnd: this.target.hwnd, x: p.x, y: p.y }); this.move = null;
-        this.onStatus({ kind: 'pointer-click', name: this.target.name });
+        this.move = null; this.queue.push({ phase: 'click', x: p.x, y: p.y });
+        this.onStatus({ kind: 'pointer-click' });
       } else if(p.x != null && (p.type === 'start' || p.type === 'move' || p.type === 'freeze')){
-        this.move = { hwnd: this.target.hwnd, x: p.x, y: p.y };
+        this.move = { phase: 'move', x: p.x, y: p.y };
       }
       this.pump();
     }
     pump(){
       if(this.busy) return;
       let job = null;
-      if(this.clicks.length) job = Object.assign({ phase: 'click' }, this.clicks.shift());
-      else if(this.move){ job = Object.assign({ phase: 'move' }, this.move); this.move = null; }
+      if(this.queue.length) job = this.queue.shift();
+      else if(this.move){ job = this.move; this.move = null; }
       if(!job) return;
       this.busy = true;
       Promise.resolve()
         .then(() => this.invoke('pointer_send', job))
         .then(() => {}, (err) => {
-          this.failed = true; this.clicks = []; this.move = null;
+          if(job.phase === 'end') return;
+          this.failed = true; this.queue = this.queue.filter(q => q.phase === 'end'); this.move = null;
           this.onStatus({ kind: 'pointer-failed', reason: String((err && err.message) || err) });
         })
         .then(() => { this.busy = false; this.pump(); });
@@ -805,7 +814,7 @@
        an agent shows the hand). First the places measured clear in all 80
        views the Atlas flies to at 1366, 1920 and 2560 wide; then a spread
        over the map, inside the panels at any of those widths. */
-    { id: 'atlas', kind: '3d', name: 'JARVIS Agent Atlas', method: 'wheel', step: 1.05, rate: 10, turn: 'drag', pointer: true,
+    { id: 'atlas', kind: '3d', name: 'JARVIS Agent Atlas', method: 'wheel', step: 1.05, rate: 10, turn: 'drag',
       aim: [0.64, 0.77, 0.60, 0.79, 0.66, 0.93, 0.50, 0.90, 0.40, 0.85, 0.35, 0.70,
             0.55, 0.60, 0.45, 0.50, 0.62, 0.45, 0.38, 0.35, 0.55, 0.30, 0.50, 0.20],
       exe: ['jarvis-agent-atlas.exe', 'jarvis agent atlas.exe', 'agent-atlas.exe', 'agent atlas.exe'],
@@ -1199,8 +1208,8 @@
     } });
     let pointerLabel = '';
     const pointer = new PointerRelay({ invoke: o.invoke, onStatus: (s) => {
-      if(s.kind === 'pointer') pointerLabel = 'POINTER · ' + (s.name || '');
-      else if(s.kind === 'pointer-click') pointerLabel = 'CLICK · ' + (s.name || '');
+      if(s.kind === 'pointer') pointerLabel = 'POINTER';
+      else if(s.kind === 'pointer-click') pointerLabel = 'CLICK';
       else if(s.kind === 'pointer-failed') pointerLabel = 'POINTER FAILED · ' + (s.reason || '');
       else if(s.kind === 'pointer-idle') pointerLabel = '';
       if(o.onStatus) o.onStatus(s);
@@ -1226,12 +1235,11 @@
         const name = a.supported ? a.name : null;
         /* Where one pinched hand goes: a drag for the Atlas, JARVIS's own
            viewer, the wheel (scrolling) for anything else that takes it —
-           not a 3D program, whose wheel is its zoom. And the pointer, for
-           a program that takes one (the Atlas). */
+           not a 3D program, whose wheel is its zoom. (The finger's pointer
+           needs no target: it is the mouse, everywhere.) */
         const kind = !a.supported || info.minimized ? null : info.own === 'model' ? 'viewer'
                    : a.turn === 'drag' ? 'drag' : a.kind === '3d' ? null : 'scroll';
         relay.setTarget(kind ? { hwnd: info.hwnd, name: a.name, kind, aim: a.aim } : null);
-        pointer.setTarget(a.supported && a.pointer && !info.minimized ? { hwnd: info.hwnd, name: a.name } : null);
         if(name !== lastApp){
           lastApp = name;
           if(o.onStatus) o.onStatus({ kind: 'foreground', name, supported: !!a.supported, reason: a.reason || null });
@@ -1359,6 +1367,6 @@
     ADAPTERS, selectAdapter, ZoomManager, createTracker, drawOverlay, startGestureZoom,
     constants: { PINCH_ON, PINCH_OFF, FIST_GUARD, PALM_CM, PALM_RAY, ARM_MS, STEP_3D,
                  TURN_ARM_MS, TURN_DEAD_MM, TURN_JUMP, TURN_MAX_FRAME, TURN_PRESENT_MS, TURN_KEEP_MS, SCROLL_UNITS_PER_DEG,
-                 FINGER_STRAIGHT, FINGER_FOLDED, POINT_FRAMES, FOLD_FRAMES, POINT_LOST_MS, POINTER_BOX }
+                 FINGER_STRAIGHT, FINGER_FOLDED, POINT_ARM_MS, FOLD_FRAMES, POINT_LOST_MS, POINTER_BOX }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

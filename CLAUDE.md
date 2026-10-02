@@ -419,9 +419,12 @@ single file `dist/index.html`.
   ANOTHER hand's pinch ends it (its own fold can read as a pinch); the
   pointer freezes when the finger stops being straight (straightest of
   the last 350 ms) and FOLD_FRAMES under 0.9 is one click; filter One
-  Euro 0.4/15 (measured). PointerRelay -> Rust pointer_send (x, y
-  fractions of the client area; move / click = move + left down + up),
-  only for an adapter with pointer:true (the Atlas). The zoom latch now
+  Euro 0.4/15 (measured). Since 2.17.0 the finger mouse is EVERYWHERE:
+  armed after POINT_ARM_MS (250) of the pose, no target window;
+  PointerRelay sends pointer_send start (Rust keeps the monitor under the
+  pointer, rcMonitor) / move / click (x, y = fractions of THAT monitor) /
+  end, in order; pointerEnabled (GESTURES "FINGER MOUSE", tool `pointer`),
+  switched off mid-point gives one 'end'. The zoom latch now
   needs two hands really in view: one hand changing slot kept its old
   slot's pinch for 160 ms and latched itself out of the one-hand gesture.
   pointer.test (real landmarks), hands16.e2e (real tracker; landmarks3d
