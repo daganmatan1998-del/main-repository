@@ -90,3 +90,10 @@ window.VANTE_CONFIG = {
   returnsWindowDays: 14,
   defectWindowDays: 30
 };
+
+/*
+ * Newsletter. When `endpoint` is set, sign-ups are POSTed there as JSON
+ * ({ email }). Left empty, the form opens the visitor's email client addressed
+ * to business.email instead — no sign-up is ever faked.
+ */
+window.VANTE_CONFIG.newsletter = { endpoint: "" };
