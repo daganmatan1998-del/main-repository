@@ -97,3 +97,6 @@ window.VANTE_CONFIG = {
  * to business.email instead — no sign-up is ever faked.
  */
 window.VANTE_CONFIG.newsletter = { endpoint: "" };
+
+/* Contact form endpoint (JSON POST). Empty: the form opens an email instead. */
+window.VANTE_CONFIG.contact = { endpoint: "" };

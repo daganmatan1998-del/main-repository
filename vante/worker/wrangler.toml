@@ -1,0 +1,9 @@
+# Deploy: npx wrangler deploy   (from this folder)
+# Secrets: npx wrangler secret put STRIPE_SECRET_KEY
+name = "vante-checkout"
+main = "checkout-worker.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+SITE_URL = "https://YOUR-DOMAIN"
+ALLOWED_ORIGIN = "https://YOUR-DOMAIN"

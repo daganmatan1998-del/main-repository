@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Account — VANTÉ</title>
+  <meta name="description" content="Your saved pieces and order help.">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0b0b0a">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Account — VANTÉ">
+  <meta property="og:description" content="Your saved pieces and order help.">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://d2ol7oe51mr4n9.cloudfront.net" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="assets/fonts/jost-latin-400-normal.woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/vante.css">
+</head>
+<body data-page="account" data-custom-motion>
+
+<main id="main" class="main">
+<section class="wrap page-top" style="padding-bottom:clamp(80px,10vw,160px)">
+    <div style="display:grid;gap:22px;padding-bottom:clamp(40px,6vw,80px)">
+      <p class="label muted">Account</p>
+      <h1 class="h1" data-split>Your <span class="italic">pieces</span></h1>
+      <p class="lead" style="max-width:56ch">Saved pieces are kept on this device. Orders are placed as a guest — your confirmation and tracking links arrive by email.</p>
+    </div>
+    <div class="card-list" style="margin-bottom:clamp(60px,8vw,120px)">
+      <div class="panel"><p class="label">Track an order</p><p class="muted">Use the tracking link in your shipping email. Can't find it? Write to us with your order number.</p><a class="label link-underline" data-cfg-mail="business.email" style="width:fit-content"></a></div>
+      <div class="panel"><p class="label">Returns</p><p class="muted">Start a return within <span data-cfg="returnsWindowDays"></span> days of delivery.</p><a class="label link-underline" href="returns.html" style="width:fit-content">How returns work</a></div>
+      <div class="panel"><p class="label">Your data</p><p class="muted">Ask for a copy of your data, a correction or deletion at any time.</p><a class="label link-underline" href="privacy.html#rights" style="width:fit-content">Your privacy rights</a></div>
+    </div>
+    <div class="section-head"><h2 class="h2">Saved</h2><span class="count" data-saved-count></span></div>
+    <div class="products" data-saved></div>
+  </section>
+</main>
+
+<noscript><p style="padding:24px;text-align:center">VANTÉ needs JavaScript for the bag and checkout. Please enable it to shop.</p></noscript>
+<script src="assets/vendor/gsap.min.js"></script>
+<script src="assets/vendor/ScrollTrigger.min.js"></script>
+<script src="assets/vendor/lenis.min.js"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/media.js"></script>
+<script src="assets/js/catalog.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/account.js"></script>
+</body>
+</html>

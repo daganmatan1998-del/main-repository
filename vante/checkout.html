@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Checkout — VANTÉ</title>
+  <meta name="description" content="Secure checkout for your VANTÉ order.">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0b0b0a">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Checkout — VANTÉ">
+  <meta property="og:description" content="Secure checkout for your VANTÉ order.">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://d2ol7oe51mr4n9.cloudfront.net" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="assets/fonts/jost-latin-400-normal.woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/vante.css">
+</head>
+<body data-page="checkout" data-no-footer data-no-announce>
+
+<main id="main" class="main">
+<div class="wrap">
+    <div class="checkout">
+      <div>
+        <p class="label muted"><a class="link-underline" href="shop.html">Continue shopping</a></p>
+        <h1 class="h2" style="margin:20px 0 40px">Checkout</h1>
+        <div data-checkout-empty hidden class="cart-empty" style="justify-items:start;text-align:left"><p class="h3">Your bag is empty.</p><a class="btn" href="shop.html">Explore the collection <svg class="btn__arrow" viewBox="0 0 18 8" fill="none" stroke="currentColor" aria-hidden="true"><path d="M0 4h17M13.5 0.5 17 4l-3.5 3.5"/></svg></a></div>
+        <form class="form" data-checkout-form novalidate>
+          <fieldset class="fieldset">
+            <legend class="label">1 — Contact</legend>
+            <div class="field field--full"><label for="co-email">Email</label><input id="co-email" name="email" type="email" autocomplete="email" required></div>
+            <label class="check"><input type="checkbox" name="marketing"> <span>Email me about new pieces and numbered drops (optional).</span></label>
+          </fieldset>
+          <fieldset class="fieldset">
+            <legend class="label">2 — Delivery</legend>
+            <div class="field field--full"><label for="co-country">Country / region</label><select id="co-country" name="country" autocomplete="country" required></select></div>
+            <div class="field"><label for="co-first">First name</label><input id="co-first" name="firstName" autocomplete="given-name" required></div>
+            <div class="field"><label for="co-last">Last name</label><input id="co-last" name="lastName" autocomplete="family-name" required></div>
+            <div class="field field--full"><label for="co-address">Address</label><input id="co-address" name="address1" autocomplete="address-line1" required></div>
+            <div class="field field--full"><label for="co-address2">Apartment, suite, building (optional)</label><input id="co-address2" name="address2" autocomplete="address-line2"></div>
+            <div class="field"><label for="co-city">City</label><input id="co-city" name="city" autocomplete="address-level2" required></div>
+            <div class="field"><label for="co-region">State / region <span data-region-opt>(optional)</span></label><input id="co-region" name="region" autocomplete="address-level1"></div>
+            <div class="field"><label for="co-postal">Postal code <span data-postal-opt>(optional)</span></label><input id="co-postal" name="postal" autocomplete="postal-code"></div>
+            <div class="field"><label for="co-phone">Phone (for the courier)</label><input id="co-phone" name="phone" type="tel" autocomplete="tel" required></div>
+          </fieldset>
+          <fieldset class="fieldset" data-methods>
+            <legend class="label">3 — Shipping method</legend>
+          </fieldset>
+          <div class="notice" data-duties></div>
+          <fieldset class="fieldset">
+            <legend class="label">4 — Review &amp; pay</legend>
+            <p class="notice field--full">Every piece is printed to order. Your order is produced in <span data-cfg="processingDays"></span> and then shipped. You may cancel or return under our <a class="link-underline" href="returns.html">Returns &amp; Cancellations policy</a>, including your statutory rights under Israeli consumer law.</p>
+            <label class="check"><input type="checkbox" name="terms" required data-terms> <span>I have read and agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a>, <a href="shipping.html" target="_blank" rel="noopener">Shipping Policy</a> and <a href="returns.html" target="_blank" rel="noopener">Returns Policy</a>, and I acknowledge the <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>
+            <p class="field__error field--full" data-terms-error hidden>Please accept the terms to continue.</p>
+            <div class="field--full" style="display:grid;gap:12px">
+              <button type="submit" class="btn btn--block" data-pay><span class="btn__text">Continue to secure payment</span></button>
+              <p class="muted" style="font-size:12px">Payment is taken on the payment provider's secure page. VANTÉ never sees or stores your card number.</p>
+              <div class="notice notice--warn" data-pay-off hidden>Online payment is not yet switched on for this store. Your bag is saved — please contact <a data-cfg-mail="business.email"></a> to place your order.</div>
+            </div>
+          </fieldset>
+        </form>
+      </div>
+      <aside class="checkout__summary" aria-labelledby="sum-title">
+        <h2 class="label" id="sum-title">Order summary</h2>
+        <div data-sum-lines style="display:grid;gap:16px"></div>
+        <div class="totals" data-sum-totals></div>
+      </aside>
+    </div>
+  </div>
+</main>
+
+<noscript><p style="padding:24px;text-align:center">VANTÉ needs JavaScript for the bag and checkout. Please enable it to shop.</p></noscript>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/media.js"></script>
+<script src="assets/js/catalog.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/checkout.js"></script>
+</body>
+</html>

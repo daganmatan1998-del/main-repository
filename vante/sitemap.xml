@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Replace https://YOUR-DOMAIN with the live domain before launch. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://YOUR-DOMAIN/index.html</loc></url>
+  <url><loc>https://YOUR-DOMAIN/shop.html</loc></url>
+  <url><loc>https://YOUR-DOMAIN/collections.html</loc></url>
+  <url><loc>https://YOUR-DOMAIN/about.html</loc></url>
+  <url><loc>https://YOUR-DOMAIN/faq.html</loc></url>
+  <url><loc>https://YOUR-DOMAIN/contact.html</loc></url>
+  <url><loc>https://YOUR-DOMAIN/terms.html</loc></url>
+  <url><loc>https://YOUR-DOMAIN/shipping.html</loc></url>
+  <url><loc>https://YOUR-DOMAIN/returns.html</loc></url>
+  <url><loc>https://YOUR-DOMAIN/privacy.html</loc></url>
+  <url><loc>https://YOUR-DOMAIN/cookies.html</loc></url>
+  <url><loc>https://YOUR-DOMAIN/accessibility.html</loc></url>
+  <url><loc>https://YOUR-DOMAIN/legal-notice.html</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=archangel-tee</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=carrara-tee</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=crowned-tee</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=pegasus-tee</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=celestial-tee</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=summit-tee</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=monogram-tee</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=seraph-hoodie</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=cropped-hoodie</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=signature-shorts</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=monogram-shorts</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=icarus-tee</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=atlas-tee</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=monogram-crewneck</loc></url>
+  <url><loc>https://YOUR-DOMAIN/product.html?id=signature-crewneck</loc></url>
+</urlset>

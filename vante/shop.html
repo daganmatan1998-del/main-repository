@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Shop — VANTÉ</title>
+  <meta name="description" content="Every VANTÉ piece in black and white: heavyweight tees, hoodies, sweatshirts and shorts, printed to order.">
+  <meta name="theme-color" content="#0b0b0a">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Shop — VANTÉ">
+  <meta property="og:description" content="Every VANTÉ piece in black and white: heavyweight tees, hoodies, sweatshirts and shorts, printed to order.">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://d2ol7oe51mr4n9.cloudfront.net" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="assets/fonts/jost-latin-400-normal.woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/vante.css">
+</head>
+<body data-page="shop" data-custom-motion>
+
+<main id="main" class="main">
+<section class="wrap page-top">
+    <div class="shop-hero">
+      <div class="shop-hero__title" style="display:grid;gap:18px">
+        <p class="label muted" data-kicker>The collection</p>
+        <h1 class="h1" data-title>All pieces</h1>
+      </div>
+      <p class="shop-hero__text muted" data-text></p>
+    </div>
+  </section>
+  <div class="toolbar">
+    <div class="wrap toolbar__inner">
+      <div class="toolbar__chips" data-chips role="group" aria-label="Filter"></div>
+      <div class="toolbar__right">
+        <label class="select"><span class="sr-only">Collection</span><select data-collection></select></label>
+        <label class="select"><span class="sr-only">Sort by</span><select data-sort>
+          <option value="featured">Featured</option><option value="newest">Newest</option>
+          <option value="price-asc">Price, low to high</option><option value="price-desc">Price, high to low</option>
+        </select></label>
+        <span class="count" data-count aria-live="polite"></span>
+      </div>
+    </div>
+  </div>
+  <section class="wrap" style="padding-bottom:clamp(80px,10vw,160px)" aria-label="Products">
+    <div class="shop-grid" data-shop-grid></div>
+  </section>
+</main>
+
+<noscript><p style="padding:24px;text-align:center">VANTÉ needs JavaScript for the bag and checkout. Please enable it to shop.</p></noscript>
+<script src="assets/vendor/gsap.min.js"></script>
+<script src="assets/vendor/ScrollTrigger.min.js"></script>
+<script src="assets/vendor/lenis.min.js"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/media.js"></script>
+<script src="assets/js/catalog.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/shop.js"></script>
+</body>
+</html>

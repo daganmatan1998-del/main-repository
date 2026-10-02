@@ -48,6 +48,12 @@
     arrow: '<svg class="btn__arrow" viewBox="0 0 18 8" fill="none" stroke="currentColor" aria-hidden="true"><path d="M0 4h17M13.5 0.5 17 4l-3.5 3.5"/></svg>'
   };
 
+  /* ---------------- Accordions ---------------- */
+  doc.addEventListener("click", function (e) {
+    var b = e.target.closest(".acc__btn");
+    if (b) b.setAttribute("aria-expanded", String(b.getAttribute("aria-expanded") !== "true"));
+  });
+
   /* ---------------- Toast ---------------- */
   var toastEl, toastTimer;
   function toast(msg) {
@@ -140,8 +146,8 @@
   }
 
   var announce = frag(
-    '<div class="announce" id="announce"><span>Complimentary standard shipping on orders over ' + esc(V.money(CFG.freeShippingOver)) +
-    ' · Shipping to the United States, Israel &amp; the Gulf — <a href="shipping.html">details</a></span></div>'
+    '<aside class="announce" id="announce" aria-label="Store announcement"><span>Complimentary standard shipping on orders over ' + esc(V.money(CFG.freeShippingOver)) +
+    ' · Shipping to the United States, Israel &amp; the Gulf — <a href="shipping.html">details</a></span></aside>'
   );
   var header = frag(
     '<header class="header' + (body.hasAttribute("data-header-light") ? " header--light" : "") + '" id="header">' +
@@ -810,9 +816,9 @@
     return $$(".split-line > span", el);
   }
   function splitWords(el) {
-    var words = el.textContent.trim().split(/\s+/);
-    el.setAttribute("aria-label", el.textContent.trim());
-    el.innerHTML = words.map(function (w) { return '<span class="word" aria-hidden="true">' + esc(w) + "</span>"; }).join(" ");
+    var text = el.textContent.trim(), words = text.split(/\s+/);
+    el.innerHTML = '<span class="sr-only">' + esc(text) + "</span>" +
+      words.map(function (w) { return '<span class="word" aria-hidden="true">' + esc(w) + "</span>"; }).join(" ");
     return $$(".word", el);
   }
   function initMotion(scope) {

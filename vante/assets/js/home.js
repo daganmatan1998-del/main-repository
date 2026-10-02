@@ -61,7 +61,12 @@
   /* ---------- Words of the statement (static fallback is full opacity) ---------- */
   var words = UI.splitWords($("[data-words]"));
 
-  if (!motion) { UI.initMotion(); return; }
+  if (!motion) {
+    // Static lookbook scrolls sideways natively, so it must be reachable by keyboard.
+    var t = $("[data-track]");
+    t.setAttribute("tabindex", "0"); t.setAttribute("role", "region"); t.setAttribute("aria-label", "Lookbook images, scroll sideways");
+    UI.initMotion(); return;
+  }
 
   /* ---------- Hero ---------- */
   var heroImg = $(".hero__media img");

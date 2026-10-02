@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Contact — VANTÉ</title>
+  <meta name="description" content="Contact VANTÉ client care about orders, sizing, shipping and returns.">
+  <meta name="theme-color" content="#0b0b0a">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Contact — VANTÉ">
+  <meta property="og:description" content="Contact VANTÉ client care about orders, sizing, shipping and returns.">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://d2ol7oe51mr4n9.cloudfront.net" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="assets/fonts/jost-latin-400-normal.woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/vante.css">
+</head>
+<body data-page="contact">
+
+<main id="main" class="main">
+<section class="wrap page-top" style="padding-bottom:clamp(80px,10vw,160px)">
+    <div class="doc">
+      <div style="display:grid;gap:22px;align-content:start">
+        <p class="label muted">Client care</p>
+        <h1 class="h1" data-split>Write<br><span class="italic">to us.</span></h1>
+        <p class="muted">We answer within one business day — <span data-cfg="business.hours"></span>.</p>
+        <p><a class="link-underline" data-cfg-mail="business.email"></a></p>
+        <p class="muted" style="font-size:var(--fs-small)"><span data-cfg="business.legalName"></span><br><span data-cfg="business.address"></span></p>
+      </div>
+      <form class="form" data-contact-form novalidate style="max-width:640px">
+        <div class="fieldset">
+          <div class="field"><label for="ct-name">Name</label><input id="ct-name" name="name" autocomplete="name" required></div>
+          <div class="field"><label for="ct-email">Email</label><input id="ct-email" name="email" type="email" autocomplete="email" required></div>
+          <div class="field field--full"><label for="ct-order">Order number (optional)</label><input id="ct-order" name="order"></div>
+          <div class="field field--full"><label for="ct-topic">Topic</label><select id="ct-topic" name="topic"><option>An order</option><option>Sizing &amp; fit</option><option>Shipping &amp; customs</option><option>Returns &amp; cancellations</option><option>Privacy request</option><option>Accessibility</option><option>Something else</option></select></div>
+          <div class="field field--full"><label for="ct-msg">Message</label><textarea id="ct-msg" name="message" required></textarea></div>
+          <p class="muted field--full" style="font-size:12px">We use these details only to answer you. See our <a class="link-underline" href="privacy.html">Privacy Policy</a>.</p>
+          <div class="field--full"><button class="btn" type="submit">Send message <svg class="btn__arrow" viewBox="0 0 18 8" fill="none" stroke="currentColor" aria-hidden="true"><path d="M0 4h17M13.5 0.5 17 4l-3.5 3.5"/></svg></button></div>
+        </div>
+      </form>
+    </div>
+  </section>
+</main>
+
+<noscript><p style="padding:24px;text-align:center">VANTÉ needs JavaScript for the bag and checkout. Please enable it to shop.</p></noscript>
+<script src="assets/vendor/gsap.min.js"></script>
+<script src="assets/vendor/ScrollTrigger.min.js"></script>
+<script src="assets/vendor/lenis.min.js"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/media.js"></script>
+<script src="assets/js/catalog.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/contact.js"></script>
+</body>
+</html>
