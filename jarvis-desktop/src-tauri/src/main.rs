@@ -2531,6 +2531,151 @@ fn drag_send(_hwnd: isize, _phase: String, _dx: f64, _dy: f64, _aim: Option<Vec<
     Err("only available on Windows".into())
 }
 
+/* ------------------------------------------------------------------
+   ONE HAND SCROLLS, ONE FINGER POINTS (2.16.0)
+
+   Both go only to the window asked about, only while it is in front —
+   put back in front and checked if our own camera window or the orb took
+   focus, refused if he switched to another program (input_target, the
+   same rule as zoom_send).
+
+   scroll_send: the page follows his pinched hand, so the page decides the
+   signs (gesture-zoom.js); here v is the vertical wheel (+ = up, toward
+   the top of the page) and h the horizontal one (+ = right), in wheel
+   units (120 a notch), any amount — browsers and Office scroll by the
+   fraction, older programs add them up to a notch. Windows sends a wheel
+   to the window under the pointer, so the pointer is put over this one
+   first if it is not (zoom_aim_at).
+
+   pointer_send: x, y are fractions of the window's client area. "move"
+   puts the pointer there; "click" puts it there and presses and releases
+   the left button. Never where another window covers that point.
+------------------------------------------------------------------ */
+#[cfg(target_os = "windows")]
+unsafe fn input_target(app: &tauri::AppHandle, hwnd: isize) -> Result<windows_sys::Win32::Foundation::HWND, String> {
+    use std::{thread, time::Duration};
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, IsIconic, IsWindow, SetForegroundWindow};
+    let own = zoom_own_windows(app);
+    let label_of = |h: isize| own.iter().find(|(_, x)| *x == h).map(|(l, _)| l.clone());
+    if let Some(l) = label_of(hwnd) {
+        if zoom_is_control(&l) || l == "model" {
+            return Err("that is JARVIS's own window".into());
+        }
+    }
+    unsafe {
+        let h = hwnd as HWND;
+        if hwnd == 0 || IsWindow(h) == 0 {
+            return Err("that window is gone".into());
+        }
+        if IsIconic(h) != 0 {
+            return Err("the window is minimised".into());
+        }
+        let fg = GetForegroundWindow() as isize;
+        if fg != hwnd {
+            let ours = label_of(fg).map(|l| zoom_is_control(&l)).unwrap_or(false);
+            if !(ours || fg == 0) {
+                return Err("foreground changed".into());
+            }
+            SetForegroundWindow(h);
+            thread::sleep(Duration::from_millis(60));
+            if GetForegroundWindow() as isize != hwnd {
+                return Err("could not bring the window forward, so nothing was sent".into());
+            }
+        }
+        Ok(h)
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn scroll_send(app: tauri::AppHandle, hwnd: isize, h: i32, v: i32) -> Result<String, String> {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, MOUSEINPUT,
+    };
+    let (h, v) = (h.clamp(-1200, 1200), v.clamp(-1200, 1200));
+    if h == 0 && v == 0 {
+        return Ok("nothing to send".into());
+    }
+    unsafe {
+        let w = input_target(&app, hwnd)?;
+        zoom_aim_at(w)?;
+        let wheel = |delta: i32, flags| INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: INPUT_0 {
+                mi: MOUSEINPUT { dx: 0, dy: 0, mouseData: delta as u32, dwFlags: flags, time: 0, dwExtraInfo: 0 },
+            },
+        };
+        let mut inputs: Vec<INPUT> = Vec::with_capacity(2);
+        if v != 0 {
+            inputs.push(wheel(v, MOUSEEVENTF_WHEEL));
+        }
+        if h != 0 {
+            inputs.push(wheel(h, MOUSEEVENTF_HWHEEL));
+        }
+        let sent = SendInput(inputs.len() as u32, inputs.as_mut_ptr(), std::mem::size_of::<INPUT>() as i32);
+        if (sent as usize) < inputs.len() {
+            return Err("Windows blocked the input (an elevated program, or a secure screen)".into());
+        }
+    }
+    Ok(format!("scroll {} {}", h, v))
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn pointer_send(app: tauri::AppHandle, hwnd: isize, phase: String, x: f64, y: f64) -> Result<serde_json::Value, String> {
+    use windows_sys::Win32::Foundation::{POINT, RECT};
+    use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP};
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetClientRect;
+    if !x.is_finite() || !y.is_finite() {
+        return Err("no place to point at".into());
+    }
+    unsafe {
+        let w = input_target(&app, hwnd)?;
+        let mut rc: RECT = std::mem::zeroed();
+        if GetClientRect(w, &mut rc) == 0 {
+            return Err("could not read the window's size".into());
+        }
+        let (cw, ch) = ((rc.right - rc.left) as f64, (rc.bottom - rc.top) as f64);
+        /* A pixel in from every edge: the very edge is the window frame. */
+        let mut p = POINT {
+            x: (x.clamp(0.0, 1.0) * (cw - 3.0)).round() as i32 + 1,
+            y: (y.clamp(0.0, 1.0) * (ch - 3.0)).round() as i32 + 1,
+        };
+        ClientToScreen(w, &mut p);
+        if zoom_root_at(p) != hwnd {
+            return Err("another window covers that place".into());
+        }
+        let (px, py) = (p.x as f64, p.y as f64);
+        let ok = match phase.as_str() {
+            "move" => drag_inputs(&mut [drag_input(px, py, 0)]),
+            "click" => drag_inputs(&mut [
+                drag_input(px, py, 0),
+                drag_input(px, py, MOUSEEVENTF_LEFTDOWN),
+                drag_input(px, py, MOUSEEVENTF_LEFTUP),
+            ]),
+            other => return Err(format!("unknown pointer phase \"{}\"", other)),
+        };
+        if !ok {
+            return Err("Windows blocked the input (an elevated program, or a secure screen)".into());
+        }
+        Ok(serde_json::json!({ "phase": phase, "x": p.x, "y": p.y }))
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn scroll_send(_hwnd: isize, _h: i32, _v: i32) -> Result<String, String> {
+    Err("only available on Windows".into())
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn pointer_send(_hwnd: isize, _phase: String, _x: f64, _y: f64) -> Result<serde_json::Value, String> {
+    Err("only available on Windows".into())
+}
+
 /* WHO IS ON TOP WHILE THE ORB FILLS THE SCREEN.
 
    The orb is always-on-top, which is right for a 180 px circle floating over
@@ -2819,7 +2964,9 @@ fn main() {
             save_model_file,
             launch_3d_workspace,
             launch_app,
-            drag_send
+            drag_send,
+            scroll_send,
+            pointer_send
         ])
         .setup(|app| {
             let window = app

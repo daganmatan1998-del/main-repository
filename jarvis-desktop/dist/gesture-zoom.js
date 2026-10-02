@@ -53,11 +53,13 @@
     maxZoom: 5,         // 500 %, relative to where JARVIS first found the window
     minZoom: 0.25,      // 25 %
     turnEnabled: true,  // precise control: one pinch turns a 3D model
-    turnScreen: 0.75    // the share of the picture the hand crosses for one full turn (360°)
+    turnScreen: 0.75,   // the share of the picture the hand crosses for one full turn (360°)
+    scrollSpeed: 1,     // one pinched hand scrolling anything else: 1 = a quarter of the picture is 4 wheel notches
+    pointerEnabled: true // in the Agent Atlas: one finger is the mouse, folding it clicks
   });
   const LIMITS = {
     sensitivity: [0.25, 3], threshold: [0, 30], smoothing: [0, 1],
-    maxSpeed: [1, 15], maxZoom: [1.2, 20], minZoom: [0.05, 0.9], turnScreen: [0.25, 1.5]
+    maxSpeed: [1, 15], maxZoom: [1.2, 20], minZoom: [0.05, 0.9], turnScreen: [0.25, 1.5], scrollSpeed: [0.25, 4]
   };
   const STORE_KEY = 'jarvis_store:gesture_zoom';
 
@@ -66,6 +68,7 @@
     if(s && typeof s === 'object'){
       if(typeof s.enabled === 'boolean') out.enabled = s.enabled;
       if(typeof s.turnEnabled === 'boolean') out.turnEnabled = s.turnEnabled;
+      if(typeof s.pointerEnabled === 'boolean') out.pointerEnabled = s.pointerEnabled;
       for(const k of Object.keys(LIMITS)){
         const v = Number(s[k]);
         if(isFinite(v)) out[k] = Math.min(LIMITS[k][1], Math.max(LIMITS[k][0], v));
@@ -145,8 +148,14 @@
     const scale = (d(P[0], P[5]) + d(P[0], P[9]) + d(P[0], P[13]) + d(P[0], P[17])) / 4 * PALM_RAY;
     if(!(scale > 1)) return null;
     const C = [0, 5, 9, 13, 17];
+    /* How straight each finger is (2.16.0): the wrist to its tip over the
+       wrist to its middle joint, in 3D. Measured on MediaPipe's own photos:
+       a straight finger reads 1.17-1.41, a folded one 0.60-0.75, the index
+       bent round into an OK sign 1.01-1.04. */
+    const straight = (pip, tip) => d(P[0], P[tip]) / Math.max(1e-6, d(P[0], P[pip]));
     return {
       scale, deep,
+      fingers: { index: straight(6, 8), middle: straight(10, 12), ring: straight(14, 16), pinky: straight(18, 20) },
       pinch: d(P[4], P[8]) / scale,
       indexReach: d(P[8], P[5]) / scale,
       thumbReach: d(P[4], P[5]) / scale,
@@ -346,9 +355,116 @@
   ------------------------------------------------------------------ */
   const TURN_ARM_MS = 220, TURN_DEAD_MM = 4, TURN_JUMP = 2.5, TURN_MAX_FRAME = 90;
 
+  /* ------------------------------------------------------------------
+     ONE FINGER IS THE MOUSE (2.16.0) — in the JARVIS Agent Atlas.
+
+     The pose: the index straight (over FINGER_STRAIGHT) and the other
+     three folded (under FINGER_FOLDED) — "pointing". Held POINT_FRAMES
+     frames and the fingertip moves the pointer: the middle of the picture
+     (POINTER_BOX, mirrored, so his right is right) spans the whole window,
+     so he never has to reach the picture's edge, and a One Euro filter
+     keeps a still finger still without lagging a moving one.
+
+     Folding the index is a left click. A bending finger's tip moves (down,
+     toward the palm), so the pointer FREEZES the moment the finger stops
+     being straight, at the straightest place of the last moment, and the
+     click goes there — where he was pointing, not where the curl drifted.
+     Folded under FINGER_FOLDED for FOLD_FRAMES frames: one click. Straight
+     again (CLICK_REARM frames): pointing again, and the next fold is the
+     next click. A fold that comes back straight without getting there is
+     no click. The pose lost (hand gone, fingers opened) for POINT_LOST_MS:
+     the pointer lets go. A pinch on the OTHER hand wins (zoom and turn
+     come first); the pointing hand's own fold can pass close enough to its
+     thumb to read as a pinch for a moment, and that is still the click.
+  ------------------------------------------------------------------ */
+  const FINGER_STRAIGHT = 1.12, FINGER_FOLDED = 0.9, POINT_FRAMES = 2, FOLD_FRAMES = 2, CLICK_REARM = 2,
+        POINT_LOST_MS = 300, POINTER_BOX = { x0: 0.2, y0: 0.12, w: 0.6, h: 0.6 };
+  const isPointing = (m) => !!(m && m.fingers && m.fingers.index > FINGER_STRAIGHT &&
+    m.fingers.middle < FINGER_FOLDED && m.fingers.ring < FINGER_FOLDED && m.fingers.pinky < FINGER_FOLDED);
+  const othersFolded = (m) => !!(m && m.fingers && m.fingers.middle < FINGER_FOLDED &&
+    m.fingers.ring < FINGER_FOLDED && m.fingers.pinky < FINGER_FOLDED);
+
+  class PointerTracker {
+    /* 0.4 Hz at rest, opening fast with speed: measured over 30 trials of
+       tracker jitter, a still finger wanders under 3 px of a 1920 window
+       and a stopped one settles within a frame. */
+    constructor(){ this.fx = new OneEuro(0.4, 15, 1); this.fy = new OneEuro(0.4, 15, 1); this.reset(); }
+    reset(){
+      this.state = 'idle'; this.slot = -1; this.at = null; this.onRun = 0; this.foldRun = 0; this.rearm = 0;
+      this.lostAt = null; this.pos = null; this.hold = null; this.hist = [];
+      this.fx.reset(); this.fy.reset();
+    }
+    /* The fingertip, in the window: x, y from 0 to 1. */
+    static toWindow(tip, width, height){
+      const mx = 1 - tip.x / width, my = tip.y / height;            // mirrored: his right is right
+      return { x: clamp((mx - POINTER_BOX.x0) / POINTER_BOX.w, 0, 1), y: clamp((my - POINTER_BOX.y0) / POINTER_BOX.h, 0, 1) };
+    }
+    update(t, ms, engaged, width, height){
+      const out = (type, extra) => Object.assign({ type, state: this.state, x: this.pos ? this.pos.x : null, y: this.pos ? this.pos.y : null }, extra || {});
+      const e = engaged || [];
+      ms = ms || [];
+      /* Its own hand is the one nearest where it was (slot numbers change
+         when a second hand comes into view: they go left to right). */
+      let m = null;
+      if(this.state !== 'idle' && this.at){
+        let bd = Infinity;
+        for(const x of ms){ const dd = Math.hypot(x.center.x - this.at.x, x.center.y - this.at.y) / x.scale; if(dd < bd){ bd = dd; m = x; } }
+        if(bd > 1.5) m = null;
+      }
+      const pinched = ms.some(x => x !== m && x.slot != null && e[x.slot]);
+      if(pinched){
+        if(this.state === 'idle') return out('none');
+        this.reset(); return out('end');
+      }
+      if(m){ this.at = m.center; this.slot = m.slot; }
+      if(this.state === 'idle'){
+        m = ms.find(isPointing);
+        if(!m){ this.onRun = 0; return out('none'); }
+        if(++this.onRun < POINT_FRAMES) return out('none');
+        this.state = 'pointing'; this.slot = m.slot; this.at = m.center; this.fx.reset(); this.fy.reset();
+        const raw = PointerTracker.toWindow(m.pts[8], width, height);
+        this.pos = { x: this.fx.filter(raw.x, t), y: this.fy.filter(raw.y, t) };
+        this.hist = [{ t, r: m.fingers.index, x: this.pos.x, y: this.pos.y }];
+        return out('start');
+      }
+      if(!m || !othersFolded(m)){
+        if(this.lostAt === null) this.lostAt = t;
+        if(t - this.lostAt > POINT_LOST_MS){ this.reset(); return out('end'); }
+        return out('hold');
+      }
+      this.lostAt = null;
+      const r = m.fingers.index;
+      if(this.state === 'pointing'){
+        if(r >= FINGER_STRAIGHT){
+          const raw = PointerTracker.toWindow(m.pts[8], width, height);
+          this.pos = { x: this.fx.filter(raw.x, t), y: this.fy.filter(raw.y, t) };
+          this.hist.push({ t, r, x: this.pos.x, y: this.pos.y });
+          while(this.hist.length > 12 || (this.hist.length > 1 && t - this.hist[0].t > 350)) this.hist.shift();
+          return out('move');
+        }
+        /* Bending: freeze at the straightest moment of the last 350 ms. */
+        const best = this.hist.reduce((a, h) => (h.r > a.r ? h : a), this.hist[this.hist.length - 1] || { r: 0, x: this.pos.x, y: this.pos.y });
+        this.pos = { x: best.x, y: best.y };
+        this.state = 'folding'; this.foldRun = r < FINGER_FOLDED ? 1 : 0;
+        return out('freeze');
+      }
+      if(this.state === 'folding'){
+        if(r >= FINGER_STRAIGHT){ this.state = 'pointing'; this.hist = []; return out('hold'); }
+        this.foldRun = r < FINGER_FOLDED ? this.foldRun + 1 : 0;
+        if(this.foldRun >= FOLD_FRAMES){ this.state = 'clicked'; this.rearm = 0; return out('click'); }
+        return out('hold');
+      }
+      /* clicked: wait for the finger to straighten again. */
+      this.rearm = r >= FINGER_STRAIGHT ? this.rearm + 1 : 0;
+      if(this.rearm >= CLICK_REARM){ this.state = 'pointing'; this.hist = []; this.fx.reset(); this.fy.reset(); }
+      return out('hold');
+    }
+  }
+
   class HandGestures {
     constructor(settings){
       this.zoom = new TwoHandZoom(settings);
+      this.pointer = new PointerTracker();
       this.latch = false;
       this.configure(settings);
       this.resetTurn();
@@ -364,7 +480,7 @@
     get state(){ return this.zoom.state; }
     get pins(){ return this.zoom.pins; }
     setLimits(){}
-    resetGesture(){ this.zoom.resetGesture(); this.resetTurn(); this.latch = false; }
+    resetGesture(){ this.zoom.resetGesture(); this.resetTurn(); this.pointer.reset(); this.latch = false; }
     resetTurn(){
       this.turn = { state: 'idle', slot: -1, armStart: 0, scale: 0, origin: null, last: null,
                     prevRaw: null, originPx: null, total: { x: 0, y: 0 } };
@@ -375,9 +491,15 @@
       const ev = this.zoom.update(frame);
       ev.hands = (this.zoom.lastMetrics || []).map(m => ({ pts: m.pts, center: m.center, slot: m.slot }));
       const e = ev.engaged || [false, false];
-      if(e[0] && e[1]) this.latch = true;
+      /* Only two hands really in view make a zoom (2.16.0): one hand that
+         changed slot keeps its old slot's pinch for a moment, and that
+         alone used to set the latch and lock the one-hand gesture out. */
+      if(e[0] && e[1] && (this.zoom.lastMetrics || []).length >= 2) this.latch = true;
       if(!e[0] && !e[1]) this.latch = false;
       ev.turn = this.turnStep(frame.t, e, frame.width, frame.height);
+      ev.pointer = this.s.pointerEnabled
+        ? this.pointer.update(frame.t, this.zoom.lastMetrics, e, frame.width, frame.height)
+        : { type: 'none', state: 'idle' };
       ev.latched = this.latch;
       return ev;
     }
@@ -456,8 +578,20 @@
      fixed when the turn begins. Sends are one at a time and in order
      (start, moves, end), the moves that pile up behind a slow one merged
      into one; a hand held still sends a keep-alive every TURN_KEEP_MS, or
-     Rust's watchdog would let go of the button under a held pinch. */
-  const TURN_PRESENT_MS = 6000, TURN_KEEP_MS = 400;
+     Rust's watchdog would let go of the button under a held pinch.
+
+     EVERYWHERE ELSE IT SCROLLS (2.16.0). With any other program in front
+     (kind 'scroll' from the probe — not JARVIS's 3D viewer, not the Atlas,
+     not a 3D program whose wheel is its zoom) the same pinch grabs the
+     page: the page follows the hand, as on a touch screen. Hand down, the
+     page comes down (it scrolls UP); hand up, it scrolls down; hand to his
+     right, it scrolls left; to his left, right. Degrees become wheel units
+     (SCROLL_UNITS_PER_DEG x scrollSpeed: a quarter of the picture is four
+     notches), fractions carried over, sent by Rust's scroll_send as the
+     vertical and horizontal wheel. A JARVIS viewer open BEHIND that
+     program no longer takes the pinch: what is in front is what he is
+     working in. */
+  const TURN_PRESENT_MS = 6000, TURN_KEEP_MS = 400, SCROLL_UNITS_PER_DEG = 4;
   class TurnRelay {
     constructor(o){
       o = o || {};
@@ -465,34 +599,60 @@
       this.invoke = o.invoke || null;
       this.now = o.now || (() => Date.now());
       this.onStatus = o.onStatus || (() => {});
+      this.speed = o.speed || (() => 1);
       this.lastPong = -1e9; this.loaded = false;
-      this.target = null; this.drag = null; this.busy = false;
+      this.target = null; this.drag = null; this.scroll = null; this.busy = false;
       this.reset();
     }
     reset(){ this.sentStart = false; this.pinged = false; this.armedShown = false; this.mode = null; }
     pong(p){ this.lastPong = this.now(); this.loaded = !(p && p.loaded === false); }
     gone(){ this.lastPong = -1e9; this.loaded = false; }
-    /* { hwnd, name } of a program in front that turns by dragging, or null. */
-    setTarget(t){ this.target = (t && t.hwnd && this.invoke) ? { hwnd: t.hwnd, name: t.name || 'the 3D view', aim: t.aim || null } : null; }
+    /* The program in front, from the probe: { hwnd, name, kind, aim } with
+       kind 'drag' (turns by a drag: the Atlas), 'scroll' (anything else
+       the wheel reaches), 'viewer' (JARVIS's own 3D window); or null. */
+    setTarget(t){
+      const kind = t && (t.kind || 'drag');
+      this.target = (t && t.hwnd && (kind === 'viewer' || this.invoke))
+        ? { hwnd: t.hwnd, name: t.name || 'the 3D view', aim: t.aim || null, kind } : null;
+    }
     viewerOpen(){ return this.loaded && this.now() - this.lastPong < TURN_PRESENT_MS; }
-    present(){ return !!this.target || this.viewerOpen(); }
+    /* Where a turn starting now would go. */
+    route(){
+      const t = this.target;
+      if(t && (t.kind === 'drag' || t.kind === 'scroll')) return t.kind;
+      return this.viewerOpen() ? 'viewer' : null;
+    }
+    present(){ return !!this.route(); }
     ping(){ try{ this.emit('jarvis://model-ping', {}); }catch(e){} }
     handle(turn){
       if(!turn) return;
       if(turn.state === 'arming' && !this.pinged){ this.pinged = true; this.ping(); }
       if(turn.type === 'start'){
         this.armedShown = true;
-        this.onStatus(this.present() ? { kind: 'turn-ready', name: this.target ? this.target.name : null } : { kind: 'turn-none' });
+        const r = this.route();
+        this.onStatus(r ? { kind: 'turn-ready', mode: r, name: r === 'viewer' ? null : this.target.name } : { kind: 'turn-none' });
         return;
       }
       if(turn.type === 'move' && (turn.dx || turn.dy)){
         if(!this.mode){
-          if(this.target){ this.mode = 'drag'; this.drag = { hwnd: this.target.hwnd, name: this.target.name, aim: this.target.aim, started: false,
+          const r = this.route();
+          if(r === 'drag'){ this.mode = 'drag'; this.drag = { hwnd: this.target.hwnd, name: this.target.name, aim: this.target.aim, started: false,
                                                                pdx: 0, pdy: 0, keep: false, keptAt: this.now(), ending: false }; }
-          else if(this.viewerOpen()) this.mode = 'viewer';
+          else if(r === 'scroll'){ this.mode = 'scroll'; this.scroll = { hwnd: this.target.hwnd, name: this.target.name, h: 0, v: 0, total: { h: 0, v: 0 } }; }
+          else if(r === 'viewer') this.mode = 'viewer';
           else return;
         }
         if(this.mode === 'failed') return;
+        if(this.mode === 'scroll'){
+          const s = this.scroll, k = SCROLL_UNITS_PER_DEG * (Number(this.speed()) || 1);
+          if(!s) return;
+          /* The page follows the hand: hand up (+dy) scrolls down (wheel -),
+             hand to his right (+dx) scrolls left (horizontal wheel -). */
+          s.h += -turn.dx * k; s.v += -turn.dy * k;
+          this.pumpScroll();
+          this.onStatus({ kind: 'turn', mode: 'scroll', total: turn.total, name: s.name });
+          return;
+        }
         if(this.mode === 'drag'){
           const d = this.drag;
           if(!d) return;
@@ -513,6 +673,7 @@
       }
       if(turn.type === 'end' || turn.type === 'cancel'){
         if(this.mode === 'viewer' && this.sentStart) this.emit('jarvis://model-rotate', { phase: 'end' });
+        if(this.mode === 'scroll') this.scroll = null;
         if(this.mode === 'drag' && this.drag){ this.drag.ending = true; this.pump(); }
         if(this.armedShown || this.mode) this.onStatus({ kind: 'turn-idle' });
         this.reset();
@@ -541,6 +702,70 @@
           if(this.drag === d) this.drag = null;
           if(this.mode === 'drag') this.mode = 'failed';
           this.onStatus({ kind: 'turn-failed', reason: String((err && err.message) || err), name: d.name });
+        })
+        .then(() => { this.busy = false; this.pump(); this.pumpScroll(); });
+    }
+    /* Whole wheel units only; what is left over waits for the next move. */
+    pumpScroll(){
+      const s = this.scroll;
+      if(this.busy || !s) return;
+      const h = Math.trunc(s.h), v = Math.trunc(s.v);
+      if(!h && !v) return;
+      s.h -= h; s.v -= v; s.total.h += h; s.total.v += v;
+      this.busy = true;
+      Promise.resolve()
+        .then(() => this.invoke('scroll_send', { hwnd: s.hwnd, h, v }))
+        .then(() => {}, (err) => {
+          if(this.scroll === s) this.scroll = null;
+          if(this.mode === 'scroll') this.mode = 'failed';
+          this.onStatus({ kind: 'turn-failed', reason: String((err && err.message) || err), name: s.name });
+        })
+        .then(() => { this.busy = false; this.pump(); this.pumpScroll(); });
+    }
+  }
+
+  /* The pointer, to the program in front that takes it (the Atlas): Rust's
+     pointer_send moves the real pointer to x, y of its window (fractions)
+     and clicks there. One call at a time; moves that pile up are merged
+     into the newest, a click is never dropped and goes in order. */
+  class PointerRelay {
+    constructor(o){
+      o = o || {};
+      this.invoke = o.invoke || null;
+      this.onStatus = o.onStatus || (() => {});
+      this.target = null; this.busy = false; this.move = null; this.clicks = []; this.active = false; this.failed = false;
+    }
+    setTarget(t){ this.target = (t && t.hwnd && this.invoke) ? { hwnd: t.hwnd, name: t.name || 'the program' } : null; }
+    handle(p){
+      if(!p || p.type === 'none') return;
+      if(p.type === 'end'){
+        if(this.active) this.onStatus({ kind: 'pointer-idle' });
+        this.active = false; this.failed = false; this.move = null;
+        return;
+      }
+      if(!this.target) return;
+      if(p.type === 'start'){ this.active = true; this.failed = false; this.onStatus({ kind: 'pointer', name: this.target.name }); }
+      if(!this.active || this.failed) return;
+      if(p.type === 'click'){
+        this.clicks.push({ hwnd: this.target.hwnd, x: p.x, y: p.y }); this.move = null;
+        this.onStatus({ kind: 'pointer-click', name: this.target.name });
+      } else if(p.x != null && (p.type === 'start' || p.type === 'move' || p.type === 'freeze')){
+        this.move = { hwnd: this.target.hwnd, x: p.x, y: p.y };
+      }
+      this.pump();
+    }
+    pump(){
+      if(this.busy) return;
+      let job = null;
+      if(this.clicks.length) job = Object.assign({ phase: 'click' }, this.clicks.shift());
+      else if(this.move){ job = Object.assign({ phase: 'move' }, this.move); this.move = null; }
+      if(!job) return;
+      this.busy = true;
+      Promise.resolve()
+        .then(() => this.invoke('pointer_send', job))
+        .then(() => {}, (err) => {
+          this.failed = true; this.clicks = []; this.move = null;
+          this.onStatus({ kind: 'pointer-failed', reason: String((err && err.message) || err) });
         })
         .then(() => { this.busy = false; this.pump(); });
     }
@@ -580,7 +805,7 @@
        an agent shows the hand). First the places measured clear in all 80
        views the Atlas flies to at 1366, 1920 and 2560 wide; then a spread
        over the map, inside the panels at any of those widths. */
-    { id: 'atlas', kind: '3d', name: 'JARVIS Agent Atlas', method: 'wheel', step: 1.05, rate: 10, turn: 'drag',
+    { id: 'atlas', kind: '3d', name: 'JARVIS Agent Atlas', method: 'wheel', step: 1.05, rate: 10, turn: 'drag', pointer: true,
       aim: [0.64, 0.77, 0.60, 0.79, 0.66, 0.93, 0.50, 0.90, 0.40, 0.85, 0.35, 0.70,
             0.55, 0.60, 0.45, 0.50, 0.62, 0.45, 0.38, 0.35, 0.55, 0.30, 0.50, 0.20],
       exe: ['jarvis-agent-atlas.exe', 'jarvis agent atlas.exe', 'agent-atlas.exe', 'agent atlas.exe'],
@@ -854,6 +1079,7 @@
   const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
                  [9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
   const TURN_COL = '#ffc94d';
+  const POINTER_COL = '#ff7bd5';
   function drawOverlay(canvas, video, ev, label){
     if(!canvas || !video) return;
     const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -887,6 +1113,16 @@
       P.forEach(p => { g.beginPath(); g.arc(p.x, p.y, 2.2, 0, Math.PI * 2); g.fill(); });
       g.globalAlpha = 1;
     });
+    /* The finger that is the mouse (2.16.0): a ring at its tip, filling
+       as it folds into a click. */
+    if(ev.pointerTip){
+      const c = map(ev.pointerTip), down = ev.pointerState === 'folding' || ev.pointerState === 'clicked';
+      g.strokeStyle = POINTER_COL; g.lineWidth = 2;
+      g.beginPath(); g.arc(c.x, c.y, down ? 7 : 11, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.moveTo(c.x - 16, c.y); g.lineTo(c.x - 12, c.y); g.moveTo(c.x + 12, c.y); g.lineTo(c.x + 16, c.y);
+      g.moveTo(c.x, c.y - 16); g.lineTo(c.x, c.y - 12); g.moveTo(c.x, c.y + 12); g.lineTo(c.x, c.y + 16); g.stroke();
+      if(down){ g.fillStyle = POINTER_COL; g.globalAlpha = ev.pointerState === 'clicked' ? 0.85 : 0.4; g.beginPath(); g.arc(c.x, c.y, 7, 0, Math.PI * 2); g.fill(); g.globalAlpha = 1; }
+    }
     /* Precise control: where the turn began, and where the hand is now. */
     if(turningSlot >= 0 && turn.origin && turn.center){
       const o = map(turn.origin), c = map(turn.center);
@@ -915,7 +1151,7 @@
       g.font = '10px "Courier New", monospace';
       const w = g.measureText(label).width + 12;
       g.fillStyle = 'rgba(3,8,15,0.72)'; g.fillRect(8, 8, w, 18);
-      g.fillStyle = /^TURN/.test(label) ? TURN_COL : col; g.fillText(label, 14, 21);
+      g.fillStyle = /^(?:TURN|SCROLL)/.test(label) ? TURN_COL : /^(?:POINTER|CLICK)/.test(label) ? POINTER_COL : col; g.fillText(label, 14, 21);
       g.restore();
     }
   }
@@ -953,12 +1189,20 @@
       if(o.onStatus) o.onStatus(s);
     };
     const manager = new ZoomManager({ invoke: o.invoke, emit: o.emit, gesture, settings, onStatus: status });
-    const relay = new TurnRelay({ emit: o.emit, invoke: o.invoke, onStatus: (s) => {
-      if(s.kind === 'turn-ready') turnLabel = 'TURN · READY' + (s.name ? ' · ' + s.name : '');
+    const relay = new TurnRelay({ emit: o.emit, invoke: o.invoke, speed: () => settings.scrollSpeed, onStatus: (s) => {
+      if(s.kind === 'turn-ready') turnLabel = (s.mode === 'scroll' ? 'SCROLL · READY' : 'TURN · READY') + (s.name ? ' · ' + s.name : '');
       else if(s.kind === 'turn-none') turnLabel = 'TURN · no 3D model open';
-      else if(s.kind === 'turn') turnLabel = 'TURN · ' + (s.name || '3D model');
+      else if(s.kind === 'turn') turnLabel = (s.mode === 'scroll' ? 'SCROLL · ' : 'TURN · ') + (s.name || '3D model');
       else if(s.kind === 'turn-failed') turnLabel = 'TURN FAILED · ' + (s.reason || '');
       else if(s.kind === 'turn-idle') turnLabel = '';
+      if(o.onStatus) o.onStatus(s);
+    } });
+    let pointerLabel = '';
+    const pointer = new PointerRelay({ invoke: o.invoke, onStatus: (s) => {
+      if(s.kind === 'pointer') pointerLabel = 'POINTER · ' + (s.name || '');
+      else if(s.kind === 'pointer-click') pointerLabel = 'CLICK · ' + (s.name || '');
+      else if(s.kind === 'pointer-failed') pointerLabel = 'POINTER FAILED · ' + (s.reason || '');
+      else if(s.kind === 'pointer-idle') pointerLabel = '';
       if(o.onStatus) o.onStatus(s);
     } });
     if(o.listen){
@@ -980,8 +1224,14 @@
       Promise.resolve().then(() => o.invoke('zoom_target')).then(info => {
         const a = selectAdapter(info);
         const name = a.supported ? a.name : null;
-        /* A program that turns by a drag (the Atlas) takes precise control. */
-        relay.setTarget(a.supported && a.turn === 'drag' && !info.minimized ? { hwnd: info.hwnd, name: a.name, aim: a.aim } : null);
+        /* Where one pinched hand goes: a drag for the Atlas, JARVIS's own
+           viewer, the wheel (scrolling) for anything else that takes it —
+           not a 3D program, whose wheel is its zoom. And the pointer, for
+           a program that takes one (the Atlas). */
+        const kind = !a.supported || info.minimized ? null : info.own === 'model' ? 'viewer'
+                   : a.turn === 'drag' ? 'drag' : a.kind === '3d' ? null : 'scroll';
+        relay.setTarget(kind ? { hwnd: info.hwnd, name: a.name, kind, aim: a.aim } : null);
+        pointer.setTarget(a.supported && a.pointer && !info.minimized ? { hwnd: info.hwnd, name: a.name } : null);
         if(name !== lastApp){
           lastApp = name;
           if(o.onStatus) o.onStatus({ kind: 'foreground', name, supported: !!a.supported, reason: a.reason || null });
@@ -1062,12 +1312,19 @@
           if(ev.state === 'idle') probeForeground(t2);
           manager.handle(ev);
           if(settings.turnEnabled) relay.handle(ev.turn);
-          drawOverlay(overlay, video, ev, label || (ev.state === 'armed' ? 'ZOOM · READY' : '') || turnLabel);
+          pointer.handle(ev.pointer);
+          /* The pointing fingertip, drawn while it is the mouse. */
+          if(pointer.active && ev.pointer && ev.pointer.state !== 'idle'){
+            const h = (ev.hands || []).find(x => x.slot === gesture.pointer.slot);
+            ev.pointerTip = h && h.pts ? h.pts[8] : null;
+            ev.pointerState = ev.pointer.state;
+          }
+          drawOverlay(overlay, video, ev, label || (ev.state === 'armed' ? 'ZOOM · READY' : '') || pointerLabel || turnLabel);
         }
       }catch(e){ if(o.onStatus) o.onStatus({ kind: 'error', reason: String((e && e.message) || e) }); }
     }
     const api = {
-      gesture, manager, relay,
+      gesture, manager, relay, pointer,
       start(){
         if(running || !settings.enabled) return Promise.resolve(false);
         running = true;
@@ -1080,6 +1337,7 @@
         unschedule();
         if(pingTimer){ clearInterval(pingTimer); pingTimer = null; }
         relay.handle({ type: 'end', state: 'idle' });
+        pointer.handle({ type: 'end' });
         if(gesture.state !== 'idle'){ manager.handle({ type: 'end' }); }
         gesture.resetGesture();
         drawOverlay(overlay, video, null, '');
@@ -1097,9 +1355,10 @@
 
   root.JarvisGestureZoom = {
     DEFAULTS, LIMITS, STORE_KEY, normaliseSettings, OneEuro, handMetrics, PinchState, TwoHandZoom,
-    HandGestures, TurnRelay, BONES,
+    HandGestures, TurnRelay, PointerTracker, PointerRelay, BONES,
     ADAPTERS, selectAdapter, ZoomManager, createTracker, drawOverlay, startGestureZoom,
     constants: { PINCH_ON, PINCH_OFF, FIST_GUARD, PALM_CM, PALM_RAY, ARM_MS, STEP_3D,
-                 TURN_ARM_MS, TURN_DEAD_MM, TURN_JUMP, TURN_MAX_FRAME, TURN_PRESENT_MS, TURN_KEEP_MS }
+                 TURN_ARM_MS, TURN_DEAD_MM, TURN_JUMP, TURN_MAX_FRAME, TURN_PRESENT_MS, TURN_KEEP_MS, SCROLL_UNITS_PER_DEG,
+                 FINGER_STRAIGHT, FINGER_FOLDED, POINT_FRAMES, FOLD_FRAMES, POINT_LOST_MS, POINTER_BOX }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

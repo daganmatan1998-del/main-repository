@@ -1361,3 +1361,68 @@ WebGL):
 - Four wheel notches zoom it in.
 - In all 98 views (every department, every agent and tool, the overview
   turned all the way round), the press landed on bare map.
+
+## Page 2.16.0: one hand scrolls everything else, one finger is the mouse in the Agent Atlas (needs the app rebuilt)
+
+**One pinched hand: 3D turns, everything else scrolls.** The one-hand pinch
+still turns a 3D model (the JARVIS viewer) and the Agent Atlas when one of
+them is the window in front. Over anything else (a browser, a document,
+Explorer, any program the wheel reaches), it grabs the page and scrolls it.
+The page follows your hand, as on a touch screen:
+
+| Your hand | The page |
+|---|---|
+| down | comes down (scrolls **up**) |
+| up | goes up (scrolls **down**) |
+| to your right | scrolls **left** |
+| to your left | scrolls **right** |
+
+- **Speed:** a quarter of the camera picture is four wheel notches. The new
+  "Scroll speed" slider in the GESTURES tab goes from 0.25× to 4×.
+- **Smoothness:** small movements add up and are never lost. Browsers and
+  Office scroll by the fraction, so it is smooth.
+- **What is in front decides:** a JARVIS 3D viewer left open behind the
+  browser is no longer turned by the pinch.
+- **No scrolling** in programs whose wheel is their zoom (Blender, other 3D
+  programs).
+
+**In the Agent Atlas, one finger is the mouse.** Raise only your index
+finger, the others folded:
+
+- the fingertip moves the pointer;
+- the middle of the camera picture spans the whole window, so you never
+  reach for the edges;
+- your right is right.
+
+**Fold the finger: a left click.** While the finger bends, the pointer
+freezes, so the click lands where you were pointing, not where the bending
+fingertip drifted. The click rules:
+
+- one fold is one click;
+- straighten the finger and the next fold is the next click;
+- a half fold that comes back is no click;
+- holding the fist clicks nothing more.
+
+A pinch on your other hand still zooms or turns, and takes over from the
+pointer.
+
+**How it was measured, on MediaPipe's real hand photos:**
+
+- **Finger straightness:** "straight" is the wrist-to-fingertip distance over
+  the wrist-to-middle-joint distance, in 3D. A straight finger reads
+  1.17–1.41, a folded one 0.60–0.75. Of all 16 hands in the set, only the
+  pointing hand counts as pointing; the fist, the thumbs-up, the victory
+  sign, open hands and OK signs do not.
+- **A still finger:** with tracker jitter, it wanders 4 px on a 1920 window.
+- **A stopped finger:** the pointer settles within a frame.
+- **End to end with the real tracker:**
+  - a real pointing hand moved the pointer the way the hand moved;
+  - swapping it in place for a real fist clicked exactly once, where it had
+    pointed;
+  - on the real Atlas page, that click opened the item under the finger.
+
+**A bug fixed on the way.** A single hand that changed slot, for example
+after the tracker briefly saw a second hand, kept its old slot's pinch for
+a moment. That alone set the "after a zoom" latch, which locked the
+one-hand gesture out until both hands opened. Now only two hands really in
+view count as a zoom.

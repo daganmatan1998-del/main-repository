@@ -404,6 +404,29 @@ single file `dist/index.html`.
   hand, panel text = I-beam); zoom_send takes the same aim. atlasdrag.e2e
   replays drag_send's exact mouse events on the real Atlas page (git
   archive atlas-build-1) and reads its OrbitControls back.
+- **One hand scrolls, one finger points (2.16.0).** The one-hand pinch goes
+  where the WINDOW IN FRONT says (TurnRelay.route from the probe's kind):
+  'viewer' (own model window) turns it, 'drag' (Atlas) drags it, 'scroll'
+  (any other supported adapter except kind '3d') scrolls it through Rust
+  scroll_send(h, v) — grab semantics: v = -dy*4*scrollSpeed (hand up =
+  wheel down), h = -dx*... (his right = scroll left); no target at all
+  falls back to a viewer that answered the ping. rotate.e2e therefore
+  puts the JARVIS viewer in front. handMetrics.fingers = wrist->tip over
+  wrist->PIP in 3D (straight 1.17-1.41, folded 0.60-0.75; OK-sign index
+  ~1.02). PointerTracker: pointing = index > FINGER_STRAIGHT (1.12) and
+  the other three < FINGER_FOLDED (0.9); its hand is followed by palm
+  centre (slots renumber left-to-right when a second hand appears); only
+  ANOTHER hand's pinch ends it (its own fold can read as a pinch); the
+  pointer freezes when the finger stops being straight (straightest of
+  the last 350 ms) and FOLD_FRAMES under 0.9 is one click; filter One
+  Euro 0.4/15 (measured). PointerRelay -> Rust pointer_send (x, y
+  fractions of the client area; move / click = move + left down + up),
+  only for an adapter with pointer:true (the Atlas). The zoom latch now
+  needs two hands really in view: one hand changing slot kept its old
+  slot's pinch for 160 ms and latched itself out of the one-hand gesture.
+  pointer.test (real landmarks), hands16.e2e (real tracker; landmarks3d
+  has pointing_up, landmarks.json does not), atlasdrag.e2e (the click on
+  the real Atlas).
 - **3D Workspace does not read its argument.** Its main.rs (branch
   claude/3d-model-workspace) ignores argv, so "open it with this model"
   starts it and saves the .glb in JARVIS\3D Workspace, but the model is not
