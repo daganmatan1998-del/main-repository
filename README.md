@@ -1305,3 +1305,59 @@ The orb's GESTURES tab replaces "Turn per cm" with **"Full turn across"**:
 25% to 150% of the screen, 75% by default. An old saved "turn per cm"
 value is ignored. The dead zone (the first 4 mm after pinching) and the
 glitch guard are unchanged.
+
+## Page 2.15.0: "let me see your agent system" opens the Agent Atlas, and your hands steer it (needs the app rebuilt)
+
+**The command.** "Hey Jarvis, let me see your agent system" opens **JARVIS
+Agent Atlas**, your 3D map of the agents (the Tauri app built from
+`jarvis-atlas-desktop`). Other wordings work too:
+
+- "show me your agent system", "open the agent atlas", "open the atlas";
+- "show me the agent map", "let me see all your agents";
+- "תראה לי את מערכת הסוכנים שלך", "תפתח את מערכת הסוכנים", "תפתח את האטלס".
+
+If the Atlas is already open, it is brought to the front instead of opened
+twice. A question about the agents ("what did the agents find today",
+"מה הסוכנים מצאו") is not this command and still goes to JARVIS as before.
+JARVIS finds the program the same way as 3D Workspace (Start menu, desktop,
+`%LOCALAPPDATA%`, Program Files), and remembers where it found it. The
+`open_agent_atlas` tool covers any other wording.
+
+**Hand control, like the 3D models.** With the camera on and the Atlas in
+front:
+
+- **one pinched hand turns the map:** right is right, up and down tilt it,
+  3/4 of the camera picture is a full turn (a quarter of it measured
+  116.5°);
+- **two pinched hands zoom it** (the plain wheel, forward is in).
+
+The Atlas is a separate program, so JARVIS steers it the way you would with
+the mouse. A left-button drag turns it (OrbitControls: one window-height of
+drag is 360°); the drag lets go and takes hold again at the window edge, so
+a turn never runs out of room. Your pointer goes back where it was
+afterwards. If you switch to another program mid-turn, the button is let go
+at once; if the camera stops talking for 2 s, a watchdog lets it go too.
+
+**Where it presses.** A press on one of the Atlas's labels never reaches the
+3D view, and its release clicks that agent. The labels turn with the map,
+so no fixed spot is always free: tested over 98 views, the first spot was
+covered in 52 of them. So JARVIS tries each spot the way a person would. It
+moves the pointer there and presses only where the Atlas shows the plain
+arrow, not the hand it shows over a label or an agent. The same goes for
+the wheel.
+
+**Tested on the real Atlas page** (the atlas-build-1 build, in Chromium with
+WebGL):
+
+| Asked | Measured |
+|---|---|
+| 90° right | 88° |
+| 60° back | 56° |
+| 400° (one fresh hold at the edge) | 395° |
+| 20° tilt | 18.4° |
+
+- A point on the map moves the way your hand does.
+- A pinch that barely moved never clicks an agent.
+- Four wheel notches zoom it in.
+- In all 98 views (every department, every agent and tool, the overview
+  turned all the way round), the press landed on bare map.

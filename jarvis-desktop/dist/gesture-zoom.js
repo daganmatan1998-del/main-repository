@@ -446,38 +446,103 @@
      viewer answers jarvis://model-ping with jarvis://model-pong (and says
      so by itself when a model loads, and model-gone when it closes); a
      pong in the last TURN_PRESENT_MS means there is a model to turn. Turns
-     go out as degrees, + right and + up, on jarvis://model-rotate. */
-  const TURN_PRESENT_MS = 6000;
+     go out as degrees, + right and + up, on jarvis://model-rotate.
+
+     Or to another program's 3D view (2.15.0): when the program in front is
+     one that turns by a mouse drag — JARVIS Agent Atlas, setTarget from the
+     foreground probe — the same degrees go to Rust's drag_send, which
+     drags in that window. That program is in front, so it is what he is
+     looking at, and it wins over a viewer open behind it. The window is
+     fixed when the turn begins. Sends are one at a time and in order
+     (start, moves, end), the moves that pile up behind a slow one merged
+     into one; a hand held still sends a keep-alive every TURN_KEEP_MS, or
+     Rust's watchdog would let go of the button under a held pinch. */
+  const TURN_PRESENT_MS = 6000, TURN_KEEP_MS = 400;
   class TurnRelay {
     constructor(o){
       o = o || {};
       this.emit = o.emit || (() => {});
+      this.invoke = o.invoke || null;
       this.now = o.now || (() => Date.now());
       this.onStatus = o.onStatus || (() => {});
       this.lastPong = -1e9; this.loaded = false;
+      this.target = null; this.drag = null; this.busy = false;
       this.reset();
     }
-    reset(){ this.sentStart = false; this.pinged = false; this.armedShown = false; }
+    reset(){ this.sentStart = false; this.pinged = false; this.armedShown = false; this.mode = null; }
     pong(p){ this.lastPong = this.now(); this.loaded = !(p && p.loaded === false); }
     gone(){ this.lastPong = -1e9; this.loaded = false; }
-    present(){ return this.loaded && this.now() - this.lastPong < TURN_PRESENT_MS; }
+    /* { hwnd, name } of a program in front that turns by dragging, or null. */
+    setTarget(t){ this.target = (t && t.hwnd && this.invoke) ? { hwnd: t.hwnd, name: t.name || 'the 3D view', aim: t.aim || null } : null; }
+    viewerOpen(){ return this.loaded && this.now() - this.lastPong < TURN_PRESENT_MS; }
+    present(){ return !!this.target || this.viewerOpen(); }
     ping(){ try{ this.emit('jarvis://model-ping', {}); }catch(e){} }
     handle(turn){
       if(!turn) return;
       if(turn.state === 'arming' && !this.pinged){ this.pinged = true; this.ping(); }
-      if(turn.type === 'start'){ this.armedShown = true; this.onStatus(this.present() ? { kind: 'turn-ready' } : { kind: 'turn-none' }); return; }
+      if(turn.type === 'start'){
+        this.armedShown = true;
+        this.onStatus(this.present() ? { kind: 'turn-ready', name: this.target ? this.target.name : null } : { kind: 'turn-none' });
+        return;
+      }
       if(turn.type === 'move' && (turn.dx || turn.dy)){
-        if(!this.present()) return;
+        if(!this.mode){
+          if(this.target){ this.mode = 'drag'; this.drag = { hwnd: this.target.hwnd, name: this.target.name, aim: this.target.aim, started: false,
+                                                               pdx: 0, pdy: 0, keep: false, keptAt: this.now(), ending: false }; }
+          else if(this.viewerOpen()) this.mode = 'viewer';
+          else return;
+        }
+        if(this.mode === 'failed') return;
+        if(this.mode === 'drag'){
+          const d = this.drag;
+          if(!d) return;
+          d.pdx += turn.dx; d.pdy += turn.dy; d.keptAt = this.now();
+          this.pump();
+          this.onStatus({ kind: 'turn', total: turn.total, name: d.name });
+          return;
+        }
         if(!this.sentStart){ this.sentStart = true; this.emit('jarvis://model-rotate', { phase: 'start' }); }
         this.emit('jarvis://model-rotate', { phase: 'move', dx: turn.dx, dy: turn.dy });
         this.onStatus({ kind: 'turn', total: turn.total });
         return;
       }
+      if(turn.type === 'move' && this.mode === 'drag' && this.drag && this.now() - this.drag.keptAt >= TURN_KEEP_MS){
+        this.drag.keep = true; this.drag.keptAt = this.now();
+        this.pump();
+        return;
+      }
       if(turn.type === 'end' || turn.type === 'cancel'){
-        if(this.sentStart) this.emit('jarvis://model-rotate', { phase: 'end' });
-        if(this.armedShown || this.sentStart) this.onStatus({ kind: 'turn-idle' });
+        if(this.mode === 'viewer' && this.sentStart) this.emit('jarvis://model-rotate', { phase: 'end' });
+        if(this.mode === 'drag' && this.drag){ this.drag.ending = true; this.pump(); }
+        if(this.armedShown || this.mode) this.onStatus({ kind: 'turn-idle' });
         this.reset();
       }
+    }
+    /* One call to drag_send at a time, in order. */
+    pump(){
+      const d = this.drag;
+      if(this.busy || !d) return;
+      let job = null;
+      if(!d.started) job = { phase: 'start', dx: 0, dy: 0 };
+      else if(d.pdx || d.pdy || d.keep){ job = { phase: 'move', dx: d.pdx, dy: d.pdy }; d.pdx = 0; d.pdy = 0; d.keep = false; }
+      else if(d.ending) job = { phase: 'end', dx: 0, dy: 0 };
+      if(!job) return;
+      this.busy = true;
+      Promise.resolve()
+        .then(() => this.invoke('drag_send', job.phase === 'start' && d.aim
+          ? { hwnd: d.hwnd, phase: 'start', dx: 0, dy: 0, aim: d.aim }
+          : { hwnd: d.hwnd, phase: job.phase, dx: job.dx, dy: job.dy }))
+        .then(() => {
+          if(job.phase === 'start') d.started = true;
+          if(job.phase === 'end' && this.drag === d) this.drag = null;
+        }, (err) => {
+          /* Rust has already let go of the button (or never pressed it).
+             Nothing more goes to that window for this turn. */
+          if(this.drag === d) this.drag = null;
+          if(this.mode === 'drag') this.mode = 'failed';
+          this.onStatus({ kind: 'turn-failed', reason: String((err && err.message) || err), name: d.name });
+        })
+        .then(() => { this.busy = false; this.pump(); });
     }
   }
 
@@ -502,6 +567,24 @@
      gesture can say how many to send; rate caps notches per second.
   ------------------------------------------------------------------ */
   const ADAPTERS = [
+    /* His JARVIS Agent Atlas (2.15.0): a three.js map with OrbitControls.
+       The plain wheel zooms it (each notch 1/0.95), a left drag turns it —
+       so precise control reaches it too (turn: 'drag'). First, and matched
+       by title as well, so the Atlas opened in a browser is still the
+       Atlas. */
+    /* aim: where in the window the wheel goes and the turn's drag takes
+       hold, as x,y fractions, in the order Rust tries them. A label there
+       swallows the press and the wheel, and the labels turn with the map,
+       so no one place is always bare: Rust moves the pointer to each in
+       turn and presses where the Atlas shows the plain arrow (a label or
+       an agent shows the hand). First the places measured clear in all 80
+       views the Atlas flies to at 1366, 1920 and 2560 wide; then a spread
+       over the map, inside the panels at any of those widths. */
+    { id: 'atlas', kind: '3d', name: 'JARVIS Agent Atlas', method: 'wheel', step: 1.05, rate: 10, turn: 'drag',
+      aim: [0.64, 0.77, 0.60, 0.79, 0.66, 0.93, 0.50, 0.90, 0.40, 0.85, 0.35, 0.70,
+            0.55, 0.60, 0.45, 0.50, 0.62, 0.45, 0.38, 0.35, 0.55, 0.30, 0.50, 0.20],
+      exe: ['jarvis-agent-atlas.exe', 'jarvis agent atlas.exe', 'agent-atlas.exe', 'agent atlas.exe'],
+      title: /\bagent\s*atlas\b/i },
     { id: 'browser', kind: 'browser', name: 'Browser', method: 'ctrl_wheel', step: 1.12, rate: 9,
       exe: ['chrome.exe', 'msedge.exe', 'firefox.exe', 'brave.exe', 'opera.exe', 'vivaldi.exe', 'arc.exe',
             'chromium.exe', 'waterfox.exe', 'librewolf.exe', 'iexplore.exe', 'zen.exe', 'thorium.exe'] },
@@ -558,7 +641,8 @@
       return { supported: false, reason: 'the desktop and taskbar have no content to zoom' };
     }
     for(const a of ADAPTERS){
-      if((a.exe && a.exe.indexOf(exe) >= 0) || (a.cls && a.cls.indexOf(cls) >= 0)) return label(a);
+      if((a.exe && a.exe.indexOf(exe) >= 0) || (a.cls && a.cls.indexOf(cls) >= 0) ||
+         (a.title && a.title.test(String(info.title || '')))) return label(a);
     }
     /* A Chromium window from a program that is not a browser is an
        Electron app, and those zoom from the keyboard. */
@@ -694,7 +778,8 @@
 
       this.busy = true;
       const gen = this.generation, target = this.target;
-      this.invoke('zoom_send', { hwnd: target.hwnd, method: a.method, notches: n }).then(() => {
+      this.invoke('zoom_send', a.aim ? { hwnd: target.hwnd, method: a.method, notches: n, aim: a.aim }
+                                     : { hwnd: target.hwnd, method: a.method, notches: n }).then(() => {
         if(gen !== this.generation) return;
         this.sent += n;
         this.onStatus({ kind: 'zoom', level: this.levelNow(), adapter: a.id, name: a.name, app: a.app });
@@ -868,10 +953,11 @@
       if(o.onStatus) o.onStatus(s);
     };
     const manager = new ZoomManager({ invoke: o.invoke, emit: o.emit, gesture, settings, onStatus: status });
-    const relay = new TurnRelay({ emit: o.emit, onStatus: (s) => {
-      if(s.kind === 'turn-ready') turnLabel = 'TURN · READY';
+    const relay = new TurnRelay({ emit: o.emit, invoke: o.invoke, onStatus: (s) => {
+      if(s.kind === 'turn-ready') turnLabel = 'TURN · READY' + (s.name ? ' · ' + s.name : '');
       else if(s.kind === 'turn-none') turnLabel = 'TURN · no 3D model open';
-      else if(s.kind === 'turn') turnLabel = 'TURN · 3D model';
+      else if(s.kind === 'turn') turnLabel = 'TURN · ' + (s.name || '3D model');
+      else if(s.kind === 'turn-failed') turnLabel = 'TURN FAILED · ' + (s.reason || '');
       else if(s.kind === 'turn-idle') turnLabel = '';
       if(o.onStatus) o.onStatus(s);
     } });
@@ -894,6 +980,8 @@
       Promise.resolve().then(() => o.invoke('zoom_target')).then(info => {
         const a = selectAdapter(info);
         const name = a.supported ? a.name : null;
+        /* A program that turns by a drag (the Atlas) takes precise control. */
+        relay.setTarget(a.supported && a.turn === 'drag' && !info.minimized ? { hwnd: info.hwnd, name: a.name, aim: a.aim } : null);
         if(name !== lastApp){
           lastApp = name;
           if(o.onStatus) o.onStatus({ kind: 'foreground', name, supported: !!a.supported, reason: a.reason || null });
@@ -1012,6 +1100,6 @@
     HandGestures, TurnRelay, BONES,
     ADAPTERS, selectAdapter, ZoomManager, createTracker, drawOverlay, startGestureZoom,
     constants: { PINCH_ON, PINCH_OFF, FIST_GUARD, PALM_CM, PALM_RAY, ARM_MS, STEP_3D,
-                 TURN_ARM_MS, TURN_DEAD_MM, TURN_JUMP, TURN_MAX_FRAME, TURN_PRESENT_MS }
+                 TURN_ARM_MS, TURN_DEAD_MM, TURN_JUMP, TURN_MAX_FRAME, TURN_PRESENT_MS, TURN_KEEP_MS }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

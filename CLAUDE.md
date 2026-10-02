@@ -383,6 +383,31 @@ single file `dist/index.html`.
   the model path as its one argument. The found path is kept in Store
   workspace3d_path and dropped when it stops working. Not-found is
   {launched:false}, not an error, so the saved model is still reported.
+- **JARVIS Agent Atlas under his hands (2.15.0).** The Atlas is his own
+  Tauri app (branch claude/3d-model-workspace, jarvis-atlas-desktop/, tag
+  atlas-build-1): three.js r128 + OrbitControls (left drag = orbit, one
+  window HEIGHT of drag = 360°, wheel = dolly), CSS2D labels with
+  pointer-events and cursor:pointer. atlasCommand ("let me see your agent
+  system", on atlasCanon -> token ATLAS) runs in detectWorkflowCommand
+  right after the 3D Workspace check; questions about the agents stay
+  with the model (agent_system_info). launch_app {program:'agent_atlas'}
+  (NamedApp, shared search with 3D Workspace) focuses a running Atlas
+  (foreground_unlock = an unassigned key, then SetForegroundWindow) or
+  starts it. Gestures: the 'atlas' adapter (exe or TITLE /agent atlas/)
+  has method 'wheel', turn 'drag' and aim = x,y fractions; the foreground
+  probe calls relay.setTarget, and TurnRelay sends the turn to drag_send
+  (serialised, moves merged, keep-alive every TURN_KEEP_MS) instead of
+  model-rotate. A press on a label never reaches OrbitControls and the
+  labels turn with the map, so NO fixed point is safe (52 of 98 views
+  covered the first one): Rust aim_probe moves the pointer to each aim
+  point and presses where GetCursorInfo shows IDC_ARROW (label/agent =
+  hand, panel text = I-beam); zoom_send takes the same aim. atlasdrag.e2e
+  replays drag_send's exact mouse events on the real Atlas page (git
+  archive atlas-build-1) and reads its OrbitControls back.
+- **3D Workspace does not read its argument.** Its main.rs (branch
+  claude/3d-model-workspace) ignores argv, so "open it with this model"
+  starts it and saves the .glb in JARVIS\3D Workspace, but the model is not
+  loaded until the app reads argv[1] (or latest-model.json).
 - **The Meshy key is read through meshyKey(env) (worker 2.6.7), never
   env.MESHY_API_KEY directly.** It takes MESHY_API_KEY, then MESHY_KEY /
   MESHY_API_TOKEN / MESHY_TOKEN / MESHY, and cleans it (spaces, quotes,

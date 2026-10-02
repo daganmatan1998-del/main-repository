@@ -2068,7 +2068,7 @@ const I18N = {
     gzSensitivityLabel: 'Steps per cm', gzThresholdLabel: 'Movement before it zooms', gzSmoothingLabel: 'Smoothing',
     gzMaxSpeedLabel: 'Maximum steps a second', gzMaxZoomLabel: 'Maximum zoom', gzMinZoomLabel: 'Minimum zoom',
     gestureTurnOn: '☝ PRECISE CONTROL: ON', gestureTurnOff: '☝ PRECISE CONTROL: OFF', gzTurnScreenLabel: 'Full turn across',
-    gestureTurnHint: 'Pinch with ONE hand while a 3D model is open: move the hand and the model turns with it — right, left, up, down and every way between, all the way round. Two pinched hands are still the zoom. STRAIGHTEN in the model\'s right-click menu puts it back.',
+    gestureTurnHint: 'Pinch with ONE hand while a 3D model is open, or the JARVIS Agent Atlas is in front: move the hand and it turns with it — right, left, up, down and every way between, all the way round. Two pinched hands are still the zoom. STRAIGHTEN in the model\'s right-click menu puts it back.',
     gestureResetBtn: 'DEFAULTS',
     actNote: 'Every tool he ran, newest first. Click a row for the full arguments and result. This is what actually happened — not what he said happened.',
     actEmpty: 'Nothing yet. This fills up the moment he actually does something.',
@@ -2329,7 +2329,7 @@ const I18N = {
     gzSensitivityLabel: 'רגישות', gzThresholdLabel: 'תנועה לפני שמתחיל זום', gzSmoothingLabel: 'החלקה',
     gzMaxSpeedLabel: 'מקסימום צעדים בשנייה', gzMaxZoomLabel: 'זום מרבי', gzMinZoomLabel: 'זום מזערי',
     gestureTurnOn: '☝ שליטה מדויקת: פועלת', gestureTurnOff: '☝ שליטה מדויקת: כבויה', gzTurnScreenLabel: 'סיבוב שלם לאורך',
-    gestureTurnHint: 'צביטה ביד אחת כשמודל תלת-ממד פתוח: תזיז את היד והמודל מסתובב איתה — ימינה, שמאלה, למעלה, למטה וכל כיוון שביניהם, סיבוב מלא. צביטה בשתי ידיים היא עדיין הזום. "STRAIGHTEN" בתפריט הקליק הימני של המודל מחזיר אותו למצב ההתחלתי.',
+    gestureTurnHint: 'צביטה ביד אחת כשמודל תלת-ממד פתוח, או כשה-JARVIS Agent Atlas מלפנים: תזיז את היד והוא מסתובב איתה — ימינה, שמאלה, למעלה, למטה וכל כיוון שביניהם, סיבוב מלא. צביטה בשתי ידיים היא עדיין הזום. "STRAIGHTEN" בתפריט הקליק הימני של המודל מחזיר אותו למצב ההתחלתי.',
     gestureResetBtn: 'ברירת מחדל',
     actNote: 'כל כלי שהוא הריץ, החדש למעלה. לחץ על שורה לפרטים המלאים. זה מה שבאמת קרה — לא מה שהוא אמר שקרה.',
     actEmpty: 'עדיין כלום. זה יתמלא ברגע שהוא באמת יעשה משהו.',
@@ -2503,7 +2503,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.14.0';
+const APP_VERSION = '2.15.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -11686,6 +11686,50 @@ function workspace3dCommand(text){
   return model && !bareOpen ? 'project' : 'open';
 }
 
+/* ------------------------------------------------------------------
+   "LET ME SEE YOUR AGENT SYSTEM" (2.15.0): his JARVIS Agent Atlas, the
+   3D map of the agents, a program of its own (launch_app in main.rs finds
+   it, or brings it forward when it is already open). Like 3D Workspace:
+   the sentence is squeezed (every way of naming the map becomes the token
+   ATLAS), then it must be made only of words a request to see it is made
+   of — anything else, a question about the agents above all ("what did
+   the agents find"), stays with the model and agent_system_info.
+------------------------------------------------------------------ */
+const ATLAS_VERBS = new Set(('see show open launch start run bring pull display view look ' +
+  'תראה תראי הראה להראות תפתח תפתחי פתח לפתוח תציג הצג להציג תעלה תפעיל לראות').split(' '));
+const ATLAS_OTHER_WORDS = new Set(('let me i want to like would could can please now your ur you ypu yur the my our up at ' +
+  'it all whole entire full in 3d of ATLAS ' +
+  'לי את שלך שלי אני רוצה בבקשה עכשיו אפשר כל ה').split(' '));
+
+function atlasCanon(text){
+  let s = ' ' + looseTokens(text).join(' ') + ' ';
+  s = s.replace(/ (?:the )?map of (?:the |your |my |all |all the |all your )?agents(?= )/g, ' ATLAS');
+  s = s.replace(/ (?:ai )?(?:agents?|agentic)(?: '?s)? (?:system|systems|atlas|map|network)(?= )/g, ' ATLAS');
+  s = s.replace(/ (?:jarvis )?atlas(?= )/g, ' ATLAS');
+  s = s.replace(/ [הבל]?(?:מערכת|מפת|אטלס) (?:ה)?(?:סוכנים|אייג'?נטים|אייגנטים|agents?)(?= )/g, ' ATLAS');
+  s = s.replace(/ [הבל]?אטלס(?= )/g, ' ATLAS');
+  /* "show me your agents": the map is how he sees them. */
+  s = s.replace(/ (?:all )?(?:your|ur|you|ypu|yur) agents(?= )/g, ' ATLAS');
+  s = s.replace(/ (?:את )?(?:כל )?הסוכנים שלך(?= )/g, ' ATLAS');
+  return s.trim();
+}
+
+function atlasCommand(text){
+  const s = atlasCanon(text);
+  if(!/(?:^| )ATLAS(?: |$)/.test(s)) return false;
+  const words = s.split(' ').filter(Boolean);
+  if(words.length > 14) return false;
+  if(/^(?:what|whats|how|why|when|where|which|who|is|are|does|did|do|should|מה|איך|למה|מתי|איפה|האם|מי|כמה) /.test(s)) return false;
+  if(/(?:^| )(?:dont|don't|do not|not|never|no|stop|close|quit|exit|hide|אל|לא|תסגור|סגור)(?: |$)/.test(s)) return false;
+  if(/(?:^| )(?:and|then|also|ואז|וגם)(?: |$)/.test(s)) return false;
+  let verb = false;
+  for(const w of words){
+    if(ATLAS_VERBS.has(w)){ verb = true; continue; }
+    if(!ATLAS_OTHER_WORDS.has(w)) return false;
+  }
+  return verb;
+}
+
 const LOOSE_FLOWS = { camera: { on: 'camera_on', off: 'camera_off' }, fs: { on: 'fullscreen', off: 'fullscreen_exit' },
                       ws: { on: 'workspace' }, site: { on: 'open_site' } };
 function understandCommand(text){
@@ -12173,6 +12217,8 @@ function detectWorkflowCommand(text, state){
     if(ws3d) return ws3d === 'project' ? 'workspace3d_project' : 'workspace3d';
   }
   if(/(?:^| )APP(?: |$)/.test(ws3dCanon(raw))) return null;
+  /* "Let me see your agent system" (2.15.0): his Agent Atlas. */
+  if(!FLOW_LATER.test(norm) && !FLOW_NOT.test(norm) && atlasCommand(raw)) return 'agent_atlas';
   let words = norm.split(' ').filter(Boolean);
   /* Too long for any rule below — but courtesy makes a command long ("hey
      jarvis could you do me a favor and open up the camera for me right
@@ -12277,7 +12323,7 @@ function splitRequests(text){
    the model, so in a compound sentence they go to it with the rest. */
 const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'fullscreen', 'fullscreen_exit',
                                       'live_full', 'live_full_exit', 'workspace', 'open_site', 'bring_window',
-                                      'workspace3d', 'workspace3d_project']);
+                                      'workspace3d', 'workspace3d_project', 'agent_atlas']);
 
 /* { steps: [{flow, part}], rest: [parts for the model] }, or null when the
    sentence is one request (or none) and the ordinary path should have it. */
@@ -13109,6 +13155,64 @@ function workspace3dLine(res, he){
   return he ? 'לא הצלחתי לפתוח את 3D Workspace: ' + why : 'I could not open 3D Workspace: ' + why;
 }
 
+const ATLAS_PATH_KEY = 'agent_atlas_path';
+
+const AGENT_ATLAS_TOOL = {
+  name: 'open_agent_atlas',
+  description: "Open JARVIS Agent Atlas, his 3D map of your agent system, on his computer (a program of its own; if it is already open it is brought to the front). Use it whenever he wants to SEE the agents: \"let me see your agent system\", \"show me the agents map\", \"open the atlas\", \"תראה לי את מערכת הסוכנים שלך\". A question about what the agents did or found is agent_system_info, not this. With the camera open he steers the map with his hands like any 3D model: one pinched hand turns it, both hands zoom. app_path only when he tells you where the program is; it is remembered. Say in a few words what happened.",
+  input_schema: { type:'object', properties: {
+    app_path: { type:'string', description:'Only if he named it: the full path of the program or its shortcut.' }
+  }, required: [] }
+};
+
+async function callAgentAtlasTool(input){
+  input = input || {};
+  if(!IS_DESKTOP) return { error: 'the Agent Atlas is a program on his computer; only the desktop app can open it' };
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!invoke) return { error: 'the desktop bridge is unavailable' };
+  let path = String(input.app_path || '').trim();
+  if(!path){ try{ path = (await Store.get(ATLAS_PATH_KEY)).value || ''; }catch(err){} }
+  let r;
+  try{ r = await invoke('launch_app', { program: 'agent_atlas', path: path || null }); }
+  catch(err){
+    const msg = String((err && err.message) || err);
+    if(/not found|unknown command|launch_app/i.test(msg) && !/could not|would not/i.test(msg)){
+      return { error: 'old_app', tell_the_user: 'This needs the rebuilt desktop app before I can open the Agent Atlas.' };
+    }
+    return { error: msg };
+  }
+  const hands = typeof liveActive === 'function' && liveActive() && gestureSettings && gestureSettings.enabled !== false;
+  if(r && r.launched){
+    if(r.app_path){ try{ await Store.set(ATLAS_PATH_KEY, r.app_path); }catch(err){} }
+    return { ok: true, already_open: !!r.already_open, app_path: r.app_path || null, hands,
+             note: (r.already_open ? 'It was already open and is in front now.' : 'It is opening.') +
+                   (hands ? ' The camera is on: one pinched hand turns the map, both hands zoom it.'
+                          : ' To steer it with his hands, the camera needs to be open.') + ' Confirm in a few words.' };
+  }
+  if(path && !input.app_path){ try{ await Store.delete(ATLAS_PATH_KEY); }catch(err){} }
+  return { error: 'not_found', searched: (r && r.searched) || [],
+           tell_the_user: 'I could not find JARVIS Agent Atlas on this computer. Install it, or tell me where the program is.' };
+}
+
+function agentAtlasLine(res, he){
+  if(res && res.ok){
+    const first = addressHim(he ? (res.already_open ? 'הנה מערכת הסוכנים.' : 'פותח את מערכת הסוכנים.')
+                                : (res.already_open ? 'Here is the agent system.' : 'Opening the agent system.'), he);
+    const hint = res.hands
+      ? (he ? ' צביטה ביד אחת מסובבת אותה, בשתי ידיים מקרבת.' : ' Pinch one hand to turn it, both hands to zoom.')
+      : (he ? ' פתח את המצלמה כדי לשלוט בה בידיים.' : ' Open the camera to steer it with your hands.');
+    return first + hint;
+  }
+  if(res && res.error === 'not_found'){
+    return he ? 'לא הצלחתי למצוא את JARVIS Agent Atlas במחשב. תתקין אותו, או תגיד לי איפה התוכנה.'
+              : 'I could not find JARVIS Agent Atlas on this computer. Install it, or tell me where the program is.';
+  }
+  if(res && res.error === 'old_app') return he ? 'לא הצלחתי: צריך לבנות מחדש את אפליקציית המחשב כדי לפתוח את מערכת הסוכנים.'
+                                               : 'I could not: the desktop app needs rebuilding before I can open the agent system.';
+  const why = (res && res.error) || 'unknown';
+  return he ? 'לא הצלחתי לפתוח את מערכת הסוכנים: ' + why : 'I could not open the agent system: ' + why;
+}
+
 async function runWorkflowCommand(flow, text){
   const he = flowLang(text) === 'he';
   const say = (line) => {
@@ -13213,6 +13317,11 @@ async function runWorkflowCommand(flow, text){
       say(he ? 'לא הצלחתי להביא את ' + label + ': ' + ((res && res.error) || '')
              : 'I could not bring ' + label + ' over: ' + ((res && res.error) || ''));
     }
+    return true;
+  }
+
+  if(flow === 'agent_atlas'){
+    say(agentAtlasLine(await callAgentAtlasTool({}), he));
     return true;
   }
 
@@ -14909,6 +15018,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     if(caps.model3d_check) advancedTools.push(CHECK3D_TOOL);
     if(IS_DESKTOP) advancedTools.push(MODEL_WINDOW_TOOL);
     if(IS_DESKTOP) advancedTools.push(WORKSPACE3D_TOOL);
+    if(IS_DESKTOP) advancedTools.push(AGENT_ATLAS_TOOL);
     requestBody.tools = fullCapability()
       ? everydayTools.concat(advancedTools)
       : everydayTools;
@@ -15437,6 +15547,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callCheck3dTool();
           } else if(tu.name === 'show_model_in_window'){
             payload = await openModelWindow(null);
+          } else if(tu.name === 'open_agent_atlas'){
+            payload = await callAgentAtlasTool(tu.input);
           } else if(tu.name === 'open_3d_workspace'){
             payload = await callWorkspace3dTool(tu.input);
           } else if(tu.name === 'open_workspace'){
@@ -17865,7 +17977,8 @@ adjustLayout();
                      /* Precise control (2.12.0): one hand turning a 3D model. */
                      : s.kind === 'turn-ready' ? 'turning: ready'
                      : s.kind === 'turn-none'  ? 'turning: no 3D model open'
-                     : s.kind === 'turn'       ? 'turning the 3D model ' + Math.round(Number((s.total && s.total.x) || 0)) + '° · ' + Math.round(Number((s.total && s.total.y) || 0)) + '°'
+                     : s.kind === 'turn-failed' ? 'turning failed: ' + (s.reason || '')
+                     : s.kind === 'turn'       ? 'turning ' + (s.name || 'the 3D model') + ' ' + Math.round(Number((s.total && s.total.x) || 0)) + '° · ' + Math.round(Number((s.total && s.total.y) || 0)) + '°'
                      : s.kind === 'turn-idle'  ? ''
                      : el.textContent;
     });

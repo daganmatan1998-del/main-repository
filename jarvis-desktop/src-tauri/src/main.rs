@@ -558,6 +558,98 @@ unsafe fn zoom_aim_at(hwnd: windows_sys::Win32::Foundation::HWND) -> Result<(), 
     }
 }
 
+/* Points of a window given as x,y fractions of its client area (2.15.0),
+   on the screen, in order, keeping only those where that window really is
+   (not covered by another — our camera box, say). */
+#[cfg(target_os = "windows")]
+unsafe fn aim_points(hwnd: windows_sys::Win32::Foundation::HWND, fractions: &[f64]) -> Vec<(i32, i32)> {
+    use windows_sys::Win32::Foundation::{POINT, RECT};
+    use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetClientRect;
+    let mut out = Vec::new();
+    unsafe {
+        let mut rc: RECT = std::mem::zeroed();
+        if GetClientRect(hwnd, &mut rc) == 0 {
+            return out;
+        }
+        let (w, h) = ((rc.right - rc.left) as f64, (rc.bottom - rc.top) as f64);
+        for pair in fractions.chunks_exact(2) {
+            let (fx, fy) = (pair[0], pair[1]);
+            if !fx.is_finite() || !fy.is_finite() {
+                continue;
+            }
+            let mut p = POINT { x: (w * fx.clamp(0.0, 1.0)).round() as i32, y: (h * fy.clamp(0.0, 1.0)).round() as i32 };
+            ClientToScreen(hwnd, &mut p);
+            if zoom_root_at(p) == hwnd as isize {
+                out.push((p.x, p.y));
+            }
+        }
+    }
+    out
+}
+
+/* Whether the pointer shows the plain arrow. Over the Agent Atlas that
+   means bare map: its labels and agents show the hand, panel text the
+   text cursor. Unknown (no cursor shown, a touch screen) counts as yes. */
+#[cfg(target_os = "windows")]
+unsafe fn cursor_is_arrow() -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetCursorInfo, LoadCursorW, CURSORINFO, CURSOR_SHOWING, IDC_ARROW,
+    };
+    unsafe {
+        let mut ci: CURSORINFO = std::mem::zeroed();
+        ci.cbSize = std::mem::size_of::<CURSORINFO>() as u32;
+        if GetCursorInfo(&mut ci) == 0 || ci.flags & CURSOR_SHOWING == 0 {
+            return true;
+        }
+        ci.hCursor == LoadCursorW(std::ptr::null_mut(), IDC_ARROW)
+    }
+}
+
+/* WHERE TO PRESS (2.15.0). The Atlas's labels turn with the map, so no
+   fixed point of its window is always bare map: a press on a label never
+   reaches the 3D view (and its release is a click on that agent). So each
+   candidate is TRIED the way a person would: the pointer goes there, the
+   program gets a moment to show its cursor, and the first place it shows
+   the plain arrow is the one. If none does, the first visible one. */
+#[cfg(target_os = "windows")]
+unsafe fn aim_probe(hwnd: windows_sys::Win32::Foundation::HWND, fractions: &[f64]) -> Option<(i32, i32)> {
+    unsafe {
+        let pts = aim_points(hwnd, fractions);
+        for &(x, y) in pts.iter().take(12) {
+            let mut v = [drag_input(x as f64, y as f64, 0)];
+            drag_inputs(&mut v);
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            if cursor_is_arrow() {
+                return Some((x, y));
+            }
+        }
+        pts.first().copied()
+    }
+}
+
+/* A wheel aimed at bare map: where the pointer already is, if that is this
+   window and shows the arrow; else the first candidate that does; the
+   usual aim without candidates. */
+#[cfg(target_os = "windows")]
+unsafe fn zoom_aim_points(hwnd: windows_sys::Win32::Foundation::HWND, fractions: &[f64]) -> Result<(), String> {
+    use windows_sys::Win32::Foundation::POINT;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
+    unsafe {
+        let mut cur = POINT { x: 0, y: 0 };
+        if GetCursorPos(&mut cur) != 0 && zoom_root_at(cur) == hwnd as isize && cursor_is_arrow() {
+            return Ok(());
+        }
+        match aim_probe(hwnd, fractions) {
+            Some((x, y)) => {
+                SetCursorPos(x, y);
+                Ok(())
+            }
+            None => zoom_aim_at(hwnd),
+        }
+    }
+}
+
 #[cfg(target_os = "windows")]
 #[tauri::command]
 fn zoom_target(app: tauri::AppHandle) -> serde_json::Value {
@@ -598,7 +690,13 @@ fn zoom_target(app: tauri::AppHandle) -> serde_json::Value {
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
-fn zoom_send(app: tauri::AppHandle, hwnd: isize, method: String, notches: i32) -> Result<String, String> {
+fn zoom_send(
+    app: tauri::AppHandle,
+    hwnd: isize,
+    method: String,
+    notches: i32,
+    aim: Option<Vec<f64>>,
+) -> Result<String, String> {
     use std::{thread, time::Duration};
     use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
@@ -682,7 +780,10 @@ fn zoom_send(app: tauri::AppHandle, hwnd: isize, method: String, notches: i32) -
         let modifier: Option<VIRTUAL_KEY>;
         match method.as_str() {
             "ctrl_wheel" | "wheel" | "alt_wheel" => {
-                zoom_aim_at(h)?;
+                match aim.as_deref() {
+                    Some(fr) if fr.len() >= 2 => zoom_aim_points(h, fr)?,
+                    _ => zoom_aim_at(h)?,
+                }
                 modifier = match method.as_str() {
                     "ctrl_wheel" => Some(VK_CONTROL),
                     "alt_wheel" => Some(VK_MENU),
@@ -740,7 +841,7 @@ fn zoom_target() -> serde_json::Value {
 
 #[cfg(not(target_os = "windows"))]
 #[tauri::command]
-fn zoom_send(_hwnd: isize, _method: String, _notches: i32) -> Result<String, String> {
+fn zoom_send(_hwnd: isize, _method: String, _notches: i32, _aim: Option<Vec<f64>>) -> Result<String, String> {
     Err("only available on Windows".into())
 }
 
@@ -1833,8 +1934,40 @@ fn ws3d_squeeze(s: &str) -> String {
     s.chars().filter(|c| c.is_alphanumeric()).flat_map(|c| c.to_lowercase()).collect()
 }
 
-/* How well a file or folder name says "3D WORKSPACE": 0 is not at all. */
-fn ws3d_score(file_name: &str) -> i32 {
+/* His own programs JARVIS opens by name. 3D Workspace (2.13.0) and, since
+   2.15.0, JARVIS Agent Atlas — the same search for both, each with its own
+   idea of what its name looks like. */
+#[derive(Clone, Copy, PartialEq)]
+enum NamedApp {
+    Workspace3d,
+    AgentAtlas,
+}
+
+impl NamedApp {
+    fn from_key(key: &str) -> Option<NamedApp> {
+        match key {
+            "3d_workspace" | "workspace3d" => Some(NamedApp::Workspace3d),
+            "agent_atlas" | "atlas" => Some(NamedApp::AgentAtlas),
+            _ => None,
+        }
+    }
+    /* Squeezed to letters and digits: the exact name, and a looser match. */
+    fn names(self, s: &str) -> (bool, bool) {
+        match self {
+            NamedApp::Workspace3d => (
+                s == "3dworkspace" || s == "workspace3d",
+                s.contains("3d") && (s.contains("workspace") || s.contains("workspce")),
+            ),
+            NamedApp::AgentAtlas => (
+                s == "jarvisagentatlas" || s == "agentatlas",
+                s.contains("atlas") && (s.contains("agent") || s.contains("jarvis")),
+            ),
+        }
+    }
+}
+
+/* How well a file or folder name names the program: 0 is not at all. */
+fn app_score(app: NamedApp, file_name: &str) -> i32 {
     let lower = file_name.to_lowercase();
     let (stem, ext) = match lower.rfind('.') {
         Some(i) if i > 0 => (&lower[..i], &lower[i + 1..]),
@@ -1844,8 +1977,7 @@ fn ws3d_score(file_name: &str) -> i32 {
     if s.contains("uninstall") || s.contains("unins") || s.contains("setup") || s.contains("installer") {
         return 0;
     }
-    let named = s == "3dworkspace" || s == "workspace3d";
-    let loose = s.contains("3d") && (s.contains("workspace") || s.contains("workspce"));
+    let (named, loose) = app.names(&s);
     if !named && !loose {
         return 0;
     }
@@ -1897,16 +2029,16 @@ fn ws3d_places() -> Vec<(std::path::PathBuf, usize)> {
 /* The best match under one place, looking `depth` folders down. A matching
    FOLDER (an install directory) counts through the program inside it: an
    .exe named like the folder, or the only .exe there is. */
-fn ws3d_search(dir: &std::path::Path, depth: usize, best: &mut Option<(i32, std::path::PathBuf)>) {
+fn app_search(app: NamedApp, dir: &std::path::Path, depth: usize, best: &mut Option<(i32, std::path::PathBuf)>) {
     let Ok(rd) = std::fs::read_dir(dir) else { return };
     for entry in rd.flatten() {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
         let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
-        let score = ws3d_score(&name);
+        let score = app_score(app, &name);
         if is_dir {
             if score > 0 {
-                if let Some(exe) = ws3d_exe_in(&path) {
+                if let Some(exe) = app_exe_in(app, &path) {
                     let s = score + 15;
                     if best.as_ref().map_or(true, |(b, _)| s > *b) {
                         *best = Some((s, exe));
@@ -1914,7 +2046,7 @@ fn ws3d_search(dir: &std::path::Path, depth: usize, best: &mut Option<(i32, std:
                 }
             }
             if depth > 1 {
-                ws3d_search(&path, depth - 1, best);
+                app_search(app, &path, depth - 1, best);
             }
         } else if score > 0 && best.as_ref().map_or(true, |(b, _)| score > *b) {
             *best = Some((score, path));
@@ -1922,7 +2054,7 @@ fn ws3d_search(dir: &std::path::Path, depth: usize, best: &mut Option<(i32, std:
     }
 }
 
-fn ws3d_exe_in(dir: &std::path::Path) -> Option<std::path::PathBuf> {
+fn app_exe_in(app: NamedApp, dir: &std::path::Path) -> Option<std::path::PathBuf> {
     let exes: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
         .ok()?
         .flatten()
@@ -1934,19 +2066,19 @@ fn ws3d_exe_in(dir: &std::path::Path) -> Option<std::path::PathBuf> {
         })
         .collect();
     exes.iter()
-        .find(|p| ws3d_score(&p.file_name().unwrap_or_default().to_string_lossy()) > 0)
+        .find(|p| app_score(app, &p.file_name().unwrap_or_default().to_string_lossy()) > 0)
         .cloned()
         .or_else(|| if exes.len() == 1 { exes.into_iter().next() } else { None })
 }
 
-fn find_3d_workspace(given: Option<&str>) -> Result<std::path::PathBuf, Vec<String>> {
+fn find_app(app: NamedApp, given: Option<&str>) -> Result<std::path::PathBuf, Vec<String>> {
     if let Some(g) = given.map(str::trim).filter(|g| !g.is_empty()) {
         let p = std::path::PathBuf::from(g.trim_matches('"'));
         if p.is_file() {
             return Ok(p);
         }
         if p.is_dir() {
-            if let Some(exe) = ws3d_exe_in(&p) {
+            if let Some(exe) = app_exe_in(app, &p) {
                 return Ok(exe);
             }
         }
@@ -1954,12 +2086,16 @@ fn find_3d_workspace(given: Option<&str>) -> Result<std::path::PathBuf, Vec<Stri
     let places = ws3d_places();
     let mut best: Option<(i32, std::path::PathBuf)> = None;
     for (dir, depth) in &places {
-        ws3d_search(dir, *depth, &mut best);
+        app_search(app, dir, *depth, &mut best);
     }
     match best {
         Some((_, p)) => Ok(p),
         None => Err(places.iter().map(|(d, _)| d.display().to_string()).collect()),
     }
+}
+
+fn find_3d_workspace(given: Option<&str>) -> Result<std::path::PathBuf, Vec<String>> {
+    find_app(NamedApp::Workspace3d, given)
 }
 
 #[cfg(target_os = "windows")]
@@ -2047,6 +2183,352 @@ async fn launch_3d_workspace(
         "app_path": app.display().to_string(),
         "model_path": model_path,
     }))
+}
+
+/* "LET ME SEE YOUR AGENT SYSTEM" (2.15.0) — his JARVIS Agent Atlas, the
+   3D map of the agents, built as its own Tauri app. Found the same way as
+   3D Workspace; and since it is a map he keeps coming back to, an Atlas
+   that is already open is brought forward rather than opened twice. */
+#[cfg(target_os = "windows")]
+unsafe fn foreground_unlock() {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+    };
+    /* Windows lets the process that sent the last input choose the
+       foreground window. An unassigned key, down and up, does nothing
+       else (the same one the Alt-wheel zoom uses to keep menus shut). */
+    let key = |up: bool| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: 0xE8,
+                wScan: 0,
+                dwFlags: if up { KEYEVENTF_KEYUP } else { 0 },
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+    let mut k = [key(false), key(true)];
+    unsafe {
+        SendInput(2, k.as_mut_ptr(), std::mem::size_of::<INPUT>() as i32);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn focus_running(app: &tauri::AppHandle, named: NamedApp) -> Option<(isize, bool)> {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, SetForegroundWindow, ShowWindow, SW_RESTORE,
+    };
+    let own = zoom_own_windows(app);
+    let found = bring_app_windows(&own).into_iter().find(|c| {
+        let (a, b) = named.names(&ws3d_squeeze(&c.title));
+        let (x, y) = named.names(&ws3d_squeeze(&c.exe));
+        a || b || x || y
+    })?;
+    unsafe {
+        let h = found.hwnd as HWND;
+        if found.iconic {
+            ShowWindow(h, SW_RESTORE);
+        }
+        foreground_unlock();
+        SetForegroundWindow(h);
+        std::thread::sleep(std::time::Duration::from_millis(80));
+        Some((found.hwnd, GetForegroundWindow() as isize == found.hwnd))
+    }
+}
+
+#[tauri::command]
+async fn launch_app(
+    app: tauri::AppHandle,
+    program: String,
+    path: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let named = NamedApp::from_key(&program).ok_or_else(|| format!("no program called \"{}\"", program))?;
+    #[cfg(target_os = "windows")]
+    if named == NamedApp::AgentAtlas {
+        if let Some((hwnd, front)) = focus_running(&app, named) {
+            return Ok(serde_json::json!({ "launched": true, "already_open": true, "hwnd": hwnd, "foreground": front }));
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = &app;
+    let exe = match find_app(named, path.as_deref()) {
+        Ok(p) => p,
+        Err(searched) => {
+            return Ok(serde_json::json!({ "launched": false, "reason": "not_found", "searched": searched }))
+        }
+    };
+    shell_open(&exe, None)?;
+    Ok(serde_json::json!({ "launched": true, "already_open": false, "app_path": exe.display().to_string() }))
+}
+
+/* ------------------------------------------------------------------
+   TURNING ANOTHER PROGRAM'S 3D VIEW WITH ONE HAND (2.15.0)
+
+   Precise control turns JARVIS's own 3D viewer by an event. The Agent
+   Atlas is another program, so it is turned the way he would turn it with
+   the mouse: a left-button drag (its OrbitControls: across, one window
+   height of drag is a full turn; up and down tilt). The page sends the
+   turn in degrees; this turns degrees into that drag.
+
+     start  only to the window asked about, only while it is in front;
+            the pointer is remembered, then pressed at the first of the
+            page's aim points where the program shows the plain arrow —
+            bare map, never a label or an agent (aim_probe);
+     move   the drag continues by dx/360 of the window's height across and
+            -dy/360 up (up is negative on the screen). At the edge of the
+            window it lets go, finds bare map again (the labels have turned
+            with the map) and takes hold there, so the turn never runs out
+            of room. If another program comes in front,
+            the button is let go at once and nothing more is sent;
+     end    let go, and the pointer goes back where it was. A drag that
+            barely moved is nudged 8 px out and back first: the Atlas reads
+            a press-and-release that never moved as a click.
+
+   A watchdog lets go of the button if two seconds pass with no word from
+   the page (the camera closed mid-turn, say): a button left down would
+   turn his next mouse move into a drag.
+------------------------------------------------------------------ */
+#[cfg(target_os = "windows")]
+struct DragState {
+    hwnd: isize,
+    start: (f64, f64),
+    cur: (f64, f64),
+    down_at: (f64, f64),
+    travelled: f64,
+    saved: (i32, i32),
+    rect: (f64, f64, f64, f64),
+    height: f64,
+    last: std::time::Instant,
+    gen: u64,
+    aim: Vec<f64>,
+}
+
+#[cfg(target_os = "windows")]
+static DRAG: std::sync::Mutex<Option<DragState>> = std::sync::Mutex::new(None);
+#[cfg(target_os = "windows")]
+static DRAG_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/* One mouse event at a point of the screen, in SendInput's 0..65535 over
+   the whole virtual desktop. */
+#[cfg(target_os = "windows")]
+unsafe fn drag_input(x: f64, y: f64, button: u32) -> windows_sys::Win32::UI::Input::KeyboardAndMouse::INPUT {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_MOVE, MOUSEEVENTF_VIRTUALDESK, MOUSEINPUT,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+    };
+    unsafe {
+        let vx = GetSystemMetrics(SM_XVIRTUALSCREEN) as f64;
+        let vy = GetSystemMetrics(SM_YVIRTUALSCREEN) as f64;
+        let vw = GetSystemMetrics(SM_CXVIRTUALSCREEN).max(2) as f64;
+        let vh = GetSystemMetrics(SM_CYVIRTUALSCREEN).max(2) as f64;
+        INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: INPUT_0 {
+                mi: MOUSEINPUT {
+                    dx: ((x - vx) * 65535.0 / (vw - 1.0)).round() as i32,
+                    dy: ((y - vy) * 65535.0 / (vh - 1.0)).round() as i32,
+                    mouseData: 0,
+                    dwFlags: MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK | button,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn drag_inputs(v: &mut [windows_sys::Win32::UI::Input::KeyboardAndMouse::INPUT]) -> bool {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{SendInput, INPUT};
+    unsafe { SendInput(v.len() as u32, v.as_mut_ptr(), std::mem::size_of::<INPUT>() as i32) as usize == v.len() }
+}
+
+/* Let go where the pointer is, and put the pointer back where he had it. */
+#[cfg(target_os = "windows")]
+unsafe fn drag_release(st: &DragState) {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::MOUSEEVENTF_LEFTUP;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SetCursorPos;
+    unsafe {
+        let mut v = [drag_input(st.cur.0, st.cur.1, MOUSEEVENTF_LEFTUP)];
+        drag_inputs(&mut v);
+        SetCursorPos(st.saved.0, st.saved.1);
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn drag_send(
+    app: tauri::AppHandle,
+    hwnd: isize,
+    phase: String,
+    dx: f64,
+    dy: f64,
+    aim: Option<Vec<f64>>,
+) -> Result<serde_json::Value, String> {
+    use std::time::{Duration, Instant};
+    use windows_sys::Win32::Foundation::{HWND, POINT, RECT};
+    use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetClientRect, GetCursorPos, GetForegroundWindow, IsIconic, IsWindow, SetForegroundWindow,
+    };
+    let mut guard = DRAG.lock().map_err(|_| "the turn is unavailable".to_string())?;
+    match phase.as_str() {
+        "start" => unsafe {
+            if let Some(old) = guard.take() {
+                drag_release(&old);
+            }
+            let own = zoom_own_windows(&app);
+            let label_of = |h: isize| own.iter().find(|(_, x)| *x == h).map(|(l, _)| l.clone());
+            if label_of(hwnd).is_some() {
+                return Err("that is JARVIS's own window".into());
+            }
+            let h = hwnd as HWND;
+            if hwnd == 0 || IsWindow(h) == 0 {
+                return Err("that window is gone".into());
+            }
+            if IsIconic(h) != 0 {
+                return Err("the window is minimised".into());
+            }
+            let fg = GetForegroundWindow() as isize;
+            if fg != hwnd {
+                let ours = label_of(fg).map(|l| zoom_is_control(&l)).unwrap_or(false);
+                if !(ours || fg == 0) {
+                    return Err("foreground changed".into());
+                }
+                SetForegroundWindow(h);
+                std::thread::sleep(Duration::from_millis(60));
+                if GetForegroundWindow() as isize != hwnd {
+                    return Err("could not bring the window forward, so nothing was sent".into());
+                }
+            }
+            let mut rc: RECT = std::mem::zeroed();
+            if GetClientRect(h, &mut rc) == 0 {
+                return Err("could not read the window's size".into());
+            }
+            let mut tl = POINT { x: 0, y: 0 };
+            ClientToScreen(h, &mut tl);
+            let (w, ht) = ((rc.right - rc.left) as f64, (rc.bottom - rc.top) as f64);
+            if w < 80.0 || ht < 80.0 {
+                return Err("the window has no room to turn in".into());
+            }
+            let rect = (tl.x as f64, tl.y as f64, tl.x as f64 + w, tl.y as f64 + ht);
+            /* The page's measured places for this program, else the Atlas's. */
+            let fractions = aim.filter(|a| a.len() >= 2).unwrap_or_else(|| vec![0.64, 0.77, 0.60, 0.79, 0.66, 0.93, 0.5, 0.9, 0.5, 0.5]);
+            let mut saved = POINT { x: 0, y: 0 };
+            GetCursorPos(&mut saved);
+            let start = aim_probe(h, &fractions)
+                .map(|(x, y)| (x as f64, y as f64))
+                .ok_or("the window is covered where it would be turned")?;
+            let mut v = [drag_input(start.0, start.1, 0), drag_input(start.0, start.1, MOUSEEVENTF_LEFTDOWN)];
+            if !drag_inputs(&mut v) {
+                return Err("Windows blocked the input (an elevated program, or a secure screen)".into());
+            }
+            let gen = DRAG_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+            *guard = Some(DragState {
+                hwnd,
+                start,
+                cur: start,
+                down_at: start,
+                travelled: 0.0,
+                saved: (saved.x, saved.y),
+                rect,
+                height: ht,
+                last: Instant::now(),
+                gen,
+                aim: fractions,
+            });
+            drop(guard);
+            std::thread::spawn(move || loop {
+                std::thread::sleep(Duration::from_millis(250));
+                let Ok(mut g) = DRAG.lock() else { return };
+                match g.as_ref() {
+                    Some(st) if st.gen == gen => {
+                        if st.last.elapsed() > Duration::from_millis(2000) {
+                            if let Some(st) = g.take() {
+                                drag_release(&st);
+                            }
+                            return;
+                        }
+                    }
+                    _ => return,
+                }
+            });
+            Ok(serde_json::json!({ "phase": "start", "x": start.0, "y": start.1, "height": ht }))
+        },
+        "move" => unsafe {
+            let st = match guard.as_mut() {
+                Some(st) if st.hwnd == hwnd => st,
+                _ => return Err("no turn in progress".into()),
+            };
+            if GetForegroundWindow() as isize != hwnd {
+                if let Some(st) = guard.take() {
+                    drag_release(&st);
+                }
+                return Err("foreground changed, so the turn was let go".into());
+            }
+            st.last = Instant::now();
+            if dx == 0.0 && dy == 0.0 {
+                return Ok(serde_json::json!({ "phase": "move", "held": true }));
+            }
+            let lim = st.height / 2.0;
+            let px = (dx / 360.0 * st.height).clamp(-lim, lim);
+            let py = (-dy / 360.0 * st.height).clamp(-lim, lim);
+            let (l, t, r, b) = st.rect;
+            let inset = 6.0;
+            let inside = |p: (f64, f64)| p.0 > l + inset && p.0 < r - inset && p.1 > t + inset && p.1 < b - inset;
+            let clampin = |p: (f64, f64)| ((p.0).clamp(l + inset, r - inset), (p.1).clamp(t + inset, b - inset));
+            let mut v = Vec::with_capacity(4);
+            let mut next = (st.cur.0 + px, st.cur.1 + py);
+            let mut regrabbed = false;
+            if !inside(next) {
+                /* Let go, find bare map again (the map has turned since
+                   the first press, and its labels with it), take hold. */
+                let mut up = [drag_input(st.cur.0, st.cur.1, MOUSEEVENTF_LEFTUP)];
+                drag_inputs(&mut up);
+                if let Some((x, y)) = aim_probe(hwnd as windows_sys::Win32::Foundation::HWND, &st.aim) {
+                    st.start = (x as f64, y as f64);
+                }
+                v.push(drag_input(st.start.0, st.start.1, 0));
+                v.push(drag_input(st.start.0, st.start.1, MOUSEEVENTF_LEFTDOWN));
+                st.down_at = st.start;
+                st.travelled = 0.0;
+                next = clampin((st.start.0 + px, st.start.1 + py));
+                regrabbed = true;
+            }
+            v.push(drag_input(next.0, next.1, 0));
+            if !drag_inputs(&mut v) {
+                if let Some(st) = guard.take() {
+                    drag_release(&st);
+                }
+                return Err("Windows blocked the input".into());
+            }
+            st.cur = next;
+            st.travelled = st.travelled.max(((next.0 - st.down_at.0).powi(2) + (next.1 - st.down_at.1).powi(2)).sqrt());
+            Ok(serde_json::json!({ "phase": "move", "px": px, "py": py, "regrabbed": regrabbed }))
+        },
+        "end" => unsafe {
+            let Some(st) = guard.take() else { return Ok(serde_json::json!({ "phase": "end", "held": false })) };
+            if st.travelled < 7.0 {
+                let mut v = [drag_input(st.cur.0 + 8.0, st.cur.1, 0), drag_input(st.cur.0, st.cur.1, 0)];
+                drag_inputs(&mut v);
+            }
+            drag_release(&st);
+            Ok(serde_json::json!({ "phase": "end", "held": true }))
+        },
+        other => Err(format!("unknown turn phase \"{}\"", other)),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn drag_send(_hwnd: isize, _phase: String, _dx: f64, _dy: f64, _aim: Option<Vec<f64>>) -> Result<serde_json::Value, String> {
+    Err("only available on Windows".into())
 }
 
 /* WHO IS ON TOP WHILE THE ORB FILLS THE SCREEN.
@@ -2335,7 +2817,9 @@ fn main() {
             stashed_model,
             refresh_orb,
             save_model_file,
-            launch_3d_workspace
+            launch_3d_workspace,
+            launch_app,
+            drag_send
         ])
         .setup(|app| {
             let window = app
