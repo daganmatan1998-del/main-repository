@@ -562,9 +562,9 @@ ul[class], ol[class] { list-style: none; padding: 0; }
   position: fixed; left: 16px; bottom: 16px; z-index: 96; width: min(440px, calc(100% - 32px));
   background: var(--ink); color: var(--bone); padding: 24px; display: grid; gap: 16px;
   box-shadow: 0 24px 60px -24px rgba(0,0,0,.5);
-  transform: translateY(calc(100% + 32px)); transition: transform .9s var(--ease);
+  transform: translateY(calc(100% + 32px)); visibility: hidden; transition: transform .9s var(--ease), visibility 0s linear .9s;
 }
-.consent.is-open { transform: none; }
+.consent.is-open { transform: none; visibility: visible; transition: transform .9s var(--ease), visibility 0s; }
 .consent p { font-size: var(--fs-small); line-height: 1.55; color: #d8d3ca; }
 .consent p a { text-decoration: underline; text-underline-offset: 2px; color: var(--bone); }
 .consent__actions { display: flex; flex-wrap: wrap; gap: 8px; }
