@@ -55,7 +55,9 @@
     turnEnabled: true,  // precise control: one pinch turns a 3D model
     turnScreen: 0.75,   // the share of the picture the hand crosses for one full turn (360°)
     scrollSpeed: 1,     // one pinched hand scrolling anything else: 1 = a quarter of the picture is 4 wheel notches
-    pointerEnabled: true // in the Agent Atlas: one finger is the mouse, folding it clicks
+    pointerEnabled: true, // in the Agent Atlas: one finger is the mouse, folding it clicks
+    trackWidth: 960,    // on the CPU path the picture is read at this width (0 = as the camera gives it): same hand, ~30% faster
+    oneHandPointing: true // while the finger is the mouse only that hand is tracked: the second-hand search costs about half the time
   });
   const LIMITS = {
     sensitivity: [0.25, 3], threshold: [0, 30], smoothing: [0, 1],
@@ -69,6 +71,8 @@
       if(typeof s.enabled === 'boolean') out.enabled = s.enabled;
       if(typeof s.turnEnabled === 'boolean') out.turnEnabled = s.turnEnabled;
       if(typeof s.pointerEnabled === 'boolean') out.pointerEnabled = s.pointerEnabled;
+      if(typeof s.oneHandPointing === 'boolean') out.oneHandPointing = s.oneHandPointing;
+      if(isFinite(Number(s.trackWidth))) out.trackWidth = Number(s.trackWidth) <= 0 ? 0 : clamp(Number(s.trackWidth), 320, 1920);
       for(const k of Object.keys(LIMITS)){
         const v = Number(s[k]);
         if(isFinite(v)) out[k] = Math.min(LIMITS[k][1], Math.max(LIMITS[k][0], v));
@@ -1227,9 +1231,22 @@
       }catch(e){ lastErr = e; }
     }
     if(!lm) throw lastErr || new Error('the hand tracker would not start');
-    let lastTs = 0;
+    let lastTs = 0, hands = 2, switching = false;
     return {
       delegate: used,
+      /* How many hands it looks for (2.21.0). With two asked for and one in
+         view it runs the palm detector on EVERY frame to find the other, which
+         is half of what a read costs (measured: 117 ms against 65 on the CPU
+         path). Changing it reconfigures the graph (about 15 ms) and the next
+         read finds the hand again, so it is done rarely. */
+      get hands(){ return hands; },
+      get busy(){ return switching; },
+      setHands(n){
+        if(n === hands || switching) return false;
+        switching = true; hands = n;
+        Promise.resolve().then(() => lm.setOptions({ numHands: n })).catch(() => {}).then(() => { switching = false; });
+        return true;
+      },
       detect(source, tMs){
         const ts = Math.max(lastTs + 1, Math.round(tMs));      // must strictly increase
         lastTs = ts;
@@ -1422,6 +1439,13 @@
     }
 
     let delegate = o.delegate, switched = false;
+    /* The first reads of a GPU path compile its shaders and take a second or
+       more; the verdict on a path is the MEDIAN of the reads after that
+       (GPU_WARMUP skipped), taken once there are GPU_JUDGE_AT. (It was the mean
+       of the first 20 including that one — enough to send a fast GPU path to
+       the CPU for good.) */
+    const GPU_WARMUP = 6, GPU_JUDGE_AT = 36, GPU_TOO_SLOW_MS = 70;
+    let reads = [], inputCanvas = null, inputCtx = null, inputW = 0, lastHandsSwitch = -1e9;
     function ensureTracker(){
       if(tracker) return Promise.resolve(tracker);
       if(!loading){
@@ -1469,15 +1493,31 @@
       if(m !== lastMedia){ lastMedia = m; tick(null); }
       schedule();
     }
+    /* What the tracker is given. On the CPU path a 1280-wide picture costs
+       about 30% more than the same picture at 960 (measured; the hand's
+       points differ by under half a camera pixel), so it is drawn smaller
+       first. The GPU path takes the video as it is. */
+    function trackerInput(){
+      const w = settings.trackWidth;
+      if(!w || !tracker || tracker.delegate !== 'CPU' || !root.document || video.videoWidth <= w) { inputW = video.videoWidth; return video; }
+      const h = Math.round(video.videoHeight * w / video.videoWidth);
+      if(!inputCanvas){ inputCanvas = root.document.createElement('canvas'); inputCtx = inputCanvas.getContext('2d'); }
+      if(inputCanvas.width !== w || inputCanvas.height !== h){ inputCanvas.width = w; inputCanvas.height = h; }
+      inputCtx.drawImage(video, 0, 0, w, h);
+      inputW = w;
+      return inputCanvas;
+    }
     function tick(meta){
       if(!running) return;
       try{
         if(tracker && video.readyState >= 2 && video.videoWidth){
+          if(tracker.busy) return;                              // a reconfigure is under way (a few ms)
           const t = now();
-          const hands = tracker.detect(video, t);
+          const hands = tracker.detect(trackerInput(), t);
           const t2 = now();
           frames++; spent += t2 - t;
           fpsN++;
+          reads.push(t2 - t);
           /* Measured: the read, the picture's age, the camera's real rate. */
           inferEma = inferEma === null ? t2 - t : inferEma + ((t2 - t) - inferEma) * 0.1;
           if(meta && typeof meta.captureTime === 'number'){
@@ -1491,7 +1531,7 @@
             trackFps = perfN / secs;
             camFps = (perfP0 >= 0 && meta && typeof meta.presentedFrames === 'number') ? (meta.presentedFrames - perfP0) / secs : trackFps;
             perfAt = t2; perfN = 0; perfP0 = meta && typeof meta.presentedFrames === 'number' ? meta.presentedFrames : -1;
-            if(o.onStatus) o.onStatus({ kind: 'perf', camFps, trackFps, inferMs: inferEma, lateMs: lateEma });
+            if(o.onStatus) o.onStatus({ kind: 'perf', camFps, trackFps, inferMs: inferEma, lateMs: lateEma, delegate: tracker.delegate, hands: tracker.hands, inputW });
           }
           pointer.setLate(lateEma);
           if(t2 - fpsAt >= 1000){ fps = fpsAt ? fpsN * 1000 / (t2 - fpsAt) : 0; fpsAt = t2; fpsN = 0; }
@@ -1499,14 +1539,24 @@
           /* A GPU path that is slow — a machine with no real GPU, or a
              broken driver, runs it in software — is worse than the CPU one.
              Measured over the first frames, and switched once. */
-          if(frames === 20 && !switched && tracker.delegate === 'GPU' && spent / frames > 70){
+          if(!switched && tracker.delegate === 'GPU' && reads.length === GPU_JUDGE_AT && median(reads.slice(GPU_WARMUP)) > GPU_TOO_SLOW_MS){
             switched = true;
             try{ tracker.close(); }catch(e){}
-            tracker = null; loading = null; delegate = 'CPU'; frames = 0; spent = 0;
+            tracker = null; loading = null; delegate = 'CPU'; frames = 0; spent = 0; reads = [];
             ensureTracker().catch(() => {});
+            return;
           }
           const ev = gesture.update({ t: t2, hands, width: video.videoWidth, height: video.videoHeight });
           lastEv = ev;
+          /* ONE HAND WHILE THE FINGER IS THE MOUSE (2.21.0): the second-hand
+             search is half of a read, and he cannot start a zoom with the
+             other hand while pointing anyway (one gesture at a time). Back to
+             two as soon as the pointer lets go. Not more often than every 1.5
+             s: each change costs a re-detection. */
+          if(settings.oneHandPointing && t2 - lastHandsSwitch > 1500){
+            const want = ev.pointer && ev.pointer.state !== 'idle' ? 1 : 2;
+            if(tracker.hands !== want && tracker.setHands(want)) lastHandsSwitch = t2;
+          }
           if(ev.state === 'idle') probeForeground(t2);
           manager.handle(ev);
           if(settings.turnEnabled) relay.handle(ev.turn);
@@ -1544,6 +1594,7 @@
       row.ptr = [p.type || '', p.state || '', p.x == null ? null : r4(p.x), p.y == null ? null : r4(p.y), r4(p.vx || 0), r4(p.vy || 0), Math.round((p.bend || 0) * 10) / 10];
       row.trn = (ev.turn && ev.turn.type) || '';
       row.zm = ev.state || '';
+      row.nh = tracker ? tracker.hands : 0;
       rec.rows.push(row);
       if(t2 - rec.reported >= 1000){ rec.reported = t2; if(o.onStatus) o.onStatus({ kind: 'recording', left: Math.max(0, Math.ceil((rec.until - t2) / 1000)) }); }
       if(t2 >= rec.until) finishRecording();
@@ -1577,7 +1628,7 @@
             format: 'jarvis-tracking-1', startedAt: new Date().toISOString(), seconds: secs,
             userAgent: root.navigator ? root.navigator.userAgent : '',
             screen: root.screen ? { w: root.screen.width, h: root.screen.height, dpr: root.devicePixelRatio || 1 } : null,
-            video: { w: video.videoWidth, h: video.videoHeight }, delegate: tracker && tracker.delegate,
+            video: { w: video.videoWidth, h: video.videoHeight, input: inputW }, delegate: tracker && tracker.delegate,
             hasCaptureTime: capturedStamps, camera: info, settings } };
           if(o.onStatus) o.onStatus({ kind: 'recording', left: secs });
         });
@@ -1607,7 +1658,8 @@
       },
       stats(){ return { frames, avgMs: frames ? spent / frames : 0, running, delegate: tracker && tracker.delegate, switched,
                         missed, repeats, fps, everyFrame: byFrame, handsAt, last: lastEv,
-                        camFps, trackFps, inferMs: inferEma, lateMs: lateEma, stamped: capturedStamps, recording: !!rec }; }
+                        camFps, trackFps, inferMs: inferEma, lateMs: lateEma, stamped: capturedStamps, recording: !!rec,
+                        hands: tracker && tracker.hands, inputW }; }
     };
     return api;
   }

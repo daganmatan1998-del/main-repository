@@ -1628,3 +1628,47 @@ which one you have):
 - **A read over 40 ms:** the tracker is on the CPU, or the GPU path is
   slow. The camera window says which in the log; "delegate": "CPU" can be
   forced in the saved settings.
+
+## Page 2.21.0: the hand is read twice as fast (needs the app rebuilt)
+
+**What the photo showed.** The camera window's line read `30 FPS · 139 MS ·
+LATE 162 MS`. The camera was fine at 30 pictures a second. But a single read
+of the hand took 139 ms, so the tracker could read only about 7 pictures a
+second. That is what made the cursor jump: the Rust glide fills in the gaps,
+but it can only guess between positions that are 140 ms apart.
+
+**Three causes, three fixes** (measured on the same real tracker, on the CPU
+path, where a read took 117 ms before):
+
+1. **The wrong path was probably chosen for good.** The page tries the
+   graphics card first and switches to the CPU if the first 20 reads average
+   over 70 ms. But a graphics path's first read compiles its shaders and
+   takes a second or more. One read of 1.5 s among 20 gave a 104 ms
+   "average" for a card that reads in 15 ms, so it was thrown out for good.
+   The verdict is now the *median* of the reads after the first six, taken
+   after 36. A test with a 1.5 s first read keeps the card; the old code
+   switched. A genuinely slow card (110 ms a read, steady) is still dropped.
+   The line now names the path (`GPU` or `CPU`), so you can see which one you
+   are on.
+2. **A picture read at its full size costs more than needed.** On the CPU
+   path the picture is drawn at 960 wide first. Same hand, about 30% faster;
+   the fingertip moves by under half a camera pixel. The graphics path still
+   gets the video as it is.
+3. **While one hand is in view and two are asked for, the palm detector runs
+   on every frame** to look for the second. That is half of a read. While the
+   finger is the mouse, only that hand is looked for (about 45% faster), and
+   two hands again as soon as the pointer lets go. A change takes about
+   15 ms and one re-detection, so it is not done more often than every 1.5 s.
+
+**The trade.** While you are pointing, the other hand is not seen, so you
+cannot start a zoom with it. Lower the finger first (the pointer lets go
+after a third of a second) and then use both hands. The one-hand pinch
+(scroll, turn) still looks for two hands.
+
+**Measured** (real tracker, CPU, one pointing hand): 117 ms a read became
+about 55 ms, so about 18 reads a second instead of 8. On a machine like
+yours (139 ms) expect about 65 ms. If you are on the CPU and still see 60
+ms or more, a working graphics path (up-to-date driver) is the next gain.
+
+**Switches** for tuning, in the saved gesture settings: `trackWidth` (960;
+0 = as the camera gives it) and `oneHandPointing` (true).

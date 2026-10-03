@@ -2512,7 +2512,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.20.0';
+const APP_VERSION = '2.21.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -18047,7 +18047,7 @@ adjustLayout();
       if(s.kind === 'perf'){
         const pe = document.getElementById('gesturePerf');
         if(pe) pe.textContent = 'camera ' + Math.round(s.camFps || 0) + ' fps' + (s.camFps < 24 ? ' (LOW — more light, or switch off the camera\'s low-light mode)' : '') +
-                                ' · tracker ' + Math.round(s.trackFps || 0) + ' fps, ' + Math.round(s.inferMs || 0) + ' ms a read' +
+                                ' · tracker ' + Math.round(s.trackFps || 0) + ' fps, ' + Math.round(s.inferMs || 0) + ' ms a read' + (s.delegate ? ' (' + s.delegate + (s.hands === 1 ? ', one hand' : '') + ')' : '') +
                                 (s.lateMs != null ? ' · a picture is ' + Math.round(s.lateMs) + ' ms old when read' : '');
         return;
       }

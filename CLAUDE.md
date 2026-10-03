@@ -491,6 +491,29 @@ single file `dist/index.html`.
   replay.mjs (scratchpad) runs a file through the real gesture code + the
   glide.rs binary. hands16.e2e (real tracker) and late.e2e (fake device with
   stamps) cover it; chain.mjs/pointer19.test the glide.
+- **A read of the hand must be FAST, and the tracker has three cost knobs
+  (2.21.0).** His photo showed 139 ms a read = ~7 reads a second whatever the
+  camera gives; every smoothing downstream guesses between positions that
+  far apart. (1) The GPU/CPU verdict is the MEDIAN of reads GPU_WARMUP (6)
+  .. GPU_JUDGE_AT (36), over GPU_TOO_SLOW_MS (70) — never the mean from the
+  first read: a GPU's first read compiles shaders (1 s+) and the old mean
+  of 20 sent a fast GPU to the CPU for good (controller.test.mjs has the
+  1.5 s first-read case; the old code fails it). (2) CPU path only:
+  trackerInput() draws the video into a settings.trackWidth (960) canvas,
+  ~30% cheaper, tip within 0.5 camera px (bench/bench2.mjs). The GPU path
+  gets the video. (3) numHands 2 with ONE hand in view runs the palm
+  detector every frame (read 117 -> 65 ms with numHands 1): while the
+  pointer state is not idle (settings.oneHandPointing) the tracker asks for
+  1 via tracker.setHands (HandLandmarker.setOptions: ~15 ms reconfigure +
+  one re-detection; tracker.busy skips that tick; at most every 1.5 s) and
+  back to 2 when it lets go. The one-hand pinch keeps 2. perf status and
+  the camera line name the path (GPU/CPU), hands and input width.
+  controller.test.mjs drives startGestureZoom in a vm with a stand-in
+  Vision whose reads take scripted ms and a clock it moves.
+- **Background shells die with their task.** A regression started with a
+  plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
+  looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &
+  disown` and read the .out file.
 - **3D Workspace does not read its argument.** Its main.rs (branch
   claude/3d-model-workspace) ignores argv, so "open it with this model"
   starts it and saves the .glb in JARVIS\3D Workspace, but the model is not

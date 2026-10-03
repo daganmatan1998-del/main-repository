@@ -142,7 +142,7 @@
            that gives fewer than 24 a second is the first thing to fix. */
         if(s.kind === 'perf'){
           liveText = liveText.replace(/ · \d+ fps/, '');          // the camera's setting; the measured rate replaces it
-          perfNote = Math.round(s.camFps) + ' fps' + (s.camFps < 24 ? ' LOW' : '') + ' · ' + Math.round(s.inferMs || 0) + ' ms' +
+          perfNote = (s.delegate ? s.delegate + ' · ' : '') + Math.round(s.camFps) + ' fps' + (s.camFps < 24 ? ' LOW' : '') + ' · ' + Math.round(s.inferMs || 0) + ' ms' +
                      (s.lateMs != null ? ' · late ' + Math.round(s.lateMs) + ' ms' : '');
           showState(); emit('jarvis://gesture-status', s); return;
         }
