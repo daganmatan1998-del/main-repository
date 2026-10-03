@@ -1759,3 +1759,44 @@ allows exactly `ms-settings:`, `microsoft.windows.camera:` and `spotify:`.
 
 **Needs the app rebuilt** (the capability file, the menu and the camera
 change) **and the worker deployed** (Groq, Spotify).
+
+## Page 2.22.1: a complex 3D request no longer ends in silence
+
+**What happened.** Asked for something with many parts ("a cargo drone with six
+landing legs, a sensor dome, a ring of thrusters and a hinged hatch"), he said
+"on it" and then nothing. A model built from code is written as the arguments
+of one tool call, and a complex one is several thousand tokens. When the
+length limit landed inside that call, the call had no arguments and nothing
+could run. The automatic retry with more room only happened when he had said
+*nothing* first, and he almost always opens with "on it". The warning went to
+the chat, which is not on screen in the desktop app. So: silence.
+
+**Fixed, in order:**
+1. **A cut-off tool call is retried with more room whatever he said first**
+   (10,000 → 20,000 tokens). He says aloud "That is a big build, trying again
+   with more room."
+2. **Still cut off: one more try with a "much shorter" instruction** in the
+   system prompt (loops and helper functions, 24–32 segments, under 150
+   lines, no introduction). Never more than three attempts.
+3. **Cut off for good: he says why and what to do** ("The code for that model
+   was too long for me to finish. Ask for a simpler one, or tell me to
+   generate it with the 3D service"). He no longer says "I did not actually
+   do that, say it again", which only repeated the same failure.
+4. **The build tool tells the model to keep the code short** for complex
+   objects (helper functions and loops, shared geometry, 32 segments on small
+   parts), since the length of the code is what gets cut off.
+5. **A heavy model is built once and simplified, not frozen.** The code used
+   to run three times (a check, a chat bubble nobody can see on the desktop,
+   the window). Now once. If the result is over 250,000 triangles the same
+   code is run again with the segment counts capped at 32, then 20, then 12
+   (`cappedThree`), and he says the detail was reduced. 300 parts at 64
+   segments went from 14 s of frozen page to under 6 s in the (software
+   graphics) test browser, and a 13 MB model became 4 MB.
+6. **"Check yourself" lists the last few problems** (a cut-off, a tool that
+   failed), so "he went quiet" leaves a trace even though the desktop has no
+   chat on screen. "He used all his working steps" is now spoken too.
+
+**Not changed:** the 3D *service* path (`generate_3d_model`, Tripo or Meshy).
+The worker cuts its prompt at 600 characters; a very long description loses
+its tail but does not fail. If a service-built model is what went missing,
+say what he answered.

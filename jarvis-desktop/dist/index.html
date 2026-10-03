@@ -2521,7 +2521,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.22.0';
+const APP_VERSION = '2.22.1';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -7629,6 +7629,7 @@ async function selfCheck(){
         detail.push('camera: ' + Math.round(p.camFps || 0) + ' fps, tracker ' + Math.round(p.trackFps || 0) + ' fps, ' + Math.round(p.inferMs || 0) + ' ms a read (' + (p.delegate || '?') + ')' + (p.resting ? ', resting' : '') + (p.lateMs != null ? ', ' + Math.round(p.lateMs) + ' ms late' : ''));
       } else detail.push('camera: open' + (gestureSettings && gestureSettings.enabled ? ', no tracker report in the last 5 s' : ''));
     }
+    if(recentProblems.length) detail.push('recent problems:\n  ' + recentProblems.join('\n  '));
     if(!said.length) said.push(he ? 'הכול עובד: השרת, המנועים והשמיעה.' : 'Everything works: the server, my engines and my hearing.');
   }catch(err){
     said.push((he ? 'הבדיקה עצמה נכשלה: ' : 'The check itself failed: ') + ((err && err.message) || err));
@@ -10850,7 +10851,7 @@ function addModelBubble(source, prompt){
 
 const BUILD3D_TOOL = {
   name: 'build_3d_model',
-  description: "Build a 3D model yourself in Three.js code and show it in the chat, rotatable and downloadable as a .glb. NOT for a model OF something he is showing you (the camera, his screen, a photo) \u2014 that is always photo_to_3d. THIS IS THE DEFAULT for any other 3D request — it is instant and free, where generate_3d_model costs credits and takes a minute. Write a body that assembles the object and RETURN a single THREE.Group or Mesh. THREE is the only thing in scope: no imports, no loaders, no network, no animation loop, no lights or camera (the viewer supplies those). Build at roughly 1-2 units tall; it gets framed automatically.\n\nDECIDE, DO NOT INTERVIEW: never ask him for dimensions, proportions, colours or the other sides before building. Choose what a real one of these looks like, build it, and mention the key choice in one short sentence; changing it afterwards is one sentence from him. A question that you could have answered yourself costs him a round trip for nothing.\n\nQUALITY IS THE WHOLE POINT — a shape that reads as a toy is a failed answer. Hold to these:\n- SEGMENTS: never accept the defaults. Cylinders and spheres want 64 radial segments, torus 64x32. Faceted silhouettes are the single clearest tell of careless work.\n- NEVER LEAVE A HARD EDGE: real manufactured objects have a small radius everywhere. Cap a cylinder with a squashed sphere, ring an edge with a thin torus, or shape the whole profile with LatheGeometry from a points array — that last one is how you get a bottle, a jar, a vase or a glass that actually looks turned rather than stacked.\n- MATERIALS CARRY IT: the viewer has real environment reflections, so roughness and metalness do visible work. Polished metal is roughness 0.15 / metalness 1. Soft-touch plastic is roughness 0.6 / metalness 0. Glossy paint is roughness 0.25 with clearcoat 1 on MeshPhysicalMaterial. Glass is MeshPhysicalMaterial with transmission 1, roughness 0.05, thickness 0.5, ior 1.5. Never leave roughness at its default on everything, and never make one object entirely one material — a cap, a band, a label and a body should differ.\n- COLOUR: avoid pure black and pure white; 0x14161a and 0xf2f0ec read as real materials. Give the object one accent, not five.\n- DETAIL PASS: add the small things that say manufactured — a seam, a lip under a cap, a recessed panel, a base ring, a subtle taper. Three or four of those beat any amount of extra bulk.\n\nGood for: bottles, tubes, jars, boxes, cans, gadgets, furniture, packaging — the geometric things a store sells. Poor for: faces, animals, plants, fabric, anything organic; for those say so and offer generate_3d_model instead.\n\nExample of the standard expected: const g = new THREE.Group(); const profile = []; for(let i = 0; i <= 24; i++){ const t = i / 24; profile.push(new THREE.Vector2(0.36 - 0.1 * Math.pow(t, 3) + 0.02 * Math.sin(t * Math.PI), t * 1.15)); } const body = new THREE.Mesh(new THREE.LatheGeometry(profile, 64), new THREE.MeshPhysicalMaterial({ color: 0x1b1d22, roughness: 0.38, metalness: 0.1, clearcoat: 0.6 })); g.add(body); const collar = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.018, 24, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.18, metalness: 1 })); collar.rotation.x = Math.PI / 2; collar.position.y = 1.14; g.add(collar); const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.27, 0.22, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); cap.position.y = 1.26; g.add(cap); const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.26, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); capTop.scale.y = 0.35; capTop.position.y = 1.37; g.add(capTop); return g;",
+  description: "Build a 3D model yourself in Three.js code and show it in the chat, rotatable and downloadable as a .glb. NOT for a model OF something he is showing you (the camera, his screen, a photo) \u2014 that is always photo_to_3d. THIS IS THE DEFAULT for any other 3D request — it is instant and free, where generate_3d_model costs credits and takes a minute. Write a body that assembles the object and RETURN a single THREE.Group or Mesh. THREE is the only thing in scope: no imports, no loaders, no network, no animation loop, no lights or camera (the viewer supplies those). Build at roughly 1-2 units tall; it gets framed automatically.\n\nDECIDE, DO NOT INTERVIEW: never ask him for dimensions, proportions, colours or the other sides before building. Choose what a real one of these looks like, build it, and mention the key choice in one short sentence; changing it afterwards is one sentence from him. A question that you could have answered yourself costs him a round trip for nothing.\n\nQUALITY IS THE WHOLE POINT — a shape that reads as a toy is a failed answer. Hold to these:\n- SEGMENTS: never accept the defaults. Cylinders and spheres want 64 radial segments, torus 64x32. Faceted silhouettes are the single clearest tell of careless work.\n- NEVER LEAVE A HARD EDGE: real manufactured objects have a small radius everywhere. Cap a cylinder with a squashed sphere, ring an edge with a thin torus, or shape the whole profile with LatheGeometry from a points array — that last one is how you get a bottle, a jar, a vase or a glass that actually looks turned rather than stacked.\n- MATERIALS CARRY IT: the viewer has real environment reflections, so roughness and metalness do visible work. Polished metal is roughness 0.15 / metalness 1. Soft-touch plastic is roughness 0.6 / metalness 0. Glossy paint is roughness 0.25 with clearcoat 1 on MeshPhysicalMaterial. Glass is MeshPhysicalMaterial with transmission 1, roughness 0.05, thickness 0.5, ior 1.5. Never leave roughness at its default on everything, and never make one object entirely one material — a cap, a band, a label and a body should differ.\n- COLOUR: avoid pure black and pure white; 0x14161a and 0xf2f0ec read as real materials. Give the object one accent, not five.\n- DETAIL PASS: add the small things that say manufactured — a seam, a lip under a cap, a recessed panel, a base ring, a subtle taper. Three or four of those beat any amount of extra bulk.\n\nKEEP THE CODE SHORT, THE MODEL RICH: the code is cut off if it is longer than about 400 lines, and then NOTHING is built. For a complex object (a vehicle, a robot, a building, anything with more than a dozen parts) write helper functions and loops, not one block per part: a function that makes a leg and a loop that places six of them, one shared geometry and material reused by every copy of a part, 32 segments on small parts and 64 only on the large ones you see first. The viewer reduces the detail by itself when a model is very heavy, so do not worry about the triangle count - worry about the length of the code.\n\nGood for: bottles, tubes, jars, boxes, cans, gadgets, furniture, packaging — the geometric things a store sells. Poor for: faces, animals, plants, fabric, anything organic; for those say so and offer generate_3d_model instead.\n\nExample of the standard expected: const g = new THREE.Group(); const profile = []; for(let i = 0; i <= 24; i++){ const t = i / 24; profile.push(new THREE.Vector2(0.36 - 0.1 * Math.pow(t, 3) + 0.02 * Math.sin(t * Math.PI), t * 1.15)); } const body = new THREE.Mesh(new THREE.LatheGeometry(profile, 64), new THREE.MeshPhysicalMaterial({ color: 0x1b1d22, roughness: 0.38, metalness: 0.1, clearcoat: 0.6 })); g.add(body); const collar = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.018, 24, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.18, metalness: 1 })); collar.rotation.x = Math.PI / 2; collar.position.y = 1.14; g.add(collar); const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.27, 0.22, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); cap.position.y = 1.26; g.add(cap); const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.26, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); capTop.scale.y = 0.35; capTop.position.y = 1.37; g.add(capTop); return g;",
   input_schema: {
     type:'object',
     properties:{
@@ -10877,19 +10878,38 @@ async function callBuild3dTool(input){
   }catch(err){
     return { error:'that code would not compile: ' + (err.message || err) };
   }
+  /* BUILT ONCE (2.22.1). It used to run three times (a check, the chat
+     bubble, the window), and on the desktop the bubble drew a WebGL scene
+     in a chat nobody can see. A complex model is hundreds of parts at 64
+     segments: half a million triangles was seconds of frozen page, and the
+     orb with it. Now: one build; if it is heavier than a window needs, the
+     same code is run again with the segment counts capped (32, then 20,
+     then 12), and the model is told so. */
+  let built, simplified = 0, triangles = 0;
   try{
-    const probe = builder(THREE);
-    if(!probe || !probe.isObject3D) return { error:'the code ran but did not return a THREE object' };
+    built = builder(THREE);
+    if(!built || !built.isObject3D) return { error:'the code ran but did not return a THREE object' };
+    triangles = countTriangles(built);
+    for(const cap of [32, 20, 12]){
+      if(triangles <= MODEL_TRIANGLE_BUDGET) break;
+      const lighter = builder(cappedThree(cap));
+      if(!lighter || !lighter.isObject3D) break;
+      built = lighter; simplified = cap; triangles = countTriangles(built);
+    }
   }catch(err){
     return { error:'the code threw while building: ' + (err.message || err) };
   }
-  addModelBubble({ build: builder }, name);
+  if(triangles > MODEL_TRIANGLE_HARD_LIMIT){
+    return { error:'the model has ' + Math.round(triangles / 1000) + ' thousand triangles even with the detail reduced, which is more than a window can show. Write it again with fewer parts: build repeated parts in a loop from one shared geometry, and use 16 to 32 segments on small parts.' };
+  }
+  const detailNote = simplified ? ' The surface detail was reduced (' + simplified + ' segments at most) so it stays smooth to turn; say so in a few words.' : '';
+  await new Promise(r => setTimeout(r, 0));          // let the orb draw a frame between the build and the export
   /* On the desktop the chat is not on screen at all — not in the small orb
      and not full screen — so a model shown only there was never seen. It
      goes to the 3D viewer window, like one from the 3D service. */
   if(IS_DESKTOP){
     let url = null, why = '';
-    try{ url = await builtModelUrl(builder(THREE)); }
+    try{ url = await builtModelUrl(built); }
     catch(err){ why = (err && err.message) || String(err); }
     if(url) lastModelUrl = url;
     const inWindow = url ? await showModelWindowToo(url, name) : false;
@@ -10897,11 +10917,45 @@ async function callBuild3dTool(input){
       return { error: 'the model was built but could not be shown: ' + (why || 'the 3D window did not open'),
                tell_the_user: 'Say the model was built but its window would not open, and why. Do not describe it as on his screen.' };
     }
-    return { ok:true, shown:true, window:true,
-             note:'The model is open in its own frameless window on his screen (he turns it by dragging, and closes it by right-clicking it or from the taskbar). Describe it briefly; do not repeat the code.' };
+    return { ok:true, shown:true, window:true, simplified: simplified || undefined,
+             note:'The model is open in its own frameless window on his screen (he turns it by dragging, and closes it by right-clicking it or from the taskbar). Describe it briefly; do not repeat the code.' + detailNote };
   }
-  return { ok:true, shown:true,
-           note:'The model is displayed in the chat and the user can rotate it. Describe it briefly; do not repeat the code.' };
+  const reuse = [built];                              // the chat bubble builds from the one we already have, then from the code
+  addModelBubble({ build: () => reuse.length ? reuse.pop() : (simplified ? builder(cappedThree(simplified)) : builder(THREE)) }, name);
+  return { ok:true, shown:true, simplified: simplified || undefined,
+           note:'The model is displayed in the chat and the user can rotate it. Describe it briefly; do not repeat the code.' + detailNote };
+}
+
+/* HOW HEAVY A BUILT MODEL IS, AND A LIGHTER BUILD OF THE SAME CODE (2.22.1).
+   The instructions ask for 64 segments on everything; fine for a bottle,
+   wasteful for a drone of two hundred parts. cappedThree(n) is THREE with
+   the segment arguments of the common geometries clamped to n, so the same
+   code builds a lighter model. Only constructors are replaced; everything
+   else (materials, groups, math) is the real THREE. */
+const MODEL_TRIANGLE_BUDGET = 250000, MODEL_TRIANGLE_HARD_LIMIT = 1500000;
+function countTriangles(object){
+  let n = 0;
+  object.traverse(o => {
+    if(!o.isMesh || !o.geometry) return;
+    const g = o.geometry;
+    n += (g.index ? g.index.count : (g.attributes && g.attributes.position ? g.attributes.position.count : 0)) / 3;
+  });
+  return Math.round(n);
+}
+function cappedThree(cap){
+  const T = THREE, c = (v, d) => Math.max(3, Math.min(v == null ? d : v, cap));
+  const sub = (Base, fix) => class extends Base { constructor(...a){ super(...fix(a)); } };
+  const over = {
+    CylinderGeometry: sub(T.CylinderGeometry, a => { a[3] = c(a[3], 8); return a; }),
+    ConeGeometry:     sub(T.ConeGeometry,     a => { a[2] = c(a[2], 8); return a; }),
+    SphereGeometry:   sub(T.SphereGeometry,   a => { a[1] = c(a[1], 8); a[2] = Math.max(2, Math.min(a[2] == null ? 6 : a[2], Math.ceil(cap / 2))); return a; }),
+    TorusGeometry:    sub(T.TorusGeometry,    a => { a[2] = c(a[2], 8); a[3] = c(a[3], 6); return a; }),
+    TorusKnotGeometry:sub(T.TorusKnotGeometry,a => { a[2] = Math.min(a[2] == null ? 64 : a[2], cap * 3); a[3] = c(a[3], 8); return a; }),
+    LatheGeometry:    sub(T.LatheGeometry,    a => { a[1] = c(a[1], 12); return a; }),
+    CircleGeometry:   sub(T.CircleGeometry,   a => { a[1] = c(a[1], 8); return a; }),
+    RingGeometry:     sub(T.RingGeometry,     a => { a[2] = c(a[2], 8); return a; })
+  };
+  return new Proxy(T, { get(t, k){ return Object.prototype.hasOwnProperty.call(over, k) ? over[k] : t[k]; } });
 }
 
 /* Sending a model to its own window. The chat bubble is fine for a glance,
@@ -15297,8 +15351,29 @@ async function readMessageStream(response, onText){
 /* Either he is being looked at this turn, or he is being remembered from
    the last one. Never both: a look replaces the note it is about to write. */
 function cameraSystemExtras(){
-  return (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote();
+  return (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + (compactCodeNote || '');
 }
+/* SET ONLY AFTER A CUT-OFF (2.22.1): the last attempt ran out of room in the
+   middle of a tool call, so nothing was built. Cleared at the start of each
+   turn. */
+let compactCodeNote = '';
+/* True when the turn ended with a tool call that was cut off for good (even
+   after more room and the compact instruction): the desktop has no chat on
+   screen, so the explanation is spoken. */
+let turnCutOffTool = false;
+/* The last few things that went wrong, for "Check yourself": the desktop has
+   no chat on screen, so "he went quiet" has otherwise left no trace. */
+const recentProblems = [];
+function noteProblem(what){
+  recentProblems.push(new Date().toISOString().slice(11, 19) + ' ' + String(what).slice(0, 220));
+  while(recentProblems.length > 8) recentProblems.shift();
+}
+function cutOffLine(){
+  return currentLang === 'he'
+    ? '\u05d4\u05e7\u05d5\u05d3 \u05e9\u05dc \u05d4\u05de\u05d5\u05d3\u05dc \u05d0\u05e8\u05d5\u05da \u05de\u05d3\u05d9 \u05d5\u05dc\u05d0 \u05d4\u05e1\u05e4\u05e7\u05ea\u05d9 \u05dc\u05e1\u05d9\u05d9\u05dd \u05d0\u05d5\u05ea\u05d5. \u05ea\u05d1\u05e7\u05e9 \u05de\u05d5\u05d3\u05dc \u05e4\u05e9\u05d5\u05d8 \u05d9\u05d5\u05ea\u05e8, \u05d0\u05d5 \u05ea\u05d2\u05d9\u05d3 \u05dc\u05d9 \u05dc\u05d9\u05d9\u05e6\u05e8 \u05d0\u05d5\u05ea\u05d5 \u05d1\u05e9\u05d9\u05e8\u05d5\u05ea \u05d4\u05ea\u05dc\u05ea \u05de\u05d9\u05de\u05d3.'
+    : 'The code for that model was too long for me to finish. Ask for a simpler one, or tell me to generate it with the 3D service.';
+}
+const COMPACT_CODE_NOTE = '\n\nYOUR LAST ATTEMPT WAS CUT OFF IN THE MIDDLE OF THE TOOL CALL, BECAUSE THE CODE WAS TOO LONG, SO NOTHING WAS BUILT. Write it again, MUCH shorter: no introduction, no explanation before the call, go straight to the tool. Under 150 lines of code. Helper functions and loops for repeated parts (one function for a leg, a loop that places six), one shared material per finish, 24 to 32 segments on small parts. A simpler model that gets built beats a perfect one that is cut off.';
 
 /* WHICH 3D SERVICE, AS THE WORKER SAYS RIGHT NOW (2.11.3). The page never
    told him, so what he said about it came from whatever his saved
@@ -15806,6 +15881,8 @@ async function askJarvis(userText, images, onText, tag){
   turnToolRan = false;
   turnToolSucceeded = false;
   turnToolFailures = [];
+  compactCodeNote = '';
+  turnCutOffTool = false;
   turnIsLook = !!(images && images.some(a => a && a.kind !== 'pdf' && a.kind !== 'text'));
   turnPicture = pictureOfTurn(images);
   turnStartedAt = Date.now();
@@ -15858,7 +15935,33 @@ async function askJarvis(userText, images, onText, tag){
   try{
     let workingMessages = trimStaleFrames(chatHistory.slice(-16));
     let budget = replyBudget();
-    let data = await callClaude(workingMessages, usingOwnBackend, onText, false, budget);
+    /* A TOOL CALL CUT OFF BY THE LIMIT IS NOT A FINISHED ANSWER (2.22.1).
+       A complex 3D model is code of several thousand tokens, written as the
+       arguments of a tool call; when the limit lands inside it the call has
+       no arguments and nothing can run. The old retry only happened when he
+       had said nothing first, and he almost always opens with "On it" — so a
+       complex request ended in silence. Now, whatever he said first: once
+       with the larger budget, then once more with the instruction to write
+       it much shorter, and he says out loud that it is a big one. */
+    const callWithRoom = async () => {
+      let d = await callClaude(workingMessages, usingOwnBackend, onText, false, budget);
+      for(let attempt = 0; attempt < 2 && d.stop_reason === 'max_tokens'; attempt++){
+        const cutCall = (d.content || []).some(b => b.type === 'tool_use' && (!b.input || Object.keys(b.input).length === 0));
+        if(!cutCall && textOf(d).trim()) break;          // a long answer, not a lost tool call: the note below says so
+        if(attempt === 0 && budget < buildBudget()){
+          budget = buildBudget();
+        } else {
+          compactCodeNote = COMPACT_CODE_NOTE;
+        }
+        if(attempt === 0){
+          addMessage('system', t('retryingBigger'));
+          try{ enqueueSpeech(addressHim(currentLang === 'he' ? '\u05d6\u05d4 \u05d1\u05e0\u05d9\u05d9\u05d4 \u05d2\u05d3\u05d5\u05dc\u05d4, \u05de\u05e0\u05e1\u05d4 \u05e9\u05d5\u05d1 \u05e2\u05dd \u05d9\u05d5\u05ea\u05e8 \u05de\u05e7\u05d5\u05dd.' : 'That is a big build. Trying again with more room.', currentLang === 'he')); }catch(e){}
+        }
+        d = await callClaude(workingMessages, usingOwnBackend, () => {}, false, budget);   // the intro was already said once
+      }
+      return d;
+    };
+    let data = await callWithRoom();
     let collected = textOf(data);
     /* Each round's text arrives with nothing between it and the last. The
        screen's copy is joined with a newline (collected, below); the voice
@@ -16048,8 +16151,11 @@ async function askJarvis(userText, images, onText, tag){
           }
           logActionEnd(logEntry, payload);
           if(payload && !payload.error) turnToolSucceeded = true;
-          else turnToolFailures.push({ tool: tu.name, error: String((payload && payload.error) || 'no result'),
-                                       tell_the_user: (payload && payload.tell_the_user) || null });
+          else {
+            turnToolFailures.push({ tool: tu.name, error: String((payload && payload.error) || 'no result'),
+                                   tell_the_user: (payload && payload.tell_the_user) || null });
+            if(!(payload && payload.error === 'cancelled')) noteProblem(tu.name + ' failed: ' + String((payload && payload.error) || 'no result'));
+          }
           if(payload && payload.error && payload.error !== 'cancelled'){
             addMessage('system', 'DEBUG (' + tu.name + '): ' + payload.error);
           }
@@ -16081,7 +16187,7 @@ async function askJarvis(userText, images, onText, tag){
         if(attachAfterResults.length) toolResults.push(...attachAfterResults);
         workingMessages = [...workingMessages, { role:'user', content:toolResults }];
         roundBoundary();
-        data = await callClaude(workingMessages, usingOwnBackend, onText, false, budget);
+        data = await callWithRoom();
         const more = textOf(data);
         if(more) collected = collected ? collected + '\n' + more : more;
       }
@@ -16113,6 +16219,7 @@ async function askJarvis(userText, images, onText, tag){
       }
       if(data.stop_reason === 'tool_use') break;     // out of rounds, handled below
       if(corrections >= 1) break;                    // one correction, never a loop
+      if(data.stop_reason === 'max_tokens') break;   // cut off, not a false claim: the reason is said below
       if(!claimsAnAction(collected, turnIsLook)) break;          // he claimed nothing
 
       /* He claimed it and called nothing — but if what was asked and what
@@ -16154,6 +16261,7 @@ async function askJarvis(userText, images, onText, tag){
       // Out of rounds while still working. Say so — silence here reads as
       // "he finished", which is exactly the wrong impression.
       addMessage('system', t('toolRoundsExhausted').replace('{n}', String(MAX_TOOL_ROUNDS)));
+      if(IS_DESKTOP) try{ enqueueSpeech(currentLang === 'he' ? '\u05d4\u05e9\u05ea\u05de\u05e9\u05ea\u05d9 \u05d1\u05db\u05dc \u05d4\u05e9\u05dc\u05d1\u05d9\u05dd \u05d5\u05e2\u05d3\u05d9\u05d9\u05df \u05dc\u05d0 \u05e1\u05d9\u05d9\u05de\u05ea\u05d9. \u05ea\u05d2\u05d9\u05d3 \u05dc\u05d9 \u05dc\u05d4\u05de\u05e9\u05d9\u05da.' : 'I used all my steps and have not finished. Tell me to carry on.'); }catch(e){}
     }
 
     // A tool call that ran out of tokens leaves a half-written JSON payload we
@@ -16166,6 +16274,10 @@ async function askJarvis(userText, images, onText, tag){
       // the ceiling was imposed downstream — almost always an older worker that
       // rewrites the request body instead of passing it through.
       const cappedElsewhere = produced > 0 && produced < budget * 0.6;
+      if((data.content || []).some(b => b.type === 'tool_use' && (!b.input || Object.keys(b.input).length === 0))){
+        turnCutOffTool = true;
+        noteProblem('a tool call was cut off by the length limit (' + produced + ' of ' + budget + ' tokens)' + (compactCodeNote ? ', even after the "shorter" instruction' : ''));
+      }
       let note = t(hadTool ? 'replyTruncatedTool' : 'replyTruncated');
       if(cappedElsewhere){
         note = t('replyCappedByBackend')
@@ -17554,6 +17666,12 @@ async function handleSend(){
     addMessage('assistant', spokenText || reply);
   }
 
+  /* Cut off for good in the middle of a tool call (a very big model): what he
+     said before it was a promise, and the reason is said instead. */
+  if(turnCutOffTool && !turnToolSucceeded){
+    heldClaims = [];
+    enqueueSpeech(cutOffLine());
+  }
   /* The turn is over. Anything still held was a promise nothing backed up. */
   if(heldClaims.length){
     if(turnToolSucceeded){

@@ -565,6 +565,25 @@ single file `dist/index.html`.
 - **The voice never blocks the queue (2.22.0).** fetchVoiceAudio aborts
   /tts after 15 s (timer held until the blob is read); the line then goes
   to speakWithBrowser.
+- **A cut-off tool call is retried, and a build runs once (2.22.1).** A
+  model built from code is the argument of ONE tool call; the length limit
+  inside it leaves `input: {}` and nothing to run. In askJarvis, callWithRoom
+  wraps every model call in the loop: stop_reason max_tokens with a tool_use
+  that has empty input (or no text) → budget = buildBudget() (20000) and
+  retry; again → COMPACT_CODE_NOTE rides in cameraSystemExtras() (the
+  system prompt) and it retries once more; never more than three calls. He
+  says "That is a big build" aloud on the first retry. Still cut off →
+  turnCutOffTool: handleSend speaks cutOffLine() instead of the held claim
+  and instead of the "I did not actually do that" line, and the claim
+  corrector is skipped for max_tokens. In a stub that answers whole JSON the
+  page flips to non-streaming and caps max_tokens at 8000 — assert "a second
+  call happened", not 20000. callBuild3dTool builds ONCE (no chat bubble on
+  the desktop, where #commPanel is hidden): over MODEL_TRIANGLE_BUDGET (250k)
+  it re-runs the code with cappedThree(32|20|12), a Proxy over THREE whose
+  geometry constructors clamp their segment arguments, and sets
+  `simplified` in the result; over MODEL_TRIANGLE_HARD_LIMIT it returns an
+  error telling the model to use fewer parts. recentProblems/noteProblem feed
+  "Check yourself". complex3d.e2e.mjs.
 - **Background shells die with their task.** A regression started with a
   plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
   looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &
