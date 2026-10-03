@@ -448,6 +448,31 @@ single file `dist/index.html`.
   return (clutch still works); a second pinch still ends it at once.
   bendsim.mjs (scratchpad) bends the real hand's joints for tests;
   pointer18.test, hands16.e2e cover it.
+- **The finger mouse is a CONTINUOUS LINE made in Rust (2.19.0).** The
+  page sends pointer_send move {x, y, vx, vy} (fractions of the monitor,
+  speed in fractions a second; freeze/click carry none); main.rs keeps a
+  Glide (src/glide.rs: pure arithmetic, `cargo test` runs on any host) and
+  a thread (jarvis-pointer, 4 ms ticks between start and end, timeBegin
+  Period(1) while it runs: needs windows-sys Win32_Media) that moves the
+  cursor with SendInput on pixel change. Constants: TAU 26 ms (lag),
+  GAP 50 (coast between samples), LEAD 30 ms capped at CAP 20 px (the
+  guess; coast and TAU compensation are not capped), EXTRA 100 ms decaying
+  (dropout), SLEW 2500 px/s (catch-up), gate 100-400 px/s (no extrapolation
+  of jitter), all scaled by monitor width / 1920. The click snaps the
+  glide to the exact point. A blocked SendInput is reported by the next
+  pointer_send. PointerTracker: velocity = EMA 0.8 of the filtered
+  position's change; follow() refuses a fingertip further than JUMP_GATE
+  0.05 + JUMP_SPEED 1.5/s * dt from where it was going (believed after
+  JUMP_ACCEPT 3 agreeing answers); POSE_GRACE_FRAMES 3 of a wrong pose
+  while the index is straight; STUCK_REARM_MS 1800 under STUCK_DEG 30
+  re-arms after a click/pause; the first paused frame is a 'freeze' with
+  no speed. Tests: chain.mjs runs the REAL gesture code in a vm context
+  (never import two versions of gesture-zoom.js into one global: the
+  second silently kept the first) in front of the glide.rs binary built
+  from glidecrate/ (a scratch crate whose lib.rs #[path]s the real file);
+  pointer19.test, chaincmp.mjs (2.18.0 vs 2.19.0 table), hands16.e2e.
+  The video he sent showed the tracker itself missing (the ring on his
+  face, the finger elsewhere): smoothing cannot fix a wrong answer.
 - **3D Workspace does not read its argument.** Its main.rs (branch
   claude/3d-model-workspace) ignores argv, so "open it with this model"
   starts it and saves the .glb in JARVIS\3D Workspace, but the model is not

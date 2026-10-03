@@ -1506,3 +1506,73 @@ label said POINTER instead of SCROLL.
   moving read 8.7–12.1°, never more than 2.7° from its own straight, and
   every frame moved the pointer. The pointing hand switching to a real
   pinch gave no click, let the mouse go, and scrolled.
+
+## Page 2.19.0: the finger mouse as one continuous line (needs the app rebuilt)
+
+**What you saw in the video.** The camera gives a position about 30 times a
+second, and each one is a tenth of a second old. 2.18.0 sent every sample
+straight to Windows. So the cursor moved in thirty small steps a second,
+unevenly, since the calls that carried them did not arrive evenly. And when
+the tracker lost the hand for a few frames, the cursor froze and then
+threw itself to wherever the hand was found. The video also shows the
+tracker itself missing: in the second where the mouse is on, the pink ring
+sits on your face while your finger is on the left. No filter can fix a
+wrong answer, but it should not follow it blindly either.
+
+**A thread in Rust moves the cursor** (`glide.rs`, about 250 times a
+second, only between pointing and letting go):
+
+- **It coasts.** Between two samples the cursor keeps going at the hand's
+  speed, so the path is a line. Under 100 px/s nothing is extrapolated, so
+  tracker jitter never becomes motion.
+- **It leads a little.** At most 20 px ahead of where the hand has got to.
+  The camera is a tenth of a second late and this takes part of that off.
+  The cursor still arrives at a stop from behind, since the lead is less
+  than the delay. A hand that stops dead at 1000 px/s is passed by about
+  35 px, and the cursor settles.
+- **It bridges a dropout.** With no new sample the cursor keeps going,
+  slowing, for at most 100 ms of travel.
+- **It never jumps.** Its step is limited to the hand's speed plus
+  2500 px/s, so a hand found again far away is a quick glide.
+- **A click goes exactly where you pointed**, from rest.
+- **The Windows timer** is asked for 1 ms steps while the cursor is being
+  moved, and let go after.
+
+**The page gives Rust the finger's speed** with its place. The pointer
+tracker also:
+
+- **Does not believe a jump.** A fingertip that lands further than any hand
+  moves in a frame (5% of the window, plus 1.5 windows a second for the
+  time since the last answer it believed) is ignored. It is believed only
+  when three answers in a row agree with each other.
+- **Carries on through a flicker.** The other three fingers' reading can
+  go wrong for a frame or two as the hand turns. For up to 3 frames the
+  pointer keeps following while the index is straight. It used to hold,
+  then let go.
+- **Stops cleanly on a pinch or a bend.** The first frame says "stop here"
+  with no speed, so the cursor does not coast on into a pinch or a click.
+- **Rearms by itself.** After a click or a pause, a finger that reads under
+  30° of your straight for a second and a half (the angle reads high for
+  good, or your straight moved) is straight enough and follows again.
+  Bent 40° or more it stays frozen: that is not a rest.
+
+**Measured, on the whole chain.** A real hand (MediaPipe's pointing photo)
+was moved along known paths and seen through a camera with a 100 ms delay,
+30 fps and ±1.5 px of noise. The real gesture code ran in front of it. In
+place of Windows was `glide.rs` itself, built as a program. "Step" is the
+biggest move between two looks at the cursor at 144 Hz.
+
+| | 2.18.0 | 2.19.0 |
+|---|---|---|
+| Medium sweep, step | 52 px | 14 px |
+| Medium sweep, how far behind the hand | 100 px | 74 px |
+| Circle, how far behind | 80 px | 53 px |
+| Lost frames, worst jump | 301 px | 22 px |
+| Lost frames and ghosts, worst jump | 742 px | 26 px |
+| A still hand, wander over 2 s | 4.2 px | 4.2 px |
+
+**What stays.** The camera is still a tenth of a second late and the
+tracker still sometimes misses. This makes the cursor smooth and keeps it
+from teleporting. It does not make the tracker see better. If the pink
+ring is off your finger in the camera window, that is the tracker's
+answer, not the cursor's.

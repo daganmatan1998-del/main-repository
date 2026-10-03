@@ -18,6 +18,8 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+mod glide;
+
 /* The hotkey. A bare Ctrl cannot be registered on its own — every OS treats a
    lone modifier as part of another combination, never as a shortcut in itself,
    so nothing would ever fire. This is the nearest thing that actually works
@@ -2625,9 +2627,39 @@ fn scroll_send(app: tauri::AppHandle, hwnd: isize, h: i32, v: i32) -> Result<Str
    and stays on that monitor until he stops (a window coming to the front
    does not move the map under his finger). "click" is the left button
    down and up where the pointer is, like a real mouse: it goes to
-   whatever is there. */
+   whatever is there.
+
+   A CONTINUOUS LINE (2.19.0). The camera gives a position about thirty
+   times a second, each a little late, and the calls that carry them here
+   do not arrive evenly; sent straight to Windows they were thirty small
+   jumps a second, and a hand the tracker lost for a few frames froze the
+   cursor and then threw it. "move" now only sets where the hand is and how
+   fast it is going (vx, vy, fractions of the monitor a second); a thread
+   moves the real cursor along glide.rs's line every few milliseconds —
+   coasting between samples, leading a little, bridging a dropout, never
+   jumping. It runs only between "start" and "end" (and is asleep, costing
+   nothing, the rest of the time). Windows' timer is asked for 1 ms steps
+   while it runs, or a 15 ms sleep would be 60 Hz at best. */
 #[cfg(target_os = "windows")]
-static POINTER_MONITOR: std::sync::Mutex<Option<(f64, f64, f64, f64)>> = std::sync::Mutex::new(None);
+struct PointerState {
+    monitor: Option<(f64, f64, f64, f64)>,
+    glide: Option<glide::Glide>,
+    sent: (i64, i64),
+    failed: Option<String>,
+    period: bool,
+}
+
+#[cfg(target_os = "windows")]
+static POINTER: std::sync::Mutex<PointerState> =
+    std::sync::Mutex::new(PointerState { monitor: None, glide: None, sent: (i64::MIN, i64::MIN), failed: None, period: false });
+#[cfg(target_os = "windows")]
+static POINTER_THREAD: std::sync::Once = std::sync::Once::new();
+
+#[cfg(target_os = "windows")]
+fn pointer_clock_ms() -> f64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64() * 1000.0
+}
 
 #[cfg(target_os = "windows")]
 unsafe fn monitor_under_pointer() -> (f64, f64, f64, f64) {
@@ -2649,19 +2681,95 @@ unsafe fn monitor_under_pointer() -> (f64, f64, f64, f64) {
 }
 
 #[cfg(target_os = "windows")]
+unsafe fn cursor_position() -> (f64, f64) {
+    use windows_sys::Win32::Foundation::POINT;
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+    unsafe {
+        let mut cur = POINT { x: 0, y: 0 };
+        GetCursorPos(&mut cur);
+        (cur.x as f64, cur.y as f64)
+    }
+}
+
+/* The pointer is let go: no more moving, the timer back to normal. */
+#[cfg(target_os = "windows")]
+fn pointer_release(st: &mut PointerState) {
+    st.glide = None;
+    st.monitor = None;
+    st.sent = (i64::MIN, i64::MIN);
+    if st.period {
+        st.period = false;
+        unsafe {
+            windows_sys::Win32::Media::timeEndPeriod(1);
+        }
+    }
+}
+
+/* The cursor's new place, every few milliseconds, while it is being moved. */
+#[cfg(target_os = "windows")]
+fn pointer_glide_loop() {
+    loop {
+        let mut wait = 25u64;
+        if let Ok(mut st) = POINTER.lock() {
+            let now = pointer_clock_ms();
+            if let Some(p) = st.glide.as_mut().map(|g| g.step(now)) {
+                wait = 4;
+                let to = (p.0.round() as i64, p.1.round() as i64);
+                if to != st.sent {
+                    let ok = unsafe { drag_inputs(&mut [drag_input(to.0 as f64, to.1 as f64, 0)]) };
+                    if ok {
+                        st.sent = to;
+                    } else {
+                        st.failed = Some("Windows blocked the input (an elevated program, or a secure screen)".into());
+                        pointer_release(&mut st);
+                    }
+                }
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(wait));
+    }
+}
+
+/* The pointer starts on this monitor, from where the cursor is. */
+#[cfg(target_os = "windows")]
+fn pointer_begin(st: &mut PointerState, m: (f64, f64, f64, f64), from: (f64, f64)) {
+    st.monitor = Some(m);
+    st.glide = Some(glide::Glide::new(from.0, from.1, pointer_clock_ms(), m.2 / 1920.0));
+    st.sent = (i64::MIN, i64::MIN);
+    if !st.period {
+        st.period = true;
+        unsafe {
+            windows_sys::Win32::Media::timeBeginPeriod(1);
+        }
+    }
+    POINTER_THREAD.call_once(|| {
+        let _ = std::thread::Builder::new().name("jarvis-pointer".into()).spawn(pointer_glide_loop);
+    });
+}
+
+#[cfg(target_os = "windows")]
 #[tauri::command]
-fn pointer_send(phase: String, x: Option<f64>, y: Option<f64>) -> Result<serde_json::Value, String> {
+fn pointer_send(
+    phase: String,
+    x: Option<f64>,
+    y: Option<f64>,
+    vx: Option<f64>,
+    vy: Option<f64>,
+) -> Result<serde_json::Value, String> {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP};
-    let mut held = POINTER_MONITOR.lock().map_err(|_| "the pointer is unavailable".to_string())?;
+    let mut st = POINTER.lock().map_err(|_| "the pointer is unavailable".to_string())?;
+    if let Some(e) = st.failed.take() {
+        return Err(e);
+    }
     unsafe {
         match phase.as_str() {
             "start" => {
                 let m = monitor_under_pointer();
-                *held = Some(m);
+                pointer_begin(&mut st, m, cursor_position());
                 Ok(serde_json::json!({ "phase": "start", "monitor": [m.0, m.1, m.2, m.3] }))
             }
             "end" => {
-                *held = None;
+                pointer_release(&mut st);
                 Ok(serde_json::json!({ "phase": "end" }))
             }
             "move" | "click" => {
@@ -2669,32 +2777,53 @@ fn pointer_send(phase: String, x: Option<f64>, y: Option<f64>) -> Result<serde_j
                     (Some(x), Some(y)) if x.is_finite() && y.is_finite() => (x.clamp(0.0, 1.0), y.clamp(0.0, 1.0)),
                     _ => return Err("no place to point at".into()),
                 };
-                let (l, t, w, h) = match *held {
+                let (l, t, w, h) = match st.monitor {
                     Some(m) => m,
                     None => {
                         let m = monitor_under_pointer();
-                        *held = Some(m);
+                        let from = (l_of(m, x), t_of(m, y));
+                        pointer_begin(&mut st, m, from);
                         m
                     }
                 };
-                let (px, py) = ((l + x * (w - 1.0)).round(), (t + y * (h - 1.0)).round());
-                let ok = if phase == "move" {
-                    drag_inputs(&mut [drag_input(px, py, 0)])
+                let (px, py) = (l + x * (w - 1.0), t + y * (h - 1.0));
+                let now = pointer_clock_ms();
+                if phase == "move" {
+                    let (vx, vy) = (vx.filter(|v| v.is_finite()).unwrap_or(0.0), vy.filter(|v| v.is_finite()).unwrap_or(0.0));
+                    if let Some(g) = st.glide.as_mut() {
+                        g.set(px, py, vx * (w - 1.0), vy * (h - 1.0), now);
+                    }
+                    Ok(serde_json::json!({ "phase": "move", "x": px, "y": py }))
                 } else {
-                    drag_inputs(&mut [
-                        drag_input(px, py, 0),
-                        drag_input(px, py, MOUSEEVENTF_LEFTDOWN),
-                        drag_input(px, py, MOUSEEVENTF_LEFTUP),
-                    ])
-                };
-                if !ok {
-                    return Err("Windows blocked the input (an elevated program, or a secure screen)".into());
+                    /* The click goes exactly where he pointed, at rest. */
+                    if let Some(g) = st.glide.as_mut() {
+                        g.snap(px, py, now);
+                    }
+                    st.sent = (px.round() as i64, py.round() as i64);
+                    let ok = drag_inputs(&mut [
+                        drag_input(px.round(), py.round(), 0),
+                        drag_input(px.round(), py.round(), MOUSEEVENTF_LEFTDOWN),
+                        drag_input(px.round(), py.round(), MOUSEEVENTF_LEFTUP),
+                    ]);
+                    if !ok {
+                        return Err("Windows blocked the input (an elevated program, or a secure screen)".into());
+                    }
+                    Ok(serde_json::json!({ "phase": "click", "x": px, "y": py }))
                 }
-                Ok(serde_json::json!({ "phase": phase, "x": px, "y": py }))
             }
             other => Err(format!("unknown pointer phase \"{}\"", other)),
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+fn l_of(m: (f64, f64, f64, f64), x: f64) -> f64 {
+    m.0 + x * (m.2 - 1.0)
+}
+
+#[cfg(target_os = "windows")]
+fn t_of(m: (f64, f64, f64, f64), y: f64) -> f64 {
+    m.1 + y * (m.3 - 1.0)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -2705,7 +2834,13 @@ fn scroll_send(_hwnd: isize, _h: i32, _v: i32) -> Result<String, String> {
 
 #[cfg(not(target_os = "windows"))]
 #[tauri::command]
-fn pointer_send(_phase: String, _x: Option<f64>, _y: Option<f64>) -> Result<serde_json::Value, String> {
+fn pointer_send(
+    _phase: String,
+    _x: Option<f64>,
+    _y: Option<f64>,
+    _vx: Option<f64>,
+    _vy: Option<f64>,
+) -> Result<serde_json::Value, String> {
     Err("only available on Windows".into())
 }
 
