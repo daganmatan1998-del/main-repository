@@ -153,9 +153,30 @@
        a straight finger reads 1.17-1.41, a folded one 0.60-0.75, the index
        bent round into an OK sign 1.01-1.04. */
     const straight = (pip, tip) => d(P[0], P[tip]) / Math.max(1e-6, d(P[0], P[pip]));
+    /* How far each finger is BENT (2.18.0), in degrees: the way its end
+       points (middle joint to tip) against the palm's own line (wrist to
+       the middle knuckle), with the sideways spread taken out — a finger
+       fanned out is not bent. Measured in 3D on MediaPipe's own photos: a
+       straight index 4-12°, a relaxed one 36-46°, an OK sign 116°, a fist
+       162°. The distance ratio above cannot see a bend at the big knuckle
+       at all: the real pointing hand bent 90° there still read 1.20,
+       "straight", which is why folding to click needed a whole curl. */
+    const vec = (a, b) => ({ x: b.x - a.x, y: b.y - a.y, z: b.z - a.z });
+    const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+    const unit = (a) => { const l = Math.sqrt(dot(a, a)) || 1; return { x: a.x / l, y: a.y / l, z: a.z / l }; };
+    const along = unit(vec(P[0], P[9]));
+    let across = vec(P[17], P[5]);
+    const ak = dot(across, along);
+    across = unit({ x: across.x - along.x * ak, y: across.y - along.y * ak, z: across.z - along.z * ak });
+    const bent = (pip, tip) => {
+      let f = vec(P[pip], P[tip]);
+      if(deep){ const s = dot(f, across); f = { x: f.x - across.x * s, y: f.y - across.y * s, z: f.z - across.z * s }; }
+      return Math.acos(clamp(dot(unit(f), along), -1, 1)) * 180 / Math.PI;
+    };
     return {
       scale, deep,
       fingers: { index: straight(6, 8), middle: straight(10, 12), ring: straight(14, 16), pinky: straight(18, 20) },
+      bends: { index: bent(6, 8), middle: bent(10, 12), ring: bent(14, 16), pinky: bent(18, 20) },
       pinch: d(P[4], P[8]) / scale,
       indexReach: d(P[8], P[5]) / scale,
       thumbReach: d(P[4], P[5]) / scale,
@@ -353,47 +374,69 @@
      A tracking glitch that throws the hand across the picture in one frame
      is not a movement; the turn starts again from wherever the hand is.
   ------------------------------------------------------------------ */
-  const TURN_ARM_MS = 220, TURN_DEAD_MM = 4, TURN_JUMP = 2.5, TURN_MAX_FRAME = 90;
+  const TURN_ARM_MS = 220, TURN_DEAD_MM = 4, TURN_JUMP = 2.5, TURN_MAX_FRAME = 90, TURN_GRACE_MS = 150;
 
   /* ------------------------------------------------------------------
      ONE FINGER IS THE MOUSE (2.16.0 in the Agent Atlas; since 2.17.0
-     everywhere on the computer).
+     everywhere on the computer; since 2.18.0 by the ANGLE of the finger).
 
-     The pose: the index straight (over FINGER_STRAIGHT) and the other
-     three folded (under FINGER_FOLDED) — "pointing". Held POINT_ARM_MS
-     (a quarter of a second, so a passing gesture while he talks does not
-     take the mouse) and the fingertip moves the pointer: the middle of
-     the picture (POINTER_BOX, mirrored, so his right is right) spans the
-     whole monitor, so he never has to reach the picture's edge, and a One
-     Euro filter keeps a still finger still without lagging a moving one.
+     The pose: the index straight (bent under POINT_ARM_DEG) and the other
+     three folded (under FINGER_FOLDED) — "pointing". Held POINT_ARM_MS (a
+     quarter of a second, so a passing gesture while he talks does not take
+     the mouse) and the fingertip moves the pointer: the middle of the
+     picture (POINTER_BOX, mirrored, so his right is right) spans the whole
+     monitor, so he never has to reach the picture's edge.
 
-     Folding the index is a left click. A bending finger's tip moves (down,
-     toward the palm), so the pointer FREEZES the moment the finger stops
-     being straight, at the straightest place of the last moment, and the
-     click goes there — where he was pointing, not where the curl drifted.
-     Folded under FINGER_FOLDED for FOLD_FRAMES frames: one click. Straight
-     again (CLICK_REARM frames): pointing again, and the next fold is the
-     next click. A fold that comes back straight without getting there is
-     no click. The pose lost (hand gone, fingers opened) for POINT_LOST_MS:
-     the pointer lets go. A pinch on the OTHER hand wins (zoom and turn
-     come first); the pointing hand's own fold can pass close enough to its
-     thumb to read as a pinch for a moment, and that is still the click.
+     What the finger does is read as its BEND, in degrees from HIS OWN
+     straight (the middle of what it read while he held it up to start, and
+     followed while he points — a hand turned toward the camera reads a
+     little differently, and that is not a bend):
+       fully straight (within STRAIGHT_DEG)  the pointer follows the finger;
+       between that and CLICK_DEG            nothing at all — the pointer
+                                             stays where it was;
+       bent CLICK_DEG (45°) or more          one left click, there.
+     Then nothing until the finger is fully straight again, and the next
+     bend is the next click. So there is no "how far is a click": straight
+     moves, half-way rests, 45° clicks. Leaving straight takes LEAVE_FRAMES
+     frames (one noisy frame is not a bend), and the pointer goes back to
+     where the finger was straightest a moment ago — a bending finger's
+     tip drifts before the bend shows, and the click goes where he pointed.
+     A hand closing into a pinch (thumb out, its tip near the index tip) is
+     not clicking: that bend is the pinch on its way.
+
+     Once pointing, the other three only have to stay curled (under
+     OTHERS_OPEN), not tightly folded: a hand that relaxes a little while it
+     moves is still pointing. The pose lost (hand gone, fingers opened) for
+     POINT_LOST_MS: the pointer lets go.
+
+     ONE GESTURE AT A TIME (2.18.0): the pointer is told by HandGestures
+     when a pinch is on (blocked: it neither moves nor clicks, and never
+     starts) and when the zoom or the pinch's turn / scroll has really begun
+     (takeover: it lets go). See HandGestures.update.
+
+     The filter: One Euro at 1 Hz at rest, opening fast with speed and with
+     a quick read of that speed (3 Hz). The old 0.4 Hz / 1 Hz trailed a
+     slow, careful move and was slow to notice a move starting — the
+     pointer stuck, then caught up. Measured (filtersweep): the first 8 px
+     of a slow move a quarter sooner, 40% less lag while moving, and a
+     still finger still wanders under 4 px of a 1920 x 1080 screen.
   ------------------------------------------------------------------ */
-  const FINGER_STRAIGHT = 1.12, FINGER_FOLDED = 0.9, POINT_ARM_MS = 250, FOLD_FRAMES = 2, CLICK_REARM = 2,
-        POINT_LOST_MS = 300, POINTER_BOX = { x0: 0.2, y0: 0.12, w: 0.6, h: 0.6 };
-  const isPointing = (m) => !!(m && m.fingers && m.fingers.index > FINGER_STRAIGHT &&
-    m.fingers.middle < FINGER_FOLDED && m.fingers.ring < FINGER_FOLDED && m.fingers.pinky < FINGER_FOLDED);
-  const othersFolded = (m) => !!(m && m.fingers && m.fingers.middle < FINGER_FOLDED &&
-    m.fingers.ring < FINGER_FOLDED && m.fingers.pinky < FINGER_FOLDED);
+  const FINGER_STRAIGHT = 1.12, FINGER_FOLDED = 0.9, OTHERS_OPEN = 1.0,
+        POINT_ARM_DEG = 35, STRAIGHT_DEG = 15, CLICK_DEG = 45,
+        POINT_ARM_MS = 250, FOLD_FRAMES = 2, CLICK_REARM = 2, LEAVE_FRAMES = 2,
+        POINT_LOST_MS = 300, POINTER_BOX = { x0: 0.2, y0: 0.12, w: 0.6, h: 0.6 },
+        POINTER_FILTER = [1.0, 30, 3];
+  const othersFolded = (m, limit) => !!(m && m.fingers && m.fingers.middle < limit &&
+    m.fingers.ring < limit && m.fingers.pinky < limit);
+  const isPointing = (m) => !!(m && m.bends && m.bends.index <= POINT_ARM_DEG && othersFolded(m, FINGER_FOLDED));
+  const closingToPinch = (m) => m.pinch < PINCH_OFF && m.indexReach > FIST_GUARD && m.thumbReach > FIST_GUARD;
 
   class PointerTracker {
-    /* 0.4 Hz at rest, opening fast with speed: measured over 30 trials of
-       tracker jitter, a still finger wanders under 3 px of a 1920 window
-       and a stopped one settles within a frame. */
-    constructor(){ this.fx = new OneEuro(0.4, 15, 1); this.fy = new OneEuro(0.4, 15, 1); this.reset(); }
+    constructor(){ this.fx = new OneEuro(...POINTER_FILTER); this.fy = new OneEuro(...POINTER_FILTER); this.reset(); }
     reset(){
-      this.state = 'idle'; this.slot = -1; this.at = null; this.since = null; this.foldRun = 0; this.rearm = 0;
-      this.lostAt = null; this.pos = null; this.hold = null; this.hist = [];
+      this.state = 'idle'; this.slot = -1; this.at = null; this.since = null; this.armBends = [];
+      this.base = 0; this.bend = 0; this.out = 0; this.inRun = 0; this.clickRun = 0;
+      this.lostAt = null; this.pos = null; this.hist = [];
       this.fx.reset(); this.fy.reset();
     }
     /* The fingertip, in the window: x, y from 0 to 1. */
@@ -401,10 +444,23 @@
       const mx = 1 - tip.x / width, my = tip.y / height;            // mirrored: his right is right
       return { x: clamp((mx - POINTER_BOX.x0) / POINTER_BOX.w, 0, 1), y: clamp((my - POINTER_BOX.y0) / POINTER_BOX.h, 0, 1) };
     }
-    update(t, ms, engaged, width, height){
-      const out = (type, extra) => Object.assign({ type, state: this.state, x: this.pos ? this.pos.x : null, y: this.pos ? this.pos.y : null }, extra || {});
-      const e = engaged || [];
+    follow(m, t, width, height){
+      const raw = PointerTracker.toWindow(m.pts[8], width, height);
+      this.pos = { x: this.fx.filter(raw.x, t), y: this.fy.filter(raw.y, t) };
+      this.hist.push({ t, b: this.bend, x: this.pos.x, y: this.pos.y });
+      while(this.hist.length > 1 && t - this.hist[0].t > 300) this.hist.shift();
+    }
+    straightAgain(){ this.state = 'pointing'; this.out = 0; this.inRun = 0; this.hist = []; this.fx.reset(); this.fy.reset(); }
+    /* gate: { blocked: a pinch is on, takeover: the zoom or a turn/scroll has begun } */
+    update(t, ms, engaged, width, height, gate){
+      const out = (type, extra) => Object.assign({ type, state: this.state, bend: this.bend,
+        x: this.pos ? this.pos.x : null, y: this.pos ? this.pos.y : null }, extra || {});
+      gate = gate || {};
       ms = ms || [];
+      if(gate.takeover){
+        if(this.state === 'idle'){ this.since = null; this.armBends = []; return out('none'); }
+        this.reset(); return out('end');
+      }
       /* Its own hand is the one nearest where it was (slot numbers change
          when a second hand comes into view: they go left to right). */
       let m = null;
@@ -413,53 +469,67 @@
         for(const x of ms){ const dd = Math.hypot(x.center.x - this.at.x, x.center.y - this.at.y) / x.scale; if(dd < bd){ bd = dd; m = x; } }
         if(bd > 1.5) m = null;
       }
-      const pinched = ms.some(x => x !== m && x.slot != null && e[x.slot]);
-      if(pinched){
-        if(this.state === 'idle') return out('none');
-        this.reset(); return out('end');
-      }
       if(m){ this.at = m.center; this.slot = m.slot; }
+      if(gate.blocked){
+        if(this.state === 'idle'){ this.since = null; this.armBends = []; return out('none'); }
+        /* Paused. If the pinch lets go before its turn begins, the index is
+           still opening out of it, bent: nothing until it is fully
+           straight again, as after a click — never a stray click. */
+        this.state = 'paused'; this.out = 0; this.inRun = 0; this.clickRun = 0;
+        return out('hold', { paused: true });
+      }
       if(this.state === 'idle'){
         m = ms.find(isPointing);
-        if(!m){ this.since = null; return out('none'); }
-        if(this.since === null) this.since = t;
+        if(!m){ this.since = null; this.armBends = []; return out('none'); }
+        if(this.since === null){ this.since = t; this.armBends = []; }
+        this.armBends.push(m.bends.index);
         if(t - this.since < POINT_ARM_MS) return out('none');
+        this.base = clamp(median(this.armBends), 0, POINT_ARM_DEG);
         this.state = 'pointing'; this.slot = m.slot; this.at = m.center; this.fx.reset(); this.fy.reset();
-        const raw = PointerTracker.toWindow(m.pts[8], width, height);
-        this.pos = { x: this.fx.filter(raw.x, t), y: this.fy.filter(raw.y, t) };
-        this.hist = [{ t, r: m.fingers.index, x: this.pos.x, y: this.pos.y }];
+        this.bend = Math.max(0, m.bends.index - this.base); this.hist = [];
+        this.follow(m, t, width, height);
         return out('start');
       }
-      if(!m || !othersFolded(m)){
+      if(!m || !m.bends || !othersFolded(m, OTHERS_OPEN)){
         if(this.lostAt === null) this.lostAt = t;
         if(t - this.lostAt > POINT_LOST_MS){ this.reset(); return out('end'); }
         return out('hold');
       }
       this.lostAt = null;
-      const r = m.fingers.index;
+      const raw = m.bends.index;
+      const b = this.bend = Math.max(0, raw - this.base);
+      const straight = b <= STRAIGHT_DEG;
+      this.clickRun = b >= CLICK_DEG ? this.clickRun + 1 : 0;
+      const click = () => { this.state = 'clicked'; this.inRun = 0; return out('click'); };
       if(this.state === 'pointing'){
-        if(r >= FINGER_STRAIGHT){
-          const raw = PointerTracker.toWindow(m.pts[8], width, height);
-          this.pos = { x: this.fx.filter(raw.x, t), y: this.fy.filter(raw.y, t) };
-          this.hist.push({ t, r, x: this.pos.x, y: this.pos.y });
-          while(this.hist.length > 12 || (this.hist.length > 1 && t - this.hist[0].t > 350)) this.hist.shift();
+        if(straight){
+          this.out = 0;
+          /* His straight drifts as the hand turns: follow it, down quickly, up slowly. */
+          this.base = clamp(this.base + (raw - this.base) * (raw < this.base ? 0.1 : 0.02), 0, POINT_ARM_DEG);
+          this.follow(m, t, width, height);
           return out('move');
         }
-        /* Bending: freeze at the straightest moment of the last 350 ms. */
-        const best = this.hist.reduce((a, h) => (h.r > a.r ? h : a), this.hist[this.hist.length - 1] || { r: 0, x: this.pos.x, y: this.pos.y });
+        this.out++;
+        if(this.out < LEAVE_FRAMES && this.clickRun < FOLD_FRAMES) return out('hold');
+        /* Bent: back to where the finger was straightest a moment ago. */
+        const best = this.hist.reduce((a, h) => (h.b < a.b ? h : a), this.hist[this.hist.length - 1] || { b: 0, x: this.pos.x, y: this.pos.y });
         this.pos = { x: best.x, y: best.y };
-        this.state = 'folding'; this.foldRun = r < FINGER_FOLDED ? 1 : 0;
+        this.state = 'folding'; this.inRun = 0;
+        if(this.clickRun >= FOLD_FRAMES && !closingToPinch(m)) return click();
         return out('freeze');
       }
       if(this.state === 'folding'){
-        if(r >= FINGER_STRAIGHT){ this.state = 'pointing'; this.hist = []; return out('hold'); }
-        this.foldRun = r < FINGER_FOLDED ? this.foldRun + 1 : 0;
-        if(this.foldRun >= FOLD_FRAMES){ this.state = 'clicked'; this.rearm = 0; return out('click'); }
+        if(straight){
+          if(++this.inRun >= CLICK_REARM) this.straightAgain();
+          return out('hold');
+        }
+        this.inRun = 0;
+        if(this.clickRun >= FOLD_FRAMES && !closingToPinch(m)) return click();
         return out('hold');
       }
-      /* clicked: wait for the finger to straighten again. */
-      this.rearm = r >= FINGER_STRAIGHT ? this.rearm + 1 : 0;
-      if(this.rearm >= CLICK_REARM){ this.state = 'pointing'; this.hist = []; this.fx.reset(); this.fy.reset(); }
+      /* clicked (or paused by a pinch): nothing until the finger is fully straight again. */
+      this.inRun = straight ? this.inRun + 1 : 0;
+      if(this.inRun >= CLICK_REARM) this.straightAgain();
       return out('hold');
     }
   }
@@ -486,7 +556,7 @@
     resetGesture(){ this.zoom.resetGesture(); this.resetTurn(); this.pointer.reset(); this.latch = false; }
     resetTurn(){
       this.turn = { state: 'idle', slot: -1, armStart: 0, scale: 0, origin: null, last: null,
-                    prevRaw: null, originPx: null, total: { x: 0, y: 0 } };
+                    prevRaw: null, originPx: null, openAt: null, total: { x: 0, y: 0 } };
       if(this.fx){ this.fx.reset(); this.fy.reset(); }
     }
 
@@ -500,9 +570,18 @@
       if(e[0] && e[1] && (this.zoom.lastMetrics || []).length >= 2) this.latch = true;
       if(!e[0] && !e[1]) this.latch = false;
       ev.turn = this.turnStep(frame.t, e, frame.width, frame.height);
-      if(this.s.pointerEnabled) ev.pointer = this.pointer.update(frame.t, this.zoom.lastMetrics, e, frame.width, frame.height);
+      /* ONE GESTURE AT A TIME (2.18.0). A pinch on either hand — the
+         pointing hand's own as well — stops the finger mouse dead: no move,
+         no click, and it never starts while a pinch is on. Once the zoom
+         or the pinch's turn / scroll has really begun, the pointer lets
+         go. Before, the pointing hand's own pinch was taken for its click
+         and ignored, so it scrolled with the mouse still held. */
+      const turning = ev.turn.state === 'armed' || ev.turn.state === 'turning';
+      const gate = { blocked: !!(e[0] || e[1]), takeover: this.zoom.state !== 'idle' || turning };
+      if(this.s.pointerEnabled) ev.pointer = this.pointer.update(frame.t, this.zoom.lastMetrics, e, frame.width, frame.height, gate);
       else if(this.pointer.state !== 'idle'){ this.pointer.reset(); ev.pointer = { type: 'end', state: 'idle' }; }   // switched off mid-point
       else ev.pointer = { type: 'none', state: 'idle' };
+      ev.active = this.zoom.state !== 'idle' ? 'zoom' : turning ? 'turn' : this.pointer.state !== 'idle' ? 'pointer' : null;
       ev.latched = this.latch;
       return ev;
     }
@@ -516,6 +595,21 @@
 
     turnStep(t, e, width, height){
       const single = !!e[0] !== !!e[1];
+      /* A pinch that opens for a moment mid-turn — a fast hand blurs and
+         the tracker reads it open for two frames — is not the end: the
+         turn waits TURN_GRACE_MS for it and carries on from wherever the
+         hand is when it closes (nothing moves meanwhile, and the gap's
+         movement is not counted, so letting go to move back and pinching
+         again still works as a clutch). It used to end, re-arm (220 ms)
+         and cross the dead zone again: the scroll stalled. A second pinch
+         is still the zoom at once. */
+      const W0 = this.turn;
+      if(!e[0] && !e[1] && this.s.turnEnabled && !this.latch && (W0.state === 'armed' || W0.state === 'turning')){
+        if(W0.openAt == null) W0.openAt = t;
+        if(t - W0.openAt < TURN_GRACE_MS)
+          return { type: 'move', state: W0.state, slot: W0.slot, center: W0.prevRaw, origin: W0.originPx, dx: 0, dy: 0, waiting: true,
+                   total: { x: W0.total.x, y: W0.total.y } };
+      }
       if(!this.s.turnEnabled || !single || this.latch) return this.endTurn();
       const slot = e[0] ? 0 : 1;
       const m = this.zoom.pins[slot].last;
@@ -525,6 +619,14 @@
       const raw = m.center;
       const view = (extra) => Object.assign({ state: T.state, slot, center: raw, origin: T.originPx, dx: 0, dy: 0,
                                               total: { x: T.total.x, y: T.total.y } }, extra || {});
+      if(T.openAt != null){
+        /* Closed again within the grace: on from here. */
+        T.openAt = null; T.prevRaw = raw; this.fx.reset(); this.fy.reset();
+        const x0 = this.fx.filter(raw.x / T.scale, t), y0 = this.fy.filter(raw.y / T.scale, t);
+        T.last = { x: x0, y: y0 };
+        if(T.state === 'armed'){ T.origin = { x: x0, y: y0 }; T.originPx = raw; }
+        return view({ type: 'move' });
+      }
       if(T.state === 'idle'){
         T.state = 'arming'; T.slot = slot; T.armStart = t; T.scale = m.scale;
         return view({ type: 'none' });
@@ -1125,9 +1227,11 @@
     /* The finger that is the mouse (2.16.0): a ring at its tip, filling
        as it folds into a click. */
     if(ev.pointerTip){
+      /* 2.18.0: the ring closes as the finger bends toward the click (45°). */
       const c = map(ev.pointerTip), down = ev.pointerState === 'folding' || ev.pointerState === 'clicked';
+      const k = ev.pointerState === 'clicked' ? 1 : clamp((ev.pointerBend || 0) / CLICK_DEG, 0, 1);
       g.strokeStyle = POINTER_COL; g.lineWidth = 2;
-      g.beginPath(); g.arc(c.x, c.y, down ? 7 : 11, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(c.x, c.y, 11 - 4 * k, 0, Math.PI * 2); g.stroke();
       g.beginPath(); g.moveTo(c.x - 16, c.y); g.lineTo(c.x - 12, c.y); g.moveTo(c.x + 12, c.y); g.lineTo(c.x + 16, c.y);
       g.moveTo(c.x, c.y - 16); g.lineTo(c.x, c.y - 12); g.moveTo(c.x, c.y + 12); g.lineTo(c.x, c.y + 16); g.stroke();
       if(down){ g.fillStyle = POINTER_COL; g.globalAlpha = ev.pointerState === 'clicked' ? 0.85 : 0.4; g.beginPath(); g.arc(c.x, c.y, 7, 0, Math.PI * 2); g.fill(); g.globalAlpha = 1; }
@@ -1326,6 +1430,7 @@
             const h = (ev.hands || []).find(x => x.slot === gesture.pointer.slot);
             ev.pointerTip = h && h.pts ? h.pts[8] : null;
             ev.pointerState = ev.pointer.state;
+            ev.pointerBend = ev.pointer.bend || 0;
           }
           drawOverlay(overlay, video, ev, label || (ev.state === 'armed' ? 'ZOOM · READY' : '') || pointerLabel || turnLabel);
         }
@@ -1367,6 +1472,7 @@
     ADAPTERS, selectAdapter, ZoomManager, createTracker, drawOverlay, startGestureZoom,
     constants: { PINCH_ON, PINCH_OFF, FIST_GUARD, PALM_CM, PALM_RAY, ARM_MS, STEP_3D,
                  TURN_ARM_MS, TURN_DEAD_MM, TURN_JUMP, TURN_MAX_FRAME, TURN_PRESENT_MS, TURN_KEEP_MS, SCROLL_UNITS_PER_DEG,
-                 FINGER_STRAIGHT, FINGER_FOLDED, POINT_ARM_MS, FOLD_FRAMES, POINT_LOST_MS, POINTER_BOX }
+                 FINGER_STRAIGHT, FINGER_FOLDED, OTHERS_OPEN, POINT_ARM_DEG, STRAIGHT_DEG, CLICK_DEG,
+                 POINT_ARM_MS, FOLD_FRAMES, CLICK_REARM, LEAVE_FRAMES, POINT_LOST_MS, POINTER_BOX, POINTER_FILTER, TURN_GRACE_MS }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

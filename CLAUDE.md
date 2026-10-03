@@ -404,7 +404,7 @@ single file `dist/index.html`.
   hand, panel text = I-beam); zoom_send takes the same aim. atlasdrag.e2e
   replays drag_send's exact mouse events on the real Atlas page (git
   archive atlas-build-1) and reads its OrbitControls back.
-- **One hand scrolls, one finger points (2.16.0).** The one-hand pinch goes
+- **One hand scrolls, one finger points (2.16.0; the click is an angle since 2.18.0).** The one-hand pinch goes
   where the WINDOW IN FRONT says (TurnRelay.route from the probe's kind):
   'viewer' (own model window) turns it, 'drag' (Atlas) drags it, 'scroll'
   (any other supported adapter except kind '3d') scrolls it through Rust
@@ -413,13 +413,9 @@ single file `dist/index.html`.
   falls back to a viewer that answered the ping. rotate.e2e therefore
   puts the JARVIS viewer in front. handMetrics.fingers = wrist->tip over
   wrist->PIP in 3D (straight 1.17-1.41, folded 0.60-0.75; OK-sign index
-  ~1.02). PointerTracker: pointing = index > FINGER_STRAIGHT (1.12) and
-  the other three < FINGER_FOLDED (0.9); its hand is followed by palm
-  centre (slots renumber left-to-right when a second hand appears); only
-  ANOTHER hand's pinch ends it (its own fold can read as a pinch); the
-  pointer freezes when the finger stops being straight (straightest of
-  the last 350 ms) and FOLD_FRAMES under 0.9 is one click; filter One
-  Euro 0.4/15 (measured). Since 2.17.0 the finger mouse is EVERYWHERE:
+  ~1.02). PointerTracker (pose, click, filter and pinch rules replaced
+  in 2.18.0 — see the next entry): its hand is followed by palm centre
+  (slots renumber left-to-right when a second hand appears). Since 2.17.0 the finger mouse is EVERYWHERE:
   armed after POINT_ARM_MS (250) of the pose, no target window;
   PointerRelay sends pointer_send start (Rust keeps the monitor under the
   pointer, rcMonitor) / move / click (x, y = fractions of THAT monitor) /
@@ -430,6 +426,28 @@ single file `dist/index.html`.
   pointer.test (real landmarks), hands16.e2e (real tracker; landmarks3d
   has pointing_up, landmarks.json does not), atlasdrag.e2e (the click on
   the real Atlas).
+- **The finger mouse is an ANGLE, and one gesture at a time (2.18.0).**
+  handMetrics.bends = degrees the finger's end (PIP->TIP) points away from
+  the palm line (wrist->middle knuckle), sideways spread projected out
+  (3D only). Real data: straight index 4-12°, relaxed 36-46, OK 116,
+  fist 162. The old ratio (fingers.*) cannot see a knuckle bend: the real
+  pointing hand bent 90° at the MCP still read 1.20. PointerTracker:
+  arms on bends.index <= POINT_ARM_DEG (35) + others < FINGER_FOLDED;
+  base = median of the arming bends, followed while straight (down 0.1,
+  up 0.02 a frame); b = bend - base: <= STRAIGHT_DEG (15) follows,
+  between does NOTHING (frozen), >= CLICK_DEG (45) for FOLD_FRAMES = one
+  click (not while closingToPinch); leaving straight takes LEAVE_FRAMES;
+  re-arm after CLICK_REARM straight frames. Staying needs others only <
+  OTHERS_OPEN (1.0). Filter POINTER_FILTER [1, 30, 3] (filtersweep;
+  0.4/15/1 lagged). HandGestures.update gates it: blocked = any pinch
+  engaged (no move/click/start; an active pointer goes 'paused', which
+  like 'clicked' waits for a fully straight finger — a pinch dropped
+  before its turn arms is never a click), takeover = zoom not idle or
+  turn armed/turning (pointer ends); ev.active names the one gesture. The
+  turn waits TURN_GRACE_MS (150) when its pinch opens, re-anchoring on
+  return (clutch still works); a second pinch still ends it at once.
+  bendsim.mjs (scratchpad) bends the real hand's joints for tests;
+  pointer18.test, hands16.e2e cover it.
 - **3D Workspace does not read its argument.** Its main.rs (branch
   claude/3d-model-workspace) ignores argv, so "open it with this model"
   starts it and saves the .glb in JARVIS\3D Workspace, but the model is not

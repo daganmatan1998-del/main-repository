@@ -2070,7 +2070,7 @@ const I18N = {
     gzSensitivityLabel: 'Steps per cm', gzThresholdLabel: 'Movement before it zooms', gzSmoothingLabel: 'Smoothing',
     gzMaxSpeedLabel: 'Maximum steps a second', gzMaxZoomLabel: 'Maximum zoom', gzMinZoomLabel: 'Minimum zoom',
     gestureTurnOn: '☝ PRECISE CONTROL: ON', gestureTurnOff: '☝ PRECISE CONTROL: OFF', gesturePointerOn: '👆 FINGER MOUSE: ON', gesturePointerOff: '👆 FINGER MOUSE: OFF', gzTurnScreenLabel: 'Full turn across', gzScrollSpeedLabel: 'Scroll speed',
-    gestureTurnHint: 'Pinch with ONE hand: on a 3D model or the JARVIS Agent Atlas it turns with the hand — right, left, up, down, all the way round; anywhere else it grabs the page and scrolls it, the page following your hand. Two pinched hands are still the zoom. ONE FINGER (the others folded), held a moment, is the mouse anywhere on the computer, and folding it is a left click. STRAIGHTEN in the model\'s right-click menu puts a model back.',
+    gestureTurnHint: 'Pinch with ONE hand: on a 3D model or the JARVIS Agent Atlas it turns with the hand — right, left, up, down, all the way round; anywhere else it grabs the page and scrolls it, the page following your hand. Two pinched hands are still the zoom. ONE FINGER (the others folded), held a moment, is the mouse anywhere on the computer: fully straight it moves the mouse, half bent nothing happens, bent 45° is a left click. Only one of these works at a time — a pinch stops the finger mouse. STRAIGHTEN in the model\'s right-click menu puts a model back.',
     gestureResetBtn: 'DEFAULTS',
     actNote: 'Every tool he ran, newest first. Click a row for the full arguments and result. This is what actually happened — not what he said happened.',
     actEmpty: 'Nothing yet. This fills up the moment he actually does something.',
@@ -2331,7 +2331,7 @@ const I18N = {
     gzSensitivityLabel: 'רגישות', gzThresholdLabel: 'תנועה לפני שמתחיל זום', gzSmoothingLabel: 'החלקה',
     gzMaxSpeedLabel: 'מקסימום צעדים בשנייה', gzMaxZoomLabel: 'זום מרבי', gzMinZoomLabel: 'זום מזערי',
     gestureTurnOn: '☝ שליטה מדויקת: פועלת', gestureTurnOff: '☝ שליטה מדויקת: כבויה', gesturePointerOn: '👆 עכבר באצבע: פועל', gesturePointerOff: '👆 עכבר באצבע: כבוי', gzTurnScreenLabel: 'סיבוב שלם לאורך', gzScrollSpeedLabel: 'מהירות גלילה',
-    gestureTurnHint: 'צביטה ביד אחת: על מודל תלת-ממד או על ה-JARVIS Agent Atlas הוא מסתובב עם היד — ימינה, שמאלה, למעלה, למטה, סיבוב מלא; בכל מקום אחר היא תופסת את הדף וגוללת אותו, הדף הולך עם היד. צביטה בשתי ידיים היא עדיין הזום. אצבע אחת (השאר מקופלות), מוחזקת רגע, היא העכבר בכל מקום במחשב, וקיפול שלה הוא קליק שמאלי. "STRAIGHTEN" בתפריט הקליק הימני של המודל מחזיר אותו למצב ההתחלתי.',
+    gestureTurnHint: 'צביטה ביד אחת: על מודל תלת-ממד או על ה-JARVIS Agent Atlas הוא מסתובב עם היד — ימינה, שמאלה, למעלה, למטה, סיבוב מלא; בכל מקום אחר היא תופסת את הדף וגוללת אותו, הדף הולך עם היד. צביטה בשתי ידיים היא עדיין הזום. אצבע אחת (השאר מקופלות), מוחזקת רגע, היא העכבר בכל מקום במחשב: ישרה לגמרי — העכבר זז איתה; בין ישרה לכפופה — לא קורה כלום; כפופה 45° — קליק שמאלי. רק אחד מאלה עובד בכל רגע — צביטה עוצרת את עכבר האצבע. "STRAIGHTEN" בתפריט הקליק הימני של המודל מחזיר אותו למצב ההתחלתי.',
     gestureResetBtn: 'ברירת מחדל',
     actNote: 'כל כלי שהוא הריץ, החדש למעלה. לחץ על שורה לפרטים המלאים. זה מה שבאמת קרה — לא מה שהוא אמר שקרה.',
     actEmpty: 'עדיין כלום. זה יתמלא ברגע שהוא באמת יעשה משהו.',
@@ -2505,7 +2505,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.17.0';
+const APP_VERSION = '2.18.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -7425,7 +7425,7 @@ async function setGestureZoom(on, turn, pointer){
            note: gestureSettings.enabled
              ? 'On. The gesture: pinch thumb and index on BOTH hands in front of the camera, pull apart to zoom in, together to zoom out, let go to stop. It zooms whatever program is in front.' +
                (gestureSettings.turnEnabled !== false ? ' Precise control is on too: pinching with ONE hand turns a 3D model (or the Agent Atlas) with the hand, in any direction, and anywhere else grabs the page and scrolls it, the page following the hand.' : ' Precise control (one hand turning a 3D model or scrolling) is off.') +
-               (gestureSettings.pointerEnabled !== false ? ' And the finger mouse: one finger (the others folded), held a moment, moves the mouse anywhere on the computer, and folding it is a left click.' : ' The finger mouse is off.')
+               (gestureSettings.pointerEnabled !== false ? ' And the finger mouse: one finger (the others folded), held a moment, is the mouse anywhere on the computer — fully straight it moves the mouse, half bent nothing happens, bent 45° is a left click. One gesture at a time: a pinch stops the finger mouse.' : ' The finger mouse is off.')
              : 'Off. The camera stays as it was.' };
 }
 (function wireGesturePanel(){
@@ -7461,12 +7461,12 @@ async function setGestureZoom(on, turn, pointer){
 
 const GESTURE_ZOOM_TOOL = {
   name: 'gesture_zoom',
-  description: "Turn two-hand gesture zoom on or off, and with `turn` precise control (one pinched hand: on a 3D model or the Agent Atlas it turns it, right/left/up/down and every way between, all the way round; anywhere else it grabs the page and scrolls it, the page following the hand; and one finger, the others folded, is the mouse anywhere on the computer, folding it a left click; `pointer` switches that). When it is on, he pinches thumb and index finger on BOTH hands in front of the camera, and every centimetre or so he moves his hands APART zooms in one step, every centimetre TOGETHER zooms out one step, on whatever program is in front (holding them still does nothing) — a web page, a PDF, a picture, a 3D model; letting go with either hand stops it. Use it for \"turn on gesture zoom\", \"let me zoom with my hands\", \"תפעיל זום עם הידיים\", and with on=false for \"turn off gesture zoom\". Turning it on opens the camera, which it needs. Confirm in one short line, and tell him the gesture if he may not know it.",
+  description: "Turn two-hand gesture zoom on or off, and with `turn` precise control (one pinched hand: on a 3D model or the Agent Atlas it turns it, right/left/up/down and every way between, all the way round; anywhere else it grabs the page and scrolls it, the page following the hand; and one finger, the others folded, is the mouse anywhere on the computer — straight it moves the mouse, bent 45° is a left click, half-way does nothing; one gesture at a time, a pinch stops the finger mouse; `pointer` switches that). When it is on, he pinches thumb and index finger on BOTH hands in front of the camera, and every centimetre or so he moves his hands APART zooms in one step, every centimetre TOGETHER zooms out one step, on whatever program is in front (holding them still does nothing) — a web page, a PDF, a picture, a 3D model; letting go with either hand stops it. Use it for \"turn on gesture zoom\", \"let me zoom with my hands\", \"תפעיל זום עם הידיים\", and with on=false for \"turn off gesture zoom\". Turning it on opens the camera, which it needs. Confirm in one short line, and tell him the gesture if he may not know it.",
   input_schema: {
     type: 'object',
     properties: { on: { type:'boolean', description:'true to turn it on (opening the camera if it is off), false to turn it off.' },
                   turn: { type:'boolean', description:'Optional: true or false to switch precise control (one hand turns a 3D model) on or off. Leave it out to keep it as it is.' },
-                  pointer: { type:'boolean', description:'Optional: true or false to switch the finger mouse (one finger moves the mouse anywhere, folding it clicks) on or off. Leave it out to keep it as it is.' } },
+                  pointer: { type:'boolean', description:'Optional: true or false to switch the finger mouse (one straight finger moves the mouse anywhere, bending it 45° clicks) on or off. Leave it out to keep it as it is.' } },
     required: ['on']
   }
 };

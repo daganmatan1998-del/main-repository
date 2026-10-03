@@ -1454,3 +1454,55 @@ pinch on your other hand still takes over from the pointer.
 Tested end to end with the real tracker and real hands, in the Atlas, in a
 browser and on the bare desktop: the pointer followed the hand, a fold was
 exactly one click, and switched off nothing moved.
+
+## Page 2.18.0: the finger mouse by its angle, one gesture at a time (needs the app rebuilt)
+
+**The click is now an angle.** The finger is read as how far it is bent,
+in degrees, measured from **your own** straight finger. Your straight is
+what it read while you held it up to start, and it is followed as your
+hand turns.
+
+- **Fully straight** (within 15°): the mouse follows the finger.
+- **Between straight and 45°:** nothing happens. The pointer stays where
+  it was, even if the hand moves.
+- **Bent 45° or more:** one left click, where the finger was last
+  straight. After that nothing happens until the finger is fully straight
+  again; then the next 45° is the next click.
+
+Why it was hard before: "folded" was the wrist-to-tip distance over the
+wrist-to-middle-joint distance. That number hardly moves when the finger
+bends at the big knuckle. MediaPipe's real pointing hand, bent 90° there,
+still read as straight. So only a nearly full curl clicked, and a finger
+bent 45° or 55° never clicked at all.
+
+**One gesture at a time.** A pinch on either hand stops the finger mouse
+at once: no move, no click. That includes a pinch by the pointing hand
+itself, which used to be taken for its own click and ignored. When the
+pinch's scroll or turn, or the two-hand zoom, really begins, the finger
+mouse lets go. It never starts while a pinch is on. A pinch dropped
+before it scrolls is never a click either: the pointer waits for a fully
+straight finger first, as after a click. Before, the pointing
+hand could pinch and scroll while the pointer stayed held, and the window
+label said POINTER instead of SCROLL.
+
+**Less sticking:**
+
+- **The pointer's smoothing:** it now reacts faster. The first 8 px of a
+  slow move come a quarter sooner, and it lags 40% less while moving. A
+  still finger still wanders under 4 px of a 1920 x 1080 screen.
+- **The other three fingers:** while you point, they only need to stay
+  curled. They used to need a tight fold, so loosening them a little froze
+  the pointer, then dropped it.
+- **A scroll pinch that opens for a moment** (a fast hand blurs) no longer
+  ends the scroll. It waits 150 ms and carries on from there. It used to
+  stop, re-arm and stall for about a third of a second.
+
+**Tested:**
+
+- **Unit tests:** run on MediaPipe's real pointing hand, its index bent by
+  known angles at its own joints. A 45° bend reads 45.0°. 53 tests,
+  24 of which fail on 2.17.0.
+- **End to end:** with the real tracker on real hands. A straight finger
+  moving read 8.7–12.1°, never more than 2.7° from its own straight, and
+  every frame moved the pointer. The pointing hand switching to a real
+  pinch gave no click, let the mouse go, and scrolled.
