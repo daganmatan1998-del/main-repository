@@ -527,8 +527,12 @@ single file `dist/index.html`.
   POST /youtube/playlist {name}: the playlist id from JARVIS_PLAYLIST /
   YOUTUBE_PLAYLIST (a link or an id, playlistIdFrom), else his channel via a
   separate Google connection (googleClient, scope youtube.readonly, state
-  prefix `youtube-state.`, jarvis_meta `youtube`, public GET /youtube/oauth,
-  redirect <worker>/youtube/oauth) and playlists?mine=true matched by
+  prefix `youtube-state.`, jarvis_meta `youtube`). Since 2.9.1 the consent
+  redirects to <worker>/calendar/oauth (already registered; /youtube/oauth
+  was Google's redirect_uri_mismatch): handleCalendarOAuth hands a verified
+  youtube-state to handleYoutubeOAuth, which exchanges the code with
+  youtubeCallbackUri (the path Google actually called; /youtube/oauth still
+  answers older links). Then playlists?mine=true matched by
   playlistKey (lowercase, no quotes/geresh/spaces; JARVIS_PLAYLIST_NAMES has
   the spellings). First playable video: playlistItems with his token or
   YOUTUBE_API_KEY (skipping Deleted/Private video), else the playlist page's
@@ -599,7 +603,14 @@ single file `dist/index.html`.
   fails. Tool descriptions: build_3d_model is allowed for a shown object once
   photo_to_3d failed, organic → service or stylised low-poly, never decline;
   generate_3d_model failing → build_3d_model in the same turn.
-  complex3d.e2e.mjs scenarios 4 and 7-10.
+  Since 2.23.1 the SERVICE is the default for anything not simply geometric
+  (both tool descriptions; never3dNote() and neverNo3dNudge(1) say so when
+  model3dServiceUp(): health model3d, key not missing, no service failure
+  this turn), and a code build is SEEN: buildReview() renders it
+  (snapshotModel: offscreen WebGLRenderer, RoomEnvironment, two views in one
+  1024x512 JPEG) and the result carries it in __attach with "rebuild once if
+  it does not read as what he asked" (turnBuildReviews: the second build is
+  final). complex3d.e2e.mjs scenarios 1, 4, 7-11.
 - **Background shells die with their task.** A regression started with a
   plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
   looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &

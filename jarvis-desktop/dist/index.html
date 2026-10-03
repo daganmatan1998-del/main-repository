@@ -2521,7 +2521,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.23.0';
+const APP_VERSION = '2.23.1';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -10847,7 +10847,7 @@ function addModelBubble(source, prompt){
 
 const BUILD3D_TOOL = {
   name: 'build_3d_model',
-  description: "Build a 3D model yourself in Three.js code and show it in the chat, rotatable and downloadable as a .glb. NOT for a model OF something he is showing you (the camera, his screen, a photo) \u2014 that is photo_to_3d, unless photo_to_3d failed: then build it here from what you saw. THIS IS THE DEFAULT for any other 3D request — it is instant and free, where generate_3d_model costs credits and takes a minute. Write a body that assembles the object and RETURN a single THREE.Group or Mesh. THREE is the only thing in scope: no imports, no loaders, no network, no animation loop, no lights or camera (the viewer supplies those). Build at roughly 1-2 units tall; it gets framed automatically.\n\nDECIDE, DO NOT INTERVIEW: never ask him for dimensions, proportions, colours or the other sides before building. Choose what a real one of these looks like, build it, and mention the key choice in one short sentence; changing it afterwards is one sentence from him. A question that you could have answered yourself costs him a round trip for nothing.\n\nQUALITY IS THE WHOLE POINT — a shape that reads as a toy is a failed answer. Hold to these:\n- SEGMENTS: never accept the defaults. Cylinders and spheres want 64 radial segments, torus 64x32. Faceted silhouettes are the single clearest tell of careless work.\n- NEVER LEAVE A HARD EDGE: real manufactured objects have a small radius everywhere. Cap a cylinder with a squashed sphere, ring an edge with a thin torus, or shape the whole profile with LatheGeometry from a points array — that last one is how you get a bottle, a jar, a vase or a glass that actually looks turned rather than stacked.\n- MATERIALS CARRY IT: the viewer has real environment reflections, so roughness and metalness do visible work. Polished metal is roughness 0.15 / metalness 1. Soft-touch plastic is roughness 0.6 / metalness 0. Glossy paint is roughness 0.25 with clearcoat 1 on MeshPhysicalMaterial. Glass is MeshPhysicalMaterial with transmission 1, roughness 0.05, thickness 0.5, ior 1.5. Never leave roughness at its default on everything, and never make one object entirely one material — a cap, a band, a label and a body should differ.\n- COLOUR: avoid pure black and pure white; 0x14161a and 0xf2f0ec read as real materials. Give the object one accent, not five.\n- DETAIL PASS: add the small things that say manufactured — a seam, a lip under a cap, a recessed panel, a base ring, a subtle taper. Three or four of those beat any amount of extra bulk.\n\nKEEP THE CODE SHORT, THE MODEL RICH: the code is cut off if it is longer than about 400 lines, and then NOTHING is built. For a complex object (a vehicle, a robot, a building, anything with more than a dozen parts) write helper functions and loops, not one block per part: a function that makes a leg and a loop that places six of them, one shared geometry and material reused by every copy of a part, 32 segments on small parts and 64 only on the large ones you see first. The viewer reduces the detail by itself when a model is very heavy, so do not worry about the triangle count - worry about the length of the code.\n\nGood for: bottles, tubes, jars, boxes, cans, gadgets, furniture, packaging — the geometric things a store sells. Organic subjects (faces, animals, plants, fabric): generate_3d_model when the 3D service is there; when it is not, or it failed, build a stylised low-poly version here.\n\nA 3D MODEL HE ASKS FOR IS NEVER DECLINED. Not \"I can't\", not \"too complex\", not \"organic\", not a question first. When the full object is too much, build a simpler, lower-detail version that still reads as the thing he asked for, and say in a few words that it is a simplified version.\n\nExample of the standard expected: const g = new THREE.Group(); const profile = []; for(let i = 0; i <= 24; i++){ const t = i / 24; profile.push(new THREE.Vector2(0.36 - 0.1 * Math.pow(t, 3) + 0.02 * Math.sin(t * Math.PI), t * 1.15)); } const body = new THREE.Mesh(new THREE.LatheGeometry(profile, 64), new THREE.MeshPhysicalMaterial({ color: 0x1b1d22, roughness: 0.38, metalness: 0.1, clearcoat: 0.6 })); g.add(body); const collar = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.018, 24, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.18, metalness: 1 })); collar.rotation.x = Math.PI / 2; collar.position.y = 1.14; g.add(collar); const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.27, 0.22, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); cap.position.y = 1.26; g.add(cap); const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.26, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); capTop.scale.y = 0.35; capTop.position.y = 1.37; g.add(capTop); return g;",
+  description: "Build a 3D model yourself in Three.js code and show it in the chat, rotatable and downloadable as a .glb. NOT for a model OF something he is showing you (the camera, his screen, a photo) \u2014 that is photo_to_3d, unless photo_to_3d failed: then build it here from what you saw. USE IT FOR SIMPLE GEOMETRIC OBJECTS (a bottle, a jar, a box, a can, a cup, a lamp, simple furniture, packaging) — it is instant and free. For anything with a complex or organic form — a creature, a character, a person, a vehicle, a drone or aircraft, a building, a weapon, a plant, anything with many curved parts — use generate_3d_model when the 3D service is available: built from primitives those look nothing like what he asked for. Use this tool for them only when the service is missing or failed, and then build the most faithful version you can. Write a body that assembles the object and RETURN a single THREE.Group or Mesh. THREE is the only thing in scope: no imports, no loaders, no network, no animation loop, no lights or camera (the viewer supplies those). Build at roughly 1-2 units tall; it gets framed automatically.\n\nDECIDE, DO NOT INTERVIEW: never ask him for dimensions, proportions, colours or the other sides before building. Choose what a real one of these looks like, build it, and mention the key choice in one short sentence; changing it afterwards is one sentence from him. A question that you could have answered yourself costs him a round trip for nothing.\n\nQUALITY IS THE WHOLE POINT — a shape that reads as a toy is a failed answer. Hold to these:\n- SEGMENTS: never accept the defaults. Cylinders and spheres want 64 radial segments, torus 64x32. Faceted silhouettes are the single clearest tell of careless work.\n- NEVER LEAVE A HARD EDGE: real manufactured objects have a small radius everywhere. Cap a cylinder with a squashed sphere, ring an edge with a thin torus, or shape the whole profile with LatheGeometry from a points array — that last one is how you get a bottle, a jar, a vase or a glass that actually looks turned rather than stacked.\n- MATERIALS CARRY IT: the viewer has real environment reflections, so roughness and metalness do visible work. Polished metal is roughness 0.15 / metalness 1. Soft-touch plastic is roughness 0.6 / metalness 0. Glossy paint is roughness 0.25 with clearcoat 1 on MeshPhysicalMaterial. Glass is MeshPhysicalMaterial with transmission 1, roughness 0.05, thickness 0.5, ior 1.5. Never leave roughness at its default on everything, and never make one object entirely one material — a cap, a band, a label and a body should differ.\n- COLOUR: avoid pure black and pure white; 0x14161a and 0xf2f0ec read as real materials. Give the object one accent, not five.\n- DETAIL PASS: add the small things that say manufactured — a seam, a lip under a cap, a recessed panel, a base ring, a subtle taper. Three or four of those beat any amount of extra bulk.\n\nKEEP THE CODE SHORT, THE MODEL RICH: the code is cut off if it is longer than about 400 lines, and then NOTHING is built. For a complex object (a vehicle, a robot, a building, anything with more than a dozen parts) write helper functions and loops, not one block per part: a function that makes a leg and a loop that places six of them, one shared geometry and material reused by every copy of a part, 32 segments on small parts and 64 only on the large ones you see first. The viewer reduces the detail by itself when a model is very heavy, so do not worry about the triangle count - worry about the length of the code.\n\nGood for: bottles, tubes, jars, boxes, cans, gadgets, furniture, packaging — the geometric things a store sells. Organic subjects (faces, animals, plants, fabric): generate_3d_model when the 3D service is there; when it is not, or it failed, build a stylised low-poly version here.\n\nA 3D MODEL HE ASKS FOR IS NEVER DECLINED. Not \"I can't\", not \"too complex\", not \"organic\", not a question first. When the full object is too much, build a simpler, lower-detail version that still reads as the thing he asked for, and say in a few words that it is a simplified version.\n\nExample of the standard expected: const g = new THREE.Group(); const profile = []; for(let i = 0; i <= 24; i++){ const t = i / 24; profile.push(new THREE.Vector2(0.36 - 0.1 * Math.pow(t, 3) + 0.02 * Math.sin(t * Math.PI), t * 1.15)); } const body = new THREE.Mesh(new THREE.LatheGeometry(profile, 64), new THREE.MeshPhysicalMaterial({ color: 0x1b1d22, roughness: 0.38, metalness: 0.1, clearcoat: 0.6 })); g.add(body); const collar = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.018, 24, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.18, metalness: 1 })); collar.rotation.x = Math.PI / 2; collar.position.y = 1.14; g.add(collar); const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.27, 0.22, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); cap.position.y = 1.26; g.add(cap); const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.26, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); capTop.scale.y = 0.35; capTop.position.y = 1.37; g.add(capTop); return g;",
   input_schema: {
     type:'object',
     properties:{
@@ -10913,8 +10913,10 @@ async function callBuild3dTool(input){
       return { error: 'the model was built but could not be shown: ' + (why || 'the 3D window did not open'),
                tell_the_user: 'Say the model was built but its window would not open, and why. Do not describe it as on his screen.' };
     }
+    const review = turnBuildReviews < 2 ? buildReview(built, name) : null;
     return { ok:true, shown:true, window:true, simplified: simplified || undefined,
-             note:'The model is open in its own frameless window on his screen (he turns it by dragging, and closes it by right-clicking it or from the taskbar). Describe it briefly; do not repeat the code.' + detailNote };
+             note:'The model is open in its own frameless window on his screen (he turns it by dragging, and closes it by right-clicking it or from the taskbar). Describe it briefly; do not repeat the code.' + detailNote,
+             __attach: review || undefined };
   }
   const reuse = [built];                              // the chat bubble builds from the one we already have, then from the code
   addModelBubble({ build: () => reuse.length ? reuse.pop() : (simplified ? builder(cappedThree(simplified)) : builder(THREE)) }, name);
@@ -10929,6 +10931,61 @@ async function callBuild3dTool(input){
    code builds a lighter model. Only constructors are replaced; everything
    else (materials, groups, math) is the real THREE. */
 const MODEL_TRIANGLE_BUDGET = 250000, MODEL_TRIANGLE_HARD_LIMIT = 1500000;
+
+/* WHAT HE BUILT, AS HE WILL SEE IT (2.23.1). A model written as code is
+   written blind: the engine never saw it. So the first build of a turn is
+   rendered (front three-quarter and from behind, above) and the picture goes
+   back beside the result, with the instruction to compare it with what was
+   asked and rebuild once if it does not read as that. The second build is
+   final. */
+let turnBuildReviews = 0;
+function snapshotModel(object){
+  if(typeof THREE === 'undefined' || !THREE.WebGLRenderer || !object) return null;
+  let renderer = null;
+  try{
+    const W = 1024, H = 512;
+    const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(W, H, false);
+    if(THREE.sRGBEncoding && 'outputEncoding' in renderer) renderer.outputEncoding = THREE.sRGBEncoding;
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xdde2e8);
+    if(THREE.PMREMGenerator && THREE.RoomEnvironment){
+      const pm = new THREE.PMREMGenerator(renderer);
+      scene.environment = pm.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+    }
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 0.7));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.8); sun.position.set(3, 5, 4); scene.add(sun);
+    const shown = object.clone(true);
+    scene.add(shown);
+    const box = new THREE.Box3().setFromObject(shown);
+    const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+    const r = Math.max(sz.x, sz.y, sz.z) || 1;
+    const cam = new THREE.PerspectiveCamera(32, 1, r / 100, r * 100);
+    renderer.setScissorTest(true);
+    [[1, 0.55, 1.6], [-1.3, 1.1, -1.3]].forEach((v, i) => {
+      renderer.setViewport(i * H, 0, H, H); renderer.setScissor(i * H, 0, H, H);
+      cam.position.set(c.x + r * v[0] * 1.15, c.y + r * v[1], c.z + r * v[2] * 1.15);
+      cam.lookAt(c);
+      renderer.render(scene, cam);
+    });
+    const data = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+    return data || null;
+  }catch(err){
+    return null;
+  }finally{
+    try{ if(renderer){ renderer.dispose(); if(renderer.forceContextLoss) renderer.forceContextLoss(); } }catch(e){}
+  }
+}
+function buildReview(object, name){
+  const data = snapshotModel(object);
+  if(!data) return null;
+  turnBuildReviews++;
+  const text = turnBuildReviews === 1
+    ? 'This is the model you just built ("' + name + '"): on the left from the front three-quarter, on the right from behind and above. Look at it the way he will. If it does not clearly read as what he asked for — the wrong overall shape or proportions, parts he named missing or in the wrong place, the wrong colours — call build_3d_model again NOW with a better version (this once). If it does, say in one sentence that it is ready. Do not list its flaws to him: fix them.'
+    : 'This is the final version ("' + name + '"). Say in one sentence that it is ready; if something he asked for could not be done, say so in a few words.';
+  return [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data } }, { type: 'text', text }];
+}
 function countTriangles(object){
   let n = 0;
   object.traverse(o => {
@@ -11458,7 +11515,7 @@ async function callPhoto3dTool(input){
 
 const MODEL3D_TOOL = {
   name: 'generate_3d_model',
-  description: "Generate a photorealistic 3D model through an external service. It runs in two passes — first the mesh, then a texture pass that paints on the colour, metalness and roughness — so it COSTS CREDITS FOR BOTH and takes roughly two minutes. Not for a model of something he is showing you \u2014 that is photo_to_3d. Use build_3d_model instead unless the user has explicitly asked for high quality, photorealism, or a real mesh they can download — or unless the subject is organic (a face, an animal, a plant) which cannot be built from primitives.\n\nThe texture pass works from the same prompt, so name the MATERIALS and the COLOURS, not just the shape: \"a matte black anodised aluminium water bottle with a brushed steel screw cap and a thin copper band at the base\" gives it something to paint, where \"a bottle\" gives it nothing and comes back grey. Say the finish (matte, gloss, brushed, anodised, frosted, woven), the material, and the colour, for each distinct part. Those are yours to choose from what the object is \u2014 do not ask him for them, or for its size, first.\n\nIf the texture pass fails the bare mesh is shown instead and the result says textured:false — when that happens, say so plainly and do not describe colours the model does not have. It makes single objects: for a scene, model its main object. IF IT FAILS (no key, no credits, the service down), DO NOT STOP THERE: build the model with build_3d_model in the same turn and mention the service problem in one short clause. A 3D model he asks for is never declined.",
+  description: "Generate a photorealistic 3D model through an external service. It runs in two passes — first the mesh, then a texture pass that paints on the colour, metalness and roughness — so it COSTS CREDITS FOR BOTH and takes roughly two minutes. Not for a model of something he is showing you \u2014 that is photo_to_3d. THE DEFAULT for anything that is not a simple geometric object: creatures, characters, people, vehicles, drones, aircraft, buildings, weapons, plants, detailed products — a real sculpted mesh that looks like the thing, where build_3d_model can only stack primitives. Use build_3d_model for simple geometric objects (a bottle, a box, a can) or when this service is missing or failed. The prompt is everything here: describe the object fully — its overall shape and proportions, every part he named and where it sits, the pose, the style (realistic, stylised, cartoon), and for each part its material, finish and colour — in one clear paragraph.\n\nThe texture pass works from the same prompt, so name the MATERIALS and the COLOURS, not just the shape: \"a matte black anodised aluminium water bottle with a brushed steel screw cap and a thin copper band at the base\" gives it something to paint, where \"a bottle\" gives it nothing and comes back grey. Say the finish (matte, gloss, brushed, anodised, frosted, woven), the material, and the colour, for each distinct part. Those are yours to choose from what the object is \u2014 do not ask him for them, or for its size, first.\n\nIf the texture pass fails the bare mesh is shown instead and the result says textured:false — when that happens, say so plainly and do not describe colours the model does not have. It makes single objects: for a scene, model its main object. IF IT FAILS (no key, no credits, the service down), DO NOT STOP THERE: build the model with build_3d_model in the same turn and mention the service problem in one short clause. A 3D model he asks for is never declined.",
   input_schema: {
     type:'object',
     properties:{
@@ -15365,7 +15422,7 @@ async function readMessageStream(response, onText){
    the last one. Never both: a look replaces the note it is about to write. */
 function cameraSystemExtras(){
   return (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + (compactCodeNote || '') +
-         (turnWants3d ? NEVER_NO_3D_NOTE : '');
+         (turnWants3d ? never3dNote() : '');
 }
 /* SET ONLY AFTER A CUT-OFF (2.22.1): the last attempt ran out of room in the
    middle of a tool call, so nothing was built. Cleared at the start of each
@@ -15393,8 +15450,20 @@ function wantsNew3dModel(text){
   if(/\b(?:print(?:er|ing)?|tutorial|course|learn|teach|software|program)\b|\u05de\u05d3\u05e4\u05e1\u05ea|\u05d4\u05d3\u05e4\u05e1\u05d4|\u05e7\u05d5\u05e8\u05e1/i.test(s)) return false;
   return true;
 }
+function model3dServiceUp(){
+  const c = backendCapabilities;
+  return !!(c && c.model3d && c.model3d_key !== 'missing') && !turnToolFailures.some(f => /^(?:generate_3d_model|photo_to_3d)$/.test(f.tool));
+}
+function never3dNote(){
+  return NEVER_NO_3D_NOTE + (model3dServiceUp()
+    ? ' THE 3D SERVICE IS AVAILABLE: unless this is a simple geometric object (a bottle, a box, a can, a cup), make it with generate_3d_model and a full description — shape, proportions, every part he named and where it sits, pose, style, and each part\'s material and colour. A model stacked from primitives does not look like a creature, a vehicle or a character.'
+    : ' There is no 3D service right now, so build it with build_3d_model as faithfully as you can: the right overall shape and proportions first, every part he named in its place, then the details.');
+}
 const NEVER_NO_3D_NOTE = '\n\nHE HAS ASKED FOR A 3D MODEL. You make one in this turn, always: a 3D model he asks for is never declined, never answered with "I can\'t", "too complex" or a question. If the full object is too much, build a simpler, lower-detail version that still reads as what he asked for, and say in a few words that it is simplified. If a 3D tool fails, use the other one (build_3d_model always works: it is code you write).';
 function neverNo3dNudge(pass, failed){
+  if(pass === 1 && model3dServiceUp()){
+    return 'He asked for a 3D model and there is no model on his screen yet. Making one is not optional and you never decline a 3D model. Call generate_3d_model NOW with a full description of it: shape and proportions, every part he named and where it sits, pose, style, and each part\'s material and colour. Do not ask him anything and do not apologise.';
+  }
   return pass === 1
     ? 'He asked for a 3D model and there is no model on his screen yet' + (failed ? ' (what failed: ' + failed + ')' : '') + '. Making one is not optional and you never decline a 3D model. Call build_3d_model NOW. If the full object is too hard, build a simpler, lower-detail version that still reads as what he asked for: basic shapes, 16 to 32 segments, under 120 lines, helper functions and loops for repeated parts. If the 3D service failed, do not give that as the answer: build it in code. Do not ask him anything and do not apologise; one short sentence after it is built.'
     : 'There is still no model. Build the simplest recognisable version of it NOW with build_3d_model: under 60 lines, boxes, cylinders and spheres only, 16 segments, one THREE.Group, the main parts in their right places and colours. Nothing else, no text before the call.';
@@ -15947,6 +16016,7 @@ async function askJarvis(userText, images, onText, tag){
   turnToolFailures = [];
   compactCodeNote = '';
   turnCutOffTool = false;
+  turnBuildReviews = 0;
   turnWants3d = wantsNew3dModel(userText);
   turnModelShown = false;
   turnIsLook = !!(images && images.some(a => a && a.kind !== 'pdf' && a.kind !== 'text'));

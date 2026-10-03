@@ -133,11 +133,14 @@ account, so it was dropped.)
   1. In [Google Cloud console](https://console.cloud.google.com/), the same
      project as the calendar: APIs & Services → Library → **YouTube Data API
      v3** → Enable.
-  2. Credentials → your OAuth client → Authorized redirect URIs → add
-     `https://<your-worker>/youtube/oauth` → Save.
-  3. OAuth consent screen → Data access → add the scope
-     `.../auth/youtube.readonly` (Google will show the unverified-app warning
-     when you connect; it is your own app: Advanced → continue).
+  2. Nothing to add to the redirect URIs: since worker 2.9.1 the YouTube
+     sign-in comes back to the calendar's address (`/calendar/oauth`), which
+     is already registered. (2.9.0 used `/youtube/oauth`, and Google refused
+     it with `redirect_uri_mismatch`.)
+  3. If Google says the scope is not allowed: OAuth consent screen → Data
+     access → add `.../auth/youtube.readonly`. Google shows the
+     unverified-app warning when you connect; it is your own app: Advanced →
+     continue.
   4. Say **"connect YouTube"** and approve; pick the channel that has the
      playlist.
 
@@ -1836,3 +1839,29 @@ one on his screen:
    in code from the description when the 3D service fails.
 A question about 3D ("how do I make a 3D model in Blender") is still just
 answered.
+
+## Page 2.23.1 / worker 2.9.1: YouTube connects, and 3D models that look like the request
+
+**"redirect_uri_mismatch" from Google.** The YouTube sign-in asked Google to
+come back to `/youtube/oauth`, an address that was never added to the OAuth
+client. It now comes back to `/calendar/oauth`, which is already registered;
+the signed state says which connection it is, so the calendar is untouched.
+
+**The models looked nothing like what he asked for.** A model built in code
+is stacked from boxes, cylinders and spheres, written blind: fine for a bottle,
+hopeless for a dragon or a drone. Three changes:
+1. **The 3D service is now the default for anything that is not a simple
+   geometric object** (creatures, characters, vehicles, drones, buildings,
+   weapons, plants, detailed products), with a full description as its prompt:
+   shape and proportions, every part he named and where it sits, pose, style,
+   and each part's material and colour. Code builds stay for bottles, boxes,
+   cans, cups, simple furniture, and for when the service is missing or fails.
+2. **A code build is looked at.** The first build of a turn is rendered from
+   two angles and the picture goes back to the model with the instruction to
+   compare it with the request and rebuild once if it does not read as that.
+3. **The "never a no" hand-back asks for the service first** when it is
+   there, and only then for a simpler code build.
+
+For the service to be used, the worker needs a Tripo (recommended) or Meshy
+key with credits; `/health` shows `model3d: true` and `model3d_key: "set"`
+when it is ready (see "The 3D service" near the top).

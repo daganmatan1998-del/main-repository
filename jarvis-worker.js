@@ -83,7 +83,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.9.0';
+const WORKER_VERSION = '2.9.1';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -3263,6 +3263,11 @@ function calendarPage(title, bodyHtml, status) {
    carries no token of ours — which is exactly why the signed state is
    checked before anything else is looked at. */
 async function handleCalendarOAuth(request, env, url) {
+  /* The same registered address serves YouTube (2.9.1): its state is signed
+     with its own prefix, so a YouTube round trip is recognised here and
+     handed over, and nobody has to add a second redirect URI in Google
+     Cloud (a missing one is Google's "redirect_uri_mismatch"). */
+  if (await verifyYoutubeState(env, url.searchParams.get('state') || '')) return handleYoutubeOAuth(request, env, url);
   if (url.searchParams.get('error')) {
     return calendarPage('Calendar not connected',
       '<p>Google said: ' + escapeHtml(url.searchParams.get('error')) + '. Nothing was changed.</p>', 400);
@@ -3366,8 +3371,14 @@ function playlistIdFrom(v) {
   const m = /[?&]list=([A-Za-z0-9_-]{10,64})/.exec(s) || /^([A-Za-z0-9_-]{10,64})$/.exec(s);
   return m ? m[1] : null;
 }
+/* The address Google sends him back to: the calendar's, which is already
+   registered in the OAuth client. A callback arriving on /youtube/oauth
+   (an older consent link) is answered there too. */
 function youtubeRedirectUri(url) {
-  return url.origin + '/youtube/oauth';
+  return url.origin + '/calendar/oauth';
+}
+function youtubeCallbackUri(url) {
+  return url.origin + (url.pathname.replace(/\/+$/, '') === '/youtube/oauth' ? '/youtube/oauth' : '/calendar/oauth');
 }
 function youtubeFail(env, request, status, code, error, tell, extra) {
   return json(Object.assign({ ok: false, code, error, tell_the_user: tell }, extra || {}), status, env, request);
@@ -3594,7 +3605,7 @@ async function handleYoutubeOAuth(request, env, url) {
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ code, client_id: c.id, client_secret: c.secret, redirect_uri: youtubeRedirectUri(url), grant_type: 'authorization_code' })
+    body: new URLSearchParams({ code, client_id: c.id, client_secret: c.secret, redirect_uri: youtubeCallbackUri(url), grant_type: 'authorization_code' })
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.refresh_token) {
@@ -3602,7 +3613,7 @@ async function handleYoutubeOAuth(request, env, url) {
     const fix = why === 'invalid_client'
       ? 'Google did not accept the worker\'s <code>GOOGLE_CLIENT_SECRET</code>. Enter it again in Cloudflare, deploy, then connect again.'
       : why === 'redirect_uri_mismatch'
-      ? 'The Google OAuth client does not list this address. In Google Cloud, Credentials, your OAuth client, Authorized redirect URIs, add exactly <code>' + escapeHtml(youtubeRedirectUri(url)) + '</code>, save, then connect again.'
+      ? 'The Google OAuth client does not list this address. In Google Cloud, Credentials, your OAuth client, Authorized redirect URIs, add exactly <code>' + escapeHtml(youtubeCallbackUri(url)) + '</code>, save, then connect again.'
       : why === 'invalid_grant'
       ? 'This sign-in was already used or took too long. Ask JARVIS to connect YouTube again.'
       : 'Remove JARVIS at myaccount.google.com/permissions and connect again.';
