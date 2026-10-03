@@ -1858,6 +1858,37 @@ fn save_model_file(b64: String, name: String) -> Result<serde_json::Value, Strin
     Ok(serde_json::json!({ "path": path.display().to_string(), "folder": dir.display().to_string(), "bytes": bytes }))
 }
 
+/* THE TRACKING RECORDING (2.20.0). The camera window records half a minute of
+   what the hand tracker saw — the 21 points of each hand, how long each frame
+   took, how late the camera's pictures were, what the pointer did — and hands
+   it here as JSON text. It goes in JARVIS\Tracking, under a name that is never
+   one already there, so he can send it and the tracking can be studied on his
+   own hands and camera instead of guessed at. No picture is in it. */
+#[tauri::command]
+fn save_trace_file(name: String, text: String) -> Result<serde_json::Value, String> {
+    if text.len() > 40 * 1024 * 1024 {
+        return Err("the recording is too big to save".into());
+    }
+    let dir = jarvis_folder().ok_or("could not find or make a JARVIS folder")?.join("Tracking");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("could not make {}: {}", dir.display(), e))?;
+    let mut stem: String = name
+        .trim_end_matches(".json")
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect();
+    if stem.is_empty() {
+        stem = "tracking".into();
+    }
+    let mut path = dir.join(format!("{}.json", stem));
+    let mut n = 2;
+    while path.exists() {
+        path = dir.join(format!("{}-{}.json", stem, n));
+        n += 1;
+    }
+    std::fs::write(&path, text.as_bytes()).map_err(|e| format!("could not write {}: {}", path.display(), e))?;
+    Ok(serde_json::json!({ "path": path.display().to_string(), "folder": dir.display().to_string(), "bytes": text.len() }))
+}
+
 /* A MODEL BUILT IN CODE, HANDED TO THE 3D VIEWER.
 
    build_3d_model makes its mesh in the orb's page; the viewer is another
@@ -2634,7 +2665,8 @@ fn scroll_send(app: tauri::AppHandle, hwnd: isize, h: i32, v: i32) -> Result<Str
    do not arrive evenly; sent straight to Windows they were thirty small
    jumps a second, and a hand the tracker lost for a few frames froze the
    cursor and then threw it. "move" now only sets where the hand is and how
-   fast it is going (vx, vy, fractions of the monitor a second); a thread
+   fast it is going (vx, vy, fractions of the monitor a second) and how late
+   the camera's picture was (late, ms, when the browser can say); a thread
    moves the real cursor along glide.rs's line every few milliseconds —
    coasting between samples, leading a little, bridging a dropout, never
    jumping. It runs only between "start" and "end" (and is asleep, costing
@@ -2755,6 +2787,7 @@ fn pointer_send(
     y: Option<f64>,
     vx: Option<f64>,
     vy: Option<f64>,
+    late: Option<f64>,
 ) -> Result<serde_json::Value, String> {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP};
     let mut st = POINTER.lock().map_err(|_| "the pointer is unavailable".to_string())?;
@@ -2791,7 +2824,7 @@ fn pointer_send(
                 if phase == "move" {
                     let (vx, vy) = (vx.filter(|v| v.is_finite()).unwrap_or(0.0), vy.filter(|v| v.is_finite()).unwrap_or(0.0));
                     if let Some(g) = st.glide.as_mut() {
-                        g.set(px, py, vx * (w - 1.0), vy * (h - 1.0), now);
+                        g.set(px, py, vx * (w - 1.0), vy * (h - 1.0), now, late);
                     }
                     Ok(serde_json::json!({ "phase": "move", "x": px, "y": py }))
                 } else {
@@ -2840,6 +2873,7 @@ fn pointer_send(
     _y: Option<f64>,
     _vx: Option<f64>,
     _vy: Option<f64>,
+    _late: Option<f64>,
 ) -> Result<serde_json::Value, String> {
     Err("only available on Windows".into())
 }
@@ -3130,6 +3164,7 @@ fn main() {
             stashed_model,
             refresh_orb,
             save_model_file,
+            save_trace_file,
             launch_3d_workspace,
             launch_app,
             drag_send,

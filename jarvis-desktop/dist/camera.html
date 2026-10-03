@@ -107,12 +107,12 @@
      both windows can read them, and pushed live when they change. */
   var GZ = window.JarvisGestureZoom;
   var gzOverlay = document.getElementById('gz');
-  var gz = null, gzNote = '', liveText = '';
+  var gz = null, gzNote = '', liveText = '', perfNote = '';
   function gzSettings(){
     try{ return JSON.parse(localStorage.getItem(GZ.STORE_KEY) || 'null'); }catch(e){ return null; }
   }
   function showState(){
-    if(liveText) say(liveText + (gzNote ? ' · ' + gzNote : ''), true);
+    if(liveText) say(liveText + (perfNote ? ' · ' + perfNote : '') + (gzNote ? ' · ' + gzNote : ''), true);
   }
   function gzStart(){
     if(!GZ || gz) return;
@@ -129,7 +129,23 @@
       /* Precise control (2.12.0) asks whether a 3D model is open, and the
          viewer answers on jarvis://model-pong. */
       listen: ev.listen ? function(name, fn){ return ev.listen(name, fn); } : null,
+      /* For the recording: which camera, what it can be set to. */
+      trackInfo: function(){
+        var tr = stream && stream.getVideoTracks && stream.getVideoTracks()[0];
+        if(!tr) return null;
+        var caps = null; try{ caps = tr.getCapabilities ? tr.getCapabilities() : null; }catch(e){}
+        return { label: tr.label || '', settings: tr.getSettings ? tr.getSettings() : null, capabilities: caps };
+      },
       onStatus: function(s){
+        /* What the camera and the tracker really do (measured each second):
+           pictures a second, a read in ms, how old a picture is. A camera
+           that gives fewer than 24 a second is the first thing to fix. */
+        if(s.kind === 'perf'){
+          liveText = liveText.replace(/ · \d+ fps/, '');          // the camera's setting; the measured rate replaces it
+          perfNote = Math.round(s.camFps) + ' fps' + (s.camFps < 24 ? ' LOW' : '') + ' · ' + Math.round(s.inferMs || 0) + ' ms' +
+                     (s.lateMs != null ? ' · late ' + Math.round(s.lateMs) + ' ms' : '');
+          showState(); emit('jarvis://gesture-status', s); return;
+        }
         if(s.kind === 'ready') gzNote = '✋ zoom';
         else if(s.kind === 'foreground') gzNote = '✋ zoom' + (s.supported && s.name ? ' · ' + s.name : '');
         else if(s.kind === 'failed') gzNote = 'no hand tracking';
@@ -146,6 +162,25 @@
     if(!gz){ if(s.enabled !== false){ try{ localStorage.setItem(GZ.STORE_KEY, JSON.stringify(s)); }catch(err){} gzStart(); } return; }
     gz.configure(s);
     if(s.enabled === false){ gzNote = ''; showState(); }
+  });
+
+  /* THE TRACKING RECORDING (2.20.0): the orb's GESTURES tab asks for half a
+     minute of what the hand tracker sees; it is saved as a file in
+     JARVIS\Tracking, which he can send to be studied. */
+  if(ev.listen) ev.listen('jarvis://gesture-record', function(e){
+    var secs = Number(e && e.payload && e.payload.seconds) || 30;
+    if(!gz){ emit('jarvis://gesture-status', { kind: 'record-failed', reason: 'hand tracking is not running' }); return; }
+    gz.record(secs).then(function(res){
+      if(!res){ emit('jarvis://gesture-status', { kind: 'record-failed', reason: 'it is already recording, or tracking is off' }); return; }
+      var d = new Date(), p2 = function(n){ return (n < 10 ? '0' : '') + n; };
+      var name = 'tracking-' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '-' + p2(d.getHours()) + p2(d.getMinutes()) + p2(d.getSeconds());
+      if(!(T.core && T.core.invoke)){ emit('jarvis://gesture-status', { kind: 'record-failed', reason: 'no desktop bridge' }); return; }
+      T.core.invoke('save_trace_file', { name: name, text: res.text }).then(function(r){
+        emit('jarvis://gesture-status', { kind: 'recorded', path: r && r.path, bytes: r && r.bytes, summary: res.summary });
+      }, function(err){
+        emit('jarvis://gesture-status', { kind: 'record-failed', reason: String((err && err.message) || err) });
+      });
+    });
   });
 
   /* How often a frame is handed to the orb. Fast enough that "look at
@@ -341,6 +376,7 @@
     return Promise.race([feed.play().catch(function(){}), new Promise(function(r){ setTimeout(r, 2500); })]).then(function(){
       if(gen !== startGen) return;
       liveText = (st.width || '?') + '×' + (st.height || '?') + (st.frameRate ? ' · ' + Math.round(st.frameRate) + ' fps' : '') + ' — live';
+      perfNote = '';
       showState();
       emit('jarvis://camera-open', true);
       gzStart();

@@ -1576,3 +1576,55 @@ tracker still sometimes misses. This makes the cursor smooth and keeps it
 from teleporting. It does not make the tracker see better. If the pink
 ring is off your finger in the camera window, that is the tracker's
 answer, not the cursor's.
+
+## Page 2.20.0: the camera is measured, and half a minute of tracking can be recorded (needs the app rebuilt)
+
+**The camera window now measures what the camera really does**, each
+second, instead of showing the camera's setting. Before, "30 fps" was only
+what the camera was *asked* for. A webcam in a dim room quietly drops to 15
+fps, and that alone makes a cursor jumpy. The window's line now reads, for
+example, `1280×720 — live · 27 fps · 38 ms · late 92 ms`:
+
+- **fps:** the pictures a second the camera gives. Under 24 it adds LOW.
+- **ms:** how long the tracker takes to read one picture.
+- **late:** how old a picture is when it has been read. The browser stamps
+  each frame with the moment the camera captured it, so this is measured
+  and not guessed. If the stamps are missing it shows nothing.
+
+The same three numbers show under the buttons in the GESTURES tab.
+
+**The cursor's lead follows the delay.** Rust looks a third of the measured
+delay ahead (10 to 45 ms; 30 ms when unknown), and its cap scales with it. A
+slow camera gets more help, a fast one less overshoot.
+
+**⏺ RECORD TRACKING (30 s)**, in the GESTURES tab, is for studying your
+camera and your hands instead of guessing. Press it, then for half a minute
+point and move your finger around the screen: slowly, fast, in circles, a
+few clicks, in and out of the camera's view. A file is saved in
+`JARVIS\Tracking\tracking-<date>-<time>.json`. It holds, per frame:
+
+- when the frame was read and how long that took;
+- the camera's own stamps for it;
+- the 21 points of each hand, and how sure the tracker was;
+- what the pointer did.
+
+The header names the camera and lists what it can be set to (exposure,
+frame rate). **There is no picture in it, only numbers.** Send it to
+Claude.
+
+The file can be replayed through the real gesture code and the real
+`glide.rs` (`replay.mjs` in the working folder). That says how many frames
+the camera lost, how long a read takes, how often the tracker is unsure,
+and what the cursor does on *your* frames.
+
+**What can be done about a slow camera** (the numbers in the window say
+which one you have):
+
+- **Under 24 fps:** more light, in front of you and not behind. Webcams
+  lower their frame rate to gather light. In the camera's own software (for
+  Logitech: G HUB or Logi Tune) switch off "low-light compensation" or
+  "RightLight" and any automatic frame rate. Plug it into a USB 3 port,
+  directly and not through a hub.
+- **A read over 40 ms:** the tracker is on the CPU, or the GPU path is
+  slow. The camera window says which in the log; "delegate": "CPU" can be
+  forced in the saved settings.

@@ -473,6 +473,24 @@ single file `dist/index.html`.
   pointer19.test, chaincmp.mjs (2.18.0 vs 2.19.0 table), hands16.e2e.
   The video he sent showed the tracker itself missing (the ring on his
   face, the finger elsewhere): smoothing cannot fix a wrong answer.
+- **The camera is MEASURED, and tracking can be recorded (2.20.0).** In
+  tick(meta): inferMs (EMA of one detect), lateMs (EMA of t2 -
+  meta.captureTime, accepted 0..1500 ms — Chromium gives captureTime for
+  real/fake devices, NOT for canvas.captureStream), camFps from
+  presentedFrames; onStatus {kind:'perf'} each second, shown by camera.html
+  (replacing the nominal getSettings().frameRate; LOW under 24) and in the
+  GESTURES tab (#gesturePerf). PointerRelay.setLate -> `late` in pointer_send
+  (only when known); glide.rs lead = clamp(0.33*late, 10, 45) ms, cap
+  CAP_PX*lead/LEAD_MS. api.record(seconds) in startGestureZoom collects per
+  frame {t, inf, c, m, pf, d, rc, h:[{s,w,p:[21x[x,y,z]]}], ptr:[type,state,
+  x,y,vx,vy,bend], trn, zm}; header has camera label/settings/capabilities
+  (o.trackInfo from camera.html), summary. Event jarvis://gesture-record
+  {seconds} -> camera.html -> Rust save_trace_file (JARVIS\Tracking, never
+  overwrites, 40 MB cap) -> status recorded/record-failed/recording. The
+  orb button repeats the ask for ~18 s until the camera window answers.
+  replay.mjs (scratchpad) runs a file through the real gesture code + the
+  glide.rs binary. hands16.e2e (real tracker) and late.e2e (fake device with
+  stamps) cover it; chain.mjs/pointer19.test the glide.
 - **3D Workspace does not read its argument.** Its main.rs (branch
   claude/3d-model-workspace) ignores argv, so "open it with this model"
   starts it and saves the .glb in JARVIS\3D Workspace, but the model is not

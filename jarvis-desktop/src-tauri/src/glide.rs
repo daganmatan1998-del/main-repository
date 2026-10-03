@@ -34,6 +34,12 @@ pub const TAU_MS: f64 = 26.0;
 pub const GAP_MS: f64 = 50.0;
 pub const LEAD_MS: f64 = 30.0;
 pub const CAP_PX: f64 = 20.0;
+/// When the page can tell how late the camera's pictures are (the browser
+/// stamps each frame with the moment the camera captured it), the lead is a
+/// third of that, between these; CAP_PX is for LEAD_MS and scales with it.
+pub const LEAD_FRAC: f64 = 0.33;
+pub const LEAD_MIN_MS: f64 = 10.0;
+pub const LEAD_MAX_MS: f64 = 45.0;
 pub const EXTRA_MS: f64 = 100.0;
 pub const DECAY_MS: f64 = 120.0;
 pub const SLEW_PXS: f64 = 2500.0;
@@ -46,6 +52,7 @@ pub struct Glide {
     target: (f64, f64),
     vel: (f64, f64),
     at: f64,
+    lead: f64,
     last: Option<f64>,
     scale: f64,
 }
@@ -67,12 +74,17 @@ impl Glide {
     /// Starts at (x, y), where the cursor is. `scale` is the monitor width
     /// over 1920.
     pub fn new(x: f64, y: f64, now_ms: f64, scale: f64) -> Glide {
-        Glide { pos: (x, y), target: (x, y), vel: (0.0, 0.0), at: now_ms, last: None, scale: scale.max(0.25) }
+        Glide { pos: (x, y), target: (x, y), vel: (0.0, 0.0), at: now_ms, lead: LEAD_MS, last: None, scale: scale.max(0.25) }
     }
 
     /// A new sample: where the hand is (x, y px) and how fast it is moving
-    /// (vx, vy px/s).
-    pub fn set(&mut self, x: f64, y: f64, vx: f64, vy: f64, now_ms: f64) {
+    /// (vx, vy px/s). `late_ms`, when known, is how old the camera's picture
+    /// was when it arrived.
+    pub fn set(&mut self, x: f64, y: f64, vx: f64, vy: f64, now_ms: f64, late_ms: Option<f64>) {
+        self.lead = match late_ms {
+            Some(l) if l.is_finite() && l >= 0.0 => (l * LEAD_FRAC).clamp(LEAD_MIN_MS, LEAD_MAX_MS),
+            _ => LEAD_MS,
+        };
         let v = (vx, vy);
         let speed = len(v) / self.scale;
         let gate = ((speed - GATE_LO) / (GATE_HI - GATE_LO)).clamp(0.0, 1.0);
@@ -98,7 +110,10 @@ impl Glide {
         // a guess about the future, so neither is capped. The lead is the
         // guess, and is.
         let here = ((near + TAU_MS) / 1000.0, (near + TAU_MS) / 1000.0);
-        let lead = limit((self.vel.0 * LEAD_MS / 1000.0, self.vel.1 * LEAD_MS / 1000.0), CAP_PX * self.scale);
+        let lead = limit(
+            (self.vel.0 * self.lead / 1000.0, self.vel.1 * self.lead / 1000.0),
+            CAP_PX * self.scale * self.lead / LEAD_MS,
+        );
         let mut t = (self.target.0 + self.vel.0 * here.0 + lead.0, self.target.1 + self.vel.1 * here.1 + lead.1);
         if age > GAP_MS {
             let s = age - GAP_MS;
@@ -142,7 +157,7 @@ mod tests {
                 let cap = next;
                 let moving = stop_at.map_or(true, |s| cap < s);
                 let c = if moving { cap } else { stop_at.unwrap() };
-                g.set(400.0 + speed * c / 1000.0, 500.0, if moving { speed } else { 0.0 }, 0.0, next + 100.0);
+                g.set(400.0 + speed * c / 1000.0, 500.0, if moving { speed } else { 0.0 }, 0.0, next + 100.0, None);
                 next += 33.3;
             }
             out.push(g.step(t));
@@ -163,7 +178,7 @@ mod tests {
     #[test]
     fn slow_jitter_speeds_are_not_extrapolated() {
         let mut g = Glide::new(100.0, 100.0, 0.0, 1.0);
-        g.set(100.0, 100.0, 60.0, -40.0, 0.0); // 72 px/s: under GATE_LO
+        g.set(100.0, 100.0, 60.0, -40.0, 0.0, None); // 72 px/s: under GATE_LO
         for i in 0..100 {
             g.step(i as f64 * 4.0);
         }
@@ -222,14 +237,14 @@ mod tests {
     #[test]
     fn a_hand_found_again_far_away_is_a_glide_not_a_jump() {
         let mut g = Glide::new(500.0, 500.0, 0.0, 1.0);
-        g.set(500.0, 500.0, 0.0, 0.0, 0.0);
+        g.set(500.0, 500.0, 0.0, 0.0, 0.0, None);
         let mut t = 0.0;
         while t <= 400.0 {
             g.step(t);
             t += 4.0;
         }
         t -= 4.0;
-        g.set(1500.0, 800.0, 0.0, 0.0, t);
+        g.set(1500.0, 800.0, 0.0, 0.0, t, None);
         let mut worst = 0.0f64;
         let mut prev = g.pos;
         for _ in 0..200 {
@@ -245,7 +260,7 @@ mod tests {
     #[test]
     fn a_dropout_is_bridged_by_slowing_travel() {
         let mut g = Glide::new(0.0, 0.0, 0.0, 1.0);
-        g.set(0.0, 0.0, 800.0, 0.0, 0.0);
+        g.set(0.0, 0.0, 800.0, 0.0, 0.0, None);
         let mut t = 0.0;
         let mut last = 0.0;
         while t < 1500.0 {
@@ -260,7 +275,7 @@ mod tests {
     #[test]
     fn a_click_snaps_to_the_spot() {
         let mut g = Glide::new(0.0, 0.0, 0.0, 1.0);
-        g.set(300.0, 300.0, 900.0, 0.0, 0.0);
+        g.set(300.0, 300.0, 900.0, 0.0, 0.0, None);
         g.step(10.0);
         g.snap(250.0, 260.0, 12.0);
         assert_eq!(g.pos, (250.0, 260.0));
@@ -269,11 +284,34 @@ mod tests {
     }
 
     #[test]
+    fn the_lead_follows_how_late_the_camera_is() {
+        let lead_of = |late: Option<f64>| {
+            let mut g = Glide::new(0.0, 0.0, 0.0, 1.0);
+            g.set(0.0, 0.0, 600.0, 0.0, 0.0, late);
+            // the coast and the lag are the same whatever the lead is
+            g.target_at(0.0).0 - 600.0 * TAU_MS / 1000.0
+        };
+        let unknown = lead_of(None);
+        let slow_cam = lead_of(Some(150.0));
+        let fast_cam = lead_of(Some(40.0));
+        let nonsense = lead_of(Some(-5.0));
+        assert!((unknown - 600.0 * LEAD_MS / 1000.0).abs() < 0.01, "{}", unknown);
+        assert!(slow_cam > unknown && (slow_cam - 600.0 * LEAD_MAX_MS / 1000.0).abs() < 0.01, "slow {}", slow_cam);
+        assert!(fast_cam < unknown && (fast_cam - 600.0 * 40.0 * LEAD_FRAC / 1000.0).abs() < 0.01, "fast {}", fast_cam);
+        assert!((nonsense - unknown).abs() < 0.01, "{}", nonsense);
+        // and a very late camera cannot send the cursor further than its scaled cap
+        let mut g = Glide::new(0.0, 0.0, 0.0, 1.0);
+        g.set(0.0, 0.0, 3000.0, 0.0, 0.0, Some(400.0));
+        let t = g.target_at(0.0).0 - 3000.0 * TAU_MS / 1000.0;
+        assert!((t - CAP_PX * LEAD_MAX_MS / LEAD_MS).abs() < 0.01, "{}", t);
+    }
+
+    #[test]
     fn sizes_scale_with_the_monitor() {
         // The same hand on a 3840 px monitor (scale 2) moves twice as many px/s;
         // the lead cap is twice as many px, so the overshoot is the same fraction of the screen.
         let mut g = Glide::new(0.0, 0.0, 0.0, 2.0);
-        g.set(0.0, 0.0, 4000.0, 0.0, 0.0);
+        g.set(0.0, 0.0, 4000.0, 0.0, 0.0, None);
         let t = g.target_at(10.0);
         let lead = t.0 - 4000.0 * (10.0 + TAU_MS) / 1000.0; // what is left after the coast and the lag
         assert!((lead - CAP_PX * 2.0).abs() < 0.01, "lead {}", lead);

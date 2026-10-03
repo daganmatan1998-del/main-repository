@@ -895,7 +895,12 @@
       this.invoke = o.invoke || null;
       this.onStatus = o.onStatus || (() => {});
       this.busy = false; this.queue = []; this.move = null; this.active = false; this.failed = false;
+      this.lateMs = null;
     }
+    /* How old the camera's pictures are when they reach us, measured by the
+       controller from the frames' own capture stamps (null if the browser
+       does not give them). Rust sets the cursor's lead from it. */
+    setLate(ms){ this.lateMs = typeof ms === 'number' && isFinite(ms) && ms >= 0 ? Math.round(ms) : null; }
     handle(p){
       if(!p || p.type === 'none' || !this.invoke) return;
       if(p.type === 'end'){
@@ -917,6 +922,7 @@
         /* vx, vy: how fast the finger is going (fractions of the monitor a
            second); Rust's glide keeps the cursor moving between samples. */
         this.move = { phase: 'move', x: p.x, y: p.y, vx: p.type === 'freeze' ? 0 : (p.vx || 0), vy: p.type === 'freeze' ? 0 : (p.vy || 0) };
+        if(this.lateMs !== null) this.move.late = this.lateMs;
       }
       this.pump();
     }
@@ -1229,7 +1235,8 @@
         lastTs = ts;
         const r = lm.detectForVideo(source, ts);
         return (r.landmarks || []).map((L, i) => ({ landmarks: L,
-          handedness: (r.handedness && r.handedness[i] && r.handedness[i][0] && r.handedness[i][0].categoryName) || '' }));
+          handedness: (r.handedness && r.handedness[i] && r.handedness[i][0] && r.handedness[i][0].categoryName) || '',
+          score: (r.handedness && r.handedness[i] && r.handedness[i][0] && r.handedness[i][0].score) || 0 }));
       },
       close(){ try{ lm.close(); }catch(e){} }
     };
@@ -1382,6 +1389,13 @@
     }
     let pingTimer = null;
     let tracker = null, loading = null, running = false, timer = null, handsAt = -1e9, lastEv = null, frames = 0, spent = 0;
+    /* What the camera and the tracker really do (2.20.0), measured, not read
+       from the camera's settings: how many pictures a second the camera
+       gives, how many the tracker reads, how long a read takes, and how old
+       a picture is when it has been read (the browser stamps each frame
+       with the moment the camera captured it). */
+    let lateEma = null, inferEma = null, camFps = 0, trackFps = 0, perfAt = 0, perfN = 0, perfP0 = -1, perfT0 = 0, capturedStamps = false;
+    let rec = null;
     /* Which program is in front, about once a second even between
        gestures. Rust remembers the last program he was in only when it is
        asked; without this, clicking the camera window and then pinching
@@ -1444,7 +1458,7 @@
         if(n === lastPresented) repeats++;
         lastPresented = n;
       }
-      tick();
+      tick(meta);
       schedule();
     }
     function onPaint(){
@@ -1452,10 +1466,10 @@
       if(!running) return;
       /* Only a new picture: the same one twice is wasted work. */
       const m = video.currentTime;
-      if(m !== lastMedia){ lastMedia = m; tick(); }
+      if(m !== lastMedia){ lastMedia = m; tick(null); }
       schedule();
     }
-    function tick(){
+    function tick(meta){
       if(!running) return;
       try{
         if(tracker && video.readyState >= 2 && video.videoWidth){
@@ -1464,6 +1478,22 @@
           const t2 = now();
           frames++; spent += t2 - t;
           fpsN++;
+          /* Measured: the read, the picture's age, the camera's real rate. */
+          inferEma = inferEma === null ? t2 - t : inferEma + ((t2 - t) - inferEma) * 0.1;
+          if(meta && typeof meta.captureTime === 'number'){
+            const age = t2 - meta.captureTime;
+            if(age >= 0 && age < 1500){ capturedStamps = true; lateEma = lateEma === null ? age : lateEma + (age - lateEma) * 0.1; }
+          }
+          perfN++;
+          if(perfAt === 0){ perfAt = t2; perfN = 0; perfP0 = meta && typeof meta.presentedFrames === 'number' ? meta.presentedFrames : -1; }
+          else if(t2 - perfAt >= 1000){
+            const secs = (t2 - perfAt) / 1000;
+            trackFps = perfN / secs;
+            camFps = (perfP0 >= 0 && meta && typeof meta.presentedFrames === 'number') ? (meta.presentedFrames - perfP0) / secs : trackFps;
+            perfAt = t2; perfN = 0; perfP0 = meta && typeof meta.presentedFrames === 'number' ? meta.presentedFrames : -1;
+            if(o.onStatus) o.onStatus({ kind: 'perf', camFps, trackFps, inferMs: inferEma, lateMs: lateEma });
+          }
+          pointer.setLate(lateEma);
           if(t2 - fpsAt >= 1000){ fps = fpsAt ? fpsN * 1000 / (t2 - fpsAt) : 0; fpsAt = t2; fpsN = 0; }
           if(hands.length) handsAt = t2;
           /* A GPU path that is slow — a machine with no real GPU, or a
@@ -1488,12 +1518,70 @@
             ev.pointerState = ev.pointer.state;
             ev.pointerBend = ev.pointer.bend || 0;
           }
-          drawOverlay(overlay, video, ev, label || (ev.state === 'armed' ? 'ZOOM · READY' : '') || pointerLabel || turnLabel);
+          if(rec) recordFrame(t2, t, meta, hands, ev);
+          drawOverlay(overlay, video, ev, (rec ? 'REC ' + Math.max(0, Math.ceil((rec.until - t2) / 1000)) + ' s' : '') || label || (ev.state === 'armed' ? 'ZOOM · READY' : '') || pointerLabel || turnLabel);
         }
       }catch(e){ if(o.onStatus) o.onStatus({ kind: 'error', reason: String((e && e.message) || e) }); }
     }
+    /* THE RECORDER (2.20.0): half a minute of what the tracker saw, for
+       studying on his own camera and hands. Per frame: when it was read, how
+       long that took, the camera's stamps for it, the 21 points of each
+       hand and how sure the tracker was of it, and what the gestures did.
+       No picture. */
+    const r1 = (v) => Math.round(v * 10) / 10, r4 = (v) => Math.round(v * 10000) / 10000;
+    function recordFrame(t2, t, meta, hands, ev){
+      const row = { t: r1(t2), inf: r1(t2 - t) };
+      if(meta){
+        if(typeof meta.captureTime === 'number') row.c = r1(meta.captureTime);
+        if(typeof meta.mediaTime === 'number') row.m = r4(meta.mediaTime);
+        if(typeof meta.presentedFrames === 'number') row.pf = meta.presentedFrames;
+        if(typeof meta.expectedDisplayTime === 'number') row.d = r1(meta.expectedDisplayTime);
+        if(typeof meta.receiveTime === 'number') row.rc = r1(meta.receiveTime);
+      }
+      row.h = (hands || []).map(h => ({ s: r4(h.score || 0), w: (h.handedness || '')[0] || '',
+        p: (h.landmarks || []).map(p => [r4(p.x), r4(p.y), r4(p.z || 0)]) }));
+      const p = ev.pointer || {};
+      row.ptr = [p.type || '', p.state || '', p.x == null ? null : r4(p.x), p.y == null ? null : r4(p.y), r4(p.vx || 0), r4(p.vy || 0), Math.round((p.bend || 0) * 10) / 10];
+      row.trn = (ev.turn && ev.turn.type) || '';
+      row.zm = ev.state || '';
+      rec.rows.push(row);
+      if(t2 - rec.reported >= 1000){ rec.reported = t2; if(o.onStatus) o.onStatus({ kind: 'recording', left: Math.max(0, Math.ceil((rec.until - t2) / 1000)) }); }
+      if(t2 >= rec.until) finishRecording();
+    }
+    function finishRecording(){
+      const r = rec; rec = null;
+      if(!r) return;
+      const rows = r.rows, n = rows.length;
+      const withHand = rows.filter(x => x.h.length).length;
+      const dur = n > 1 ? (rows[n - 1].t - rows[0].t) / 1000 : 0;
+      let longestGap = 0, gap = 0;
+      for(const x of rows){ if(x.h.length) gap = 0; else { gap++; longestGap = Math.max(longestGap, gap); } }
+      const summary = { frames: n, seconds: Math.round(dur * 10) / 10, trackFps: dur ? Math.round(n / dur * 10) / 10 : 0,
+                        framesWithHand: withHand, longestHandlessRun: longestGap,
+                        inferMs: inferEma === null ? null : Math.round(inferEma), lateMs: lateEma === null ? null : Math.round(lateEma), camFps: Math.round(camFps * 10) / 10 };
+      r.header.summary = summary;
+      const text = '{"header":' + JSON.stringify(r.header) + ',"frames":[\n' + rows.map(x => JSON.stringify(x)).join(',\n') + '\n]}';
+      r.resolve({ text, frames: n, summary });
+    }
+
     const api = {
       gesture, manager, relay, pointer,
+      /* Record `seconds` of tracking; resolves with { text, frames, summary }. */
+      record(seconds){
+        return new Promise((resolve) => {
+          if(rec || !running){ resolve(null); return; }
+          const secs = Math.max(3, Math.min(90, Number(seconds) || 30));
+          let info = null; try{ info = o.trackInfo ? o.trackInfo() : null; }catch(e){}
+          const t = now();
+          rec = { rows: [], until: t + secs * 1000, reported: t, resolve, header: {
+            format: 'jarvis-tracking-1', startedAt: new Date().toISOString(), seconds: secs,
+            userAgent: root.navigator ? root.navigator.userAgent : '',
+            screen: root.screen ? { w: root.screen.width, h: root.screen.height, dpr: root.devicePixelRatio || 1 } : null,
+            video: { w: video.videoWidth, h: video.videoHeight }, delegate: tracker && tracker.delegate,
+            hasCaptureTime: capturedStamps, camera: info, settings } };
+          if(o.onStatus) o.onStatus({ kind: 'recording', left: secs });
+        });
+      },
       start(){
         if(running || !settings.enabled) return Promise.resolve(false);
         running = true;
@@ -1503,6 +1591,7 @@
       },
       stop(){
         running = false;
+        if(rec) finishRecording();
         unschedule();
         if(pingTimer){ clearInterval(pingTimer); pingTimer = null; }
         relay.handle({ type: 'end', state: 'idle' });
@@ -1517,7 +1606,8 @@
         if(settings.enabled) api.start(); else api.stop();
       },
       stats(){ return { frames, avgMs: frames ? spent / frames : 0, running, delegate: tracker && tracker.delegate, switched,
-                        missed, repeats, fps, everyFrame: byFrame, handsAt, last: lastEv }; }
+                        missed, repeats, fps, everyFrame: byFrame, handsAt, last: lastEv,
+                        camFps, trackFps, inferMs: inferEma, lateMs: lateEma, stamped: capturedStamps, recording: !!rec }; }
     };
     return api;
   }

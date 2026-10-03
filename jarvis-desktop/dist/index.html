@@ -1694,8 +1694,12 @@
     <div class="gzRow"><label for="gzTurnScreen" id="gzTurnScreenLabel">Full turn across</label><input id="gzTurnScreen" type="range" min="0.25" max="1.5" step="0.05"><span class="gzVal" id="gzTurnScreenVal"></span></div>
     <div class="gzRow"><label for="gzScrollSpeed" id="gzScrollSpeedLabel">Scroll speed</label><input id="gzScrollSpeed" type="range" min="0.25" max="4" step="0.25"><span class="gzVal" id="gzScrollSpeedVal"></span></div>
     <div class="vsRow vsActions">
+      <button id="gestureRecordBtn" type="button">⏺ RECORD TRACKING (30 s)</button>
       <button id="gestureResetBtn" type="button">DEFAULTS</button>
     </div>
+    <div class="vsHint" id="gestureRecordHint">To see what your camera and hand really do: press, then for half a minute point and move your finger around the screen — slowly, fast, in circles, a few clicks, in and out of the camera's view. A file is saved in JARVIS\Tracking (no picture in it, only the hand's points and timings) — send it to Claude.</div>
+    <div class="vsHint" id="gesturePerf"></div>
+    <div class="vsHint" id="gestureRecordInfo"></div>
   </div>
 </div>
 
@@ -2069,6 +2073,7 @@ const I18N = {
     gestureHint: 'Pinch thumb and index finger on BOTH hands in front of the camera, then pull your hands apart to zoom in and bring them together to zoom out — on whatever is in front: a web page, a PDF, a picture, a 3D model. Let go with either hand and it stops; the next pinch starts fresh. Needs the camera window open.',
     gzSensitivityLabel: 'Steps per cm', gzThresholdLabel: 'Movement before it zooms', gzSmoothingLabel: 'Smoothing',
     gzMaxSpeedLabel: 'Maximum steps a second', gzMaxZoomLabel: 'Maximum zoom', gzMinZoomLabel: 'Minimum zoom',
+    gestureRecordBtn: '⏺ RECORD TRACKING (30 s)', gestureRecordHint: 'To see what your camera and hand really do: press, then for half a minute point and move your finger around the screen — slowly, fast, in circles, a few clicks, in and out of the camera\'s view. A file is saved in JARVIS\\Tracking (no picture in it, only the hand\'s points and timings) — send it to Claude.',
     gestureTurnOn: '☝ PRECISE CONTROL: ON', gestureTurnOff: '☝ PRECISE CONTROL: OFF', gesturePointerOn: '👆 FINGER MOUSE: ON', gesturePointerOff: '👆 FINGER MOUSE: OFF', gzTurnScreenLabel: 'Full turn across', gzScrollSpeedLabel: 'Scroll speed',
     gestureTurnHint: 'Pinch with ONE hand: on a 3D model or the JARVIS Agent Atlas it turns with the hand — right, left, up, down, all the way round; anywhere else it grabs the page and scrolls it, the page following your hand. Two pinched hands are still the zoom. ONE FINGER (the others folded), held a moment, is the mouse anywhere on the computer: fully straight it moves the mouse, half bent nothing happens, bent 45° is a left click. Only one of these works at a time — a pinch stops the finger mouse. STRAIGHTEN in the model\'s right-click menu puts a model back.',
     gestureResetBtn: 'DEFAULTS',
@@ -2330,6 +2335,7 @@ const I18N = {
     gestureHint: 'תצמיד אגודל ואצבע בשתי הידיים מול המצלמה, ואז תרחיק את הידיים זו מזו כדי להגדיל ותקרב אותן כדי להקטין — בכל מה שפתוח מלפנים: דף אינטרנט, PDF, תמונה, מודל תלת-ממד. שחרור של יד אחת עוצר; הצביטה הבאה מתחילה מחדש. צריך שחלון המצלמה יהיה פתוח.',
     gzSensitivityLabel: 'רגישות', gzThresholdLabel: 'תנועה לפני שמתחיל זום', gzSmoothingLabel: 'החלקה',
     gzMaxSpeedLabel: 'מקסימום צעדים בשנייה', gzMaxZoomLabel: 'זום מרבי', gzMinZoomLabel: 'זום מזערי',
+    gestureRecordBtn: '⏺ הקלט מעקב (30 שניות)', gestureRecordHint: 'כדי לראות מה המצלמה והיד שלך עושות באמת: לחץ, ובמשך חצי דקה הצבע והזז את האצבע סביב המסך — לאט, מהר, במעגלים, כמה קליקים, וביציאה וכניסה מהתמונה. נשמר קובץ בתיקיית JARVIS\\Tracking (בלי תמונה, רק נקודות היד וזמנים) — שלח אותו לקלאוד.',
     gestureTurnOn: '☝ שליטה מדויקת: פועלת', gestureTurnOff: '☝ שליטה מדויקת: כבויה', gesturePointerOn: '👆 עכבר באצבע: פועל', gesturePointerOff: '👆 עכבר באצבע: כבוי', gzTurnScreenLabel: 'סיבוב שלם לאורך', gzScrollSpeedLabel: 'מהירות גלילה',
     gestureTurnHint: 'צביטה ביד אחת: על מודל תלת-ממד או על ה-JARVIS Agent Atlas הוא מסתובב עם היד — ימינה, שמאלה, למעלה, למטה, סיבוב מלא; בכל מקום אחר היא תופסת את הדף וגוללת אותו, הדף הולך עם היד. צביטה בשתי ידיים היא עדיין הזום. אצבע אחת (השאר מקופלות), מוחזקת רגע, היא העכבר בכל מקום במחשב: ישרה לגמרי — העכבר זז איתה; בין ישרה לכפופה — לא קורה כלום; כפופה 45° — קליק שמאלי. רק אחד מאלה עובד בכל רגע — צביטה עוצרת את עכבר האצבע. "STRAIGHTEN" בתפריט הקליק הימני של המודל מחזיר אותו למצב ההתחלתי.',
     gestureResetBtn: 'ברירת מחדל',
@@ -2450,6 +2456,7 @@ function applyLanguage(lang){
     gestureBtn:'gestureBtn', gestureHint:'gestureHint', gzSensitivityLabel:'gzSensitivityLabel', gzThresholdLabel:'gzThresholdLabel',
     gzSmoothingLabel:'gzSmoothingLabel', gzMaxSpeedLabel:'gzMaxSpeedLabel', gzMaxZoomLabel:'gzMaxZoomLabel',
     gzMinZoomLabel:'gzMinZoomLabel', gestureResetBtn:'gestureResetBtn', gestureTurnHint:'gestureTurnHint', gzTurnScreenLabel:'gzTurnScreenLabel', gzScrollSpeedLabel:'gzScrollSpeedLabel',
+    gestureRecordBtn:'gestureRecordBtn', gestureRecordHint:'gestureRecordHint',
     readyMsg:'readyMsg', authEnterBtn:'authEnterBtn', decoySendBtn:'decoySendBtn'
   };
   Object.keys(textMap).forEach(id=>{
@@ -2505,7 +2512,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.19.0';
+const APP_VERSION = '2.20.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -7441,6 +7448,8 @@ async function setGestureZoom(on, turn, pointer){
     gestureSettings.pointerEnabled = gestureSettings.pointerEnabled === false;
     renderGestureSettings(); saveGestureSettings();
   });
+  const recBtn = document.getElementById('gestureRecordBtn');
+  if(recBtn) recBtn.addEventListener('click', () => { startTrackingRecording(); });
   const reset = document.getElementById('gestureResetBtn');
   if(reset) reset.addEventListener('click', () => {
     gestureSettings = Object.assign({}, GZ_DEFAULTS, { enabled: gestureSettings.enabled });
@@ -7458,6 +7467,52 @@ async function setGestureZoom(on, turn, pointer){
   });
   loadGestureSettings().then(renderGestureSettings).catch(()=>{});
 })();
+
+/* THE TRACKING RECORDING (2.20.0). The button opens the camera if it is not
+   open, asks the camera window for 30 s of recording, and shows its progress
+   and the file it saved. The camera window may still be starting, so the ask
+   is repeated until it answers. */
+var trackRecordWaiting = false, trackRecordRetry = null;
+function gestureRecordStatus(s){
+  const info = document.getElementById('gestureRecordInfo'), btn = document.getElementById('gestureRecordBtn');
+  const he = currentLang === 'he';
+  if(s.kind === 'recording'){
+    trackRecordWaiting = false; clearInterval(trackRecordRetry); trackRecordRetry = null;
+    if(btn){ btn.disabled = true; btn.textContent = (he ? '⏺ מקליט… ' : '⏺ RECORDING… ') + s.left + (he ? ' ש׳' : ' s'); }
+    if(info) info.textContent = he ? 'הצבע והזז את האצבע — לאט, מהר, מעגלים, כמה קליקים, ויציאה מהתמונה.' : 'Point and move your finger — slowly, fast, in circles, a few clicks, in and out of the view.';
+    return;
+  }
+  trackRecordWaiting = false; clearInterval(trackRecordRetry); trackRecordRetry = null;
+  if(btn){ btn.disabled = false; btn.textContent = t('gestureRecordBtn'); }
+  if(!info) return;
+  if(s.kind === 'recorded'){
+    const m = s.summary || {};
+    info.textContent = (he ? 'נשמר: ' : 'Saved: ') + (s.path || '') + ' — ' + (m.frames || 0) + (he ? ' פריימים, יד ב-' : ' frames, hand in ') + (m.framesWithHand || 0) +
+      (he ? ' מהם, הפסקה הארוכה ביותר ' : ', the longest gap ') + (m.longestHandlessRun || 0) + (he ? ' פריימים' : ' frames') +
+      '. ' + (he ? 'שלח את הקובץ לקלאוד.' : 'Send that file to Claude.');
+  } else {
+    info.textContent = (he ? 'ההקלטה נכשלה: ' : 'The recording failed: ') + (s.reason || '');
+  }
+}
+async function startTrackingRecording(){
+  const ev = window.__TAURI__ && window.__TAURI__.event;
+  const info = document.getElementById('gestureRecordInfo');
+  if(!IS_DESKTOP || !ev || !ev.emit){ if(info) info.textContent = currentLang === 'he' ? 'ההקלטה זמינה רק באפליקציית השולחן.' : 'Recording is only in the desktop app.'; return; }
+  if(gestureSettings.enabled === false){ gestureSettings.enabled = true; await saveGestureSettings(); }
+  try{ if(!liveActive()) await startLive(); }catch(err){}
+  trackRecordWaiting = true;
+  if(info) info.textContent = currentLang === 'he' ? 'מכין את המצלמה…' : 'Getting the camera ready…';
+  const ask = () => { try{ const p = ev.emit('jarvis://gesture-record', { seconds: 30 }); if(p && p.catch) p.catch(()=>{}); }catch(err){} };
+  ask();
+  let tries = 0;
+  clearInterval(trackRecordRetry);
+  trackRecordRetry = setInterval(() => {
+    if(!trackRecordWaiting){ clearInterval(trackRecordRetry); trackRecordRetry = null; return; }
+    if(++tries > 12){ clearInterval(trackRecordRetry); trackRecordRetry = null; trackRecordWaiting = false;
+      if(info) info.textContent = currentLang === 'he' ? 'המצלמה לא ענתה — פתח אותה ונסה שוב.' : 'The camera did not answer — open it and try again.'; return; }
+    ask();
+  }, 1500);
+}
 
 const GESTURE_ZOOM_TOOL = {
   name: 'gesture_zoom',
@@ -17987,6 +18042,19 @@ adjustLayout();
     /* What the gesture zoom is doing, shown in the GESTURES panel. */
     ev.listen('jarvis://gesture-status', (e)=>{
       const s = (e && e.payload) || {};
+      /* What the camera and tracker really do, each second (2.20.0), and the
+         tracking recording's progress and file. */
+      if(s.kind === 'perf'){
+        const pe = document.getElementById('gesturePerf');
+        if(pe) pe.textContent = 'camera ' + Math.round(s.camFps || 0) + ' fps' + (s.camFps < 24 ? ' (LOW — more light, or switch off the camera\'s low-light mode)' : '') +
+                                ' · tracker ' + Math.round(s.trackFps || 0) + ' fps, ' + Math.round(s.inferMs || 0) + ' ms a read' +
+                                (s.lateMs != null ? ' · a picture is ' + Math.round(s.lateMs) + ' ms old when read' : '');
+        return;
+      }
+      if(s.kind === 'recording' || s.kind === 'recorded' || s.kind === 'record-failed'){
+        gestureRecordStatus(s);
+        return;
+      }
       const el = document.getElementById('gestureStatus');
       if(!el) return;
       el.textContent = s.kind === 'ready'   ? 'hand tracking ready (' + (s.delegate || '') + ')'
