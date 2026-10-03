@@ -2521,7 +2521,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.22.1';
+const APP_VERSION = '2.23.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -8933,32 +8933,33 @@ async function callConnectCalendarTool(){
            note: "Google's sign-in is open in his browser. He picks the account whose calendar you should use and approves; the page then names the account. Nothing is connected until he does — say that." };
 }
 
-/* MUSIC (2.22.0): "let's put some music" plays his Spotify playlist named
-   "jarvis" from the first song. The worker does the playing through
-   Spotify's Web API (it holds the connection); this side opens the playlist
-   in the Spotify app on his computer, so it is in front of him and, when
-   the app was closed, so that this computer appears as a device to play
-   on — then asks again until it does. */
+/* MUSIC (2.23.0): "let's put some music" plays his YouTube playlist named
+   "jarvis" (ג'רוויס) from the first video. The worker finds the playlist
+   (JARVIS_PLAYLIST, or his channel through "connect YouTube") and hands back
+   watch?v=<first>&list=<id>&index=1; this side opens it in his browser, which
+   plays it from the top, in order. Stop / next / previous are the keyboard's
+   media keys (media_key in main.rs), which the browser passes to YouTube.
+   (2.22.0 did this with Spotify, whose API now needs a Premium account.) */
 const MUSIC_PLAYLIST = 'jarvis';
 const MUSIC_TOOL = {
   name: 'play_music',
-  description: "Music on his Spotify. action 'play' (the default) opens his playlist named \"jarvis\" in the Spotify app and plays it from the FIRST song, in order — for \"let's put some music\", \"let's hear some music\", \"play some music\", \"put on my playlist\", \"שים מוזיקה\", \"בוא נשמע מוזיקה\", \"תנגן משהו\". Another playlist only when he names one (playlist). 'pause' stops it (\"stop the music\", \"תעצור את המוזיקה\"), 'resume' carries on where it stopped, 'next' / 'previous' change the song. Confirm in a few words once it returns ok; if it returns tell_the_user, say that instead.",
+  description: "Music from his YouTube playlist. action 'play' (the default) opens his playlist named \"jarvis\" (ג'רוויס) on YouTube and plays it from the FIRST video, in order — for \"let's put some music\", \"let's hear some music\", \"play some music\", \"put on my playlist\", \"שים מוזיקה\", \"בוא נשמע מוזיקה\", \"תנגן משהו\". Another playlist of his only when he names one (playlist). 'pause' pauses it or carries on (\"stop the music\", \"תעצור את המוזיקה\", \"resume\"), 'next' / 'previous' change the song. Confirm in a few words once it returns ok; if it returns tell_the_user, say that instead.",
   input_schema: {
     type: 'object',
     properties: {
-      action: { type: 'string', enum: ['play', 'pause', 'resume', 'next', 'previous'], description: "Default 'play'." },
-      playlist: { type: 'string', description: "Only when he names a different playlist. Default: jarvis." }
+      action: { type: 'string', enum: ['play', 'pause', 'next', 'previous'], description: "Default 'play'. 'pause' also resumes." },
+      playlist: { type: 'string', description: "Only when he names a different playlist of his. Default: jarvis." }
     },
     required: []
   }
 };
-const SPOTIFY_CONNECT_TOOL = {
-  name: 'connect_spotify',
-  description: "Open Spotify's sign-in in his browser to connect (or reconnect) his Spotify account, so music can be played. Use it when he asks to connect Spotify, or when play_music answered needs_connect. Nothing is connected until he approves on Spotify's page — say that.",
+const YOUTUBE_CONNECT_TOOL = {
+  name: 'connect_youtube',
+  description: "Open Google's sign-in in his browser to connect (or reconnect) his YouTube channel, so his playlists can be found and played. Use it when he asks to connect YouTube, or when play_music answered needs_connect. Nothing is connected until he approves on Google's page — say that.",
   input_schema: { type: 'object', properties: {}, required: [] }
 };
 
-async function spotifyPost(path, body){
+async function musicPost(path, body){
   if(!backendUrl) return { ok: false, code: 'no_worker', error: 'no backend is configured' };
   try{
     const res = await fetch(backendUrl + path, {
@@ -8966,9 +8967,6 @@ async function spotifyPost(path, body){
       body: JSON.stringify(body || {})
     });
     if(res.status === 401){ await forceReauth(); return { ok: false, code: 'session', error: 'session expired' }; }
-    if(res.status === 404 && !String(res.headers.get('content-type') || '').includes('json')){
-      return { ok: false, code: 'old_worker', error: 'this worker has no ' + path + ' yet — deploy the updated jarvis-worker.js' };
-    }
     const data = await res.json().catch(() => ({}));
     if(res.status === 404 && !data.code) return { ok: false, code: 'old_worker', error: 'this worker has no ' + path + ' yet — deploy the updated jarvis-worker.js' };
     return Object.assign({ status: res.status }, data);
@@ -8977,62 +8975,45 @@ async function spotifyPost(path, body){
   }
 }
 
-/* The Spotify app, at that playlist. Only a spotify: link this code made
-   (the playlist's own URI, or the app itself) — nothing he said is
-   passed through. */
-async function openSpotifyApp(uri){
-  if(!IS_DESKTOP) return false;
+/* Only a YouTube address the worker built is opened. */
+async function openInBrowser(url){
+  if(!/^https:\/\/(?:www\.)?youtube\.com\/(?:watch|playlist)\?/.test(String(url || ''))) return false;
   const opener = window.__TAURI__ && window.__TAURI__.opener;
-  const target = /^spotify:playlist:[A-Za-z0-9]{10,40}$/.test(String(uri || '')) ? uri : 'spotify:';
-  try{ await opener.openUrl(target); return true; }
-  catch(err){ console.warn('JARVIS: could not open Spotify —', err); return false; }
+  try{
+    if(IS_DESKTOP && opener && opener.openUrl){ await opener.openUrl(url); return true; }
+    return !!window.open(url, '_blank', 'noopener');
+  }catch(err){ console.warn('JARVIS: could not open YouTube —', err); return false; }
 }
 
-async function callConnectSpotifyTool(){
-  const data = await spotifyPost('/spotify/connect', {});
-  if(!data.url) return { error: data.error || 'could not start the Spotify connection', code: data.code, tell_the_user: data.tell_the_user, redirect_uri: data.redirect_uri };
+async function callConnectYoutubeTool(){
+  const data = await musicPost('/youtube/connect', {});
+  if(!data.url) return { error: data.error || 'could not start the YouTube connection', code: data.code, tell_the_user: data.tell_the_user, redirect_uri: data.redirect_uri };
   const opener = window.__TAURI__ && window.__TAURI__.opener;
   try{
     if(IS_DESKTOP && opener && opener.openUrl) await opener.openUrl(data.url);
     else if(!window.open(data.url, '_blank', 'noopener')) throw new Error('the browser blocked the new tab');
   }catch(err){
-    addMessage('system', 'Spotify: ' + data.url);   // shown to him, never to the model (it carries the signed state)
+    addMessage('system', 'YouTube: ' + data.url);   // shown to him, never to the model (it carries the signed state)
     return { ok: true, opened: false, note: 'The link is on his screen; he opens it and approves. Nothing is connected until he does.' };
   }
-  return { ok: true, opened: true, note: "Spotify's sign-in is open in his browser. Nothing is connected until he approves there; then he can ask for music again." };
+  return { ok: true, opened: true, note: "Google's sign-in is open in his browser. Nothing is connected until he approves there; then he can ask for music again." };
 }
 
-let musicBusy = false;
+let musicBusy = false, musicPlaying = false;
 /* Play the playlist; resolves with what happened, for the voice and the tool. */
 async function playMusic(name){
   if(musicBusy) return { ok: false, code: 'busy', error: 'already starting the music' };
   musicBusy = true;
   try{
-    const want = String(name || MUSIC_PLAYLIST).trim() || MUSIC_PLAYLIST;
-    let r = await spotifyPost('/spotify/play', { name: want, computer_only: IS_DESKTOP });
-    if(r.ok){ openSpotifyApp(r.playlist && r.playlist.uri); return r; }
-    /* Spotify is not running on this computer: open it at the playlist and
-       wait for it to sign in and show up as a device (a few seconds). */
-    if(r.code === 'no_device' && IS_DESKTOP){
-      const uri = r.playlist && r.playlist.uri;
-      const opened = await openSpotifyApp(uri);
-      const body = uri ? { name: want, uri, computer_only: true } : { name: want, computer_only: true };
-      for(let i = 0; i < 10 && opened; i++){
-        await new Promise(res => setTimeout(res, 2000));
-        r = await spotifyPost('/spotify/play', body);
-        if(r.ok || r.code !== 'no_device') break;
-      }
-      /* Still no computer: whatever device he has Spotify open on. */
-      if(r.code === 'no_device'){
-        const any = await spotifyPost('/spotify/play', uri ? { name: want, uri } : { name: want });
-        if(any.ok || any.code !== 'no_device') r = any;
-        else r.opened = opened;
-      }
+    const r = await musicPost('/youtube/playlist', { name: String(name || MUSIC_PLAYLIST).trim() || MUSIC_PLAYLIST });
+    if(r.ok){
+      const opened = await openInBrowser(r.url);
+      if(!opened) return Object.assign({}, r, { ok: false, code: 'not_opened', error: 'the browser would not open ' + r.url });
+      musicPlaying = true;
       return r;
     }
-    if(r.code === 'spotify_premium') await openSpotifyApp(r.playlist && r.playlist.uri);
-    if(r.code === 'spotify_not_connected'){
-      const c = await callConnectSpotifyTool();
+    if(r.code === 'youtube_not_connected'){
+      const c = await callConnectYoutubeTool();
       r.connect_opened = !!(c && c.ok);
     }
     return r;
@@ -9041,7 +9022,24 @@ async function playMusic(name){
   }
 }
 
-/* One spoken line for whatever playMusic / a control answered. */
+/* Stop / next / previous: the media keys, which the browser hands to YouTube. */
+async function musicKey(action){
+  const key = action === 'next' ? 'next' : action === 'previous' ? 'previous' : 'play_pause';
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!IS_DESKTOP || !invoke) return { ok: false, code: 'no_keys', error: 'the music keys work only in the desktop app' };
+  /* "Stop" while nothing of ours is playing would START whatever was paused. */
+  if(key === 'play_pause' && action === 'pause' && !musicPlaying) return { ok: true, already: true };
+  try{
+    await invoke('media_key', { key });
+    if(key === 'play_pause') musicPlaying = action === 'pause' ? false : !musicPlaying;
+    return { ok: true, action };
+  }catch(err){
+    const msg = String((err && err.message) || err);
+    return { ok: false, code: /not found|unknown command|media_key/i.test(msg) ? 'old_app' : 'key_failed', error: msg };
+  }
+}
+
+/* One spoken line for whatever playMusic / a key answered. */
 function musicLine(r, he, action){
   action = action || 'play';
   if(r && r.ok){
@@ -9049,21 +9047,19 @@ function musicLine(r, he, action){
     if(action === 'resume')   return he ? 'ממשיך את המוזיקה.' : 'Music back on.';
     if(action === 'next')     return he ? 'השיר הבא.' : 'Next song.';
     if(action === 'previous') return he ? 'השיר הקודם.' : 'Previous song.';
-    const pl = (r.playlist && r.playlist.name) || MUSIC_PLAYLIST;
-    const where = r.device && String(r.device.type || '').toLowerCase() !== 'computer' ? (he ? ' ב-' : ' on ') + r.device.name : '';
-    return he ? 'מנגן את הפלייליסט ' + pl + ' מהשיר הראשון' + where + '.'
-              : 'Playing your ' + pl + ' playlist from the first song' + where + '.';
+    const pl = (r.playlist && r.playlist.title) || MUSIC_PLAYLIST;
+    if(r.plays_from_start === false) return he ? 'פתחתי את הפלייליסט ' + pl + ' ביוטיוב.' : 'Your ' + pl + ' playlist is open on YouTube.';
+    return he ? 'מנגן את הפלייליסט ' + pl + ' ביוטיוב, מהשיר הראשון.' : 'Playing your ' + pl + ' playlist on YouTube, from the first song.';
   }
   const code = r && r.code;
-  if(code === 'spotify_not_connected') return he ? 'צריך לחבר את ספוטיפיי פעם אחת — פתחתי לך את הדף שלהם. תאשר, ואז תבקש שוב.'
-                                                 : 'Spotify needs connecting once — I opened its page. Approve it, then ask again.';
-  if(code === 'spotify_premium') return he ? 'ספוטיפיי מרשה להפעיל מוזיקה מאפליקציה רק בפרימיום. פתחתי את הפלייליסט — תלחץ פליי.'
-                                           : (r.tell_the_user || 'Spotify lets an app press play only on Premium. I opened the playlist — press play.');
-  if(code === 'playlist_not_found') return he ? 'לא מצאתי בספוטיפיי שלך פלייליסט בשם ' + MUSIC_PLAYLIST + '.' : (r.tell_the_user || 'I could not find that playlist.');
-  if(code === 'no_device') return he ? (r.opened ? 'פתחתי את ספוטיפיי, אבל הוא עדיין לא מוכן לנגן. תוודא שאתה מחובר באפליקציה ותבקש שוב.' : 'ספוטיפיי לא פתוח באף מכשיר.')
-                                     : (r.opened ? 'I opened Spotify, but it is not ready to play yet. Check you are signed in to the app and ask again.' : 'Spotify is not open on any device.');
-  if(code === 'spotify_missing') return he ? 'ספוטיפיי עוד לא מוגדר אצלי בשרת: חסרים SPOTIFY_CLIENT_ID ו-SPOTIFY_CLIENT_SECRET.' : r.tell_the_user;
-  if(code === 'old_worker') return he ? 'השרת שלי עוד לא מכיר את ספוטיפיי — צריך לפרוס את ה-worker המעודכן.' : 'My server does not know Spotify yet — the updated worker needs deploying.';
+  if(code === 'youtube_not_connected') return he ? 'צריך לחבר את יוטיוב פעם אחת — פתחתי לך את הדף של גוגל. תאשר, ואז תבקש שוב.'
+                                                 : 'YouTube needs connecting once — I opened Google’s page. Approve it, then ask again.';
+  if(code === 'youtube_api_disabled') return he ? 'ה-YouTube Data API כבוי בפרויקט של גוגל. צריך להפעיל אותו ב-Google Cloud, ואז לבקש שוב.' : r.tell_the_user;
+  if(code === 'playlist_not_found') return he ? 'לא מצאתי ביוטיוב שלך פלייליסט בשם ' + MUSIC_PLAYLIST + '.' : (r.tell_the_user || 'I could not find that playlist.');
+  if(code === 'playlist_empty') return he ? 'בפלייליסט אין סרטון שאפשר לנגן.' : r.tell_the_user;
+  if(code === 'youtube_missing') return he ? 'המוזיקה ביוטיוב עוד לא מוגדרת אצלי בשרת.' : r.tell_the_user;
+  if(code === 'old_worker') return he ? 'השרת שלי עוד לא מכיר את יוטיוב — צריך לפרוס את ה-worker המעודכן.' : 'My server does not know YouTube music yet — the updated worker needs deploying.';
+  if(code === 'old_app') return he ? 'כדי לעצור ולדלג צריך לבנות מחדש את האפליקציה.' : 'Stopping and skipping need the app rebuilt.';
   if(he) return 'לא הצלחתי להפעיל את המוזיקה' + (r && r.error ? ': ' + r.error : '.');
   return (r && r.tell_the_user) || ('I could not start the music' + (r && r.error ? ': ' + r.error : '.'));
 }
@@ -9072,10 +9068,10 @@ async function callMusicTool(input){
   const action = String((input && input.action) || 'play');
   let r;
   if(action === 'play') r = await playMusic(input && input.playlist);
-  else if(/^(?:pause|resume|next|previous)$/.test(action)) r = await spotifyPost('/spotify/control', { action });
-  else return { error: 'action must be play, pause, resume, next or previous' };
-  if(r && r.ok) return { ok: true, action, playlist: r.playlist ? r.playlist.name : undefined, device: r.device ? r.device.name : undefined,
-                         note: action === 'play' ? 'It is playing from the first song. Confirm in a few words.' : 'Done. Confirm in a few words.' };
+  else if(/^(?:pause|resume|next|previous)$/.test(action)) r = await musicKey(action === 'resume' ? 'pause' : action);
+  else return { error: 'action must be play, pause, next or previous' };
+  if(r && r.ok) return { ok: true, action, playlist: r.playlist ? r.playlist.title : undefined,
+                         note: action === 'play' ? 'It is playing on YouTube from the first video. Confirm in a few words.' : 'Done. Confirm in a few words.' };
   return { ok: false, code: r && r.code, error: (r && r.error) || 'failed', tell_the_user: musicLine(r, false, action),
            needs_connect: !!(r && r.needs_connect), connect_opened: !!(r && r.connect_opened) };
 }
@@ -10851,7 +10847,7 @@ function addModelBubble(source, prompt){
 
 const BUILD3D_TOOL = {
   name: 'build_3d_model',
-  description: "Build a 3D model yourself in Three.js code and show it in the chat, rotatable and downloadable as a .glb. NOT for a model OF something he is showing you (the camera, his screen, a photo) \u2014 that is always photo_to_3d. THIS IS THE DEFAULT for any other 3D request — it is instant and free, where generate_3d_model costs credits and takes a minute. Write a body that assembles the object and RETURN a single THREE.Group or Mesh. THREE is the only thing in scope: no imports, no loaders, no network, no animation loop, no lights or camera (the viewer supplies those). Build at roughly 1-2 units tall; it gets framed automatically.\n\nDECIDE, DO NOT INTERVIEW: never ask him for dimensions, proportions, colours or the other sides before building. Choose what a real one of these looks like, build it, and mention the key choice in one short sentence; changing it afterwards is one sentence from him. A question that you could have answered yourself costs him a round trip for nothing.\n\nQUALITY IS THE WHOLE POINT — a shape that reads as a toy is a failed answer. Hold to these:\n- SEGMENTS: never accept the defaults. Cylinders and spheres want 64 radial segments, torus 64x32. Faceted silhouettes are the single clearest tell of careless work.\n- NEVER LEAVE A HARD EDGE: real manufactured objects have a small radius everywhere. Cap a cylinder with a squashed sphere, ring an edge with a thin torus, or shape the whole profile with LatheGeometry from a points array — that last one is how you get a bottle, a jar, a vase or a glass that actually looks turned rather than stacked.\n- MATERIALS CARRY IT: the viewer has real environment reflections, so roughness and metalness do visible work. Polished metal is roughness 0.15 / metalness 1. Soft-touch plastic is roughness 0.6 / metalness 0. Glossy paint is roughness 0.25 with clearcoat 1 on MeshPhysicalMaterial. Glass is MeshPhysicalMaterial with transmission 1, roughness 0.05, thickness 0.5, ior 1.5. Never leave roughness at its default on everything, and never make one object entirely one material — a cap, a band, a label and a body should differ.\n- COLOUR: avoid pure black and pure white; 0x14161a and 0xf2f0ec read as real materials. Give the object one accent, not five.\n- DETAIL PASS: add the small things that say manufactured — a seam, a lip under a cap, a recessed panel, a base ring, a subtle taper. Three or four of those beat any amount of extra bulk.\n\nKEEP THE CODE SHORT, THE MODEL RICH: the code is cut off if it is longer than about 400 lines, and then NOTHING is built. For a complex object (a vehicle, a robot, a building, anything with more than a dozen parts) write helper functions and loops, not one block per part: a function that makes a leg and a loop that places six of them, one shared geometry and material reused by every copy of a part, 32 segments on small parts and 64 only on the large ones you see first. The viewer reduces the detail by itself when a model is very heavy, so do not worry about the triangle count - worry about the length of the code.\n\nGood for: bottles, tubes, jars, boxes, cans, gadgets, furniture, packaging — the geometric things a store sells. Poor for: faces, animals, plants, fabric, anything organic; for those say so and offer generate_3d_model instead.\n\nExample of the standard expected: const g = new THREE.Group(); const profile = []; for(let i = 0; i <= 24; i++){ const t = i / 24; profile.push(new THREE.Vector2(0.36 - 0.1 * Math.pow(t, 3) + 0.02 * Math.sin(t * Math.PI), t * 1.15)); } const body = new THREE.Mesh(new THREE.LatheGeometry(profile, 64), new THREE.MeshPhysicalMaterial({ color: 0x1b1d22, roughness: 0.38, metalness: 0.1, clearcoat: 0.6 })); g.add(body); const collar = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.018, 24, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.18, metalness: 1 })); collar.rotation.x = Math.PI / 2; collar.position.y = 1.14; g.add(collar); const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.27, 0.22, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); cap.position.y = 1.26; g.add(cap); const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.26, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); capTop.scale.y = 0.35; capTop.position.y = 1.37; g.add(capTop); return g;",
+  description: "Build a 3D model yourself in Three.js code and show it in the chat, rotatable and downloadable as a .glb. NOT for a model OF something he is showing you (the camera, his screen, a photo) \u2014 that is photo_to_3d, unless photo_to_3d failed: then build it here from what you saw. THIS IS THE DEFAULT for any other 3D request — it is instant and free, where generate_3d_model costs credits and takes a minute. Write a body that assembles the object and RETURN a single THREE.Group or Mesh. THREE is the only thing in scope: no imports, no loaders, no network, no animation loop, no lights or camera (the viewer supplies those). Build at roughly 1-2 units tall; it gets framed automatically.\n\nDECIDE, DO NOT INTERVIEW: never ask him for dimensions, proportions, colours or the other sides before building. Choose what a real one of these looks like, build it, and mention the key choice in one short sentence; changing it afterwards is one sentence from him. A question that you could have answered yourself costs him a round trip for nothing.\n\nQUALITY IS THE WHOLE POINT — a shape that reads as a toy is a failed answer. Hold to these:\n- SEGMENTS: never accept the defaults. Cylinders and spheres want 64 radial segments, torus 64x32. Faceted silhouettes are the single clearest tell of careless work.\n- NEVER LEAVE A HARD EDGE: real manufactured objects have a small radius everywhere. Cap a cylinder with a squashed sphere, ring an edge with a thin torus, or shape the whole profile with LatheGeometry from a points array — that last one is how you get a bottle, a jar, a vase or a glass that actually looks turned rather than stacked.\n- MATERIALS CARRY IT: the viewer has real environment reflections, so roughness and metalness do visible work. Polished metal is roughness 0.15 / metalness 1. Soft-touch plastic is roughness 0.6 / metalness 0. Glossy paint is roughness 0.25 with clearcoat 1 on MeshPhysicalMaterial. Glass is MeshPhysicalMaterial with transmission 1, roughness 0.05, thickness 0.5, ior 1.5. Never leave roughness at its default on everything, and never make one object entirely one material — a cap, a band, a label and a body should differ.\n- COLOUR: avoid pure black and pure white; 0x14161a and 0xf2f0ec read as real materials. Give the object one accent, not five.\n- DETAIL PASS: add the small things that say manufactured — a seam, a lip under a cap, a recessed panel, a base ring, a subtle taper. Three or four of those beat any amount of extra bulk.\n\nKEEP THE CODE SHORT, THE MODEL RICH: the code is cut off if it is longer than about 400 lines, and then NOTHING is built. For a complex object (a vehicle, a robot, a building, anything with more than a dozen parts) write helper functions and loops, not one block per part: a function that makes a leg and a loop that places six of them, one shared geometry and material reused by every copy of a part, 32 segments on small parts and 64 only on the large ones you see first. The viewer reduces the detail by itself when a model is very heavy, so do not worry about the triangle count - worry about the length of the code.\n\nGood for: bottles, tubes, jars, boxes, cans, gadgets, furniture, packaging — the geometric things a store sells. Organic subjects (faces, animals, plants, fabric): generate_3d_model when the 3D service is there; when it is not, or it failed, build a stylised low-poly version here.\n\nA 3D MODEL HE ASKS FOR IS NEVER DECLINED. Not \"I can't\", not \"too complex\", not \"organic\", not a question first. When the full object is too much, build a simpler, lower-detail version that still reads as the thing he asked for, and say in a few words that it is a simplified version.\n\nExample of the standard expected: const g = new THREE.Group(); const profile = []; for(let i = 0; i <= 24; i++){ const t = i / 24; profile.push(new THREE.Vector2(0.36 - 0.1 * Math.pow(t, 3) + 0.02 * Math.sin(t * Math.PI), t * 1.15)); } const body = new THREE.Mesh(new THREE.LatheGeometry(profile, 64), new THREE.MeshPhysicalMaterial({ color: 0x1b1d22, roughness: 0.38, metalness: 0.1, clearcoat: 0.6 })); g.add(body); const collar = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.018, 24, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.18, metalness: 1 })); collar.rotation.x = Math.PI / 2; collar.position.y = 1.14; g.add(collar); const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.27, 0.22, 64), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); cap.position.y = 1.26; g.add(cap); const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.26, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc8ccd2, roughness: 0.22, metalness: 1 })); capTop.scale.y = 0.35; capTop.position.y = 1.37; g.add(capTop); return g;",
   input_schema: {
     type:'object',
     properties:{
@@ -11278,6 +11274,27 @@ async function runLockedModel3d(seen, text){
     userInterrupted = false;
     try{ noteActivity(); }catch(e){}
   }
+  /* NEVER A NO (2.23.0): the 3D service could not make it (no key, no
+     credits, down, refused), so it is built in code from the description he
+     was given, through an ordinary turn that may not end without a model. */
+  if(!(result && result.ok) && !timedOut && !(result && result.error === 'cancelled') && seen && seen.description){
+    noteProblem('3D service failed for the locked model: ' + String((result && result.error) || 'no result'));
+    addMessage('system', '3D: ' + String((result && result.error) || 'the service did not make it'));
+    if(typeof speak === 'function') speak(he ? '\u05e9\u05d9\u05e8\u05d5\u05ea \u05d4\u05ea\u05dc\u05ea \u05de\u05d9\u05de\u05d3 \u05dc\u05d0 \u05d4\u05e6\u05dc\u05d9\u05d7, \u05d0\u05d6 \u05d0\u05e0\u05d9 \u05d1\u05d5\u05e0\u05d4 \u05d0\u05ea \u05d4\u05de\u05d5\u05d3\u05dc \u05d1\u05e7\u05d5\u05d3.'
+                                         : 'The 3D service did not make it, so I am building the model in code.');
+    const ask = (he ? '\u05ea\u05e2\u05e9\u05d4 \u05de\u05d5\u05d3\u05dc \u05ea\u05dc\u05ea \u05de\u05d9\u05de\u05d3 \u05e9\u05dc \u05de\u05d4 \u05e9\u05ea\u05d9\u05d0\u05e8\u05ea: ' : 'Make a 3D model of what you just described: ') +
+                String(seen.description).slice(0, 1200);
+    isThinking = true; lastThinkStart = Date.now();
+    let reply = null;
+    try{ reply = await askJarvis(ask, [], null, { origin: 'chat' }); }catch(err){ reply = null; }
+    isThinking = false; currentAbortController = null;
+    try{ updateStopBtnVisibility(); }catch(e){}
+    if(reply){
+      addMessage('assistant', reply);
+      if(typeof speak === 'function') speak(reply);
+    }
+    return;
+  }
   const T = k => (I18N[he ? 'he' : 'en'] || {})[k] || t(k);
   let line;
   if(result && result.ok){
@@ -11441,7 +11458,7 @@ async function callPhoto3dTool(input){
 
 const MODEL3D_TOOL = {
   name: 'generate_3d_model',
-  description: "Generate a photorealistic 3D model through an external service. It runs in two passes — first the mesh, then a texture pass that paints on the colour, metalness and roughness — so it COSTS CREDITS FOR BOTH and takes roughly two minutes. Not for a model of something he is showing you \u2014 that is photo_to_3d. Use build_3d_model instead unless the user has explicitly asked for high quality, photorealism, or a real mesh they can download — or unless the subject is organic (a face, an animal, a plant) which cannot be built from primitives.\n\nThe texture pass works from the same prompt, so name the MATERIALS and the COLOURS, not just the shape: \"a matte black anodised aluminium water bottle with a brushed steel screw cap and a thin copper band at the base\" gives it something to paint, where \"a bottle\" gives it nothing and comes back grey. Say the finish (matte, gloss, brushed, anodised, frosted, woven), the material, and the colour, for each distinct part. Those are yours to choose from what the object is \u2014 do not ask him for them, or for its size, first.\n\nIf the texture pass fails the bare mesh is shown instead and the result says textured:false — when that happens, say so plainly and do not describe colours the model does not have. Do not use it for logos, flat images, scenes or people; it makes single objects.",
+  description: "Generate a photorealistic 3D model through an external service. It runs in two passes — first the mesh, then a texture pass that paints on the colour, metalness and roughness — so it COSTS CREDITS FOR BOTH and takes roughly two minutes. Not for a model of something he is showing you \u2014 that is photo_to_3d. Use build_3d_model instead unless the user has explicitly asked for high quality, photorealism, or a real mesh they can download — or unless the subject is organic (a face, an animal, a plant) which cannot be built from primitives.\n\nThe texture pass works from the same prompt, so name the MATERIALS and the COLOURS, not just the shape: \"a matte black anodised aluminium water bottle with a brushed steel screw cap and a thin copper band at the base\" gives it something to paint, where \"a bottle\" gives it nothing and comes back grey. Say the finish (matte, gloss, brushed, anodised, frosted, woven), the material, and the colour, for each distinct part. Those are yours to choose from what the object is \u2014 do not ask him for them, or for its size, first.\n\nIf the texture pass fails the bare mesh is shown instead and the result says textured:false — when that happens, say so plainly and do not describe colours the model does not have. It makes single objects: for a scene, model its main object. IF IT FAILS (no key, no credits, the service down), DO NOT STOP THERE: build the model with build_3d_model in the same turn and mention the service problem in one short clause. A 3D model he asks for is never declined.",
   input_schema: {
     type:'object',
     properties:{
@@ -11977,8 +11994,9 @@ const LOOSE_LEXICON = new Map();
   add('O:ws', ['workspace', 'work space', 'work environment', 'working environment', 'dashboards', 'my dashboards',
                'סביבת עבודה', 'סביבת העבודה']);
   OPEN_SITES.forEach((site, i) => site.names.forEach(n => LOOSE_LEXICON.set(normaliseHeard(n), 'O:site:' + i)));
-  /* Music (2.22.0): his "jarvis" playlist on Spotify. "Spotify" itself
-     stays the site; his name is already gone from "the jarvis playlist". */
+  /* Music (2.22.0, YouTube since 2.23.0): his "jarvis" playlist. "YouTube"
+     itself stays the site; his name is already gone from "the jarvis
+     playlist". */
   add('O:music', ['music', 'some music', 'musics', 'songs', 'some songs', 'a song', 'song', 'tunes', 'some tunes', 'a tune',
                   'playlist', 'my playlist', 'the playlist', 'some beats', 'beats', 'a few songs',
                   'מוזיקה', 'המוזיקה', 'מוסיקה', 'המוסיקה', 'מוזיקה טובה', 'שירים', 'השירים', 'שיר', 'השיר', 'פלייליסט',
@@ -12007,8 +12025,8 @@ const LOOSE_LEXICON = new Map();
   add('WANT', ['want', 'need', 'i want', 'i need', 'i wanna', 'i would like', 'id like',
                'רוצה', 'אני רוצה', 'צריך', 'אני צריך', 'צריכה', 'אני צריכה']);
   add('P', ['the', 'my', 'your', 'our', 'this', 'that', 'to', 'into', 'in', 'mode', 'window', 'app', 'site', 'website',
-            'page', 'tab', 'a new tab', 'feed', 'back', 'chrome', 'browser', 'the browser', 'some', 'on spotify', 'from spotify',
-            'את', 'של', 'שלי', 'שלך', 'לי', 'לנו', 'מצב', 'חלון', 'האתר', 'אתר', 'עם', 'קצת', 'בספוטיפיי', 'מהספוטיפיי']);
+            'page', 'tab', 'a new tab', 'feed', 'back', 'chrome', 'browser', 'the browser', 'some', 'on youtube', 'from youtube', 'in youtube',
+            'את', 'של', 'שלי', 'שלך', 'לי', 'לנו', 'מצב', 'חלון', 'האתר', 'אתר', 'עם', 'קצת', 'ביוטיוב', 'מהיוטיוב', 'מיוטיוב']);
 })();
 const LOOSE_KNOWN = new Set([...LOOSE_LEXICON.keys()].flatMap(k => k.split(' ')));
 /* Hebrew glues ה, ל, ו, ש, מ, ב, כ onto the word: "למסך", "והמצלמה",
@@ -12177,11 +12195,6 @@ function understandCommand(text){
      הבא" a skip — not the playlist from the top again. The model has
      play_music for those. */
   if(kind === 'music' && words.some(w => /^(?:up|down|louder|quieter|volume|ווליום|תגביר|תנמיך|next|skip|previous|הבא|הקודם|דלג|תדלג|תעביר)$/.test(w))) return null;
-  /* "Play Spotify" is music, not the website ("open Spotify" still is). */
-  if(kind === 'site' && /spotify/i.test((OPEN_SITES[+things[0].split(':')[2]] || {}).en || '') &&
-     words.some(w => /^(?:play|playing|hear|listen|blast|נגן|תנגן|לנגן|ננגן|תשמיע|להשמיע|נשמע|לשמוע)$/.test(w))){
-    return { flow: 'music_on', words, site: null };
-  }
   const on = roles.includes('ON'), off = roles.includes('OFF');
   let dir = on && off ? null : on ? 'on' : off ? 'off'
           : (roles.includes('N') || roles.includes('WANT')) ? 'on' : null;
@@ -13660,7 +13673,7 @@ async function runWorkflowCommand(flow, text){
 
   /* "Let's put some music" (2.22.0): the jarvis playlist, from the top. */
   if(flow === 'music_on' || flow === 'music_off'){
-    const r = flow === 'music_on' ? await playMusic(MUSIC_PLAYLIST) : await spotifyPost('/spotify/control', { action: 'pause' });
+    const r = flow === 'music_on' ? await playMusic(MUSIC_PLAYLIST) : await musicKey('pause');
     const line = musicLine(r, he, flow === 'music_on' ? 'play' : 'pause');
     if(r && r.ok) say(line);
     else {
@@ -15351,7 +15364,8 @@ async function readMessageStream(response, onText){
 /* Either he is being looked at this turn, or he is being remembered from
    the last one. Never both: a look replaces the note it is about to write. */
 function cameraSystemExtras(){
-  return (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + (compactCodeNote || '');
+  return (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + (compactCodeNote || '') +
+         (turnWants3d ? NEVER_NO_3D_NOTE : '');
 }
 /* SET ONLY AFTER A CUT-OFF (2.22.1): the last attempt ran out of room in the
    middle of a tool call, so nothing was built. Cleared at the start of each
@@ -15361,6 +15375,56 @@ let compactCodeNote = '';
    after more room and the compact instruction): the desktop has no chat on
    screen, so the explanation is spoken. */
 let turnCutOffTool = false;
+/* A 3D MODEL IS NEVER A NO (2.23.0). He asked for it: whatever the engine
+   says, the turn ends with a model on his screen. In order: the model builds
+   it (with more room, then shorter, see callWithRoom); a turn that ends with
+   no model is handed back twice, the second time for the simplest
+   recognisable version; then the app itself asks the 3D service with his
+   own words; and if even that is not possible, a rough stand-in, said to be
+   one. A sentence that refuses is never spoken in such a turn. */
+let turnWants3d = false, turnModelShown = false;
+const NEW3D_MARK = /\b3\s?-?d\b|\bthree[\s-]?d(?:imensional)?\b|\u05ea\u05dc\u05ea[\s-]?\u05de\u05d9?\u05de\u05d3/i;
+const NEW3D_VERB = /\b(?:make|create|build|generate|design|model|render|sculpt|craft|produce|give me|show me|draw|do)\b|(?:^|[\s,])(?:\u05ea\u05e2\u05e9\u05d4|\u05ea\u05e2\u05e9\u05d9|\u05e2\u05e9\u05d4|\u05ea\u05d9\u05e6\u05d5\u05e8|\u05ea\u05e6\u05d5\u05e8|\u05e6\u05d5\u05e8|\u05dc\u05d9\u05e6\u05d5\u05e8|\u05ea\u05d1\u05e0\u05d4|\u05d1\u05e0\u05d4|\u05dc\u05d1\u05e0\u05d5\u05ea|\u05ea\u05db\u05d9\u05df|\u05dc\u05d4\u05db\u05d9\u05df|\u05ea\u05d9\u05d9\u05e6\u05e8|\u05dc\u05d9\u05d9\u05e6\u05e8|\u05ea\u05e2\u05e6\u05d1|\u05ea\u05df \u05dc\u05d9|\u05ea\u05e8\u05d0\u05d4 \u05dc\u05d9)(?=[\s,]|$)/i;
+function wantsNew3dModel(text){
+  const s = String(text || '').trim();
+  if(!s || s.length > 1500 || !NEW3D_MARK.test(s) || !NEW3D_VERB.test(s)) return false;
+  /* A question about 3D, or 3D printing, is not a request for a model. */
+  if(/^(?:how|what|why|when|where|which|who|is|are|does|did|explain|tell me about)\b|^(?:\u05d0\u05d9\u05da|\u05de\u05d4|\u05dc\u05de\u05d4|\u05de\u05ea\u05d9|\u05d0\u05d9\u05e4\u05d4|\u05d4\u05d0\u05dd|\u05ea\u05e1\u05d1\u05d9\u05e8)(?![\u0590-\u05FF])/i.test(s)) return false;
+  if(/\b(?:print(?:er|ing)?|tutorial|course|learn|teach|software|program)\b|\u05de\u05d3\u05e4\u05e1\u05ea|\u05d4\u05d3\u05e4\u05e1\u05d4|\u05e7\u05d5\u05e8\u05e1/i.test(s)) return false;
+  return true;
+}
+const NEVER_NO_3D_NOTE = '\n\nHE HAS ASKED FOR A 3D MODEL. You make one in this turn, always: a 3D model he asks for is never declined, never answered with "I can\'t", "too complex" or a question. If the full object is too much, build a simpler, lower-detail version that still reads as what he asked for, and say in a few words that it is simplified. If a 3D tool fails, use the other one (build_3d_model always works: it is code you write).';
+function neverNo3dNudge(pass, failed){
+  return pass === 1
+    ? 'He asked for a 3D model and there is no model on his screen yet' + (failed ? ' (what failed: ' + failed + ')' : '') + '. Making one is not optional and you never decline a 3D model. Call build_3d_model NOW. If the full object is too hard, build a simpler, lower-detail version that still reads as what he asked for: basic shapes, 16 to 32 segments, under 120 lines, helper functions and loops for repeated parts. If the 3D service failed, do not give that as the answer: build it in code. Do not ask him anything and do not apologise; one short sentence after it is built.'
+    : 'There is still no model. Build the simplest recognisable version of it NOW with build_3d_model: under 60 lines, boxes, cylinders and spheres only, 16 segments, one THREE.Group, the main parts in their right places and colours. Nothing else, no text before the call.';
+}
+const REFUSAL_SENTENCE = /\b(?:can(?:no|')?t|cannot|unable to|not able to|won'?t be able|isn'?t possible|not possible|too complex|beyond what)\b|(?:\u05dc\u05d0 \u05d9\u05db\u05d5\u05dc|\u05dc\u05d0 \u05d0\u05d5\u05db\u05dc|\u05d0\u05d9\u05df \u05dc\u05d9 \u05d0\u05e4\u05e9\u05e8\u05d5\u05ea|\u05dc\u05d0 \u05de\u05e1\u05d5\u05d2\u05dc|\u05dc\u05d0 \u05e0\u05d9\u05ea\u05df|\u05de\u05d5\u05e8\u05db\u05d1 \u05de\u05d3\u05d9)/i;
+
+/* The app's own last resort, when the engine produced no model at all. */
+const STANDIN_CODE = 'const g = new THREE.Group();' +
+  ' const base = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.68, 0.1, 48), new THREE.MeshStandardMaterial({ color: 0x1b1e24, roughness: 0.5, metalness: 0.3 })); g.add(base);' +
+  ' const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.015, 12, 64), new THREE.MeshStandardMaterial({ color: 0x00e5ff, roughness: 0.3, emissive: 0x00a0b4, emissiveIntensity: 0.6 })); ring.rotation.x = Math.PI / 2; ring.position.y = 0.05; g.add(ring);' +
+  ' const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 1), new THREE.MeshStandardMaterial({ color: 0x9aa4b1, roughness: 0.35, metalness: 0.6, flatShading: true })); body.position.y = 0.6; g.add(body);' +
+  ' const top = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), new THREE.MeshStandardMaterial({ color: 0x00e5ff, roughness: 0.2, metalness: 0.4 })); top.position.y = 1.12; g.add(top);' +
+  ' return g;';
+async function guaranteed3dModel(text){
+  const he = /[\u0590-\u05FF]/.test(String(text || '')) || currentLang === 'he';
+  const what = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 400);
+  if(backendUrl && backendCapabilities && backendCapabilities.model3d){
+    setToolStatus(he ? '\u25b8 \u05de\u05d9\u05d9\u05e6\u05e8 \u05d1\u05e9\u05d9\u05e8\u05d5\u05ea \u05d4\u05ea\u05dc\u05ea \u05de\u05d9\u05de\u05d3\u2026' : '\u25b8 making it with the 3D service\u2026');
+    try{ enqueueSpeech(he ? '\u05d0\u05e0\u05d9 \u05de\u05d9\u05d9\u05e6\u05e8 \u05d0\u05d5\u05ea\u05d5 \u05d1\u05e9\u05d9\u05e8\u05d5\u05ea \u05d4\u05ea\u05dc\u05ea \u05de\u05d9\u05de\u05d3, \u05d6\u05d4 \u05dc\u05d5\u05e7\u05d7 \u05db\u05e9\u05ea\u05d9 \u05d3\u05e7\u05d5\u05ea.' : 'I am making it with the 3D service; it takes about two minutes.'); }catch(e){}
+    const r = await callModel3dTool({ prompt: what });
+    if(r && r.ok) return { ok: true, line: addressHim(he ? '\u05d4\u05de\u05d5\u05d3\u05dc \u05de\u05d5\u05db\u05df, \u05de\u05e9\u05d9\u05e8\u05d5\u05ea \u05d4\u05ea\u05dc\u05ea \u05de\u05d9\u05de\u05d3.' : 'The model is ready, from the 3D service.', he) };
+    noteProblem('3D service fallback failed: ' + String((r && r.error) || 'no result'));
+  }
+  const r2 = await callBuild3dTool({ name: (he ? '\u05d8\u05d9\u05d5\u05d8\u05d4: ' : 'Draft: ') + what.slice(0, 50), code: STANDIN_CODE });
+  if(r2 && r2.ok) return { ok: true, standin: true, line: he
+    ? '\u05dc\u05d0 \u05d4\u05e6\u05dc\u05d7\u05ea\u05d9 \u05dc\u05d1\u05e0\u05d5\u05ea \u05de\u05d5\u05d3\u05dc \u05de\u05e4\u05d5\u05e8\u05d8, \u05d0\u05d6 \u05e9\u05de\u05ea\u05d9 \u05d8\u05d9\u05d5\u05d8\u05d4 \u05d2\u05e1\u05d4. \u05ea\u05d2\u05d9\u05d3 \u05d0\u05d5\u05ea\u05d5 \u05e9\u05d5\u05d1 \u05d1\u05e4\u05e9\u05d8\u05d5\u05ea \u05d5\u05d0\u05d1\u05e0\u05d4 \u05de\u05d5\u05d3\u05dc \u05d0\u05de\u05d9\u05ea\u05d9.'
+    : 'I could not build a detailed model of it, so I put up a rough stand-in. Say it again more simply and I will build the real one.' };
+  return { ok: false };
+}
+
 /* The last few things that went wrong, for "Check yourself": the desktop has
    no chat on screen, so "he went quiet" has otherwise left no trace. */
 const recentProblems = [];
@@ -15463,8 +15527,8 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
                                       TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                       WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
                                       NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL);
-    /* Music (2.22.0): through the worker's Spotify connection. */
-    everydayTools.push(MUSIC_TOOL, SPOTIFY_CONNECT_TOOL);
+    /* Music (2.23.0): his YouTube playlist, through the worker. */
+    everydayTools.push(MUSIC_TOOL, YOUTUBE_CONNECT_TOOL);
     /* The report needs a connected store, not a desktop — it reads the same
        Shopify connection the website uses, so it is offered in both. Offered
        only when a store really is configured: a tool that can only return
@@ -15883,6 +15947,8 @@ async function askJarvis(userText, images, onText, tag){
   turnToolFailures = [];
   compactCodeNote = '';
   turnCutOffTool = false;
+  turnWants3d = wantsNew3dModel(userText);
+  turnModelShown = false;
   turnIsLook = !!(images && images.some(a => a && a.kind !== 'pdf' && a.kind !== 'text'));
   turnPicture = pictureOfTurn(images);
   turnStartedAt = Date.now();
@@ -15989,6 +16055,7 @@ async function askJarvis(userText, images, onText, tag){
     // between describing an answer and arriving at one.
     let loopGuard = 0;
     let corrections = 0;
+    let model3dNudges = 0;
     /* The outer pass exists for one case: the turn ended, he described doing
        something, and he called nothing. Then — once, never more — he is handed
        that back and asked to either do it or say plainly that he cannot. */
@@ -16034,8 +16101,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callConnectCalendarTool();
           } else if(tu.name === 'play_music'){
             payload = await callMusicTool(tu.input);
-          } else if(tu.name === 'connect_spotify'){
-            payload = await callConnectSpotifyTool();
+          } else if(tu.name === 'connect_youtube'){
+            payload = await callConnectYoutubeTool();
           } else if(tu.name === 'send_whatsapp'){
             payload = await callWhatsAppTool(tu.input);
           } else if(tu.name === 'call_me'){
@@ -16151,6 +16218,7 @@ async function askJarvis(userText, images, onText, tag){
           }
           logActionEnd(logEntry, payload);
           if(payload && !payload.error) turnToolSucceeded = true;
+          if(payload && payload.ok && payload.shown && /^(?:build_3d_model|generate_3d_model|photo_to_3d)$/.test(tu.name)) turnModelShown = true;
           else {
             turnToolFailures.push({ tool: tu.name, error: String((payload && payload.error) || 'no result'),
                                    tell_the_user: (payload && payload.tell_the_user) || null });
@@ -16192,6 +16260,25 @@ async function askJarvis(userText, images, onText, tag){
         if(more) collected = collected ? collected + '\n' + more : more;
       }
 
+      /* He asked for a 3D model and none is on his screen: handed back,
+         twice at most, for a model — the second time the simplest one.
+         Before every other check: a refusal, a failed service, a cut-off
+         or a promise all end the same way here. */
+      if(turnWants3d && !turnModelShown && model3dNudges < 2 && data.stop_reason !== 'tool_use' && !userInterrupted){
+        model3dNudges++;
+        if(model3dNudges === 2) compactCodeNote = COMPACT_CODE_NOTE;
+        loopGuard = Math.min(loopGuard, MAX_TOOL_ROUNDS - 3);   // room for the build and its answer
+        setToolStatus(t('doingItForReal'));
+        const failed = turnToolFailures.slice(-3).map(f => f.tool + ': ' + f.error).join('; ');
+        workingMessages = [...workingMessages,
+                           { role:'assistant', content: textOf(data) || '(no text)' },
+                           { role:'user', content: neverNo3dNudge(model3dNudges, failed) }];
+        roundBoundary();
+        data = await callWithRoom();
+        const fixed = textOf(data);
+        if(fixed) collected = fixed;
+        continue;
+      }
       if(loopGuard > 0){
         /* He used a tool — but if every one of them failed and his last
            words still say it was done, that is the same false "done" the
@@ -16255,6 +16342,17 @@ async function askJarvis(userText, images, onText, tag){
          model reads next turn — so its own untrue line came back to it as
          something it had apparently established. */
       if(fixed) collected = fixed;
+    }
+    /* Still no model after both hand-backs: the app makes one itself. */
+    if(turnWants3d && !turnModelShown && !userInterrupted){
+      const fb = await guaranteed3dModel(userText);
+      if(fb && fb.ok){
+        turnModelShown = true;
+        turnToolSucceeded = true;
+        turnCutOffTool = false;
+        collected = fb.line;
+        if(onText) onText('\n' + fb.line);
+      }
     }
     clearToolStatus();
     if(data.stop_reason === 'tool_use'){
@@ -17602,10 +17700,14 @@ async function handleSend(){
      Held, not deleted: the screen still shows the whole reply. It is the
      speaker that stops making promises. */
   let heldClaims = [];
+  let heldRefusals = [];
   let spokeCount = 0;
   const sayOrHold = (sentence)=>{
     if(!sentence) return;
     sentence = speakableToolTalk(sentence);
+    /* In a turn that asked for a 3D model, "I can't" is held: the turn is
+       not over until there is a model (2.23.0), and then it was never true. */
+    if(turnWants3d && REFUSAL_SENTENCE.test(sentence)){ heldRefusals.push(sentence); return; }
     if(!turnToolSucceeded && claimsItDidSomething(sentence)){ heldClaims.push(sentence); return; }
     if(heldClaims.length && turnToolSucceeded){
       for(const held of heldClaims) enqueueSpeech(held);
@@ -17666,6 +17768,11 @@ async function handleSend(){
     addMessage('assistant', spokenText || reply);
   }
 
+  /* A held refusal is spoken only if, after everything, there is no model. */
+  if(heldRefusals.length){
+    if(!turnModelShown) for(const r of heldRefusals) enqueueSpeech(r);
+    heldRefusals = [];
+  }
   /* Cut off for good in the middle of a tool call (a very big model): what he
      said before it was a promise, and the reason is said instead. */
   if(turnCutOffTool && !turnToolSucceeded){

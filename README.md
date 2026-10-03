@@ -110,32 +110,40 @@ The permission is kept in D1 (`jarvis_meta`), so no refresh token has to be
 copied anywhere. An existing `GOOGLE_REFRESH_TOKEN` still works; a connection
 made from the app takes precedence over it.
 
-## Music: "let's put some music" plays the jarvis playlist
+## Music: "let's put some music" plays the jarvis playlist on YouTube
 
-Two secrets on the worker, then one sentence to JARVIS. Once:
+The same commands as before ("let's put some music", "let's hear some music",
+"play some music", "put on my playlist", "music please", "שים מוזיקה", "בוא נשמע
+מוזיקה", "תפעיל מוזיקה", "תנגן את הפלייליסט"...). He finds your YouTube playlist
+named **jarvis** (any spelling: Jarvis, JARVIS, ג'רוויס, ג׳רוויס, גרוויס,
+ג'וויס) and opens it in your browser at its first video, so it plays from the
+start, in order. "Stop the music" / "תעצור את המוזיקה" pauses it; "next song",
+"previous" and "resume" go through the keyboard's media keys, which the browser
+hands to YouTube. (2.22.0 used Spotify; its developer API now needs a Premium
+account, so it was dropped.)
 
-1. At [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard),
-   **Create app**. Under **Redirect URIs** add exactly
-   `https://<your-worker>/spotify/oauth` (the address the app talks to, plus
-   `/spotify/oauth`), and tick **Web API**.
-2. Put its **Client ID** and **Client secret** on the worker:
-   `wrangler secret put SPOTIFY_CLIENT_ID` and
-   `wrangler secret put SPOTIFY_CLIENT_SECRET`, then redeploy.
-3. Say **"connect Spotify"** (or just ask for music: the first time he opens
-   the sign-in himself). Approve on Spotify's page; it names the account.
+**Setup, once. Either way works:**
 
-Then **"let's put some music"**, "let's hear some music", "play some music",
-"put on my playlist", "music please", "שים מוזיקה", "בוא נשמע מוזיקה",
-"תפעיל מוזיקה", "תנגן את הפלייליסט"... He finds the playlist named
-**jarvis** among yours, opens it in the Spotify app on the computer, turns
-shuffle off and plays it **from the first song**. If Spotify was closed, it
-opens at the playlist and he waits a few seconds for it to sign in, then
-starts it. "Stop the music" / "תעצור את המוזיקה" pauses; "next song",
-"resume" and "previous" go to the model, which has the same tool.
+- **The quick way, no sign-in.** Make the playlist *Public* or *Unlisted*, copy
+  its link (Share → Copy link), and put it on the worker as a secret:
+  `wrangler secret put JARVIS_PLAYLIST` (or Cloudflare → the worker → Settings →
+  Variables and Secrets → Add → Secret). Deploy. Done.
+- **By name, from your channel** (private playlists too, and the name can
+  change later): uses the Google sign-in the calendar already has.
+  1. In [Google Cloud console](https://console.cloud.google.com/), the same
+     project as the calendar: APIs & Services → Library → **YouTube Data API
+     v3** → Enable.
+  2. Credentials → your OAuth client → Authorized redirect URIs → add
+     `https://<your-worker>/youtube/oauth` → Save.
+  3. OAuth consent screen → Data access → add the scope
+     `.../auth/youtube.readonly` (Google will show the unverified-app warning
+     when you connect; it is your own app: Advanced → continue).
+  4. Say **"connect YouTube"** and approve; pick the channel that has the
+     playlist.
 
-Spotify lets an app press play **only on a Premium account**. On a free
-account he opens the playlist and tells you to press play. The permission
-is kept in D1 (`jarvis_meta` key `spotify`), like the calendar's.
+Whether it starts with sound is the browser's choice: Chrome plays YouTube
+automatically on a computer where YouTube is used regularly; if it ever opens
+paused, one click on the video starts it (and from then on it autoplays).
 
 ## Watching the screen, on request
 
@@ -1750,12 +1758,13 @@ and then where the file is saved (`JARVIS\Tracking`). The same page has
 moved under **More ›**.
 
 **Music** (see "Music" near the top): "let's put some music" plays the
-**jarvis** playlist from the first song.
+**jarvis** playlist from the first song (on YouTube since 2.23.0).
 
 **Windows targets open now.** "Open Windows settings" and "open the Windows
 camera app" were refused by the app itself: the opener plugin's default
 allows only http, https, mailto and tel. `capabilities/default.json` now
-allows exactly `ms-settings:`, `microsoft.windows.camera:` and `spotify:`.
+allows exactly `ms-settings:` and `microsoft.windows.camera:` (`spotify:` was
+there in 2.22.x).
 
 **Needs the app rebuilt** (the capability file, the menu and the camera
 change) **and the worker deployed** (Groq, Spotify).
@@ -1800,3 +1809,30 @@ the chat, which is not on screen in the desktop app. So: silence.
 The worker cuts its prompt at 600 characters; a very long description loses
 its tail but does not fail. If a service-built model is what went missing,
 say what he answered.
+
+## Page 2.23.0 / worker 2.9.0: music from YouTube, and a 3D model is never a no
+
+**Music moved to YouTube** (see "Music" near the top). Same commands; the
+jarvis playlist opens in the browser at its first video. The worker has
+`POST /youtube/playlist` (JARVIS_PLAYLIST, or the playlist found by name on
+his channel after "connect YouTube"); Spotify's routes, tools and the
+`spotify:` scheme are gone. Stop / next / previous are media keys sent by the
+new `media_key` command in the app (needs the rebuild).
+
+**A 3D model he asks for is always made.** "Make me a 3D model of a dragon"
+used to end, sometimes, with "I can't build organic shapes" or "the 3D service
+is out of credits". Now a turn that asked for a 3D model does not end without
+one on his screen:
+1. Both 3D tools say a model is never declined: organic subjects go to the 3D
+   service when it is there and are built as a stylised low-poly version in
+   code when it is not; a failed service means "build it in code", not "no".
+2. If the turn ends with no model anyway, it is handed back (twice at most):
+   first for a simpler version, then for the simplest recognisable one.
+3. If there is still nothing, the app asks the 3D service itself with his own
+   words; and if there is no service, it puts up a rough stand-in and says so.
+4. "I can't..." is never spoken in such a turn unless, after all of that,
+   there is truly nothing.
+5. "Make it a 3D model" (the lock, from a picture) falls back to building it
+   in code from the description when the 3D service fails.
+A question about 3D ("how do I make a 3D model in Blender") is still just
+answered.

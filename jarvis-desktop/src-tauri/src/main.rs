@@ -2248,6 +2248,50 @@ unsafe fn foreground_unlock() {
     }
 }
 
+/* MUSIC KEYS (2.23.0). "Stop the music" and "next song" for the YouTube
+   playlist he plays from: the keyboard's own media keys, which Windows hands
+   to whatever is playing (Chrome and Edge pass them to YouTube through the
+   Media Session). No window has to be found or focused. */
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn media_key(key: String) -> Result<String, String> {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+    };
+    let vk: u16 = match key.as_str() {
+        "play_pause" => 0xB3, // VK_MEDIA_PLAY_PAUSE
+        "next" => 0xB0,       // VK_MEDIA_NEXT_TRACK
+        "previous" => 0xB1,   // VK_MEDIA_PREV_TRACK
+        "stop" => 0xB2,       // VK_MEDIA_STOP
+        _ => return Err(format!("unknown media key {key}")),
+    };
+    let make = |up: bool| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: vk,
+                wScan: 0,
+                dwFlags: if up { KEYEVENTF_KEYUP } else { 0 },
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+    let mut k = [make(false), make(true)];
+    let sent = unsafe { SendInput(2, k.as_mut_ptr(), std::mem::size_of::<INPUT>() as i32) };
+    if sent == 2 {
+        Ok(key)
+    } else {
+        Err("Windows refused the key (another program may be blocking input)".into())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn media_key(key: String) -> Result<String, String> {
+    Err(format!("media keys are only sent on Windows ({key})"))
+}
+
 #[cfg(target_os = "windows")]
 fn focus_running(app: &tauri::AppHandle, named: NamedApp) -> Option<(isize, bool)> {
     use windows_sys::Win32::Foundation::HWND;
@@ -3169,7 +3213,8 @@ fn main() {
             launch_app,
             drag_send,
             scroll_send,
-            pointer_send
+            pointer_send,
+            media_key
         ])
         .setup(|app| {
             let window = app

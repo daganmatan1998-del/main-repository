@@ -522,30 +522,29 @@ single file `dist/index.html`.
   "old worker". Health: `stt` is true with Groq alone, `stt_via`,
   `stt_groq_key_name` (never the value). Groq-only failures are 429/502,
   never 401. groqstt.test.mjs.
-- **Music is Spotify's Web API through the worker (worker 2.8.0 / page
-  2.22.0).** SPOTIFY_CLIENT_ID/SECRET (spotifyClient pulls the 32-hex value
-  out of a pasted label); connect = POST /spotify/connect → consent →
-  public GET /spotify/oauth (state prefix `spotify-state.`, so a calendar
-  state is refused) → refresh token + account + product in jarvis_meta
-  `spotify`. POST /spotify/play {name|uri, computer_only}: playlist by NAME
-  (exact, then prefix, then contains; /me/playlists paged), device = a
-  Computer first, shuffle off, play context_uri offset 0 position_ms 0.
-  Codes: spotify_missing 503, spotify_not_connected 409 (needs_connect),
-  spotify_client 502, no_device 409 (carries the playlist uri),
-  spotify_premium 402, playlist_not_found 404 — never 401. /spotify/control
-  pause|resume|next|previous. Page: O:music in LOOSE_LEXICON ("music",
-  "some music", "playlist", מוזיקה, שירים...) + verbs play/hear/listen/
-  נגן/נשמע/תשמיע; flows music_on/music_off (self-contained); music alone =
-  on; up/down/volume/next/skip/הבא make it the model's (play_music tool);
-  "play spotify" is music, "open spotify" stays the site. playMusic: play
-  computer_only → no_device → open the app at the playlist (opener,
-  `spotify:` allowed in capabilities/default.json) and ask again every 2 s
-  (10x), then any device. Premium is Spotify's rule for starting playback:
-  on free he opens the playlist and says to press play. spotify.test.mjs,
-  music.test.mjs, music.e2e.mjs.
+- **Music is the YouTube playlist "jarvis" (worker 2.9.0 / page 2.23.0;
+  Spotify in 2.22.x, dropped: its dev API needs Premium since Feb 2026).**
+  POST /youtube/playlist {name}: the playlist id from JARVIS_PLAYLIST /
+  YOUTUBE_PLAYLIST (a link or an id, playlistIdFrom), else his channel via a
+  separate Google connection (googleClient, scope youtube.readonly, state
+  prefix `youtube-state.`, jarvis_meta `youtube`, public GET /youtube/oauth,
+  redirect <worker>/youtube/oauth) and playlists?mine=true matched by
+  playlistKey (lowercase, no quotes/geresh/spaces; JARVIS_PLAYLIST_NAMES has
+  the spellings). First playable video: playlistItems with his token or
+  YOUTUBE_API_KEY (skipping Deleted/Private video), else the playlist page's
+  own "playlistVideoRenderer". Returns url = watch?v=<first>&list=<id>&index=1.
+  Codes: youtube_missing 503, youtube_not_connected 409, youtube_client 502,
+  youtube_api_disabled 502 (accessNotConfigured), playlist_not_found 404,
+  playlist_empty 404 — never 401. Page: the same O:music lexicon and
+  music_on/music_off flows; playMusic opens the url (only a youtube.com
+  watch/playlist address); musicKey → Rust media_key (VK_MEDIA_PLAY_PAUSE /
+  NEXT / PREV via SendInput); "stop" sends nothing unless our music is
+  playing (it would START something paused). Tools play_music (play | pause |
+  next | previous) and connect_youtube. youtube.test.mjs, music.test.mjs,
+  music.e2e.mjs.
 - **The opener allows only what capabilities/default.json lists (2.22.0).**
   tauri-plugin-opener's default scope is http/https/mailto/tel; the scoped
-  entry adds exactly spotify:*, ms-settings:*, microsoft.windows.camera:*
+  entry adds exactly ms-settings:* and microsoft.windows.camera:*
   (open_url's Windows targets were refused before). `cargo check` for
   Windows runs tauri-build, which rejects an unknown permission name.
 - **The orb menu must fit the 180 px window (2.22.0).** Seven rows at
@@ -584,6 +583,23 @@ single file `dist/index.html`.
   `simplified` in the result; over MODEL_TRIANGLE_HARD_LIMIT it returns an
   error telling the model to use fewer parts. recentProblems/noteProblem feed
   "Check yourself". complex3d.e2e.mjs.
+- **A 3D model he asks for is never a no (2.23.0).** turnWants3d =
+  wantsNew3dModel(userText): a 3D marker (3d / three d / תלת מימד) AND a
+  create verb, not a question (how/what/איך/מה...) and not 3D printing or a
+  tutorial. In such a turn NEVER_NO_3D_NOTE rides in cameraSystemExtras;
+  turnModelShown is set from a 3D tool's result (ok && shown); a turn that
+  would end with no model is handed back by neverNo3dNudge (twice, the
+  second with COMPACT_CODE_NOTE, before every other end-of-turn check, with
+  loopGuard pulled back so tools can still run), then guaranteed3dModel():
+  the 3D service with his words when /health says model3d, else STANDIN_CODE
+  via callBuild3dTool, said to be a stand-in. handleSend holds every
+  REFUSAL_SENTENCE of a 3D turn (the whole turn, including the tail flush)
+  and speaks them only if no model was shown. runLockedModel3d falls back to
+  askJarvis("make a 3D model of what you described: ...") when the service
+  fails. Tool descriptions: build_3d_model is allowed for a shown object once
+  photo_to_3d failed, organic → service or stylised low-poly, never decline;
+  generate_3d_model failing → build_3d_model in the same turn.
+  complex3d.e2e.mjs scenarios 4 and 7-10.
 - **Background shells die with their task.** A regression started with a
   plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
   looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &

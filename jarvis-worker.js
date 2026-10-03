@@ -64,11 +64,10 @@
      POST /calendar/create     { title, start, end, ... } → { ok, calendar, event }
      POST /calendar/connect                             → { url } Google's consent screen
      GET  /calendar/oauth      (Google's redirect back; public, signed state)
-     POST /spotify/connect                              → { url } Spotify's consent screen
-     GET  /spotify/oauth       (Spotify's redirect back; public, signed state)
-     POST /spotify/play        { name?, uri?, computer_only? } → plays the playlist
-                               from track one, or { code, tell_the_user }
-     POST /spotify/control     { action: pause|resume|next|previous }
+     POST /youtube/connect                              → { url } Google's consent (youtube.readonly)
+     GET  /youtube/oauth       (Google's redirect back; public, signed state)
+     POST /youtube/playlist    { name? }                → { url } of the jarvis playlist from its
+                               first video, or { code, tell_the_user }
      POST /stt                 audio bytes              → { text } (Groq Whisper
                                first when a gsk_ key exists, Workers AI behind it)
      POST /shopify/query      { query, variables }     → GraphQL result
@@ -84,7 +83,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.8.0';
+const WORKER_VERSION = '2.9.0';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -111,8 +110,8 @@ export default {
       /* Google's redirect back after he approves the calendar: it carries
          no token of ours, only the signed state that handler checks. */
       if (path === '/calendar/oauth') return await handleCalendarOAuth(request, env, url);
-      /* Spotify's redirect back (2.8.0), the same way. */
-      if (path === '/spotify/oauth')  return await handleSpotifyOAuth(request, env, url);
+      /* Google's redirect back for YouTube (2.9.0), the same way. */
+      if (path === '/youtube/oauth')  return await handleYoutubeOAuth(request, env, url);
 
       const authed = await requireToken(request, env);
       if (!authed) return json({ error: 'unauthorized' }, 401, env, request);
@@ -130,9 +129,8 @@ export default {
       if (path === '/calendar/upcoming')           return await handleCalendarUpcoming(request, env, url);
       if (path === '/calendar/create')             return await handleCalendarCreate(request, env);
       if (path === '/calendar/connect')            return await handleCalendarConnect(request, env, url);
-      if (path === '/spotify/connect')             return await handleSpotifyConnect(request, env, url);
-      if (path === '/spotify/play')                return await handleSpotifyPlay(request, env);
-      if (path === '/spotify/control')             return await handleSpotifyControl(request, env);
+      if (path === '/youtube/connect')             return await handleYoutubeConnect(request, env, url);
+      if (path === '/youtube/playlist')            return await handleYoutubePlaylist(request, env);
       if (path === '/shopify/query')               return await handleShopify(request, env);
       if (path === '/whatsapp/send')               return await handleOutboxSend(request, env, ctx, 'whatsapp');
       if (path === '/call/start')                  return await handleOutboxSend(request, env, ctx, 'call');
@@ -333,9 +331,10 @@ async function health(env) {
     read_page: true,          // present only on workers that carry /fetch
     search: true,             // /search — engine-agnostic, needs no Anthropic key
     stt_language_hint: true,   // present only on workers that accept ?language=
-    /* Music (2.8.0): whether the Spotify app keys are set (connection
-       itself is checked by /spotify/play, which names what is missing). */
-    spotify: spotifyConfigured(env),
+    /* Music (2.9.0): YouTube, from JARVIS_PLAYLIST or the Google client
+       (the connection itself is checked by /youtube/playlist). */
+    youtube: youtubeConfigured(env),
+    youtube_playlist_fixed: !!playlistIdFrom(env.JARVIS_PLAYLIST || env.YOUTUBE_PLAYLIST),
     /* Present only on workers that DETECT the language first and treat the
        hint as a second opinion. The page gates on this: an older worker
        feeds ?language= straight to Whisper as a lock, which is what made
@@ -3330,258 +3329,228 @@ async function handleCalendarOAuth(request, env, url) {
 }
 
 /* =====================================================================
-   SPOTIFY (2.8.0) — "let's put some music" plays his "jarvis" playlist
-   from the first song.
+   MUSIC ON YOUTUBE (2.9.0) — "let's put some music" plays his YouTube
+   playlist named "jarvis" (ג'רוויס) from the first video.
 
-   Like the calendar: only the app is a secret (SPOTIFY_CLIENT_ID and
-   SPOTIFY_CLIENT_SECRET, from developer.spotify.com, with the redirect URI
-   <worker>/spotify/oauth). He says "connect Spotify" once, approves on
-   Spotify's own page, and the refresh token is kept in D1 (jarvis_meta
-   'spotify') with the name of the account. /spotify/play finds the
-   playlist by NAME among his playlists, picks the device (this computer's
-   Spotify first), turns shuffle off and starts it at track one.
+   Spotify came first (2.8.0) and was dropped: since February 2026 its
+   developer API needs a Premium account to exist at all. YouTube needs
+   nothing new: the Google OAuth client the calendar already uses
+   (GOOGLE_CLIENT_ID/SECRET) is asked for one more read-only permission,
+   on its own connection, because a YouTube channel can belong to a
+   different account (or a brand account) from the calendar.
 
-   Spotify lets an app start playback only for a Premium account, and only
-   on a device that is running and signed in — so each refusal has its own
-   code and its own fix, and none of them is a 401 (the page reads 401 as
-   its own session running out and asks for the PIN).
+   Two ways to know the playlist, in this order:
+     1. JARVIS_PLAYLIST (or YOUTUBE_PLAYLIST) on the worker: a playlist
+        link or its id. Needs no connection at all.
+     2. "connect YouTube" once (POST /youtube/connect → Google consent →
+        public GET /youtube/oauth): his playlists are read and the one
+        named jarvis / ג'רוויס is found by name.
+   The first video comes from the API (with his token, or YOUTUBE_API_KEY),
+   else from the playlist page itself. The page opens
+   watch?v=<first>&list=<id>&index=1, which YouTube plays from the start,
+   in order. Refusals are coded, never 401 (the page reads 401 as its own
+   session running out).
    ===================================================================== */
-const SPOTIFY_SCOPES = 'playlist-read-private playlist-read-collaborative user-read-private ' +
-                       'user-read-playback-state user-modify-playback-state';
-const SPOTIFY_API = 'https://api.spotify.com/v1';
+const YOUTUBE_SCOPES = 'openid email https://www.googleapis.com/auth/youtube.readonly';
+const YOUTUBE_API = 'https://www.googleapis.com/youtube/v3';
 
-/* The two values as Spotify shows them (32 hex characters each), cleaned of
-   whatever came with them when pasted: quotes, spaces, a label. */
-function spotifyClient(env) {
-  const clean = v => {
-    const s = String(v || '').trim().replace(/^['"]+|['"]+$/g, '').trim();
-    const m = /\b[0-9a-f]{32}\b/i.exec(s);
-    return m ? m[0] : s;
-  };
-  return { id: clean(env.SPOTIFY_CLIENT_ID), secret: clean(env.SPOTIFY_CLIENT_SECRET) };
+/* Every way he might have spelled the name, with apostrophes, geresh,
+   spaces and case taken out: "Jarvis", "JARVIS", "ג'רוויס", "ג׳רוויס",
+   "גרוויס", "ג'וויס". */
+const JARVIS_PLAYLIST_NAMES = ['jarvis', 'javis', 'jarviss', 'גרוויס', 'גוויס', 'גארוויס', 'גרביס', 'גארביס'];
+function playlistKey(s) {
+  return String(s || '').toLowerCase().replace(/["'`׳״’‘\s._-]+/g, '');
 }
-function spotifyConfigured(env) {
-  const c = spotifyClient(env);
-  return !!(c.id && c.secret);
+function playlistIdFrom(v) {
+  const s = String(v || '').trim();
+  const m = /[?&]list=([A-Za-z0-9_-]{10,64})/.exec(s) || /^([A-Za-z0-9_-]{10,64})$/.exec(s);
+  return m ? m[1] : null;
 }
-function spotifyRedirectUri(url) {
-  return url.origin + '/spotify/oauth';
+function youtubeRedirectUri(url) {
+  return url.origin + '/youtube/oauth';
 }
-function spotifyFail(env, request, status, code, error, tell, extra) {
+function youtubeFail(env, request, status, code, error, tell, extra) {
   return json(Object.assign({ ok: false, code, error, tell_the_user: tell }, extra || {}), status, env, request);
 }
+function youtubeConfigured(env) {
+  const c = googleClient(env);
+  return !!((c.id && c.secret) || playlistIdFrom(env.JARVIS_PLAYLIST || env.YOUTUBE_PLAYLIST));
+}
 
-async function storedSpotify(env) {
+async function storedYoutube(env) {
   if (!env.JARVIS_DB) return null;
   try {
     await ensureSchema(env);
-    const row = await env.JARVIS_DB.prepare("SELECT value FROM jarvis_meta WHERE key = 'spotify'").first();
+    const row = await env.JARVIS_DB.prepare("SELECT value FROM jarvis_meta WHERE key = 'youtube'").first();
     return row && row.value ? JSON.parse(row.value) : null;
   } catch (e) { return null; }
 }
-async function saveSpotify(env, value) {
+async function saveYoutube(env, value) {
   await ensureSchema(env);
   await env.JARVIS_DB.prepare(
-    "INSERT INTO jarvis_meta (key, value) VALUES ('spotify', ?) " +
+    "INSERT INTO jarvis_meta (key, value) VALUES ('youtube', ?) " +
     'ON CONFLICT(key) DO UPDATE SET value = excluded.value'
   ).bind(JSON.stringify(value)).run();
 }
 
-async function spotifyTokenRequest(env, params) {
-  const c = spotifyClient(env);
-  const res = await fetch('https://accounts.spotify.com/api/token', {
+/* A fresh access token from the stored refresh token, or why there is none. */
+async function youtubeAccess(env) {
+  const stored = await storedYoutube(env);
+  if (!stored || !stored.refresh_token) return { missing: true };
+  const c = googleClient(env);
+  const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded',
-               Authorization: 'Basic ' + btoa(c.id + ':' + c.secret) },
-    body: new URLSearchParams(params)
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: c.id, client_secret: c.secret, refresh_token: stored.refresh_token, grant_type: 'refresh_token' })
   });
   const data = await res.json().catch(() => ({}));
-  return { res, data };
-}
-
-/* A fresh access token from the stored refresh token. Spotify may hand a
-   new refresh token back; it is kept when it does. */
-let spotifyAccessCache = null;
-async function spotifyAccess(env) {
-  const stored = await storedSpotify(env);
-  if (!stored || !stored.refresh_token) return { missing: true };
-  if (spotifyAccessCache && spotifyAccessCache.refresh === stored.refresh_token && spotifyAccessCache.exp > Date.now() + 30000) {
-    return { token: spotifyAccessCache.token, stored };
-  }
-  const { res, data } = await spotifyTokenRequest(env, { grant_type: 'refresh_token', refresh_token: stored.refresh_token });
   if (!res.ok || !data.access_token) {
-    return { error: String(data.error_description || data.error || ('HTTP ' + res.status)), revoked: data.error === 'invalid_grant',
-             badClient: data.error === 'invalid_client' };
+    return { error: String(data.error_description || data.error || ('HTTP ' + res.status)), revoked: data.error === 'invalid_grant', badClient: data.error === 'invalid_client' };
   }
-  if (data.refresh_token && data.refresh_token !== stored.refresh_token) {
-    stored.refresh_token = data.refresh_token;
-    try { await saveSpotify(env, stored); } catch (e) { /* the old one still works this time */ }
-  }
-  spotifyAccessCache = { token: data.access_token, refresh: stored.refresh_token, exp: Date.now() + (Number(data.expires_in) || 3600) * 1000 };
   return { token: data.access_token, stored };
 }
 
-async function spotifyApi(token, method, path, body) {
-  const res = await fetch(SPOTIFY_API + path, {
-    method,
-    headers: Object.assign({ Authorization: 'Bearer ' + token }, body ? { 'Content-Type': 'application/json' } : {}),
-    body: body ? JSON.stringify(body) : undefined
-  });
-  let data = null;
-  if (res.status !== 204) {
-    const text = await res.text().catch(() => '');
-    try { data = text ? JSON.parse(text) : null; } catch (e) { data = { raw: text.slice(0, 200) }; }
-  }
+async function youtubeApi(path, token, apiKey) {
+  const u = YOUTUBE_API + path + (apiKey && !token ? (path.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(apiKey) : '');
+  const res = await fetch(u, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+  const data = await res.json().catch(() => null);
   return { status: res.status, ok: res.ok, data };
 }
-
-/* The login, or the reason there is none, as a response the page can act on. */
-async function spotifySession(env, request) {
-  if (!spotifyConfigured(env)) {
-    return { fail: spotifyFail(env, request, 503, 'spotify_missing',
-      'the worker is missing SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET',
-      'Spotify is not set up on my server yet: it needs SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET.',
-      { missing: ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET'] }) };
-  }
-  const got = await spotifyAccess(env);
-  if (got.missing || got.revoked) {
-    return { fail: spotifyFail(env, request, 409, 'spotify_not_connected',
-      got.revoked ? 'the Spotify permission was withdrawn or has expired' : 'Spotify is not connected yet',
-      got.revoked ? 'The Spotify connection has expired — I will open Spotify so you can approve it again.'
-                  : 'Your Spotify is not connected yet — I will open Spotify so you can approve it.',
-      { needs_connect: true }) };
-  }
-  if (got.error) {
-    return { fail: spotifyFail(env, request, 502, got.badClient ? 'spotify_client' : 'spotify_down',
-      'Spotify sign-in failed: ' + got.error,
-      got.badClient ? 'Spotify did not accept my app\'s secret — SPOTIFY_CLIENT_SECRET on the server needs to be entered again.'
-                    : 'Spotify did not let me sign in just now.') };
-  }
-  return { token: got.token, stored: got.stored };
+/* Google's own words for "the YouTube Data API is not switched on in this
+   project", which needs a different fix from everything else. */
+function youtubeApiOff(r) {
+  const e = r && r.data && r.data.error;
+  const reason = e && Array.isArray(e.errors) && e.errors[0] && e.errors[0].reason;
+  return r && r.status === 403 && (reason === 'accessNotConfigured' || /has not been used|is disabled|SERVICE_DISABLED/i.test(String((e && e.message) || '')));
+}
+function youtubeApiMessage(r) {
+  const e = r && r.data && r.data.error;
+  return String((e && e.message) || ('HTTP ' + (r && r.status))).slice(0, 200);
 }
 
-/* His playlists, looked through by name: exactly that name first, then
-   one that starts with it, then one that contains it. */
-async function findSpotifyPlaylist(token, name) {
-  const want = String(name || 'jarvis').trim().toLowerCase();
-  let exact = null, starts = null, contains = null;
-  for (let offset = 0; offset < 400; offset += 50) {
-    const r = await spotifyApi(token, 'GET', '/me/playlists?limit=50&offset=' + offset);
+/* His playlists, looked through by name: an exact (normalised) match on the
+   name asked for, else any of the spellings of jarvis, else one containing
+   it. */
+async function findYoutubePlaylist(token, name) {
+  const want = playlistKey(name || 'jarvis');
+  const wanted = new Set([want].concat(JARVIS_PLAYLIST_NAMES.includes(want) || !name ? JARVIS_PLAYLIST_NAMES : []));
+  let exact = null, near = null, pageToken = '';
+  for (let page = 0; page < 6; page++) {
+    const r = await youtubeApi('/playlists?part=snippet,contentDetails&mine=true&maxResults=50' + (pageToken ? '&pageToken=' + pageToken : ''), token);
     if (!r.ok) return { error: r };
-    const items = (r.data && r.data.items) || [];
-    for (const p of items) {
-      if (!p || !p.uri) continue;
-      const n = String(p.name || '').trim().toLowerCase();
-      if (n === want) { exact = exact || p; }
-      else if (!starts && n.startsWith(want)) starts = p;
-      else if (!contains && n.includes(want)) contains = p;
+    for (const p of (r.data && r.data.items) || []) {
+      const k = playlistKey(p.snippet && p.snippet.title);
+      if (k === want) { exact = p; break; }
+      if (!exact && wanted.has(k)) exact = p;
+      if (!near && [...wanted].some(w => w && k.includes(w))) near = p;
     }
-    if (exact || items.length < 50 || !(r.data && r.data.next)) break;
+    if (exact && playlistKey(exact.snippet.title) === want) break;
+    pageToken = r.data && r.data.nextPageToken;
+    if (!pageToken) break;
   }
-  const p = exact || starts || contains;
+  const p = exact || near;
   if (!p) return { none: true };
-  const total = (p.tracks && p.tracks.total) != null ? p.tracks.total : (p.items && p.items.total) != null ? p.items.total : null;
-  return { playlist: { name: p.name, uri: p.uri, id: p.id, tracks: total } };
+  return { playlist: { id: p.id, title: (p.snippet && p.snippet.title) || name, count: p.contentDetails ? p.contentDetails.itemCount : null } };
 }
 
-/* This computer first (a Computer that is already active, then any
-   Computer), then whatever is active, then anything — unless only a
-   computer will do. */
-function pickSpotifyDevice(devices, computerOnly) {
-  const usable = (devices || []).filter(d => d && d.id && !d.is_restricted);
-  const pc = usable.filter(d => String(d.type || '').toLowerCase() === 'computer');
-  const choice = pc.find(d => d.is_active) || pc[0] ||
-                 (computerOnly ? null : (usable.find(d => d.is_active) || usable[0]));
-  return choice || null;
+/* The first video that can play: skips "Deleted video" / "Private video". */
+async function firstYoutubeVideo(env, playlistId, token) {
+  const key = String(env.YOUTUBE_API_KEY || env.GOOGLE_API_KEY || '').trim();
+  if (token || key) {
+    const r = await youtubeApi('/playlistItems?part=snippet,contentDetails&maxResults=10&playlistId=' + encodeURIComponent(playlistId), token, key);
+    if (r.ok) {
+      for (const it of (r.data && r.data.items) || []) {
+        const vid = it.contentDetails && it.contentDetails.videoId;
+        const title = String((it.snippet && it.snippet.title) || '');
+        if (vid && !/^(deleted|private) video$/i.test(title)) return { videoId: vid, title };
+      }
+      return { empty: true };
+    }
+    if (youtubeApiOff(r)) return { apiOff: r };
+  }
+  /* No API at all: the playlist page carries its videos in its own data. */
+  try {
+    const res = await fetch('https://www.youtube.com/playlist?list=' + encodeURIComponent(playlistId) + '&hl=en',
+                            { headers: { 'Accept-Language': 'en', 'User-Agent': 'Mozilla/5.0' } });
+    const html = await res.text();
+    const m = /"playlistVideoRenderer":\{"videoId":"([A-Za-z0-9_-]{11})"/.exec(html) || /"videoId":"([A-Za-z0-9_-]{11})"/.exec(html);
+    if (m) return { videoId: m[1], title: null };
+  } catch (e) { /* the page will open the playlist itself */ }
+  return { unknown: true };
 }
 
-function spotifyPlayFailure(env, request, r, extra) {
-  const reason = String((r.data && r.data.error && (r.data.error.reason || r.data.error.message)) || ('HTTP ' + r.status));
-  if (r.status === 403 && /premium/i.test(reason)) {
-    return spotifyFail(env, request, 402, 'spotify_premium', 'Spotify answered: ' + reason,
-      'Spotify only lets an app press play on a Premium account. I opened the playlist — press play on it.', extra);
-  }
-  if (r.status === 404) {
-    return spotifyFail(env, request, 409, 'no_device', 'Spotify answered: ' + reason,
-      'Spotify is not open on any device right now.', extra);
-  }
-  if (r.status === 401 || r.status === 403) {
-    return spotifyFail(env, request, 409, 'spotify_not_connected', 'Spotify answered: ' + reason,
-      'Spotify refused me — connect it again and I will try once more.', Object.assign({ needs_connect: true }, extra || {}));
-  }
-  if (r.status === 429) {
-    return spotifyFail(env, request, 429, 'spotify_busy', 'Spotify answered: ' + reason, 'Spotify asked me to slow down — try again in a moment.', extra);
-  }
-  return spotifyFail(env, request, 502, 'spotify_down', 'Spotify answered: ' + reason, 'Spotify did not start the music.', extra);
-}
-
-/* POST /spotify/play { name?: 'jarvis', uri?: 'spotify:playlist:...', computer_only?: bool } */
-async function handleSpotifyPlay(request, env) {
+/* POST /youtube/playlist { name?: 'jarvis' } → { ok, playlist, first, url } */
+async function handleYoutubePlaylist(request, env) {
   const body = await request.json().catch(() => ({}));
-  const s = await spotifySession(env, request);
-  if (s.fail) return s.fail;
-  const account = (s.stored && s.stored.account) || null;
-  const product = (s.stored && s.stored.product) || null;
+  const name = String((body && body.name) || 'jarvis');
+  let token = null, account = null, playlist = null;
 
-  let playlist = null;
-  const givenUri = String((body && body.uri) || '');
-  if (/^spotify:playlist:[A-Za-z0-9]{10,40}$/.test(givenUri)) {
-    playlist = { name: String((body && body.name) || 'jarvis'), uri: givenUri, id: givenUri.split(':')[2], tracks: null };
+  const fixedId = playlistIdFrom(env.JARVIS_PLAYLIST || env.YOUTUBE_PLAYLIST);
+  if (fixedId) {
+    playlist = { id: fixedId, title: name, count: null, from: 'JARVIS_PLAYLIST' };
+    const got = await youtubeAccess(env).catch(() => ({}));
+    if (got && got.token) { token = got.token; account = got.stored.account || null; }
   } else {
-    const found = await findSpotifyPlaylist(s.token, (body && body.name) || 'jarvis');
-    if (found.error) return spotifyPlayFailure(env, request, found.error);
+    const c = googleClient(env);
+    if (!(c.id && c.secret)) {
+      return youtubeFail(env, request, 503, 'youtube_missing', 'the worker has neither JARVIS_PLAYLIST nor GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET',
+        'YouTube music is not set up on my server yet: it needs the Google sign-in keys, or the playlist link as JARVIS_PLAYLIST.',
+        { missing: ['JARVIS_PLAYLIST', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'] });
+    }
+    const got = await youtubeAccess(env);
+    if (got.missing || got.revoked) {
+      return youtubeFail(env, request, 409, 'youtube_not_connected', got.revoked ? 'the YouTube permission was withdrawn or has expired' : 'YouTube is not connected yet',
+        got.revoked ? 'The YouTube connection has expired. I opened Google so you can approve it again, then ask for music again.'
+                    : 'YouTube needs connecting once. I opened Google so you can approve it, then ask for music again.',
+        { needs_connect: true });
+    }
+    if (got.error) {
+      return youtubeFail(env, request, 502, got.badClient ? 'youtube_client' : 'youtube_down', 'Google sign-in failed: ' + got.error,
+        got.badClient ? 'Google did not accept my sign-in keys. GOOGLE_CLIENT_SECRET on the server needs entering again.'
+                      : 'Google did not let me sign in to YouTube just now.');
+    }
+    token = got.token; account = got.stored.account || null;
+    const found = await findYoutubePlaylist(token, name);
+    if (found.error) {
+      if (youtubeApiOff(found.error)) {
+        return youtubeFail(env, request, 502, 'youtube_api_disabled', 'YouTube Data API v3 is not enabled: ' + youtubeApiMessage(found.error),
+          'The YouTube Data API is switched off in the Google Cloud project. Enable "YouTube Data API v3" there, then ask again.');
+      }
+      return youtubeFail(env, request, 502, 'youtube_down', 'YouTube answered: ' + youtubeApiMessage(found.error), 'YouTube did not give me your playlists just now.');
+    }
     if (found.none) {
-      const name = String((body && body.name) || 'jarvis');
-      return spotifyFail(env, request, 404, 'playlist_not_found', 'no playlist named "' + name + '" in ' + (account || 'this account'),
-        'I could not find a playlist called ' + name + ' in your Spotify' + (account ? ' (' + account + ')' : '') + '.', { account });
+      return youtubeFail(env, request, 404, 'playlist_not_found', 'no playlist named "' + name + '" on ' + (account || 'this channel'),
+        'I could not find a playlist called ' + name + ' on your YouTube' + (account ? ' (' + account + ')' : '') + '.', { account });
     }
     playlist = found.playlist;
   }
-  const extra = { playlist, account, product };
 
-  const dev = await spotifyApi(s.token, 'GET', '/me/player/devices');
-  if (!dev.ok) return spotifyPlayFailure(env, request, dev, extra);
-  const devices = (dev.data && dev.data.devices) || [];
-  const device = pickSpotifyDevice(devices, !!(body && body.computer_only));
-  if (!device) {
-    return spotifyFail(env, request, 409, 'no_device',
-      devices.length ? 'Spotify is open only on ' + devices.map(d => d.name + ' (' + d.type + ')').join(', ') : 'Spotify is not open on any device',
-      'Spotify is not open on this computer.', Object.assign({ devices: devices.map(d => ({ name: d.name, type: d.type, active: !!d.is_active })) }, extra));
+  const first = await firstYoutubeVideo(env, playlist.id, token);
+  if (first.apiOff) {
+    return youtubeFail(env, request, 502, 'youtube_api_disabled', 'YouTube Data API v3 is not enabled: ' + youtubeApiMessage(first.apiOff),
+      'The YouTube Data API is switched off in the Google Cloud project. Enable "YouTube Data API v3" there, then ask again.', { playlist });
   }
-  /* From the first song: in order, from track one, at 0:00. */
-  await spotifyApi(s.token, 'PUT', '/me/player/shuffle?state=false&device_id=' + encodeURIComponent(device.id));
-  const play = await spotifyApi(s.token, 'PUT', '/me/player/play?device_id=' + encodeURIComponent(device.id),
-                                { context_uri: playlist.uri, offset: { position: 0 }, position_ms: 0 });
-  if (!play.ok) return spotifyPlayFailure(env, request, play, Object.assign({ device: { name: device.name, type: device.type } }, extra));
-  return json({ ok: true, playlist, device: { name: device.name, type: device.type }, account }, 200, env, request);
+  if (first.empty) {
+    return youtubeFail(env, request, 404, 'playlist_empty', 'the playlist has no playable video', 'Your ' + playlist.title + ' playlist has no video I can play.', { playlist });
+  }
+  const url = first.videoId
+    ? 'https://www.youtube.com/watch?v=' + first.videoId + '&list=' + encodeURIComponent(playlist.id) + '&index=1'
+    : 'https://www.youtube.com/playlist?list=' + encodeURIComponent(playlist.id);
+  return json({ ok: true, playlist, first: first.videoId ? { videoId: first.videoId, title: first.title } : null, url, account,
+                plays_from_start: !!first.videoId }, 200, env, request);
 }
 
-/* POST /spotify/control { action: 'pause' | 'resume' | 'next' | 'previous' } */
-async function handleSpotifyControl(request, env) {
-  const body = await request.json().catch(() => ({}));
-  const action = String((body && body.action) || '');
-  const routes = { pause: ['PUT', '/me/player/pause'], resume: ['PUT', '/me/player/play'],
-                   next: ['POST', '/me/player/next'], previous: ['POST', '/me/player/previous'] };
-  if (!routes[action]) return json({ error: 'action must be pause, resume, next or previous' }, 400, env, request);
-  const s = await spotifySession(env, request);
-  if (s.fail) return s.fail;
-  const r = await spotifyApi(s.token, routes[action][0], routes[action][1]);
-  if (!r.ok) return spotifyPlayFailure(env, request, r);
-  return json({ ok: true, action, account: (s.stored && s.stored.account) || null }, 200, env, request);
-}
-
-/* The consent page, signed like the calendar's but with its own prefix:
-   a calendar state is not a Spotify state, and neither is a session. */
-async function signSpotifyState(env) {
+/* The consent page: signed like the calendar's, with its own prefix. */
+async function signYoutubeState(env) {
   const nonce = b64urlEncode(crypto.getRandomValues(new Uint8Array(12)));
   const encoded = b64urlEncode(new TextEncoder().encode(JSON.stringify({
     exp: Math.floor(Date.now() / 1000) + CALENDAR_STATE_TTL_SECONDS, n: nonce })));
-  return encoded + '.' + b64urlEncode(await hmac(tokenSecret(env) || 'dev-secret', 'spotify-state.' + encoded));
+  return encoded + '.' + b64urlEncode(await hmac(tokenSecret(env) || 'dev-secret', 'youtube-state.' + encoded));
 }
-async function verifySpotifyState(env, state) {
+async function verifyYoutubeState(env, state) {
   if (!state || state.indexOf('.') < 0) return false;
   const [encoded, sig] = state.split('.');
-  const expected = b64urlEncode(await hmac(tokenSecret(env) || 'dev-secret', 'spotify-state.' + encoded));
+  const expected = b64urlEncode(await hmac(tokenSecret(env) || 'dev-secret', 'youtube-state.' + encoded));
   if (!sig || sig.length !== expected.length) return false;
   let diff = 0;
   for (let i = 0; i < sig.length; i++) diff |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
@@ -3592,64 +3561,71 @@ async function verifySpotifyState(env, state) {
   } catch (e) { return false; }
 }
 
-async function handleSpotifyConnect(request, env, url) {
-  if (!spotifyConfigured(env)) {
-    return spotifyFail(env, request, 503, 'spotify_missing', 'the worker is missing SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET',
-      'Spotify cannot be connected yet: my server needs SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET, from an app whose redirect URI is ' + spotifyRedirectUri(url) + '.',
-      { missing: ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET'], redirect_uri: spotifyRedirectUri(url) });
+async function handleYoutubeConnect(request, env, url) {
+  const c = googleClient(env);
+  if (!(c.id && c.secret)) {
+    return youtubeFail(env, request, 503, 'youtube_missing', 'the worker is missing GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET',
+      'YouTube cannot be connected yet: my server needs the Google sign-in keys first.', { missing: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'], redirect_uri: youtubeRedirectUri(url) });
   }
-  const consent = new URL('https://accounts.spotify.com/authorize');
-  consent.searchParams.set('client_id', spotifyClient(env).id);
+  const consent = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  consent.searchParams.set('client_id', c.id);
+  consent.searchParams.set('redirect_uri', youtubeRedirectUri(url));
   consent.searchParams.set('response_type', 'code');
-  consent.searchParams.set('redirect_uri', spotifyRedirectUri(url));
-  consent.searchParams.set('scope', SPOTIFY_SCOPES);
-  consent.searchParams.set('show_dialog', 'true');
-  consent.searchParams.set('state', await signSpotifyState(env));
-  return json({ ok: true, url: consent.toString(), redirect_uri: spotifyRedirectUri(url) }, 200, env, request);
+  consent.searchParams.set('scope', YOUTUBE_SCOPES);
+  consent.searchParams.set('access_type', 'offline');
+  consent.searchParams.set('prompt', 'consent select_account');
+  consent.searchParams.set('state', await signYoutubeState(env));
+  return json({ ok: true, url: consent.toString(), redirect_uri: youtubeRedirectUri(url) }, 200, env, request);
 }
 
-/* Where Spotify sends him back. Public, like the calendar's: the signed
-   state is checked before anything else. */
-async function handleSpotifyOAuth(request, env, url) {
+async function handleYoutubeOAuth(request, env, url) {
   const page = (title, html, status) => calendarPage(title, html, status);
   if (url.searchParams.get('error')) {
-    return page('Spotify not connected', '<p>Spotify said: ' + escapeHtml(url.searchParams.get('error')) + '. Nothing was changed.</p>', 400);
+    return page('YouTube not connected', '<p>Google said: ' + escapeHtml(url.searchParams.get('error')) + '. Nothing was changed.</p>', 400);
   }
-  if (!(await verifySpotifyState(env, url.searchParams.get('state') || ''))) {
-    return page('Spotify not connected', '<p>This link has expired, or was not started by your JARVIS. Ask him to connect Spotify again.</p>', 400);
+  if (!(await verifyYoutubeState(env, url.searchParams.get('state') || ''))) {
+    return page('YouTube not connected', '<p>This link has expired, or was not started by your JARVIS. Ask him to connect YouTube again.</p>', 400);
   }
   const code = url.searchParams.get('code') || '';
-  if (!code || !spotifyConfigured(env)) {
-    return page('Spotify not connected', '<p>Spotify did not send a sign-in code back. Nothing was changed.</p>', 400);
+  const c = googleClient(env);
+  if (!code || !(c.id && c.secret)) {
+    return page('YouTube not connected', '<p>Google did not send a sign-in code back. Nothing was changed.</p>', 400);
   }
-  const { res, data } = await spotifyTokenRequest(env, { grant_type: 'authorization_code', code, redirect_uri: spotifyRedirectUri(url) });
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ code, client_id: c.id, client_secret: c.secret, redirect_uri: youtubeRedirectUri(url), grant_type: 'authorization_code' })
+  });
+  const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.refresh_token) {
-    const why = String(data.error || ('HTTP ' + res.status));
+    const why = String(data.error || (data.refresh_token ? '' : 'no lasting permission') || ('HTTP ' + res.status));
     const fix = why === 'invalid_client'
-      ? 'Spotify did not accept the worker\'s <code>SPOTIFY_CLIENT_ID</code> / <code>SPOTIFY_CLIENT_SECRET</code>. Enter both again in Cloudflare, exactly as the Spotify developer dashboard shows them, deploy, then connect again.'
-      : /redirect/i.test(String(data.error_description || '')) || why === 'invalid_request'
-      ? 'The Spotify app does not list this worker\'s address. In the Spotify developer dashboard, under Redirect URIs, add exactly <code>' + escapeHtml(spotifyRedirectUri(url)) + '</code>, save, then connect again.'
+      ? 'Google did not accept the worker\'s <code>GOOGLE_CLIENT_SECRET</code>. Enter it again in Cloudflare, deploy, then connect again.'
+      : why === 'redirect_uri_mismatch'
+      ? 'The Google OAuth client does not list this address. In Google Cloud, Credentials, your OAuth client, Authorized redirect URIs, add exactly <code>' + escapeHtml(youtubeRedirectUri(url)) + '</code>, save, then connect again.'
       : why === 'invalid_grant'
-      ? 'This sign-in was already used or took too long. Ask JARVIS to connect Spotify again.'
-      : 'Nothing was changed. Ask JARVIS to connect Spotify again.';
-    return page('Spotify not connected', '<p>Spotify refused the last step (' + escapeHtml(why) + ').</p><p>' + fix + '</p>', 400);
+      ? 'This sign-in was already used or took too long. Ask JARVIS to connect YouTube again.'
+      : 'Remove JARVIS at myaccount.google.com/permissions and connect again.';
+    return page('YouTube not connected', '<p>Google refused the last step (' + escapeHtml(why) + ').</p><p>' + fix + '</p>', 400);
   }
-  let account = null, product = null;
+  let account = null;
   try {
-    const me = await spotifyApi(data.access_token, 'GET', '/me');
-    if (me.ok && me.data) { account = me.data.display_name || me.data.email || me.data.id || null; product = me.data.product || null; }
-  } catch (e) { /* named on the next play instead */ }
+    const ch = await youtubeApi('/channels?part=snippet&mine=true', data.access_token);
+    if (ch.ok && ch.data && ch.data.items && ch.data.items[0]) account = ch.data.items[0].snippet.title || null;
+    else if (youtubeApiOff(ch)) {
+      if (env.JARVIS_DB) await saveYoutube(env, { refresh_token: data.refresh_token, account: null, connected_at: new Date().toISOString() });
+      return page('Almost connected',
+        '<p>Google approved, but the <b>YouTube Data API v3</b> is switched off in your Google Cloud project, so your playlists cannot be read yet.</p>' +
+        '<p>In Google Cloud: APIs &amp; Services, Library, search "YouTube Data API v3", Enable. Then ask JARVIS for music again; there is no need to connect again.</p>');
+    }
+  } catch (e) { /* named on the first play instead */ }
   if (!env.JARVIS_DB) {
-    return page('Spotify not connected', '<p>Signed in as <b>' + escapeHtml(account || 'your Spotify account') +
-      '</b>, but this worker has no database (JARVIS_DB) to keep the permission in.</p>', 500);
+    return page('YouTube not connected', '<p>Signed in, but this worker has no database (JARVIS_DB) to keep the permission in.</p>', 500);
   }
-  await saveSpotify(env, { refresh_token: data.refresh_token, account, product, connected_at: new Date().toISOString() });
-  spotifyAccessCache = { token: data.access_token, refresh: data.refresh_token, exp: Date.now() + (Number(data.expires_in) || 3600) * 1000 };
-  const premiumNote = product && product !== 'premium'
-    ? '<p>Note: this account is <b>' + escapeHtml(product) + '</b>. Spotify lets apps start playback only on Premium, so JARVIS will open the playlist and you press play.</p>' : '';
-  return page('Spotify connected',
-    '<p>JARVIS now plays music on the Spotify account of <b>' + escapeHtml(account || 'the account you chose') +
-    '</b>. You can close this tab and say "let\'s put some music".</p>' + premiumNote);
+  await saveYoutube(env, { refresh_token: data.refresh_token, account, connected_at: new Date().toISOString() });
+  return page('YouTube connected',
+    '<p>JARVIS now plays music from the YouTube channel <b>' + escapeHtml(account || 'you chose') +
+    '</b>. You can close this tab and say "let\'s put some music".</p>');
 }
 
 /* =====================================================================
