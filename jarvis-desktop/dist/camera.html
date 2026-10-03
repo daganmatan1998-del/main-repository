@@ -143,7 +143,8 @@
         if(s.kind === 'perf'){
           liveText = liveText.replace(/ · \d+ fps/, '');          // the camera's setting; the measured rate replaces it
           perfNote = (s.delegate ? s.delegate + ' · ' : '') + Math.round(s.camFps) + ' fps' + (s.camFps < 24 ? ' LOW' : '') + ' · ' + Math.round(s.inferMs || 0) + ' ms' +
-                     (s.lateMs != null ? ' · late ' + Math.round(s.lateMs) + ' ms' : '');
+                     (s.lateMs != null ? ' · late ' + Math.round(s.lateMs) + ' ms' : '') +
+                     (s.resting ? ' · resting' : '');   // 2.22.0: no hand in view, reading ~8 a second
           showState(); emit('jarvis://gesture-status', s); return;
         }
         if(s.kind === 'ready') gzNote = '✋ zoom';

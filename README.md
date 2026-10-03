@@ -110,6 +110,33 @@ The permission is kept in D1 (`jarvis_meta`), so no refresh token has to be
 copied anywhere. An existing `GOOGLE_REFRESH_TOKEN` still works; a connection
 made from the app takes precedence over it.
 
+## Music: "let's put some music" plays the jarvis playlist
+
+Two secrets on the worker, then one sentence to JARVIS. Once:
+
+1. At [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard),
+   **Create app**. Under **Redirect URIs** add exactly
+   `https://<your-worker>/spotify/oauth` (the address the app talks to, plus
+   `/spotify/oauth`), and tick **Web API**.
+2. Put its **Client ID** and **Client secret** on the worker:
+   `wrangler secret put SPOTIFY_CLIENT_ID` and
+   `wrangler secret put SPOTIFY_CLIENT_SECRET`, then redeploy.
+3. Say **"connect Spotify"** (or just ask for music: the first time he opens
+   the sign-in himself). Approve on Spotify's page; it names the account.
+
+Then **"let's put some music"**, "let's hear some music", "play some music",
+"put on my playlist", "music please", "שים מוזיקה", "בוא נשמע מוזיקה",
+"תפעיל מוזיקה", "תנגן את הפלייליסט"... He finds the playlist named
+**jarvis** among yours, opens it in the Spotify app on the computer, turns
+shuffle off and plays it **from the first song**. If Spotify was closed, it
+opens at the playlist and he waits a few seconds for it to sign in, then
+starts it. "Stop the music" / "תעצור את המוזיקה" pauses; "next song",
+"resume" and "previous" go to the model, which has the same tool.
+
+Spotify lets an app press play **only on a Premium account**. On a free
+account he opens the playlist and tells you to press play. The permission
+is kept in D1 (`jarvis_meta` key `spotify`), like the calendar's.
+
 ## Watching the screen, on request
 
 "Hey Jarvis, can you see my screen?" (or "תסתכל על המסך") turns it on, and an
@@ -1672,3 +1699,63 @@ ms or more, a working graphics path (up-to-date driver) is the next gain.
 
 **Switches** for tuning, in the saved gesture settings: `trackWidth` (960;
 0 = as the camera gives it) and `oneHandPointing` (true).
+
+## Page 2.22.0 / worker 2.8.0: why he stops answering, said out loud; music; record tracking in the menu
+
+**"He does not answer."** There are five different reasons, and in the
+small orb none of them showed on screen:
+- the server cannot be reached;
+- the session has expired;
+- every thinking engine is out of credit;
+- the transcription allowance is spent (Workers AI's free 10,000 neurons a
+  day are shared by speech, chat fallbacks and pictures, so a long day of
+  talking runs them out);
+- listening is switched off.
+
+Three changes:
+
+1. **Groq hears him first (worker 2.8.0).** `/stt` sends the recording to
+   Groq's `whisper-large-v3-turbo` whenever a Groq key exists anywhere on the
+   worker: `GROQ_API_KEY`, or a `gsk_` key already in one of the chat slots
+   (`PRIMARY_API_KEY`, `FALLBACK_API_KEY`...), so no new secret is needed if
+   you have one. Its free tier is about 2,000 requests and 8 hours of audio a
+   day, separate from Workers AI. Workers AI stays behind it, unchanged, when
+   Groq refuses or returns only a hallucination. `/health` now says
+   `stt_via: groq | workers-ai` and the key's name, never its value.
+2. **"Check yourself" (orb right-click menu).** He asks each of these in
+   turn and *says* what he found: the server, the session, each engine (the
+   failing one by name, and which one he is answering through instead),
+   hearing, listening off, push-to-talk, a 3D lock, and the camera's real
+   numbers. The full report goes on the clipboard, so you can paste it to
+   Claude.
+3. **The voice can no longer hold everything up.** A `/tts` request that did
+   not answer used to stall the whole speech queue, and every reply after
+   it with it. After 15 s the line is spoken in the computer's own voice
+   instead.
+
+**The camera rests when no hand is there.** With no hand in view for 2 s,
+the tracker reads at most one frame every 120 ms instead of every frame. It
+was using a whole core, and the graphics card, all day on an empty picture,
+beside JARVIS's own page. A hand coming in is seen within one of those reads,
+and from then on every frame is read again. The camera window's line says
+`resting` (the GESTURES panel: `resting (no hand in view)`).
+
+**Record tracking is in the menu.** The GESTURES panel is not on screen in
+the desktop app, which is why the button could not be found. Right-click the
+orb → **Camera & hands ›** → **⏺ Record tracking**. He says when it starts,
+and then where the file is saved (`JARVIS\Tracking`). The same page has
+**👆 Finger mouse** and **✋ Hand control** on/off, each confirmed out loud.
+"Record my hand tracking" works by voice too (the `gesture_zoom` tool's
+`record`). The menu was made to fit the 180 px orb: Reset position and Hide
+moved under **More ›**.
+
+**Music** (see "Music" near the top): "let's put some music" plays the
+**jarvis** playlist from the first song.
+
+**Windows targets open now.** "Open Windows settings" and "open the Windows
+camera app" were refused by the app itself: the opener plugin's default
+allows only http, https, mailto and tel. `capabilities/default.json` now
+allows exactly `ms-settings:`, `microsoft.windows.camera:` and `spotify:`.
+
+**Needs the app rebuilt** (the capability file, the menu and the camera
+change) **and the worker deployed** (Groq, Spotify).

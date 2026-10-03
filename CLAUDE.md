@@ -510,6 +510,61 @@ single file `dist/index.html`.
   the camera line name the path (GPU/CPU), hands and input width.
   controller.test.mjs drives startGestureZoom in a vm with a stand-in
   Vision whose reads take scripted ms and a clock it moves.
+- **Groq hears first, Workers AI behind it (worker 2.8.0).** handleStt
+  tries groqTranscribe (whisper-large-v3-turbo, multipart, verbose_json, no
+  language lock) whenever groqSttKey finds a gsk_ key in GROQ_API_KEY,
+  GROQ_KEY or any PRIMARY/FALLBACK chat slot (cleaned of quotes/"Bearer").
+  Empty text = silence, Workers AI NOT asked again (neurons); a
+  hallucination or an error falls to the unchanged Workers AI chain with the
+  Groq line first in `tried`. Every `tried` entry for a model that RAN must
+  end ": empty result" or ": hallucination (...)" — the page reads anything
+  else as a failure. `dropped` must be present (null) or the page warns
+  "old worker". Health: `stt` is true with Groq alone, `stt_via`,
+  `stt_groq_key_name` (never the value). Groq-only failures are 429/502,
+  never 401. groqstt.test.mjs.
+- **Music is Spotify's Web API through the worker (worker 2.8.0 / page
+  2.22.0).** SPOTIFY_CLIENT_ID/SECRET (spotifyClient pulls the 32-hex value
+  out of a pasted label); connect = POST /spotify/connect → consent →
+  public GET /spotify/oauth (state prefix `spotify-state.`, so a calendar
+  state is refused) → refresh token + account + product in jarvis_meta
+  `spotify`. POST /spotify/play {name|uri, computer_only}: playlist by NAME
+  (exact, then prefix, then contains; /me/playlists paged), device = a
+  Computer first, shuffle off, play context_uri offset 0 position_ms 0.
+  Codes: spotify_missing 503, spotify_not_connected 409 (needs_connect),
+  spotify_client 502, no_device 409 (carries the playlist uri),
+  spotify_premium 402, playlist_not_found 404 — never 401. /spotify/control
+  pause|resume|next|previous. Page: O:music in LOOSE_LEXICON ("music",
+  "some music", "playlist", מוזיקה, שירים...) + verbs play/hear/listen/
+  נגן/נשמע/תשמיע; flows music_on/music_off (self-contained); music alone =
+  on; up/down/volume/next/skip/הבא make it the model's (play_music tool);
+  "play spotify" is music, "open spotify" stays the site. playMusic: play
+  computer_only → no_device → open the app at the playlist (opener,
+  `spotify:` allowed in capabilities/default.json) and ask again every 2 s
+  (10x), then any device. Premium is Spotify's rule for starting playback:
+  on free he opens the playlist and says to press play. spotify.test.mjs,
+  music.test.mjs, music.e2e.mjs.
+- **The opener allows only what capabilities/default.json lists (2.22.0).**
+  tauri-plugin-opener's default scope is http/https/mailto/tel; the scoped
+  entry adds exactly spotify:*, ms-settings:*, microsoft.windows.camera:*
+  (open_url's Windows targets were refused before). `cargo check` for
+  Windows runs tauri-build, which rejects an unknown permission name.
+- **The orb menu must fit the 180 px window (2.22.0).** Seven rows at
+  11 px/5 px padding end at 176 px; anything rarely used goes in a page
+  (`camera`: record tracking, finger mouse, hand control; `more`: reset
+  position, hide). Labels are nowrap+ellipsis — measure new ones (Hebrew
+  too) in the 180x180 orbsim (menufit2.mjs), keep them under ~160 px.
+  Switches thrown from the menu are SAID (menuSay): nothing else shows.
+  "Check yourself" = selfCheck(): /health, /fallback/test (401 → PIN),
+  sttBrokenWhy, muted/PTT/modelLock, lastGesturePerf; spoken, full report
+  to the log and clipboard. Recording from the menu is spoken
+  (trackRecordSay) at start, save and failure.
+- **The tracker rests without a hand (2.22.0).** tick() skips reads while
+  no hand for IDLE_AFTER_MS (2000) and the last read was under
+  IDLE_EVERY_MS (120) ago — never while recording; skipped frames are
+  idleSkips, not `missed`. perf/stats carry `resting`.
+- **The voice never blocks the queue (2.22.0).** fetchVoiceAudio aborts
+  /tts after 15 s (timer held until the blob is read); the line then goes
+  to speakWithBrowser.
 - **Background shells die with their task.** A regression started with a
   plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
   looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &

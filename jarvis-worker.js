@@ -64,7 +64,14 @@
      POST /calendar/create     { title, start, end, ... } → { ok, calendar, event }
      POST /calendar/connect                             → { url } Google's consent screen
      GET  /calendar/oauth      (Google's redirect back; public, signed state)
-     POST /shopify/query       { query, variables }     → GraphQL result
+     POST /spotify/connect                              → { url } Spotify's consent screen
+     GET  /spotify/oauth       (Spotify's redirect back; public, signed state)
+     POST /spotify/play        { name?, uri?, computer_only? } → plays the playlist
+                               from track one, or { code, tell_the_user }
+     POST /spotify/control     { action: pause|resume|next|previous }
+     POST /stt                 audio bytes              → { text } (Groq Whisper
+                               first when a gsk_ key exists, Workers AI behind it)
+     POST /shopify/query      { query, variables }     → GraphQL result
      POST /whatsapp/send       { text, send_at? }       → sends now, or queues it
      POST /call/start          { text, send_at? }       → rings him now, or queues it
      GET  /outbox/scheduled                             → { pending, recent }, both kinds
@@ -77,7 +84,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.7.0';
+const WORKER_VERSION = '2.8.0';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -104,6 +111,8 @@ export default {
       /* Google's redirect back after he approves the calendar: it carries
          no token of ours, only the signed state that handler checks. */
       if (path === '/calendar/oauth') return await handleCalendarOAuth(request, env, url);
+      /* Spotify's redirect back (2.8.0), the same way. */
+      if (path === '/spotify/oauth')  return await handleSpotifyOAuth(request, env, url);
 
       const authed = await requireToken(request, env);
       if (!authed) return json({ error: 'unauthorized' }, 401, env, request);
@@ -121,6 +130,9 @@ export default {
       if (path === '/calendar/upcoming')           return await handleCalendarUpcoming(request, env, url);
       if (path === '/calendar/create')             return await handleCalendarCreate(request, env);
       if (path === '/calendar/connect')            return await handleCalendarConnect(request, env, url);
+      if (path === '/spotify/connect')             return await handleSpotifyConnect(request, env, url);
+      if (path === '/spotify/play')                return await handleSpotifyPlay(request, env);
+      if (path === '/spotify/control')             return await handleSpotifyControl(request, env);
       if (path === '/shopify/query')               return await handleShopify(request, env);
       if (path === '/whatsapp/send')               return await handleOutboxSend(request, env, ctx, 'whatsapp');
       if (path === '/call/start')                  return await handleOutboxSend(request, env, ctx, 'call');
@@ -298,6 +310,10 @@ async function health(env) {
       ? 'engine' : (env.AI ? 'described' : false),
     vision_engine: (chain.find(e => e.vendor === 'anthropic' || engineSeesImages(e, env)) || {}).label || null,
     vision_describer: env.AI ? describersFor(env)[0].model : null,
+    /* How he is heard (2.8.0): Groq's Whisper first when a gsk_ key exists
+       anywhere in the worker (named, never the value), Workers AI behind it. */
+    stt_via: groqSttKey(env) ? 'groq' : (env.AI ? 'workers-ai' : false),
+    stt_groq_key_name: (groqSttKey(env) || {}).name || null,
     voice: !!(env.CARTESIA_API_KEY || env.AI),
     voice_via: env.CARTESIA_API_KEY ? 'cartesia' : (env.AI ? 'workers-ai' : false),
     model3d: !!model3dProvider(env),
@@ -313,10 +329,13 @@ async function health(env) {
     model3d_key_cleaned: model3dKeyInfo(env).cleaned,
     model3d_check: true,      // present only on workers that carry /model3d/check
     images: !!env.AI,
-    stt: !!env.AI,
+    stt: !!(env.AI || groqSttKey(env)),
     read_page: true,          // present only on workers that carry /fetch
     search: true,             // /search — engine-agnostic, needs no Anthropic key
     stt_language_hint: true,   // present only on workers that accept ?language=
+    /* Music (2.8.0): whether the Spotify app keys are set (connection
+       itself is checked by /spotify/play, which names what is missing). */
+    spotify: spotifyConfigured(env),
     /* Present only on workers that DETECT the language first and treat the
        hint as a second opinion. The page gates on this: an older worker
        feeds ?language= straight to Whisper as a lock, which is what made
@@ -2422,15 +2441,97 @@ function isWhisperHallucination(text, byteLength) {
   return WHISPER_NOISE_SET.indexOf(bare) >= 0;
 }
 
+/* HEARING THAT DOES NOT SPEND THE WORKERS AI ALLOWANCE (worker 2.8.0).
+
+   Transcription ran only on Workers AI, whose free 10,000 neurons a day are
+   shared with the voice, picture descriptions and the backup brain; when
+   they ran out he could not be heard at all until midnight UTC, and to him
+   that was JARVIS not answering. Groq serves the same Whisper (large-v3
+   turbo) with its own free allowance (2,000 requests and 8 hours of audio a
+   day). It goes first whenever a Groq key exists anywhere in the worker —
+   GROQ_API_KEY, or a gsk_ key already in a PRIMARY/FALLBACK slot for the
+   chat chain, so no new secret is needed if he has one — and Workers AI
+   stays behind it, exactly as before, when Groq refuses or finds only a
+   hallucination. */
+const GROQ_STT_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+const GROQ_STT_MODEL = 'whisper-large-v3-turbo';
+const GROQ_KEY_SLOTS = ['GROQ_API_KEY', 'GROQ_KEY', 'PRIMARY_API_KEY', 'FALLBACK_API_KEY',
+                        'FALLBACK_API_KEY_2', 'FALLBACK_API_KEY_3', 'FALLBACK_API_KEY_4', 'FALLBACK_API_KEY_5'];
+function groqSttKey(env) {
+  for (const name of GROQ_KEY_SLOTS) {
+    const v = String(env[name] || '').trim().replace(/^['"]+|['"]+$/g, '').replace(/^Bearer\s+/i, '').trim();
+    const m = /gsk_[A-Za-z0-9]+/.exec(v);
+    if (m) return { key: m[0], name };
+  }
+  return null;
+}
+/* What the recording is, from its first bytes — Groq wants a file name it
+   recognises. MediaRecorder gives webm (or ogg, or mp4 on some builds). */
+function audioFileOf(bytes) {
+  const b = bytes, at = (i, s) => s.split('').every((c, k) => b[i + k] === c.charCodeAt(0));
+  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return { name: 'speech.webm', type: 'audio/webm' };
+  if (at(0, 'OggS')) return { name: 'speech.ogg', type: 'audio/ogg' };
+  if (at(0, 'RIFF')) return { name: 'speech.wav', type: 'audio/wav' };
+  if (at(4, 'ftyp')) return { name: 'speech.m4a', type: 'audio/mp4' };
+  if (at(0, 'ID3') || (b[0] === 0xff && (b[1] & 0xe0) === 0xe0)) return { name: 'speech.mp3', type: 'audio/mpeg' };
+  if (at(0, 'fLaC')) return { name: 'speech.flac', type: 'audio/flac' };
+  return { name: 'speech.webm', type: 'audio/webm' };
+}
+async function groqTranscribe(env, bytes, lang) {
+  const k = groqSttKey(env);
+  if (!k) return null;
+  const file = audioFileOf(bytes);
+  const form = new FormData();
+  form.append('file', new Blob([bytes], { type: file.type }), file.name);
+  form.append('model', String(env.GROQ_STT_MODEL || GROQ_STT_MODEL));
+  form.append('response_format', 'verbose_json');
+  form.append('temperature', '0');
+  if (lang) form.append('language', lang);
+  const res = await fetch(GROQ_STT_URL, { method: 'POST', headers: { Authorization: 'Bearer ' + k.key }, body: form });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = String((data && data.error && (data.error.message || data.error.code)) || '').slice(0, 140);
+    throw new Error('groq ' + res.status + (msg ? ': ' + msg : ''));
+  }
+  return { text: String((data && data.text) || '').trim(), language: (data && data.language) || null,
+           model: 'groq:' + String(env.GROQ_STT_MODEL || GROQ_STT_MODEL) };
+}
+
 async function handleStt(request, env) {
-  if (!env.AI) {
-    return json({ error: 'Workers AI is not bound: add the AI binding in the dashboard' }, 503, env, request);
+  if (!env.AI && !groqSttKey(env)) {
+    return json({ error: 'Workers AI is not bound and there is no Groq key: add the AI binding in the dashboard, or a GROQ_API_KEY' }, 503, env, request);
   }
   const buf = await request.arrayBuffer().catch(() => null);
   if (!buf || buf.byteLength < 800) {
     return json({ error: 'no audio', bytes: buf ? buf.byteLength : 0 }, 400, env, request);
   }
   const bytes = new Uint8Array(buf);
+  const groqTried = [];
+  let groqDropped = null;
+  if (groqSttKey(env)) {
+    try {
+      const g = await groqTranscribe(env, bytes, null);
+      if (!g.text) {
+        /* Groq's large-v3 turbo ran and heard no words: that is silence, and
+           the Workers AI chain is not asked again (it costs neurons). */
+        return json({ ok: true, text: '', tried: [g.model + ': empty result'], dropped: null, bytes: bytes.length, via: 'groq' }, 200, env, request);
+      }
+      if (!isWhisperHallucination(g.text, bytes.length)) {
+        return json({ ok: true, text: g.text, model: g.model, detected: g.language, dropped: null, via: 'groq' }, 200, env, request);
+      }
+      groqDropped = g.text;
+      groqTried.push(g.model + ': hallucination (' + g.text.slice(0, 40) + ')');
+    } catch (err) {
+      groqTried.push(String((err && err.message) || err).slice(0, 160));
+    }
+    if (!env.AI) {
+      /* No second route: a hallucination is silence; a refusal is said as one. */
+      if (groqDropped) return json({ ok: true, text: '', tried: groqTried, dropped: groqDropped, bytes: bytes.length, via: 'groq' }, 200, env, request);
+      const quota = groqTried.find(t => /429|rate limit|quota/i.test(t));
+      return json({ error: (quota ? 'the Groq transcription allowance is spent for now — ' : 'Groq transcription failed: ') + groqTried.join(' | '),
+                    tried: groqTried }, quota ? 429 : 502, env, request);
+    }
+  }
 
   /* The two models want the audio in different shapes — the turbo one takes
      base64, the original takes a plain byte array. Rather than pin a guess,
@@ -2489,8 +2590,8 @@ async function handleStt(request, env) {
     { model: WHISPER_MODELS[1], input: withLang(withVocab({ audio: [...bytes] })) }
   ];
 
-  const tried = [];
-  let firstDropped = null;
+  const tried = groqTried.slice();
+  let firstDropped = groqDropped;
   let ran = 0;          // attempts where a model actually ran, whatever it returned
   let empties = 0;      // ...and found no words
   for (const attempt of attempts) {
@@ -3226,6 +3327,329 @@ async function handleCalendarOAuth(request, env, url) {
   return calendarPage('Calendar connected',
     '<p>JARVIS now reads and writes the Google Calendar of <b>' + escapeHtml(account || 'the account you chose') +
     '</b>. You can close this tab.</p>');
+}
+
+/* =====================================================================
+   SPOTIFY (2.8.0) — "let's put some music" plays his "jarvis" playlist
+   from the first song.
+
+   Like the calendar: only the app is a secret (SPOTIFY_CLIENT_ID and
+   SPOTIFY_CLIENT_SECRET, from developer.spotify.com, with the redirect URI
+   <worker>/spotify/oauth). He says "connect Spotify" once, approves on
+   Spotify's own page, and the refresh token is kept in D1 (jarvis_meta
+   'spotify') with the name of the account. /spotify/play finds the
+   playlist by NAME among his playlists, picks the device (this computer's
+   Spotify first), turns shuffle off and starts it at track one.
+
+   Spotify lets an app start playback only for a Premium account, and only
+   on a device that is running and signed in — so each refusal has its own
+   code and its own fix, and none of them is a 401 (the page reads 401 as
+   its own session running out and asks for the PIN).
+   ===================================================================== */
+const SPOTIFY_SCOPES = 'playlist-read-private playlist-read-collaborative user-read-private ' +
+                       'user-read-playback-state user-modify-playback-state';
+const SPOTIFY_API = 'https://api.spotify.com/v1';
+
+/* The two values as Spotify shows them (32 hex characters each), cleaned of
+   whatever came with them when pasted: quotes, spaces, a label. */
+function spotifyClient(env) {
+  const clean = v => {
+    const s = String(v || '').trim().replace(/^['"]+|['"]+$/g, '').trim();
+    const m = /\b[0-9a-f]{32}\b/i.exec(s);
+    return m ? m[0] : s;
+  };
+  return { id: clean(env.SPOTIFY_CLIENT_ID), secret: clean(env.SPOTIFY_CLIENT_SECRET) };
+}
+function spotifyConfigured(env) {
+  const c = spotifyClient(env);
+  return !!(c.id && c.secret);
+}
+function spotifyRedirectUri(url) {
+  return url.origin + '/spotify/oauth';
+}
+function spotifyFail(env, request, status, code, error, tell, extra) {
+  return json(Object.assign({ ok: false, code, error, tell_the_user: tell }, extra || {}), status, env, request);
+}
+
+async function storedSpotify(env) {
+  if (!env.JARVIS_DB) return null;
+  try {
+    await ensureSchema(env);
+    const row = await env.JARVIS_DB.prepare("SELECT value FROM jarvis_meta WHERE key = 'spotify'").first();
+    return row && row.value ? JSON.parse(row.value) : null;
+  } catch (e) { return null; }
+}
+async function saveSpotify(env, value) {
+  await ensureSchema(env);
+  await env.JARVIS_DB.prepare(
+    "INSERT INTO jarvis_meta (key, value) VALUES ('spotify', ?) " +
+    'ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+  ).bind(JSON.stringify(value)).run();
+}
+
+async function spotifyTokenRequest(env, params) {
+  const c = spotifyClient(env);
+  const res = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded',
+               Authorization: 'Basic ' + btoa(c.id + ':' + c.secret) },
+    body: new URLSearchParams(params)
+  });
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
+}
+
+/* A fresh access token from the stored refresh token. Spotify may hand a
+   new refresh token back; it is kept when it does. */
+let spotifyAccessCache = null;
+async function spotifyAccess(env) {
+  const stored = await storedSpotify(env);
+  if (!stored || !stored.refresh_token) return { missing: true };
+  if (spotifyAccessCache && spotifyAccessCache.refresh === stored.refresh_token && spotifyAccessCache.exp > Date.now() + 30000) {
+    return { token: spotifyAccessCache.token, stored };
+  }
+  const { res, data } = await spotifyTokenRequest(env, { grant_type: 'refresh_token', refresh_token: stored.refresh_token });
+  if (!res.ok || !data.access_token) {
+    return { error: String(data.error_description || data.error || ('HTTP ' + res.status)), revoked: data.error === 'invalid_grant',
+             badClient: data.error === 'invalid_client' };
+  }
+  if (data.refresh_token && data.refresh_token !== stored.refresh_token) {
+    stored.refresh_token = data.refresh_token;
+    try { await saveSpotify(env, stored); } catch (e) { /* the old one still works this time */ }
+  }
+  spotifyAccessCache = { token: data.access_token, refresh: stored.refresh_token, exp: Date.now() + (Number(data.expires_in) || 3600) * 1000 };
+  return { token: data.access_token, stored };
+}
+
+async function spotifyApi(token, method, path, body) {
+  const res = await fetch(SPOTIFY_API + path, {
+    method,
+    headers: Object.assign({ Authorization: 'Bearer ' + token }, body ? { 'Content-Type': 'application/json' } : {}),
+    body: body ? JSON.stringify(body) : undefined
+  });
+  let data = null;
+  if (res.status !== 204) {
+    const text = await res.text().catch(() => '');
+    try { data = text ? JSON.parse(text) : null; } catch (e) { data = { raw: text.slice(0, 200) }; }
+  }
+  return { status: res.status, ok: res.ok, data };
+}
+
+/* The login, or the reason there is none, as a response the page can act on. */
+async function spotifySession(env, request) {
+  if (!spotifyConfigured(env)) {
+    return { fail: spotifyFail(env, request, 503, 'spotify_missing',
+      'the worker is missing SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET',
+      'Spotify is not set up on my server yet: it needs SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET.',
+      { missing: ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET'] }) };
+  }
+  const got = await spotifyAccess(env);
+  if (got.missing || got.revoked) {
+    return { fail: spotifyFail(env, request, 409, 'spotify_not_connected',
+      got.revoked ? 'the Spotify permission was withdrawn or has expired' : 'Spotify is not connected yet',
+      got.revoked ? 'The Spotify connection has expired — I will open Spotify so you can approve it again.'
+                  : 'Your Spotify is not connected yet — I will open Spotify so you can approve it.',
+      { needs_connect: true }) };
+  }
+  if (got.error) {
+    return { fail: spotifyFail(env, request, 502, got.badClient ? 'spotify_client' : 'spotify_down',
+      'Spotify sign-in failed: ' + got.error,
+      got.badClient ? 'Spotify did not accept my app\'s secret — SPOTIFY_CLIENT_SECRET on the server needs to be entered again.'
+                    : 'Spotify did not let me sign in just now.') };
+  }
+  return { token: got.token, stored: got.stored };
+}
+
+/* His playlists, looked through by name: exactly that name first, then
+   one that starts with it, then one that contains it. */
+async function findSpotifyPlaylist(token, name) {
+  const want = String(name || 'jarvis').trim().toLowerCase();
+  let exact = null, starts = null, contains = null;
+  for (let offset = 0; offset < 400; offset += 50) {
+    const r = await spotifyApi(token, 'GET', '/me/playlists?limit=50&offset=' + offset);
+    if (!r.ok) return { error: r };
+    const items = (r.data && r.data.items) || [];
+    for (const p of items) {
+      if (!p || !p.uri) continue;
+      const n = String(p.name || '').trim().toLowerCase();
+      if (n === want) { exact = exact || p; }
+      else if (!starts && n.startsWith(want)) starts = p;
+      else if (!contains && n.includes(want)) contains = p;
+    }
+    if (exact || items.length < 50 || !(r.data && r.data.next)) break;
+  }
+  const p = exact || starts || contains;
+  if (!p) return { none: true };
+  const total = (p.tracks && p.tracks.total) != null ? p.tracks.total : (p.items && p.items.total) != null ? p.items.total : null;
+  return { playlist: { name: p.name, uri: p.uri, id: p.id, tracks: total } };
+}
+
+/* This computer first (a Computer that is already active, then any
+   Computer), then whatever is active, then anything — unless only a
+   computer will do. */
+function pickSpotifyDevice(devices, computerOnly) {
+  const usable = (devices || []).filter(d => d && d.id && !d.is_restricted);
+  const pc = usable.filter(d => String(d.type || '').toLowerCase() === 'computer');
+  const choice = pc.find(d => d.is_active) || pc[0] ||
+                 (computerOnly ? null : (usable.find(d => d.is_active) || usable[0]));
+  return choice || null;
+}
+
+function spotifyPlayFailure(env, request, r, extra) {
+  const reason = String((r.data && r.data.error && (r.data.error.reason || r.data.error.message)) || ('HTTP ' + r.status));
+  if (r.status === 403 && /premium/i.test(reason)) {
+    return spotifyFail(env, request, 402, 'spotify_premium', 'Spotify answered: ' + reason,
+      'Spotify only lets an app press play on a Premium account. I opened the playlist — press play on it.', extra);
+  }
+  if (r.status === 404) {
+    return spotifyFail(env, request, 409, 'no_device', 'Spotify answered: ' + reason,
+      'Spotify is not open on any device right now.', extra);
+  }
+  if (r.status === 401 || r.status === 403) {
+    return spotifyFail(env, request, 409, 'spotify_not_connected', 'Spotify answered: ' + reason,
+      'Spotify refused me — connect it again and I will try once more.', Object.assign({ needs_connect: true }, extra || {}));
+  }
+  if (r.status === 429) {
+    return spotifyFail(env, request, 429, 'spotify_busy', 'Spotify answered: ' + reason, 'Spotify asked me to slow down — try again in a moment.', extra);
+  }
+  return spotifyFail(env, request, 502, 'spotify_down', 'Spotify answered: ' + reason, 'Spotify did not start the music.', extra);
+}
+
+/* POST /spotify/play { name?: 'jarvis', uri?: 'spotify:playlist:...', computer_only?: bool } */
+async function handleSpotifyPlay(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const s = await spotifySession(env, request);
+  if (s.fail) return s.fail;
+  const account = (s.stored && s.stored.account) || null;
+  const product = (s.stored && s.stored.product) || null;
+
+  let playlist = null;
+  const givenUri = String((body && body.uri) || '');
+  if (/^spotify:playlist:[A-Za-z0-9]{10,40}$/.test(givenUri)) {
+    playlist = { name: String((body && body.name) || 'jarvis'), uri: givenUri, id: givenUri.split(':')[2], tracks: null };
+  } else {
+    const found = await findSpotifyPlaylist(s.token, (body && body.name) || 'jarvis');
+    if (found.error) return spotifyPlayFailure(env, request, found.error);
+    if (found.none) {
+      const name = String((body && body.name) || 'jarvis');
+      return spotifyFail(env, request, 404, 'playlist_not_found', 'no playlist named "' + name + '" in ' + (account || 'this account'),
+        'I could not find a playlist called ' + name + ' in your Spotify' + (account ? ' (' + account + ')' : '') + '.', { account });
+    }
+    playlist = found.playlist;
+  }
+  const extra = { playlist, account, product };
+
+  const dev = await spotifyApi(s.token, 'GET', '/me/player/devices');
+  if (!dev.ok) return spotifyPlayFailure(env, request, dev, extra);
+  const devices = (dev.data && dev.data.devices) || [];
+  const device = pickSpotifyDevice(devices, !!(body && body.computer_only));
+  if (!device) {
+    return spotifyFail(env, request, 409, 'no_device',
+      devices.length ? 'Spotify is open only on ' + devices.map(d => d.name + ' (' + d.type + ')').join(', ') : 'Spotify is not open on any device',
+      'Spotify is not open on this computer.', Object.assign({ devices: devices.map(d => ({ name: d.name, type: d.type, active: !!d.is_active })) }, extra));
+  }
+  /* From the first song: in order, from track one, at 0:00. */
+  await spotifyApi(s.token, 'PUT', '/me/player/shuffle?state=false&device_id=' + encodeURIComponent(device.id));
+  const play = await spotifyApi(s.token, 'PUT', '/me/player/play?device_id=' + encodeURIComponent(device.id),
+                                { context_uri: playlist.uri, offset: { position: 0 }, position_ms: 0 });
+  if (!play.ok) return spotifyPlayFailure(env, request, play, Object.assign({ device: { name: device.name, type: device.type } }, extra));
+  return json({ ok: true, playlist, device: { name: device.name, type: device.type }, account }, 200, env, request);
+}
+
+/* POST /spotify/control { action: 'pause' | 'resume' | 'next' | 'previous' } */
+async function handleSpotifyControl(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const action = String((body && body.action) || '');
+  const routes = { pause: ['PUT', '/me/player/pause'], resume: ['PUT', '/me/player/play'],
+                   next: ['POST', '/me/player/next'], previous: ['POST', '/me/player/previous'] };
+  if (!routes[action]) return json({ error: 'action must be pause, resume, next or previous' }, 400, env, request);
+  const s = await spotifySession(env, request);
+  if (s.fail) return s.fail;
+  const r = await spotifyApi(s.token, routes[action][0], routes[action][1]);
+  if (!r.ok) return spotifyPlayFailure(env, request, r);
+  return json({ ok: true, action, account: (s.stored && s.stored.account) || null }, 200, env, request);
+}
+
+/* The consent page, signed like the calendar's but with its own prefix:
+   a calendar state is not a Spotify state, and neither is a session. */
+async function signSpotifyState(env) {
+  const nonce = b64urlEncode(crypto.getRandomValues(new Uint8Array(12)));
+  const encoded = b64urlEncode(new TextEncoder().encode(JSON.stringify({
+    exp: Math.floor(Date.now() / 1000) + CALENDAR_STATE_TTL_SECONDS, n: nonce })));
+  return encoded + '.' + b64urlEncode(await hmac(tokenSecret(env) || 'dev-secret', 'spotify-state.' + encoded));
+}
+async function verifySpotifyState(env, state) {
+  if (!state || state.indexOf('.') < 0) return false;
+  const [encoded, sig] = state.split('.');
+  const expected = b64urlEncode(await hmac(tokenSecret(env) || 'dev-secret', 'spotify-state.' + encoded));
+  if (!sig || sig.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < sig.length; i++) diff |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
+  if (diff !== 0) return false;
+  try {
+    const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(encoded)));
+    return payload.exp > Math.floor(Date.now() / 1000);
+  } catch (e) { return false; }
+}
+
+async function handleSpotifyConnect(request, env, url) {
+  if (!spotifyConfigured(env)) {
+    return spotifyFail(env, request, 503, 'spotify_missing', 'the worker is missing SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET',
+      'Spotify cannot be connected yet: my server needs SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET, from an app whose redirect URI is ' + spotifyRedirectUri(url) + '.',
+      { missing: ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET'], redirect_uri: spotifyRedirectUri(url) });
+  }
+  const consent = new URL('https://accounts.spotify.com/authorize');
+  consent.searchParams.set('client_id', spotifyClient(env).id);
+  consent.searchParams.set('response_type', 'code');
+  consent.searchParams.set('redirect_uri', spotifyRedirectUri(url));
+  consent.searchParams.set('scope', SPOTIFY_SCOPES);
+  consent.searchParams.set('show_dialog', 'true');
+  consent.searchParams.set('state', await signSpotifyState(env));
+  return json({ ok: true, url: consent.toString(), redirect_uri: spotifyRedirectUri(url) }, 200, env, request);
+}
+
+/* Where Spotify sends him back. Public, like the calendar's: the signed
+   state is checked before anything else. */
+async function handleSpotifyOAuth(request, env, url) {
+  const page = (title, html, status) => calendarPage(title, html, status);
+  if (url.searchParams.get('error')) {
+    return page('Spotify not connected', '<p>Spotify said: ' + escapeHtml(url.searchParams.get('error')) + '. Nothing was changed.</p>', 400);
+  }
+  if (!(await verifySpotifyState(env, url.searchParams.get('state') || ''))) {
+    return page('Spotify not connected', '<p>This link has expired, or was not started by your JARVIS. Ask him to connect Spotify again.</p>', 400);
+  }
+  const code = url.searchParams.get('code') || '';
+  if (!code || !spotifyConfigured(env)) {
+    return page('Spotify not connected', '<p>Spotify did not send a sign-in code back. Nothing was changed.</p>', 400);
+  }
+  const { res, data } = await spotifyTokenRequest(env, { grant_type: 'authorization_code', code, redirect_uri: spotifyRedirectUri(url) });
+  if (!res.ok || !data.refresh_token) {
+    const why = String(data.error || ('HTTP ' + res.status));
+    const fix = why === 'invalid_client'
+      ? 'Spotify did not accept the worker\'s <code>SPOTIFY_CLIENT_ID</code> / <code>SPOTIFY_CLIENT_SECRET</code>. Enter both again in Cloudflare, exactly as the Spotify developer dashboard shows them, deploy, then connect again.'
+      : /redirect/i.test(String(data.error_description || '')) || why === 'invalid_request'
+      ? 'The Spotify app does not list this worker\'s address. In the Spotify developer dashboard, under Redirect URIs, add exactly <code>' + escapeHtml(spotifyRedirectUri(url)) + '</code>, save, then connect again.'
+      : why === 'invalid_grant'
+      ? 'This sign-in was already used or took too long. Ask JARVIS to connect Spotify again.'
+      : 'Nothing was changed. Ask JARVIS to connect Spotify again.';
+    return page('Spotify not connected', '<p>Spotify refused the last step (' + escapeHtml(why) + ').</p><p>' + fix + '</p>', 400);
+  }
+  let account = null, product = null;
+  try {
+    const me = await spotifyApi(data.access_token, 'GET', '/me');
+    if (me.ok && me.data) { account = me.data.display_name || me.data.email || me.data.id || null; product = me.data.product || null; }
+  } catch (e) { /* named on the next play instead */ }
+  if (!env.JARVIS_DB) {
+    return page('Spotify not connected', '<p>Signed in as <b>' + escapeHtml(account || 'your Spotify account') +
+      '</b>, but this worker has no database (JARVIS_DB) to keep the permission in.</p>', 500);
+  }
+  await saveSpotify(env, { refresh_token: data.refresh_token, account, product, connected_at: new Date().toISOString() });
+  spotifyAccessCache = { token: data.access_token, refresh: data.refresh_token, exp: Date.now() + (Number(data.expires_in) || 3600) * 1000 };
+  const premiumNote = product && product !== 'premium'
+    ? '<p>Note: this account is <b>' + escapeHtml(product) + '</b>. Spotify lets apps start playback only on Premium, so JARVIS will open the playlist and you press play.</p>' : '';
+  return page('Spotify connected',
+    '<p>JARVIS now plays music on the Spotify account of <b>' + escapeHtml(account || 'the account you chose') +
+    '</b>. You can close this tab and say "let\'s put some music".</p>' + premiumNote);
 }
 
 /* =====================================================================

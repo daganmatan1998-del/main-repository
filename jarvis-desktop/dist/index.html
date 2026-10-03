@@ -596,12 +596,17 @@
     border-radius:4px; padding:4px; min-width:150px;
     backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
     box-shadow:0 6px 24px rgba(0,0,0,0.55);
+    /* The small orb is a 180 px window: seven rows fit, and anything more
+       scrolls rather than being cut off below the window's edge. */
+    max-height:calc(100vh - 8px); max-width:calc(100vw - 8px);
+    overflow-y:auto; overflow-x:hidden; box-sizing:border-box;
   }
   #orbMenu button{
-    display:block; width:100%; text-align:left;
+    display:block; width:100%; text-align:start;
     background:none; border:0; cursor:pointer;
-    color:#00e5ff; font-family:inherit; font-size:12px;
-    letter-spacing:1px; padding:8px 10px; border-radius:3px;
+    color:#00e5ff; font-family:inherit; font-size:11px; line-height:1.2;
+    letter-spacing:0.5px; padding:5px 9px; border-radius:3px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   #orbMenu button:hover{ background:rgba(0,229,255,0.16); }
 
@@ -2042,9 +2047,11 @@ const I18N = {
     livePlaceTip: 'Drag to move — double-click to put it back',
     orbLanguage: 'Language',
     orbBack: 'Back',
+    orbCamera: 'Camera & hands', orbRecord: '⏺ Record tracking', orbCheck: '🩺 Check yourself', orbMore: 'More',
+    orbPointerOn: '👆 Finger mouse: on', orbPointerOff: '👆 Finger mouse: off', orbHandsOn: '✋ Hand control: on', orbHandsOff: '✋ Hand control: off',
     orbListenOn: 'Resume listening',
     orbListenOff: 'Stop listening',
-    orbPushToTalk: 'Switch to push-to-talk ({key})',
+    orbPushToTalk: 'Use push-to-talk ({key})',
     orbHandsFree: 'Switch to hands-free',
     pttOn: '\u25B8 push-to-talk: hold {key}, wait for the short tone, and speak \u2014 let go and he answers. The microphone is off the rest of the time. Right-click the orb for hands-free.',
     pttOff: '\u25B8 hands-free: he is listening all the time again.',
@@ -2304,9 +2311,11 @@ const I18N = {
     livePlaceTip: 'גרור כדי להזיז — לחיצה כפולה מחזירה למקום',
     orbLanguage: 'שפה',
     orbBack: 'חזרה',
+    orbCamera: 'מצלמה וידיים', orbRecord: '⏺ הקלט מעקב', orbCheck: '🩺 בדיקה עצמית', orbMore: 'עוד',
+    orbPointerOn: '👆 עכבר באצבע: פועל', orbPointerOff: '👆 עכבר באצבע: כבוי', orbHandsOn: '✋ ידיים: פועל', orbHandsOff: '✋ ידיים: כבוי',
     orbListenOn: 'תחזור להקשיב',
     orbListenOff: 'תפסיק להקשיב',
-    orbPushToTalk: 'עבור ללחיצה לדיבור ({key})',
+    orbPushToTalk: 'לחיצה לדיבור ({key})',
     orbHandsFree: 'עבור להאזנה רציפה',
     pttOn: '\u25B8 לחיצה לדיבור: תחזיק את {key}, תחכה לצליל הקצר ותדבר \u2014 כשתשחרר הוא עונה. בשאר הזמן המיקרופון כבוי. קליק ימני על הכדור להאזנה רציפה.',
     pttOff: '\u25B8 האזנה רציפה: הוא שוב מקשיב כל הזמן.',
@@ -2512,7 +2521,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.21.0';
+const APP_VERSION = '2.22.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -6311,6 +6320,7 @@ async function transcribeAndSend(blob, sawSpeech, spokeAt, ptt){
          and those need completely different fixes. */
       const raw = allFailed ? tried.join(' | ') : String(data.error || res.status);
       const hint = res.status === 404 ? 'this worker has no /stt yet — deploy the updated jarvis-worker.js'
+                 : /groq/i.test(raw) && !/workers ai|@cf\//i.test(raw) && /429|rate limit|allowance/i.test(raw) ? 'the Groq transcription allowance is spent for now (it refills within the hour)'
                  : /binding|not bound/i.test(raw) ? 'add the Workers AI binding named AI in the Cloudflare dashboard'
                  : /limit|quota|neuron|4006|allocation/i.test(raw) ? 'the daily free Workers AI allowance is spent; it resets at 00:00 UTC'
                  : raw;
@@ -7472,11 +7482,22 @@ async function setGestureZoom(on, turn, pointer){
    open, asks the camera window for 30 s of recording, and shows its progress
    and the file it saved. The camera window may still be starting, so the ask
    is repeated until it answers. */
-var trackRecordWaiting = false, trackRecordRetry = null;
+var trackRecordWaiting = false, trackRecordRetry = null, trackRecordSpoken = false, trackRecordStarted = false;
+/* On the desktop the GESTURES panel is not on screen (2.22.0: the orb menu
+   starts the recording), so its start, its file and its failure are SAID. */
+function trackRecordSay(line, sir){
+  if(!trackRecordSpoken || !IS_DESKTOP || typeof speak !== 'function') return;
+  try{ speak(sir ? addressHim(line, currentLang === 'he') : line); }catch(e){}
+}
 function gestureRecordStatus(s){
   const info = document.getElementById('gestureRecordInfo'), btn = document.getElementById('gestureRecordBtn');
   const he = currentLang === 'he';
   if(s.kind === 'recording'){
+    if(!trackRecordStarted){
+      trackRecordStarted = true;
+      trackRecordSay(he ? 'מקליט חצי דקה. הצבע עם האצבע והזז אותה סביב המסך — לאט, מהר, במעגלים, וכמה קליקים.'
+                        : 'Recording for half a minute. Point and move your finger around the screen — slowly, fast, in circles, and a few clicks.', false);
+    }
     trackRecordWaiting = false; clearInterval(trackRecordRetry); trackRecordRetry = null;
     if(btn){ btn.disabled = true; btn.textContent = (he ? '⏺ מקליט… ' : '⏺ RECORDING… ') + s.left + (he ? ' ש׳' : ' s'); }
     if(info) info.textContent = he ? 'הצבע והזז את האצבע — לאט, מהר, מעגלים, כמה קליקים, ויציאה מהתמונה.' : 'Point and move your finger — slowly, fast, in circles, a few clicks, in and out of the view.';
@@ -7484,6 +7505,12 @@ function gestureRecordStatus(s){
   }
   trackRecordWaiting = false; clearInterval(trackRecordRetry); trackRecordRetry = null;
   if(btn){ btn.disabled = false; btn.textContent = t('gestureRecordBtn'); }
+  if(trackRecordStarted || trackRecordSpoken){
+    trackRecordSay(s.kind === 'recorded'
+      ? (he ? 'ההקלטה נשמרה בתיקיית JARVIS, בתוך Tracking. שלח את הקובץ לקלאוד.' : 'The recording is saved in the JARVIS folder, under Tracking. Send that file to Claude.')
+      : (he ? 'ההקלטה נכשלה: ' : 'The recording failed: ') + (s.reason || ''), s.kind === 'recorded');
+    trackRecordSpoken = false; trackRecordStarted = false;
+  }
   if(!info) return;
   if(s.kind === 'recorded'){
     const m = s.summary || {};
@@ -7494,9 +7521,10 @@ function gestureRecordStatus(s){
     info.textContent = (he ? 'ההקלטה נכשלה: ' : 'The recording failed: ') + (s.reason || '');
   }
 }
-async function startTrackingRecording(){
+async function startTrackingRecording(spoken){
   const ev = window.__TAURI__ && window.__TAURI__.event;
   const info = document.getElementById('gestureRecordInfo');
+  trackRecordSpoken = !!spoken; trackRecordStarted = false;
   if(!IS_DESKTOP || !ev || !ev.emit){ if(info) info.textContent = currentLang === 'he' ? 'ההקלטה זמינה רק באפליקציית השולחן.' : 'Recording is only in the desktop app.'; return; }
   if(gestureSettings.enabled === false){ gestureSettings.enabled = true; await saveGestureSettings(); }
   try{ if(!liveActive()) await startLive(); }catch(err){}
@@ -7509,9 +7537,112 @@ async function startTrackingRecording(){
   trackRecordRetry = setInterval(() => {
     if(!trackRecordWaiting){ clearInterval(trackRecordRetry); trackRecordRetry = null; return; }
     if(++tries > 12){ clearInterval(trackRecordRetry); trackRecordRetry = null; trackRecordWaiting = false;
-      if(info) info.textContent = currentLang === 'he' ? 'המצלמה לא ענתה — פתח אותה ונסה שוב.' : 'The camera did not answer — open it and try again.'; return; }
+      const line = currentLang === 'he' ? 'המצלמה לא ענתה — פתח אותה ונסה שוב.' : 'The camera did not answer — open it and try again.';
+      if(info) info.textContent = line;
+      trackRecordSay(line); trackRecordSpoken = false; return; }
     ask();
   }, 1500);
+}
+/* THE SELF-CHECK (2.22.0). "He doesn't answer" has five different causes —
+   the server unreachable, the session expired, every thinking engine out
+   of credit, the transcription allowance spent, the microphone muted — and
+   in the small orb none of them is on screen. The orb menu's "Check
+   yourself" asks each one in turn and SAYS what it found, shortest first;
+   the full report goes to the log and the clipboard, to paste to Claude. */
+var lastGesturePerf = null;
+let selfCheckRunning = false;
+async function selfCheck(){
+  if(selfCheckRunning) return null;
+  selfCheckRunning = true;
+  const he = currentLang === 'he';
+  const said = [], detail = [];
+  const timed = (url, opts, ms) => {
+    const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = setTimeout(() => { try{ ac && ac.abort(); }catch(e){} }, ms || 12000);
+    return fetch(url, Object.assign({}, opts || {}, ac ? { signal: ac.signal } : {})).finally(() => clearTimeout(timer));
+  };
+  try{
+    if(IS_DESKTOP) speak(he ? 'בודק את עצמי.' : 'Checking myself.');
+    detail.push('JARVIS ' + APP_VERSION + ' self-check ' + new Date().toISOString());
+    if(!backendUrl){
+      said.push(he ? 'אין לי כתובת שרת, אז אני עובד בלי ה-worker.' : 'I have no server address, so I am running without the worker.');
+    } else {
+      /* 1. The server. Nothing else can work without it. */
+      let health = null;
+      try{
+        const r = await timed(backendUrl + '/health', {}, 10000);
+        health = r.ok ? await r.json() : null;
+        detail.push('worker /health: ' + r.status + (health ? ' version ' + health.version : ''));
+        if(health) backendCapabilities = health;
+      }catch(err){ detail.push('worker /health: ' + ((err && err.message) || err)); }
+      if(!health){
+        said.push(he ? 'אני לא מצליח להגיע לשרת שלי, ולכן אני לא שומע ולא עונה. תבדוק את החיבור לאינטרנט, או שה-worker פרוס.'
+                     : 'I cannot reach my server, so I can neither hear nor answer. Check the internet connection, or that the worker is deployed.');
+      } else {
+        /* 2. The session and the thinking engines, in one call. */
+        let engines = null, status = 0;
+        try{
+          const r = await timed(backendUrl + '/fallback/test', { method: 'POST', headers: jarvisHeaders() }, 25000);
+          status = r.status;
+          engines = r.ok ? await r.json().catch(() => null) : null;
+        }catch(err){ detail.push('engines: ' + ((err && err.message) || err)); }
+        if(status === 401){
+          said.push(he ? 'פג תוקף החיבור שלי — אני צריך את הקוד שלך.' : 'My session has expired — I need your PIN.');
+          try{ forceReauth(); }catch(e){}
+        } else if(engines && Array.isArray(engines.engines)){
+          const list = engines.engines, good = list.filter(e => e.ok);
+          list.forEach((e, i) => detail.push('engine ' + (i + 1) + ' ' + (e.label || e.model) + ': ' + (e.ok ? 'ok' : (e.error || e.reason || 'failed'))));
+          if(!good.length){
+            const why = (list[0] && (list[0].error || list[0].reason)) || 'no engine answered';
+            said.push(he ? 'אף אחד מהמנועים שלי לא עונה, ולכן אני לא עונה. הראשון אומר: ' + why
+                         : 'None of my thinking engines answer, which is why I do not. The first one says: ' + why);
+          } else if(!list[0].ok){
+            said.push(he ? 'המנוע הראשי שלי, ' + (list[0].label || list[0].model) + ', לא עובד: ' + (list[0].error || list[0].reason || '') + '. אני עונה דרך ' + (good[0].label || good[0].model) + '.'
+                         : 'My main engine, ' + (list[0].label || list[0].model) + ', is failing: ' + (list[0].error || list[0].reason || '') + '. I am answering through ' + (good[0].label || good[0].model) + '.');
+          } else {
+            detail.push('thinking: ' + good.length + '/' + list.length + ' engines answer');
+          }
+        } else if(status){
+          detail.push('engines: HTTP ' + status);
+        }
+        /* 3. Hearing. */
+        const via = health.stt_via || (health.stt ? 'workers-ai' : false);
+        detail.push('hearing: ' + (via || 'none') + (sttBrokenWhy ? ' — failing: ' + sttBrokenWhy : '') + (sttFailures ? ' (' + sttFailures + ' failures)' : ''));
+        if(!health.stt){
+          said.push(he ? 'לשרת שלי אין זיהוי דיבור, אז אני לא שומע אותך.' : 'My server has no speech recognition, so I cannot hear you.');
+        } else if(sttBrokenWhy){
+          const quota = /limit|quota|neuron|4006|allocation|allowance/i.test(sttBrokenWhy);
+          said.push(he ? 'אני לא שומע אותך כרגע: ' + (quota ? 'המכסה של התמלול נגמרה' : sttBrokenWhy) + '.' + (quota && via !== 'groq' ? ' מפתח Groq ב-worker יפתור את זה.' : '')
+                       : 'I cannot hear you right now: ' + (quota ? 'the transcription allowance is used up' : sttBrokenWhy) + '.' + (quota && via !== 'groq' ? ' A Groq key in the worker fixes that.' : ''));
+        }
+        if(health.voice === false || !workerVoiceAvailable) detail.push('voice: the computer\'s own (no worker voice)');
+      }
+    }
+    /* 4. Things on this side that look like "he is ignoring me". */
+    let muted = false; try{ muted = !!(window.__orbMuted && window.__orbMuted()); }catch(e){}
+    if(muted) said.push(he ? 'ההקשבה שלי כבויה — בתפריט, "הפעל הקשבה".' : 'My listening is switched off — "Listen" in this menu turns it back on.');
+    else if(pttMode) said.push(he ? 'לחץ-ודבר פועל: אני שומע רק כשהמקש לחוץ.' : 'Push-to-talk is on: I only hear you while the key is held.');
+    if(modelLock) said.push(he ? 'אני נעול על בניית מודל תלת מימד עד שהוא יסתיים.' : 'I am locked on building a 3D model until it finishes.');
+    if(liveActive()){
+      const p = lastGesturePerf;
+      if(p && Date.now() - p.at < 5000){
+        detail.push('camera: ' + Math.round(p.camFps || 0) + ' fps, tracker ' + Math.round(p.trackFps || 0) + ' fps, ' + Math.round(p.inferMs || 0) + ' ms a read (' + (p.delegate || '?') + ')' + (p.resting ? ', resting' : '') + (p.lateMs != null ? ', ' + Math.round(p.lateMs) + ' ms late' : ''));
+      } else detail.push('camera: open' + (gestureSettings && gestureSettings.enabled ? ', no tracker report in the last 5 s' : ''));
+    }
+    if(!said.length) said.push(he ? 'הכול עובד: השרת, המנועים והשמיעה.' : 'Everything works: the server, my engines and my hearing.');
+  }catch(err){
+    said.push((he ? 'הבדיקה עצמה נכשלה: ' : 'The check itself failed: ') + ((err && err.message) || err));
+  }finally{
+    selfCheckRunning = false;
+  }
+  const report = detail.concat(['said: ' + said.join(' ')]).join('\n');
+  console.info('JARVIS self-check\n' + report);
+  try{ addMessage('system', report); }catch(e){}
+  let copied = false;
+  try{ if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(report); copied = true; } }catch(e){}
+  const line = said.join(' ') + (copied ? (he ? ' הדוח המלא הועתק ללוח.' : ' The full report is on the clipboard.') : '');
+  if(IS_DESKTOP) speak(line);
+  return { said: line, report };
 }
 
 const GESTURE_ZOOM_TOOL = {
@@ -7521,7 +7652,8 @@ const GESTURE_ZOOM_TOOL = {
     type: 'object',
     properties: { on: { type:'boolean', description:'true to turn it on (opening the camera if it is off), false to turn it off.' },
                   turn: { type:'boolean', description:'Optional: true or false to switch precise control (one hand turns a 3D model) on or off. Leave it out to keep it as it is.' },
-                  pointer: { type:'boolean', description:'Optional: true or false to switch the finger mouse (one straight finger moves the mouse anywhere, bending it 45° clicks) on or off. Leave it out to keep it as it is.' } },
+                  pointer: { type:'boolean', description:'Optional: true or false to switch the finger mouse (one straight finger moves the mouse anywhere, bending it 45° clicks) on or off. Leave it out to keep it as it is.' },
+                  record: { type:'boolean', description:'Optional: true to record 30 seconds of hand tracking to a file (JARVIS\\Tracking) for Claude to study — "record my hand tracking", "תקליט את המעקב". Needs on=true.' } },
     required: ['on']
   }
 };
@@ -7843,27 +7975,35 @@ async function fetchVoiceAudio(text){
   const voiceId = cartesiaVoiceId || DEFAULT_CARTESIA_VOICE_ID;
 
   if(!cartesiaApiKey && backendUrl && workerVoiceAvailable){
-    const res = await fetch(backendUrl + '/tts', {
-      method:'POST',
-      headers: jarvisHeaders(),
-      body: JSON.stringify({ text, language, voiceId })
-    });
-    if(res.status === 401){ await forceReauth(); throw voiceError('session', 'session expired'); }
-    if(res.status === 404 || res.status === 503){
-      // This worker has no /tts yet — stop asking and fall back quietly.
-      workerVoiceAvailable = false;
-      cartesiaStatus.textContent = voiceStatusText();
-      return null;
-    }
-    if(!res.ok){
-      const errText = await res.text().catch(()=> '');
-      // The worker forwards Cartesia's own status so the cause survives the hop.
-      let upstream = 0;
-      try{ upstream = (JSON.parse(errText) || {}).upstream_status || 0; }catch(err){}
-      throw voiceError(classifyVoiceStatus(upstream || res.status),
-                       'worker /tts returned ' + res.status + (errText ? ': ' + errText.slice(0,140) : ''));
-    }
-    return await res.blob();
+    /* Never wait on the voice for ever (2.22.0): a /tts that does not answer
+       held the whole speech queue, and with it every reply after it — he
+       "stopped answering" with the answer already written. After 15 s the
+       line goes to the computer's own voice instead. */
+    const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const ttsTimer = setTimeout(()=>{ try{ ac && ac.abort(); }catch(e){} }, 15000);
+    try{
+      const res = await fetch(backendUrl + '/tts', Object.assign({
+        method:'POST',
+        headers: jarvisHeaders(),
+        body: JSON.stringify({ text, language, voiceId })
+      }, ac ? { signal: ac.signal } : {}));
+      if(res.status === 401){ await forceReauth(); throw voiceError('session', 'session expired'); }
+      if(res.status === 404 || res.status === 503){
+        // This worker has no /tts yet — stop asking and fall back quietly.
+        workerVoiceAvailable = false;
+        cartesiaStatus.textContent = voiceStatusText();
+        return null;
+      }
+      if(!res.ok){
+        const errText = await res.text().catch(()=> '');
+        // The worker forwards Cartesia's own status so the cause survives the hop.
+        let upstream = 0;
+        try{ upstream = (JSON.parse(errText) || {}).upstream_status || 0; }catch(err){}
+        throw voiceError(classifyVoiceStatus(upstream || res.status),
+                         'worker /tts returned ' + res.status + (errText ? ': ' + errText.slice(0,140) : ''));
+      }
+      return await res.blob();
+    }finally{ clearTimeout(ttsTimer); }
   }
 
   const directKey = cartesiaApiKey || BUILTIN_CARTESIA_API_KEY;
@@ -8790,6 +8930,153 @@ async function callConnectCalendarTool(){
   addMessage('system', t('calendarConnectOpened'));
   return { ok: true, opened: true,
            note: "Google's sign-in is open in his browser. He picks the account whose calendar you should use and approves; the page then names the account. Nothing is connected until he does — say that." };
+}
+
+/* MUSIC (2.22.0): "let's put some music" plays his Spotify playlist named
+   "jarvis" from the first song. The worker does the playing through
+   Spotify's Web API (it holds the connection); this side opens the playlist
+   in the Spotify app on his computer, so it is in front of him and, when
+   the app was closed, so that this computer appears as a device to play
+   on — then asks again until it does. */
+const MUSIC_PLAYLIST = 'jarvis';
+const MUSIC_TOOL = {
+  name: 'play_music',
+  description: "Music on his Spotify. action 'play' (the default) opens his playlist named \"jarvis\" in the Spotify app and plays it from the FIRST song, in order — for \"let's put some music\", \"let's hear some music\", \"play some music\", \"put on my playlist\", \"שים מוזיקה\", \"בוא נשמע מוזיקה\", \"תנגן משהו\". Another playlist only when he names one (playlist). 'pause' stops it (\"stop the music\", \"תעצור את המוזיקה\"), 'resume' carries on where it stopped, 'next' / 'previous' change the song. Confirm in a few words once it returns ok; if it returns tell_the_user, say that instead.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['play', 'pause', 'resume', 'next', 'previous'], description: "Default 'play'." },
+      playlist: { type: 'string', description: "Only when he names a different playlist. Default: jarvis." }
+    },
+    required: []
+  }
+};
+const SPOTIFY_CONNECT_TOOL = {
+  name: 'connect_spotify',
+  description: "Open Spotify's sign-in in his browser to connect (or reconnect) his Spotify account, so music can be played. Use it when he asks to connect Spotify, or when play_music answered needs_connect. Nothing is connected until he approves on Spotify's page — say that.",
+  input_schema: { type: 'object', properties: {}, required: [] }
+};
+
+async function spotifyPost(path, body){
+  if(!backendUrl) return { ok: false, code: 'no_worker', error: 'no backend is configured' };
+  try{
+    const res = await fetch(backendUrl + path, {
+      method: 'POST', headers: Object.assign(jarvisHeaders(), { 'Content-Type': 'application/json' }),
+      body: JSON.stringify(body || {})
+    });
+    if(res.status === 401){ await forceReauth(); return { ok: false, code: 'session', error: 'session expired' }; }
+    if(res.status === 404 && !String(res.headers.get('content-type') || '').includes('json')){
+      return { ok: false, code: 'old_worker', error: 'this worker has no ' + path + ' yet — deploy the updated jarvis-worker.js' };
+    }
+    const data = await res.json().catch(() => ({}));
+    if(res.status === 404 && !data.code) return { ok: false, code: 'old_worker', error: 'this worker has no ' + path + ' yet — deploy the updated jarvis-worker.js' };
+    return Object.assign({ status: res.status }, data);
+  }catch(err){
+    return { ok: false, code: 'unreachable', error: 'could not reach the worker: ' + ((err && err.message) || err) };
+  }
+}
+
+/* The Spotify app, at that playlist. Only a spotify: link this code made
+   (the playlist's own URI, or the app itself) — nothing he said is
+   passed through. */
+async function openSpotifyApp(uri){
+  if(!IS_DESKTOP) return false;
+  const opener = window.__TAURI__ && window.__TAURI__.opener;
+  const target = /^spotify:playlist:[A-Za-z0-9]{10,40}$/.test(String(uri || '')) ? uri : 'spotify:';
+  try{ await opener.openUrl(target); return true; }
+  catch(err){ console.warn('JARVIS: could not open Spotify —', err); return false; }
+}
+
+async function callConnectSpotifyTool(){
+  const data = await spotifyPost('/spotify/connect', {});
+  if(!data.url) return { error: data.error || 'could not start the Spotify connection', code: data.code, tell_the_user: data.tell_the_user, redirect_uri: data.redirect_uri };
+  const opener = window.__TAURI__ && window.__TAURI__.opener;
+  try{
+    if(IS_DESKTOP && opener && opener.openUrl) await opener.openUrl(data.url);
+    else if(!window.open(data.url, '_blank', 'noopener')) throw new Error('the browser blocked the new tab');
+  }catch(err){
+    addMessage('system', 'Spotify: ' + data.url);   // shown to him, never to the model (it carries the signed state)
+    return { ok: true, opened: false, note: 'The link is on his screen; he opens it and approves. Nothing is connected until he does.' };
+  }
+  return { ok: true, opened: true, note: "Spotify's sign-in is open in his browser. Nothing is connected until he approves there; then he can ask for music again." };
+}
+
+let musicBusy = false;
+/* Play the playlist; resolves with what happened, for the voice and the tool. */
+async function playMusic(name){
+  if(musicBusy) return { ok: false, code: 'busy', error: 'already starting the music' };
+  musicBusy = true;
+  try{
+    const want = String(name || MUSIC_PLAYLIST).trim() || MUSIC_PLAYLIST;
+    let r = await spotifyPost('/spotify/play', { name: want, computer_only: IS_DESKTOP });
+    if(r.ok){ openSpotifyApp(r.playlist && r.playlist.uri); return r; }
+    /* Spotify is not running on this computer: open it at the playlist and
+       wait for it to sign in and show up as a device (a few seconds). */
+    if(r.code === 'no_device' && IS_DESKTOP){
+      const uri = r.playlist && r.playlist.uri;
+      const opened = await openSpotifyApp(uri);
+      const body = uri ? { name: want, uri, computer_only: true } : { name: want, computer_only: true };
+      for(let i = 0; i < 10 && opened; i++){
+        await new Promise(res => setTimeout(res, 2000));
+        r = await spotifyPost('/spotify/play', body);
+        if(r.ok || r.code !== 'no_device') break;
+      }
+      /* Still no computer: whatever device he has Spotify open on. */
+      if(r.code === 'no_device'){
+        const any = await spotifyPost('/spotify/play', uri ? { name: want, uri } : { name: want });
+        if(any.ok || any.code !== 'no_device') r = any;
+        else r.opened = opened;
+      }
+      return r;
+    }
+    if(r.code === 'spotify_premium') await openSpotifyApp(r.playlist && r.playlist.uri);
+    if(r.code === 'spotify_not_connected'){
+      const c = await callConnectSpotifyTool();
+      r.connect_opened = !!(c && c.ok);
+    }
+    return r;
+  }finally{
+    musicBusy = false;
+  }
+}
+
+/* One spoken line for whatever playMusic / a control answered. */
+function musicLine(r, he, action){
+  action = action || 'play';
+  if(r && r.ok){
+    if(action === 'pause')    return he ? 'עצרתי את המוזיקה.' : 'Music paused.';
+    if(action === 'resume')   return he ? 'ממשיך את המוזיקה.' : 'Music back on.';
+    if(action === 'next')     return he ? 'השיר הבא.' : 'Next song.';
+    if(action === 'previous') return he ? 'השיר הקודם.' : 'Previous song.';
+    const pl = (r.playlist && r.playlist.name) || MUSIC_PLAYLIST;
+    const where = r.device && String(r.device.type || '').toLowerCase() !== 'computer' ? (he ? ' ב-' : ' on ') + r.device.name : '';
+    return he ? 'מנגן את הפלייליסט ' + pl + ' מהשיר הראשון' + where + '.'
+              : 'Playing your ' + pl + ' playlist from the first song' + where + '.';
+  }
+  const code = r && r.code;
+  if(code === 'spotify_not_connected') return he ? 'צריך לחבר את ספוטיפיי פעם אחת — פתחתי לך את הדף שלהם. תאשר, ואז תבקש שוב.'
+                                                 : 'Spotify needs connecting once — I opened its page. Approve it, then ask again.';
+  if(code === 'spotify_premium') return he ? 'ספוטיפיי מרשה להפעיל מוזיקה מאפליקציה רק בפרימיום. פתחתי את הפלייליסט — תלחץ פליי.'
+                                           : (r.tell_the_user || 'Spotify lets an app press play only on Premium. I opened the playlist — press play.');
+  if(code === 'playlist_not_found') return he ? 'לא מצאתי בספוטיפיי שלך פלייליסט בשם ' + MUSIC_PLAYLIST + '.' : (r.tell_the_user || 'I could not find that playlist.');
+  if(code === 'no_device') return he ? (r.opened ? 'פתחתי את ספוטיפיי, אבל הוא עדיין לא מוכן לנגן. תוודא שאתה מחובר באפליקציה ותבקש שוב.' : 'ספוטיפיי לא פתוח באף מכשיר.')
+                                     : (r.opened ? 'I opened Spotify, but it is not ready to play yet. Check you are signed in to the app and ask again.' : 'Spotify is not open on any device.');
+  if(code === 'spotify_missing') return he ? 'ספוטיפיי עוד לא מוגדר אצלי בשרת: חסרים SPOTIFY_CLIENT_ID ו-SPOTIFY_CLIENT_SECRET.' : r.tell_the_user;
+  if(code === 'old_worker') return he ? 'השרת שלי עוד לא מכיר את ספוטיפיי — צריך לפרוס את ה-worker המעודכן.' : 'My server does not know Spotify yet — the updated worker needs deploying.';
+  if(he) return 'לא הצלחתי להפעיל את המוזיקה' + (r && r.error ? ': ' + r.error : '.');
+  return (r && r.tell_the_user) || ('I could not start the music' + (r && r.error ? ': ' + r.error : '.'));
+}
+
+async function callMusicTool(input){
+  const action = String((input && input.action) || 'play');
+  let r;
+  if(action === 'play') r = await playMusic(input && input.playlist);
+  else if(/^(?:pause|resume|next|previous)$/.test(action)) r = await spotifyPost('/spotify/control', { action });
+  else return { error: 'action must be play, pause, resume, next or previous' };
+  if(r && r.ok) return { ok: true, action, playlist: r.playlist ? r.playlist.name : undefined, device: r.device ? r.device.name : undefined,
+                         note: action === 'play' ? 'It is playing from the first song. Confirm in a few words.' : 'Done. Confirm in a few words.' };
+  return { ok: false, code: r && r.code, error: (r && r.error) || 'failed', tell_the_user: musicLine(r, false, action),
+           needs_connect: !!(r && r.needs_connect), connect_opened: !!(r && r.connect_opened) };
 }
 
 /* WhatsApp to his own phone, through the worker. There is deliberately no
@@ -11636,30 +11923,38 @@ const LOOSE_LEXICON = new Map();
   add('O:ws', ['workspace', 'work space', 'work environment', 'working environment', 'dashboards', 'my dashboards',
                'סביבת עבודה', 'סביבת העבודה']);
   OPEN_SITES.forEach((site, i) => site.names.forEach(n => LOOSE_LEXICON.set(normaliseHeard(n), 'O:site:' + i)));
+  /* Music (2.22.0): his "jarvis" playlist on Spotify. "Spotify" itself
+     stays the site; his name is already gone from "the jarvis playlist". */
+  add('O:music', ['music', 'some music', 'musics', 'songs', 'some songs', 'a song', 'song', 'tunes', 'some tunes', 'a tune',
+                  'playlist', 'my playlist', 'the playlist', 'some beats', 'beats', 'a few songs',
+                  'מוזיקה', 'המוזיקה', 'מוסיקה', 'המוסיקה', 'מוזיקה טובה', 'שירים', 'השירים', 'שיר', 'השיר', 'פלייליסט',
+                  'הפלייליסט', 'פליליסט', 'הפליליסט', 'מנגינה', 'קצת מוזיקה', 'קצת שירים']);
   add('ON', ['open', 'open up', 'start', 'start up', 'turn on', 'switch on', 'activate', 'enable', 'show', 'show me',
              'see', 'let me see', 'view', 'bring up', 'pull up', 'fire up', 'boot up', 'launch', 'load', 'put on',
              'go', 'go to', 'go into', 'enter', 'visit', 'take me to', 'navigate to', 'switch to', 'display', 'run',
              'begin', 'on', 'up', 'maximize', 'maximise', 'expand', 'set up', 'setup', 'prepare',
              'opening', 'starting', 'turning on', 'switching on', 'showing', 'bringing up', 'pulling up', 'launching',
-             'putting on', 'going', 'setting up',
+             'putting on', 'going', 'setting up', 'play', 'playing', 'hear', 'listen', 'listen to', 'listening to',
+             'blast', 'queue up',
              'פתח', 'תפתח', 'תפתחי', 'לפתוח', 'נפתח', 'פתחי', 'תפעיל', 'הפעל', 'להפעיל', 'תפעילי', 'נפעיל',
              'תדליק', 'הדלק', 'להדליק', 'תדליקי', 'נדליק', 'תעלה', 'העלה', 'להעלות', 'תראה', 'תראה לי', 'תראי לי',
              'להראות', 'לראות', 'תכנס', 'תיכנס', 'כנס', 'להיכנס', 'תיכנסי', 'נכנס', 'תעבור', 'עבור', 'לעבור', 'נעבור',
-             'תגדיל', 'להגדיל', 'תציג', 'להציג', 'הצג', 'תכין', 'להכין', 'תסדר', 'לסדר', 'תקפיץ', 'דלוקה', 'פתוחה']);
+             'תגדיל', 'להגדיל', 'תציג', 'להציג', 'הצג', 'תכין', 'להכין', 'תסדר', 'לסדר', 'תקפיץ', 'דלוקה', 'פתוחה',
+             'נשמע', 'לשמוע', 'תשמיע', 'השמע', 'להשמיע', 'תשמיעי', 'נגן', 'תנגן', 'לנגן', 'ננגן', 'תנגני', 'נקשיב', 'להקשיב']);
   add('OFF', ['close', 'shut', 'shut down', 'shut off', 'turn off', 'switch off', 'stop', 'kill', 'disable', 'deactivate',
               'hide', 'end', 'exit', 'leave', 'quit', 'get out of', 'go out of', 'get rid of', 'put away', 'cancel',
-              'minimize', 'minimise', 'off', 'down', 'out of', 'away',
+              'minimize', 'minimise', 'off', 'down', 'out of', 'away', 'pause', 'pausing',
               'closing', 'turning off', 'switching off', 'shutting', 'shutting down', 'stopping', 'killing', 'hiding',
               'סגור', 'תסגור', 'תסגרי', 'לסגור', 'נסגור', 'כבה', 'תכבה', 'תכבי', 'לכבות', 'נכבה', 'תפסיק', 'להפסיק',
               'הפסק', 'תעצור', 'לעצור', 'עצור', 'תוריד', 'להוריד', 'תסתיר', 'להסתיר', 'צא', 'תצא', 'לצאת', 'צאי', 'נצא',
               'תבטל', 'לבטל', 'בטל', 'תקטין', 'להקטין', 'כבויה', 'סגורה']);
   add('N', ['turn', 'switch', 'put', 'get', 'bring', 'pull', 'fire', 'make', 'make it', 'make yourself', 'give me', 'get me',
-            'תעשה', 'לעשות', 'עשה', 'תביא', 'להביא', 'הבא', 'תשים', 'לשים', 'שים']);
+            'תעשה', 'לעשות', 'עשה', 'תביא', 'להביא', 'הבא', 'תשים', 'לשים', 'שים', 'נשים', 'תשימי', 'שימי']);
   add('WANT', ['want', 'need', 'i want', 'i need', 'i wanna', 'i would like', 'id like',
                'רוצה', 'אני רוצה', 'צריך', 'אני צריך', 'צריכה', 'אני צריכה']);
   add('P', ['the', 'my', 'your', 'our', 'this', 'that', 'to', 'into', 'in', 'mode', 'window', 'app', 'site', 'website',
-            'page', 'tab', 'a new tab', 'feed', 'back', 'chrome', 'browser', 'the browser',
-            'את', 'של', 'שלי', 'שלך', 'לי', 'לנו', 'מצב', 'חלון', 'האתר', 'אתר', 'עם']);
+            'page', 'tab', 'a new tab', 'feed', 'back', 'chrome', 'browser', 'the browser', 'some', 'on spotify', 'from spotify',
+            'את', 'של', 'שלי', 'שלך', 'לי', 'לנו', 'מצב', 'חלון', 'האתר', 'אתר', 'עם', 'קצת', 'בספוטיפיי', 'מהספוטיפיי']);
 })();
 const LOOSE_KNOWN = new Set([...LOOSE_LEXICON.keys()].flatMap(k => k.split(' ')));
 /* Hebrew glues ה, ל, ו, ש, מ, ב, כ onto the word: "למסך", "והמצלמה",
@@ -11806,7 +12101,7 @@ function atlasCommand(text){
 }
 
 const LOOSE_FLOWS = { camera: { on: 'camera_on', off: 'camera_off' }, fs: { on: 'fullscreen', off: 'fullscreen_exit' },
-                      ws: { on: 'workspace' }, site: { on: 'open_site' } };
+                      ws: { on: 'workspace' }, site: { on: 'open_site' }, music: { on: 'music_on', off: 'music_off' } };
 function understandCommand(text){
   const words = looseTokens(text);
   if(!words.length || words.length > 12) return null;
@@ -11823,11 +12118,22 @@ function understandCommand(text){
   }
   const things = [...new Set(roles.filter(r => r.indexOf('O:') === 0))];
   if(things.length !== 1) return null; // nothing to act on, or two things (planRequests splits "and")
+  const kind = things[0].split(':')[1];
+  /* "Turn the music up/down" is the volume, and "the next song" / "השיר
+     הבא" a skip — not the playlist from the top again. The model has
+     play_music for those. */
+  if(kind === 'music' && words.some(w => /^(?:up|down|louder|quieter|volume|ווליום|תגביר|תנמיך|next|skip|previous|הבא|הקודם|דלג|תדלג|תעביר)$/.test(w))) return null;
+  /* "Play Spotify" is music, not the website ("open Spotify" still is). */
+  if(kind === 'site' && /spotify/i.test((OPEN_SITES[+things[0].split(':')[2]] || {}).en || '') &&
+     words.some(w => /^(?:play|playing|hear|listen|blast|נגן|תנגן|לנגן|ננגן|תשמיע|להשמיע|נשמע|לשמוע)$/.test(w))){
+    return { flow: 'music_on', words, site: null };
+  }
   const on = roles.includes('ON'), off = roles.includes('OFF');
   let dir = on && off ? null : on ? 'on' : off ? 'off'
           : (roles.includes('N') || roles.includes('WANT')) ? 'on' : null;
+  /* "Music, please" / "some music" / "מוזיקה": music alone is a request for it. */
+  if(!dir && kind === 'music' && roles.every(r => r === 'O:music' || r === 'P')) dir = 'on';
   if(!dir) return null;                // "the camera" alone: the strict rules, or the model
-  const kind = things[0].split(':')[1];
   const flow = LOOSE_FLOWS[kind] && LOOSE_FLOWS[kind][dir];
   if(!flow) return null;
   return { flow, words, site: kind === 'site' ? OPEN_SITES[+things[0].split(':')[2]] : null };
@@ -12398,7 +12704,7 @@ function splitRequests(text){
    the model, so in a compound sentence they go to it with the rest. */
 const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'fullscreen', 'fullscreen_exit',
                                       'live_full', 'live_full_exit', 'workspace', 'open_site', 'bring_window',
-                                      'workspace3d', 'workspace3d_project', 'agent_atlas']);
+                                      'workspace3d', 'workspace3d_project', 'agent_atlas', 'music_on', 'music_off']);
 
 /* { steps: [{flow, part}], rest: [parts for the model] }, or null when the
    sentence is one request (or none) and the ordinary path should have it. */
@@ -13297,6 +13603,21 @@ async function runWorkflowCommand(flow, text){
     persistCurrentSession();
     if(IS_DESKTOP && typeof speak === 'function') speak(line);
   };
+
+  /* "Let's put some music" (2.22.0): the jarvis playlist, from the top. */
+  if(flow === 'music_on' || flow === 'music_off'){
+    const r = flow === 'music_on' ? await playMusic(MUSIC_PLAYLIST) : await spotifyPost('/spotify/control', { action: 'pause' });
+    const line = musicLine(r, he, flow === 'music_on' ? 'play' : 'pause');
+    if(r && r.ok) say(line);
+    else {
+      /* A failure is said as it is, without "sir". */
+      addMessage('assistant', line);
+      chatHistory.push({ role:'assistant', content: line });
+      persistCurrentSession();
+      if(IS_DESKTOP && typeof speak === 'function') speak(line);
+    }
+    return true;
+  }
 
   if(flow === 'camera_on' || flow === 'camera_off'){
     const on = flow === 'camera_on';
@@ -15067,6 +15388,8 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
                                       TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                       WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
                                       NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL);
+    /* Music (2.22.0): through the worker's Spotify connection. */
+    everydayTools.push(MUSIC_TOOL, SPOTIFY_CONNECT_TOOL);
     /* The report needs a connected store, not a desktop — it reads the same
        Shopify connection the website uses, so it is offered in both. Offered
        only when a store really is configured: a tool that can only return
@@ -15606,6 +15929,10 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callCalendarCreateTool(tu.input);
           } else if(tu.name === 'connect_google_calendar'){
             payload = await callConnectCalendarTool();
+          } else if(tu.name === 'play_music'){
+            payload = await callMusicTool(tu.input);
+          } else if(tu.name === 'connect_spotify'){
+            payload = await callConnectSpotifyTool();
           } else if(tu.name === 'send_whatsapp'){
             payload = await callWhatsAppTool(tu.input);
           } else if(tu.name === 'call_me'){
@@ -15667,6 +15994,14 @@ async function askJarvis(userText, images, onText, tag){
             payload = await setGestureZoom(!(tu.input && tu.input.on === false),
                                            tu.input && typeof tu.input.turn === 'boolean' ? tu.input.turn : undefined,
                                            tu.input && typeof tu.input.pointer === 'boolean' ? tu.input.pointer : undefined);
+            /* "Record my hand tracking" (2.22.0): 30 s, saved in JARVIS\Tracking. */
+            if(tu.input && tu.input.record === true && payload && payload.enabled){
+              if(IS_DESKTOP){
+                startTrackingRecording(false).catch(()=>{});
+                payload.recording = 'started';
+                payload.note = 'Recording 30 seconds of hand tracking now: tell him to point and move his finger around the screen (slowly, fast, in circles, a few clicks) for half a minute. The file is saved in JARVIS\\Tracking; he sends it to Claude. ' + (payload.note || '');
+              } else payload.recording = 'only in the desktop app';
+            }
           } else if(tu.name === 'bring_window_here'){
             payload = await callBringWindowTool(tu.input);
           } else if(tu.name === 'watch_screen'){
@@ -17627,7 +17962,21 @@ adjustLayout();
        reimplementation of it beside it. "Switch to English" and this button
        are one control with two ways in, which is what was asked for: they
        carry the same weight because they ARE the same call. */
-    const items = page === 'lang'
+    const back = { label: '\u2039 ' + t('orbBack'), page:'main' };
+    const handsOn = !!(gestureSettings && gestureSettings.enabled);
+    const pointerOn = !!(gestureSettings && gestureSettings.pointerEnabled !== false);
+    const items = page === 'camera' ? [
+          { label: t('orbRecord'), run: ()=> { startTrackingRecording(true).catch(()=>{}); } },
+          { label: pointerOn ? t('orbPointerOn') : t('orbPointerOff'), run: ()=> setFingerMouse(!pointerOn) },
+          { label: handsOn ? t('orbHandsOn') : t('orbHandsOff'), run: ()=> {
+              setGestureZoom(!handsOn).then(()=> menuSay(!handsOn ? (currentLang === 'he' ? 'שליטה בידיים פועלת.' : 'Hand control is on.')
+                                                                  : (currentLang === 'he' ? 'שליטה בידיים כבויה.' : 'Hand control is off.'))).catch(()=>{}); } },
+          back ]
+      : page === 'more' ? [
+          { label: t('orbResetPlace'), run: resetOrbPlace },
+          { label: t('orbHide'), run: hideOrb },
+          back ]
+      : page === 'lang'
       ? LANG_CHOICES.map(c => ({
           label: (c.id === langMode ? '\u2022 ' : '\u2007\u2007') + c.label,
           run: ()=> setLangMode(c.id),
@@ -17642,12 +17991,17 @@ adjustLayout();
             run: ()=> setPttMode(!pttMode)
           }] : []),
           { label: t('orbLanguage') + ' \u203a', page:'lang' },
-          { label: t('orbResetPlace'), run: resetOrbPlace },
+          /* 2.22.0: the camera's switches and the tracking recording (the
+             GESTURES panel is not on screen in the app), and the self-check
+             that SAYS why he is not answering. The 180 px window holds seven
+             rows, so the rarely used ones moved under More. */
+          { label: t('orbCamera') + ' \u203a', page:'camera' },
+          { label: t('orbCheck'), run: ()=> { selfCheck().catch(()=>{}); } },
           /* The way back when he is stuck: the page reloaded, from Rust
              (refresh_orb), which also takes him out of full screen first.
              The same thing Ctrl+Shift+F5 and the tray's Refresh do. */
           { label: t('orbRefresh'), run: refreshJarvis },
-          { label: t('orbHide'), run: hideOrb }
+          { label: t('orbMore') + ' \u203a', page:'more' }
         ];
     for(const it of items){
       const b = document.createElement('button');
@@ -17670,6 +18024,16 @@ adjustLayout();
     orbMenu.style.top  = Math.max(4, Math.min(y, window.innerHeight - h - 4)) + 'px';
   }
   function hideOrbMenu(){ if(orbMenu) orbMenu.style.display = 'none'; }
+  /* A switch thrown from the menu is confirmed out loud: the panel that
+     would show it is not on screen in the app. */
+  function menuSay(line){ try{ speak(addressHim(line, currentLang === 'he')); }catch(e){} }
+  async function setFingerMouse(on){
+    gestureSettings.pointerEnabled = !!on;
+    if(on && !gestureSettings.enabled){ await setGestureZoom(true); }
+    else { renderGestureSettings(); await saveGestureSettings(); }
+    menuSay(on ? (currentLang === 'he' ? 'עכבר באצבע פועל.' : 'Finger mouse is on.')
+               : (currentLang === 'he' ? 'עכבר באצבע כבוי.' : 'Finger mouse is off.'));
+  }
 
   async function refreshJarvis(){
     try{ await persistCurrentSession(); }catch(err){}
@@ -18045,10 +18409,12 @@ adjustLayout();
       /* What the camera and tracker really do, each second (2.20.0), and the
          tracking recording's progress and file. */
       if(s.kind === 'perf'){
+        lastGesturePerf = Object.assign({ at: Date.now() }, s);
         const pe = document.getElementById('gesturePerf');
         if(pe) pe.textContent = 'camera ' + Math.round(s.camFps || 0) + ' fps' + (s.camFps < 24 ? ' (LOW — more light, or switch off the camera\'s low-light mode)' : '') +
                                 ' · tracker ' + Math.round(s.trackFps || 0) + ' fps, ' + Math.round(s.inferMs || 0) + ' ms a read' + (s.delegate ? ' (' + s.delegate + (s.hands === 1 ? ', one hand' : '') + ')' : '') +
-                                (s.lateMs != null ? ' · a picture is ' + Math.round(s.lateMs) + ' ms old when read' : '');
+                                (s.lateMs != null ? ' · a picture is ' + Math.round(s.lateMs) + ' ms old when read' : '') +
+                                (s.resting ? ' · resting (no hand in view)' : '');
         return;
       }
       if(s.kind === 'recording' || s.kind === 'recorded' || s.kind === 'record-failed'){

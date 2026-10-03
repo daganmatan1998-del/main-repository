@@ -1461,6 +1461,13 @@
     const raf = root.requestAnimationFrame ? root.requestAnimationFrame.bind(root) : (f) => setTimeout(() => f(now()), 16);
     const unraf = root.cancelAnimationFrame ? root.cancelAnimationFrame.bind(root) : clearTimeout;
     let missed = 0, repeats = 0, lastPresented = -1, lastMedia = -1, fpsAt = 0, fpsN = 0, fps = 0;
+    /* RESTING WHILE NO HAND IS THERE (2.22.0). Every frame is read while a
+       hand is in view; with none for IDLE_AFTER_MS, at most one read every
+       IDLE_EVERY_MS — the tracker was taking a whole core (and the GPU) all
+       day for an empty picture, beside JARVIS's own page. A hand coming in
+       is seen within one of those reads, and then every frame again. */
+    const IDLE_AFTER_MS = 2000, IDLE_EVERY_MS = 120;
+    let lastReadAt = -1e9, idleSkips = 0;
     function schedule(){
       if(!running || timer) return;
       timer = byFrame ? { vfc: video.requestVideoFrameCallback(onFrame) } : { raf: raf(onPaint) };
@@ -1513,6 +1520,8 @@
         if(tracker && video.readyState >= 2 && video.videoWidth){
           if(tracker.busy) return;                              // a reconfigure is under way (a few ms)
           const t = now();
+          if(!rec && t - handsAt > IDLE_AFTER_MS && t - lastReadAt < IDLE_EVERY_MS){ idleSkips++; return; }
+          lastReadAt = t;
           const hands = tracker.detect(trackerInput(), t);
           const t2 = now();
           frames++; spent += t2 - t;
@@ -1531,7 +1540,8 @@
             trackFps = perfN / secs;
             camFps = (perfP0 >= 0 && meta && typeof meta.presentedFrames === 'number') ? (meta.presentedFrames - perfP0) / secs : trackFps;
             perfAt = t2; perfN = 0; perfP0 = meta && typeof meta.presentedFrames === 'number' ? meta.presentedFrames : -1;
-            if(o.onStatus) o.onStatus({ kind: 'perf', camFps, trackFps, inferMs: inferEma, lateMs: lateEma, delegate: tracker.delegate, hands: tracker.hands, inputW });
+            if(o.onStatus) o.onStatus({ kind: 'perf', camFps, trackFps, inferMs: inferEma, lateMs: lateEma, delegate: tracker.delegate, hands: tracker.hands, inputW,
+                                        resting: t2 - handsAt > IDLE_AFTER_MS });
           }
           pointer.setLate(lateEma);
           if(t2 - fpsAt >= 1000){ fps = fpsAt ? fpsN * 1000 / (t2 - fpsAt) : 0; fpsAt = t2; fpsN = 0; }
@@ -1659,7 +1669,7 @@
       stats(){ return { frames, avgMs: frames ? spent / frames : 0, running, delegate: tracker && tracker.delegate, switched,
                         missed, repeats, fps, everyFrame: byFrame, handsAt, last: lastEv,
                         camFps, trackFps, inferMs: inferEma, lateMs: lateEma, stamped: capturedStamps, recording: !!rec,
-                        hands: tracker && tracker.hands, inputW }; }
+                        hands: tracker && tracker.hands, inputW, idleSkips, resting: now() - handsAt > IDLE_AFTER_MS }; }
     };
     return api;
   }
