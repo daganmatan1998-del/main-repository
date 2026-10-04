@@ -2521,7 +2521,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.25.0';
+const APP_VERSION = '2.26.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -9130,7 +9130,7 @@ async function callMusicTool(input){
 ------------------------------------------------------------------ */
 const WEB_SHOOTER_TOOL = {
   name: 'web_shooters',
-  description: "His WS-01 web shooters, as a filter on his hands in the camera window (desktop only). on=true puts them on — \"activate web shooter\", \"web shooters on\", \"suit up\", \"תפעיל את יורי הקורים\" — and opens the camera if it is closed; on=false takes them off — \"take down the web shooters\", \"תוריד את יורי הקורים\". While they are on, hand control of the computer is OFF (no zoom, scrolling, turning or finger mouse); folding the middle and ring fingers fires a web. Confirm in a few words; if it returns tell_the_user, say that instead.",
+  description: "His WS-01 web shooters, as a filter on his forearms in the camera window (desktop only), for learning how the device works. on=true puts them on — \"activate web shooter\", \"web shooters on\", \"suit up\", \"תפעיל את יורי הקורים\" — and opens the camera if it is closed; on=false takes them off — \"take down the web shooters\", \"תוריד את יורי הקורים\". While they are on, hand control of the computer is OFF (no zoom, scrolling, turning or finger mouse); while he holds the middle and ring fingers folded (index and pinky out) the valve is open and fluid streams from the nozzle along his forearm; opening them stops it. Confirm in a few words; if it returns tell_the_user, say that instead.",
   input_schema: {
     type: 'object',
     properties: { on: { type: 'boolean', description: 'true puts them on, false takes them down.' } },
@@ -9169,8 +9169,9 @@ function webShooterLine(r, on, he){
                              : (he ? 'הורדתי את יורי הקורים. השליטה בידיים חזרה.' : 'Web shooters down. Hand control is back.');
     const first = !wsHinted;
     wsHinted = true;
-    return he ? 'יורי הקורים מופעלים.' + (first ? ' תקפל את האמה והקמיצה כדי לירות.' : '')
-              : 'Web shooters online.' + (first ? ' Fold your middle and ring fingers to fire.' : '');
+    /* "האמה" alone is also the forearm in Hebrew: the finger is named in full. */
+    return he ? 'יורי הקורים מופעלים.' + (first ? ' תקפל את האצבע האמצעית ואת הקמיצה כדי לירות, ותפתח אותן כדי לעצור.' : '')
+              : 'Web shooters online.' + (first ? ' Fold your middle and ring fingers to fire, open them to stop.' : '');
   }
   const code = r && r.code;
   if(code === 'no_camera') return he ? 'המצלמה לא נפתחה, אז אין על מה להלביש אותם.' : 'The camera would not open, so there is nothing to put them on.';
@@ -9182,7 +9183,7 @@ async function callWebShooterTool(input){
   const on = !(input && input.on === false);
   const r = await setWebShooters(on);
   if(r.ok) return { ok: true, on, note: on
-    ? 'They are on his hands in the camera window; hand control of the computer is off until they come down. Confirm in a few words; the first time, say that folding the middle and ring fingers fires a web.'
+    ? 'They are on his forearms in the camera window; hand control of the computer is off until they come down. Confirm in a few words; the first time, say that holding the middle and ring fingers folded fires and opening them stops.'
     : 'They are down and hand control is back. Confirm in a few words.' };
   return { ok: false, code: r.code, error: r.error, tell_the_user: webShooterLine(r, on, false) };
 }

@@ -696,6 +696,33 @@ single file `dist/index.html`.
   has no text-only mode (the orb forces silentMode off). Tests:
   wsfilter.test (real photos, joints folded), webshooter.e2e (real tracker,
   screenshots ws_*.png), wscmd.test, wsorb.e2e.
+- **The web shooter is on the FOREARM, and fires a stream (2.26.0).** His
+  photo (handimgs/his_thwip.jpg in the scratchpad: middle 175, ring 173,
+  index 27, pinky 23) is the trigger. TriggerState (replaces ThwipTrigger):
+  open after 2 frames of the pose, close after 2 out of it; while open, flow()
+  emits particles at EMIT_HZ from the NOZZLE along the forearm at 8 m/s with
+  gravity, each with its own sub-frame age (at 8 m/s a frame is a metre:
+  without that nothing joined the nozzle and the strand was invisible), and
+  the newest run is drawn to tr.nozzleNow; release pushes a null (the strand
+  detaches); MAX_HOLD_S 4. No splat (he asked: a learning filter). The
+  forearm: forearmFromPose (vendored pose_landmarker_lite.task, VIDEO mode,
+  every 110 ms while on; pose wrist must be within 0.9 palm of the hand
+  wrist, elbow visibility >= 0.5, z damped 0.6; none on a close-up) >
+  forearmFromPixels (palm-colour skin model, rays from the wrist skipping
+  the hand's own hull, contrast check, band centre, then the principal axis
+  of skin in a +-35 deg cone only out to where the whole cone is in the
+  picture; webcam scale 0-2 deg off, close-ups <= 16) > the hand line;
+  chooseForearm rejects > 95 deg from the hand. forearmFrame: Y = palm
+  normal made square to the forearm (the wrist does not twist), Z by
+  chirality. PALM_TRIGGER is lifted out of the model into the hand group;
+  the Wire_black geometry is cut at x 0.152 (cutBelow) and a TubeGeometry
+  is rebuilt each frame from WIRE_EXIT (forearm frame) to WIRE_END (hand
+  frame). The bar: wsNote(readout()) — forearm source and wrist bend,
+  trigger angles, valve. In Hebrew "האמה" is also the forearm: the spoken
+  hint says "האצבע האמצעית". Tests: wsfilter.test (77), wspixels.e2e
+  (synthetic forearms at known bends on his real hand), webshooter.e2e
+  (pose on male_full_height_hands, his photo opens the valve; ws_flow.png,
+  ws_pose.png), wsorb.e2e, wscmd.test.
 - **Background shells die with their task.** A regression started with a
   plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
   looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &

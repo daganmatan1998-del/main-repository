@@ -1923,3 +1923,31 @@ when it is ready (see "The 3D service" near the top).
   hidden (the curve would cut them); stop, pause, next and previous are by
   voice. An ad's "Skip" is pressed by itself.
 - Needs the app rebuilt.
+
+## Page 2.26.0: the web shooter on the forearm, and a stream that works like the real one
+
+- **The trigger is the hand in your photo**: middle and ring fingers folded
+  into the palm, index and pinky out (the thumb can be anywhere). Measured
+  on your own photo: middle 175°, ring 173°, index 27°, pinky 23°.
+- **No burst any more.** While you hold the trigger the valve is open and
+  fluid leaves the nozzle along your forearm (about 8 m/s, falling under
+  gravity), as a thin white line twisted round itself. Move your arm and
+  the line bends, because each bit keeps the direction it left in. Open
+  your fingers and the valve closes: the strand comes off the nozzle and
+  falls away. After 4 seconds held, the burst is spent until you open and
+  fold again.
+- **The forearm is tracked on its own** (the device sits on the forearm, the
+  trigger in the palm, and the wrist bends between them):
+  1. **The pose**: when the camera sees your face and shoulders, MediaPipe's
+     pose model (now in the app, nothing downloaded) gives the elbow, and
+     the forearm is elbow to wrist.
+  2. **The forearm itself**: otherwise, the skin of your palm's colour is
+     followed out of the wrist; measured within 2° at webcam scale,
+     wrist bent anywhere from -60° to +65°. A sleeve, or a wall of skin
+     colour, gives nothing rather than a guess.
+  3. **The hand**: if neither, the hand's own line.
+  The palm trigger stays in the palm and its wire bends at the wrist.
+- **The camera bar teaches it**: for each arm, where the forearm comes from
+  (pose / pixels / hand) and how bent the wrist is, the trigger's two
+  fingers in degrees, and the valve (closed, or FLOW and for how long).
+- Needs the app rebuilt.

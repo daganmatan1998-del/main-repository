@@ -184,16 +184,33 @@
         .then(function(){ return window.THREE.RoomEnvironment ? null : loadScript('./vendor/three/examples/js/environments/RoomEnvironment.js'); })
         .then(function(){ return window.JarvisWebShooter ? null : loadScript('./webshooter.js'); })
         .then(function(){
+          var saved = gzSettings() || {};
           var ws = window.JarvisWebShooter.create({
             stage: document.getElementById('stage'), video: feed,
             mirrored: function(){ return mirrored; },
-            onShot: function(info){ emit('jarvis://web-shot', info); }
+            onShot: function(info){ emit('jarvis://web-shot', info); },
+            /* The forearm (2.26.0): the pose model, on the same path (GPU or
+               CPU) the hand tracker settled on. */
+            poseModel: './vendor/mediapipe/pose_landmarker_lite.task', wasmBase: './vendor/mediapipe/wasm',
+            delegate: (gz && gz.stats().delegate === 'CPU') || saved.delegate === 'CPU' ? 'CPU' : undefined,
+            onStatus: function(r){ if(wsOn){ gzNote = wsNote(r); showState(); } }
           });
           return ws.load('./filters/ws-01-web-shooter.glb').then(function(){ WS = ws; window.__ws = ws; return ws; });
         })
         .catch(function(e){ wsLoading = null; throw e; });
     }
     return wsLoading;
+  }
+  /* The learning line (2.26.0): per arm, where the forearm comes from (the
+     pose, its own pixels, or only the hand) and how bent the wrist is, the
+     trigger's two fingers in degrees, and the valve. */
+  function wsNote(r){
+    var parts = ((r && r.hands) || []).map(function(h){
+      return h.side + ': forearm ' + h.forearm + (h.bendDeg ? ' ' + h.bendDeg + '\u00b0' : '') +
+             ' \u00b7 trigger ' + (h.middle == null ? '-' : h.middle + '\u00b0/' + h.ring + '\u00b0') +
+             ' \u00b7 ' + (h.valve === 'open' ? 'FLOW ' + Number(h.flowS || 0).toFixed(1) + ' s' : 'closed');
+    });
+    return '\ud83d\udd78 WS-01' + (parts.length ? ' \u00b7 ' + parts.join(' | ') : ' \u00b7 no hand');
   }
   function webShooters(on){
     if(!on){
