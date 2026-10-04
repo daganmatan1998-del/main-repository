@@ -1875,3 +1875,26 @@ when it is ready (see "The 3D service" near the top).
 - **When the 3D service fails for "make it a 3D model"**, he first says why
   in one line ("The Tripo account is out of credits..."), then "I am building
   it in code instead", and does.
+
+## Page 2.24.0: the same 3D model every time, music in its own window, the workspace in front
+
+- **Every 3D request ended in the same model** (a grey ball on a stand with a
+  cyan tip): that was the app's own last-resort stand-in. When the worker
+  answers from Workers AI (its last engine, used once the others are spent)
+  he has no tools at all, so "build it now" could only ever be answered in
+  words. Now the app asks for the model as plain code text — no tools, no
+  history, just the object — which any engine can write, builds it itself,
+  and gives the engine one chance to fix an error. Code that tries to make a
+  renderer, touch the page or the network is refused before it runs. The
+  stand-in is only shown when even that fails, and the reason goes to
+  "Check yourself". For a model that really looks like the thing, the 3D
+  service (a Tripo key with credits) is still the way.
+- **Music plays in its own window**: a square with rounded corners at the
+  top middle of the screen, playing his playlist from the first song — not a
+  Chrome tab on the playlist page. "Stop the music" closes it; pause, carry
+  on, next and previous control it. It is not signed in to YouTube (Google
+  does not allow signing in inside an app window), so the playlist must be
+  **Public or Unlisted**. Needs the app rebuilt.
+- **"Let's start working"**: the three panes now open in front of whatever
+  he was using, Shopify focused — not behind it, as taskbar buttons. Needs
+  the app rebuilt.

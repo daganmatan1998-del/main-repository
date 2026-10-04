@@ -2521,7 +2521,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.23.2';
+const APP_VERSION = '2.24.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -8943,11 +8943,11 @@ async function callConnectCalendarTool(){
 const MUSIC_PLAYLIST = 'jarvis';
 const MUSIC_TOOL = {
   name: 'play_music',
-  description: "Music from his YouTube playlist. action 'play' (the default) opens his playlist named \"jarvis\" (ג'רוויס) on YouTube and plays it from the FIRST video, in order — for \"let's put some music\", \"let's hear some music\", \"play some music\", \"put on my playlist\", \"שים מוזיקה\", \"בוא נשמע מוזיקה\", \"תנגן משהו\". Another playlist of his only when he names one (playlist). 'pause' pauses it or carries on (\"stop the music\", \"תעצור את המוזיקה\", \"resume\"), 'next' / 'previous' change the song. Confirm in a few words once it returns ok; if it returns tell_the_user, say that instead.",
+  description: "Music from his YouTube playlist. action 'play' (the default) plays his playlist named \"jarvis\" (ג'רוויס) from the FIRST video, in order, in a small music window at the top of his screen — for \"let's put some music\", \"let's hear some music\", \"play some music\", \"put on my playlist\", \"שים מוזיקה\", \"בוא נשמע מוזיקה\", \"תנגן משהו\". Another playlist of his only when he names one (playlist). 'pause' pauses it, 'resume' carries on, 'next' / 'previous' change the song, 'stop' stops it and closes the music window (\"turn off the music\", \"תכבה את המוזיקה\"). Confirm in a few words once it returns ok; if it returns tell_the_user, say that instead.",
   input_schema: {
     type: 'object',
     properties: {
-      action: { type: 'string', enum: ['play', 'pause', 'next', 'previous'], description: "Default 'play'. 'pause' also resumes." },
+      action: { type: 'string', enum: ['play', 'pause', 'resume', 'next', 'previous', 'stop'], description: "Default 'play'." },
       playlist: { type: 'string', description: "Only when he names a different playlist of his. Default: jarvis." }
     },
     required: []
@@ -8999,7 +8999,17 @@ async function callConnectYoutubeTool(){
   return { ok: true, opened: true, note: "Google's sign-in is open in his browser. Nothing is connected until he approves there; then he can ask for music again." };
 }
 
-let musicBusy = false, musicPlaying = false;
+let musicBusy = false, musicPlaying = false, musicInWindow = false;
+/* MUSIC IN ITS OWN WINDOW (2.24.0): a small square at the top middle of the
+   screen, rounded, playing from the first song (music_window in main.rs).
+   An app built before it has no music_window: the browser, as before. */
+async function openMusicWindow(url){
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!IS_DESKTOP || !invoke) return false;
+  try{ await invoke('music_window', { url }); return true; }
+  catch(err){ console.warn('JARVIS: music window —', err); return false; }
+}
+
 /* Play the playlist; resolves with what happened, for the voice and the tool. */
 async function playMusic(name){
   if(musicBusy) return { ok: false, code: 'busy', error: 'already starting the music' };
@@ -9007,6 +9017,11 @@ async function playMusic(name){
   try{
     const r = await musicPost('/youtube/playlist', { name: String(name || MUSIC_PLAYLIST).trim() || MUSIC_PLAYLIST });
     if(r.ok){
+      if(await openMusicWindow(r.url)){
+        musicPlaying = true; musicInWindow = true;
+        return Object.assign({}, r, { plays_from_start: true, in_window: true });   // its page script starts a playlist page's first song
+      }
+      musicInWindow = false;
       const opened = await openInBrowser(r.url);
       if(!opened) return Object.assign({}, r, { ok: false, code: 'not_opened', error: 'the browser would not open ' + r.url });
       musicPlaying = true;
@@ -9022,16 +9037,39 @@ async function playMusic(name){
   }
 }
 
-/* Stop / next / previous: the media keys, which the browser hands to YouTube. */
+/* Pause / resume / next / previous / stop. The music window is told
+   directly; music playing in a browser gets the media keys. */
 async function musicKey(action){
   const key = action === 'next' ? 'next' : action === 'previous' ? 'previous' : 'play_pause';
   const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
   if(!IS_DESKTOP || !invoke) return { ok: false, code: 'no_keys', error: 'the music keys work only in the desktop app' };
-  /* "Stop" while nothing of ours is playing would START whatever was paused. */
-  if(key === 'play_pause' && action === 'pause' && !musicPlaying) return { ok: true, already: true };
+  if(musicInWindow){
+    const what = action === 'stop' ? 'close' : action;
+    try{
+      await invoke('music_control', { action: what });
+      if(what === 'close'){ musicInWindow = false; musicPlaying = false; }
+      else if(what === 'pause') musicPlaying = false;
+      else musicPlaying = true;
+      return { ok: true, action };
+    }catch(err){
+      const msg = String((err && err.message) || err);
+      if(/not_open/.test(msg)){ musicInWindow = false; musicPlaying = false;
+        return (action === 'pause' || action === 'stop') ? { ok: true, action, already: true } : { ok: false, code: 'not_playing', error: 'the music window is closed' }; }
+      return { ok: false, code: 'key_failed', error: msg };
+    }
+  }
+  /* One play/pause key does both, so which one is meant decides whether it
+     is sent: "stop" while nothing of ours is playing would START whatever
+     was paused, and "resume" while it plays would stop it. */
+  let playingAfter = musicPlaying;
+  if(key === 'play_pause'){
+    const wantPlaying = action === 'resume';
+    if(musicPlaying === wantPlaying) return { ok: true, action, already: true };
+    playingAfter = wantPlaying;
+  }
   try{
     await invoke('media_key', { key });
-    if(key === 'play_pause') musicPlaying = action === 'pause' ? false : !musicPlaying;
+    musicPlaying = playingAfter;
     return { ok: true, action };
   }catch(err){
     const msg = String((err && err.message) || err);
@@ -9043,11 +9081,13 @@ async function musicKey(action){
 function musicLine(r, he, action){
   action = action || 'play';
   if(r && r.ok){
+    if(action === 'stop')     return he ? 'כיביתי את המוזיקה.' : 'Music off.';
     if(action === 'pause')    return he ? 'עצרתי את המוזיקה.' : 'Music paused.';
     if(action === 'resume')   return he ? 'ממשיך את המוזיקה.' : 'Music back on.';
     if(action === 'next')     return he ? 'השיר הבא.' : 'Next song.';
     if(action === 'previous') return he ? 'השיר הקודם.' : 'Previous song.';
     const pl = (r.playlist && r.playlist.title) || MUSIC_PLAYLIST;
+    if(r.in_window) return he ? 'מנגן את הפלייליסט ' + pl + ', מהשיר הראשון.' : 'Playing your ' + pl + ' playlist, from the first song.';
     if(r.plays_from_start === false) return he ? 'פתחתי את הפלייליסט ' + pl + ' ביוטיוב.' : 'Your ' + pl + ' playlist is open on YouTube.';
     return he ? 'מנגן את הפלייליסט ' + pl + ' ביוטיוב, מהשיר הראשון.' : 'Playing your ' + pl + ' playlist on YouTube, from the first song.';
   }
@@ -9060,6 +9100,7 @@ function musicLine(r, he, action){
   if(code === 'youtube_missing') return he ? 'המוזיקה ביוטיוב עוד לא מוגדרת אצלי בשרת.' : r.tell_the_user;
   if(code === 'old_worker') return he ? 'השרת שלי עוד לא מכיר את יוטיוב — צריך לפרוס את ה-worker המעודכן.' : 'My server does not know YouTube music yet — the updated worker needs deploying.';
   if(code === 'old_app') return he ? 'כדי לעצור ולדלג צריך לבנות מחדש את האפליקציה.' : 'Stopping and skipping need the app rebuilt.';
+  if(code === 'not_playing') return he ? 'חלון המוזיקה סגור. תגיד לי לשים מוזיקה.' : 'The music window is closed. Ask me for music.';
   if(he) return 'לא הצלחתי להפעיל את המוזיקה' + (r && r.error ? ': ' + r.error : '.');
   return (r && r.tell_the_user) || ('I could not start the music' + (r && r.error ? ': ' + r.error : '.'));
 }
@@ -9068,10 +9109,10 @@ async function callMusicTool(input){
   const action = String((input && input.action) || 'play');
   let r;
   if(action === 'play') r = await playMusic(input && input.playlist);
-  else if(/^(?:pause|resume|next|previous)$/.test(action)) r = await musicKey(action === 'resume' ? 'pause' : action);
-  else return { error: 'action must be play, pause, next or previous' };
+  else if(/^(?:pause|resume|next|previous|stop)$/.test(action)) r = await musicKey(action);
+  else return { error: 'action must be play, pause, resume, next, previous or stop' };
   if(r && r.ok) return { ok: true, action, playlist: r.playlist ? r.playlist.title : undefined,
-                         note: action === 'play' ? 'It is playing on YouTube from the first video. Confirm in a few words.' : 'Done. Confirm in a few words.' };
+                         note: action === 'play' ? (r.in_window ? 'It is playing from the first video in his music window at the top of the screen. Confirm in a few words.' : 'It is playing on YouTube from the first video. Confirm in a few words.') : 'Done. Confirm in a few words.' };
   return { ok: false, code: r && r.code, error: (r && r.error) || 'failed', tell_the_user: musicLine(r, false, action),
            needs_connect: !!(r && r.needs_connect), connect_opened: !!(r && r.connect_opened) };
 }
@@ -10858,7 +10899,34 @@ const BUILD3D_TOOL = {
   }
 };
 
+/* Classes engines reach for that r128 does not have: CapsuleGeometry is
+   three.js's own later definition; RoundedBoxGeometry (an addon) becomes a
+   plain box rather than a thrown error. */
+function ensureThreeExtras(){
+  if(typeof THREE === 'undefined') return;
+  try{
+    if(!THREE.CapsuleGeometry && THREE.LatheGeometry && THREE.Path){
+      THREE.CapsuleGeometry = class CapsuleGeometry extends THREE.LatheGeometry {
+        constructor(radius = 1, length = 1, capSegments = 4, radialSegments = 8){
+          const path = new THREE.Path();
+          path.absarc(0, -length / 2, radius, Math.PI * 1.5, 0);
+          path.absarc(0, length / 2, radius, 0, Math.PI * 0.5);
+          super(path.getPoints(capSegments), radialSegments);
+          this.type = 'CapsuleGeometry';
+          this.parameters = { radius, length, capSegments, radialSegments };
+        }
+      };
+    }
+    if(!THREE.RoundedBoxGeometry && THREE.BoxGeometry){
+      THREE.RoundedBoxGeometry = class RoundedBoxGeometry extends THREE.BoxGeometry {
+        constructor(width = 1, height = 1, depth = 1){ super(width, height, depth); }
+      };
+    }
+  }catch(e){ /* a frozen THREE: the code's own error says what is missing */ }
+}
+
 async function callBuild3dTool(input){
+  ensureThreeExtras();
   const code = (input && input.code || '').trim();
   const name = (input && input.name || '3D model').trim();
   if(!code) return { error:'no code given' };
@@ -12984,6 +13052,9 @@ async function callWorkspaceTool(input){
     }
   }
 
+  /* In front, not behind what he was using (2.24.0); an older build has
+     no front_workspace, and the panes are where they always were. */
+  try{ await invoke('front_workspace'); }catch(e){}
   const done = opened.concat(reused);
   if(done.length) addMessage('system', '▸ workspace: ' + done.join(', ') +
                              (failed.length ? ' — failed: ' + failed.map(f => f.service).join(', ') : ''));
@@ -13731,8 +13802,8 @@ async function runWorkflowCommand(flow, text){
 
   /* "Let's put some music" (2.22.0): the jarvis playlist, from the top. */
   if(flow === 'music_on' || flow === 'music_off'){
-    const r = flow === 'music_on' ? await playMusic(MUSIC_PLAYLIST) : await musicKey('pause');
-    const line = musicLine(r, he, flow === 'music_on' ? 'play' : 'pause');
+    const r = flow === 'music_on' ? await playMusic(MUSIC_PLAYLIST) : await musicKey(musicInWindow ? 'stop' : 'pause');
+    const line = musicLine(r, he, flow === 'music_on' ? 'play' : (musicInWindow || (r && r.action === 'stop') ? 'stop' : 'pause'));
     if(r && r.ok) say(line);
     else {
       /* A failure is said as it is, without "sir". */
@@ -15472,6 +15543,109 @@ function neverNo3dNudge(pass, failed){
 }
 const REFUSAL_SENTENCE = /\b(?:can(?:no|')?t|cannot|unable to|not able to|won'?t be able|isn'?t possible|not possible|too complex|beyond what)\b|(?:\u05dc\u05d0 \u05d9\u05db\u05d5\u05dc|\u05dc\u05d0 \u05d0\u05d5\u05db\u05dc|\u05d0\u05d9\u05df \u05dc\u05d9 \u05d0\u05e4\u05e9\u05e8\u05d5\u05ea|\u05dc\u05d0 \u05de\u05e1\u05d5\u05d2\u05dc|\u05dc\u05d0 \u05e0\u05d9\u05ea\u05df|\u05de\u05d5\u05e8\u05db\u05d1 \u05de\u05d3\u05d9)/i;
 
+/* ANY ENGINE CAN WRITE THE CODE (2.24.0). The worker's last-resort engine
+   (Workers AI) is given no tools at all, and Groq's tool calls break on long
+   code inside a JSON argument; with every other engine spent, "call
+   build_3d_model" could only be answered in words, and EVERY request ended
+   in the same stand-in. Here the request carries nothing but the object:
+   no tools, no history, no pictures; the code comes back as plain text,
+   which any engine writes, and the app builds it. One repair round with the
+   error. Code that reaches for a renderer, the DOM, a loop or the network is
+   refused before it runs: this is a weaker engine's code. */
+const CODE3D_SYSTEM =
+  'You write the body of a JavaScript function that builds ONE 3D object with Three.js r128. The function receives THREE ' +
+  'and must end with "return g;" where g is a THREE.Group holding every part. Answer with ONLY the code: no markdown ' +
+  'fences, no explanation, no imports, no renderer, scene, camera, lights, animation loop, DOM or network. Core r128 ' +
+  'only: Group, Mesh, BoxGeometry, SphereGeometry, CylinderGeometry, ConeGeometry, TorusGeometry, CapsuleGeometry, ' +
+  'LatheGeometry (THREE.Vector2 points), ExtrudeGeometry (THREE.Shape), TubeGeometry (THREE.CatmullRomCurve3), ' +
+  'MeshStandardMaterial, MeshPhysicalMaterial, Vector2, Vector3, Color, MathUtils. Never THREE.Geometry, loaders, fonts ' +
+  'or TextGeometry. Make it look like the real thing: its characteristic silhouette first (what makes it recognisable ' +
+  'at a glance), every main part in its right place and proportion, the real colour and finish of each part ' +
+  '(MeshStandardMaterial color, roughness, metalness), 24 to 48 segments on round parts. About 1 to 2 units tall, ' +
+  'standing on y = 0, centred on x and z. Helper functions and loops for repeated parts (legs, wheels, windows, ' +
+  'fingers). At most 150 lines. Infer anything not said; never ask.';
+const CODE3D_REFUSE = /\b(?:WebGLRenderer|requestAnimationFrame|setInterval|appendChild|XMLHttpRequest|localStorage|sessionStorage|__TAURI|import\s*\(|fetch\s*\()/;
+
+function engineCannotCallTools(){ return /^workers-ai\//i.test(String(lastEngineLabel || '')); }
+
+/* The code out of an answer: fenced or bare, with stray import/export lines
+   gone. */
+function codeFromReply(raw){
+  let s = String(raw || '');
+  const fence = s.match(/```[a-zA-Z]*[ \t]*\n([\s\S]*?)```/);
+  if(fence) s = fence[1];
+  else s = s.replace(/^\s*```[a-zA-Z]*\s*|\s*```\s*$/g, '');
+  s = s.replace(/^[ \t]*import\s[^\n]*$/gm, '').replace(/^([ \t]*)export\s+(?:default\s+)?/gm, '$1');
+  return s.trim();
+}
+
+/* The same code, read the ways an engine writes it: a body that returns;
+   a function it declared and never called; a group it filled and never
+   returned; parts added to a "scene" it was never given. */
+function codeCandidates(code){
+  const out = [code];
+  const names = [];
+  const re = /(?:^|\n)[ \t]*(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(|(?:^|\n)[ \t]*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:function\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/g;
+  let m;
+  while((m = re.exec(code))) names.push(m[1] || m[2]);
+  for(const n of names.reverse()) out.push(code + '\n;return ' + n + '(THREE);');
+  const g = code.match(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*new THREE\.(?:Group|Object3D)\s*\(/);
+  if(g) out.push(code + '\n;return ' + g[1] + ';');
+  if(/\bscene\.add\s*\(/.test(code) && !/(?:const|let|var)\s+scene\b/.test(code)) out.push('const scene = new THREE.Group();\n' + code + '\n;return scene;');
+  return out;
+}
+
+async function writeModelCodeQuietly(what, previous){
+  if(!backendUrl) return { error: 'no server' };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 90000);
+  toolRunningSince = Date.now();                     // a build being written is not a stall
+  try{
+    const ask = previous
+      ? 'The object: ' + what + '\n\nThis code for it failed (' + previous.error + '):\n' + String(previous.code || '').slice(0, 6000) +
+        '\n\nWrite it again, fixed. Only the function body.'
+      : 'The object: ' + what + '\n\nThe function body:';
+    const res = await fetch(anthropicEndpoint(), {
+      method:'POST', headers: jarvisHeaders(), signal: ctrl.signal,
+      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens: 4000, system: CODE3D_SYSTEM,
+                             messages: [{ role:'user', content: ask }] })
+    });
+    if(!res.ok) return { error: 'the engine answered ' + res.status };
+    lastEngineLabel = res.headers.get('X-Jarvis-Engine') || lastEngineLabel;
+    const data = await res.json();
+    const code = codeFromReply((data.content || []).filter(b => b && b.type === 'text').map(b => b.text).join('\n'));
+    return code ? { code } : { error: 'no code in the answer' };
+  }catch(err){
+    return { error: (err && err.name === 'AbortError') ? 'no answer in 90 seconds' : String((err && err.message) || err) };
+  }finally{
+    clearTimeout(timer);
+    toolRunningSince = 0;
+    if(isThinking) lastThinkStart = Date.now();
+  }
+}
+
+async function buildFromPlainCode(what, he){
+  setToolStatus(he ? '\u25b8 \u05db\u05d5\u05ea\u05d1 \u05d0\u05ea \u05d4\u05de\u05d5\u05d3\u05dc\u2026' : '\u25b8 writing the model\u2026');
+  let previous = null, lastError = 'no code';
+  for(let attempt = 0; attempt < 2; attempt++){
+    const got = await writeModelCodeQuietly(what, previous);
+    if(!got || !got.code){ lastError = (got && got.error) || 'no code'; if(previous) break; continue; }
+    if(CODE3D_REFUSE.test(got.code)){
+      lastError = 'the code reached outside the model (a renderer, the DOM, a loop or the network)';
+      previous = { code: got.code, error: lastError + '; only build and return the THREE.Group' };
+      continue;
+    }
+    for(const code of codeCandidates(got.code)){
+      const r = await callBuild3dTool({ name: what.slice(0, 60), code });
+      if(r && r.ok){ if(r.__attach) delete r.__attach; return r; }
+      lastError = String((r && r.error) || 'no result');
+      if(!/did not return a THREE object/.test(lastError)) break;   // a real error: repair it, not another reading
+    }
+    previous = { code: got.code, error: lastError };
+  }
+  return { error: lastError };
+}
+
 /* The app's own last resort, when the engine produced no model at all. */
 const STANDIN_CODE = 'const g = new THREE.Group();' +
   ' const base = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.68, 0.1, 48), new THREE.MeshStandardMaterial({ color: 0x1b1e24, roughness: 0.5, metalness: 0.3 })); g.add(base);' +
@@ -15489,6 +15663,9 @@ async function guaranteed3dModel(text){
     if(r && r.ok) return { ok: true, line: addressHim(he ? '\u05d4\u05de\u05d5\u05d3\u05dc \u05de\u05d5\u05db\u05df, \u05de\u05e9\u05d9\u05e8\u05d5\u05ea \u05d4\u05ea\u05dc\u05ea \u05de\u05d9\u05de\u05d3.' : 'The model is ready, from the 3D service.', he) };
     noteProblem('3D service fallback failed: ' + String((r && r.error) || 'no result'));
   }
+  const built = await buildFromPlainCode(what, he);
+  if(built && built.ok) return { ok: true, line: addressHim(he ? '\u05d4\u05e0\u05d4 \u05d4\u05de\u05d5\u05d3\u05dc.' : 'Here is the model.', he) };
+  noteProblem('3D: the plain-code build failed too (' + String((built && built.error) || 'no code') + '); the stand-in was shown');
   const r2 = await callBuild3dTool({ name: (he ? '\u05d8\u05d9\u05d5\u05d8\u05d4: ' : 'Draft: ') + what.slice(0, 50), code: STANDIN_CODE });
   if(r2 && r2.ok) return { ok: true, standin: true, line: he
     ? '\u05dc\u05d0 \u05d4\u05e6\u05dc\u05d7\u05ea\u05d9 \u05dc\u05d1\u05e0\u05d5\u05ea \u05de\u05d5\u05d3\u05dc \u05de\u05e4\u05d5\u05e8\u05d8, \u05d0\u05d6 \u05e9\u05de\u05ea\u05d9 \u05d8\u05d9\u05d5\u05d8\u05d4 \u05d2\u05e1\u05d4. \u05ea\u05d2\u05d9\u05d3 \u05d0\u05d5\u05ea\u05d5 \u05e9\u05d5\u05d1 \u05d1\u05e4\u05e9\u05d8\u05d5\u05ea \u05d5\u05d0\u05d1\u05e0\u05d4 \u05de\u05d5\u05d3\u05dc \u05d0\u05de\u05d9\u05ea\u05d9.'
@@ -16293,12 +16470,12 @@ async function askJarvis(userText, images, onText, tag){
           }
           logActionEnd(logEntry, payload);
           if(payload && !payload.error) turnToolSucceeded = true;
-          if(payload && payload.ok && payload.shown && /^(?:build_3d_model|generate_3d_model|photo_to_3d)$/.test(tu.name)) turnModelShown = true;
           else {
             turnToolFailures.push({ tool: tu.name, error: String((payload && payload.error) || 'no result'),
                                    tell_the_user: (payload && payload.tell_the_user) || null });
             if(!(payload && payload.error === 'cancelled')) noteProblem(tu.name + ' failed: ' + String((payload && payload.error) || 'no result'));
           }
+          if(payload && payload.ok && payload.shown && /^(?:build_3d_model|generate_3d_model|photo_to_3d)$/.test(tu.name)) turnModelShown = true;
           if(payload && payload.error && payload.error !== 'cancelled'){
             addMessage('system', 'DEBUG (' + tu.name + '): ' + payload.error);
           }
@@ -16339,9 +16516,12 @@ async function askJarvis(userText, images, onText, tag){
          twice at most, for a model — the second time the simplest one.
          Before every other check: a refusal, a failed service, a cut-off
          or a promise all end the same way here. */
-      if(turnWants3d && !turnModelShown && model3dNudges < 2 && data.stop_reason !== 'tool_use' && !userInterrupted){
+      /* An engine with no tools (the worker's Workers AI, its last resort)
+         can only ever answer "build it now" in words: straight to the app's
+         own build below, which asks for the code as plain text (2.24.0). */
+      if(turnWants3d && !turnModelShown && engineCannotCallTools() && data.stop_reason !== 'tool_use' && !userInterrupted) break;
+      if(turnWants3d && !turnModelShown && model3dNudges < 1 && data.stop_reason !== 'tool_use' && !userInterrupted){
         model3dNudges++;
-        if(model3dNudges === 2) compactCodeNote = COMPACT_CODE_NOTE;
         loopGuard = Math.min(loopGuard, MAX_TOOL_ROUNDS - 3);   // room for the build and its answer
         setToolStatus(t('doingItForReal'));
         const failed = turnToolFailures.slice(-3).map(f => f.tool + ': ' + f.error).join('; ');

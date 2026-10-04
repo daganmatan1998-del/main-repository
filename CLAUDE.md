@@ -619,6 +619,48 @@ single file `dist/index.html`.
   the whole hand-back + stand-in in the background, which speaks over the
   NEXT scenario; wait it out (lock.e2e, fullscreen.e2e do) and count model
   windows from the block's own start.
+- **Any engine can write the 3D code (2.24.0).** His photo showed
+  STANDIN_CODE for every request: Workers AI (the worker's last engine) gets
+  NO tools, so the never-no hand-backs could only be answered in words.
+  engineCannotCallTools() (lastEngineLabel starts workers-ai/) skips the
+  hand-back; otherwise there is ONE hand-back now, then guaranteed3dModel:
+  the service (health model3d) → buildFromPlainCode (writeModelCodeQuietly:
+  CODE3D_SYSTEM, no tools/history/pictures, plain-text body; codeFromReply
+  strips fences/import/export; codeCandidates also calls a declared-never-
+  called function, returns a filled group, gives a "scene"; CODE3D_REFUSE
+  rejects renderer/DOM-append/loop/network code before it runs; one repair
+  round with the error) → the stand-in. toolRunningSince is set while it
+  writes (stall breaker). ensureThreeExtras adds CapsuleGeometry (three.js's
+  own r139 definition) and RoundedBoxGeometry (a plain box) to r128. The
+  2.23.0 misplaced `else` (every successful non-3D tool booked as a failure)
+  is fixed. plain3d.e2e.mjs; complex3d.e2e scenario 6 finds the last body
+  WITH a tool result (the plain-code request comes last now).
+- **Music has its own window (2.24.0).** Rust music_window(url): label
+  "music", WebviewUrl::External (youtube.com /watch or /playlist only),
+  frameless, 360 logical px square at the top middle of the primary monitor
+  (placed in physical px after build), always on top, not focused, rounded
+  by DWM (attr 33 = DWMWCP_ROUND, attr 34 = cyan border), its OWN
+  data_directory (music-webview) because it needs additional_browser_args
+  with --autoplay-policy=no-user-gesture-required and WebView2 refuses
+  different args in a profile already open. MUSIC_INIT (initialization
+  script, main world) hides the page around #movie_player, fills the square
+  (object-fit cover), turns a playlist page into its first video, starts a
+  paused start for 30 s unless he touched it, and defines
+  window.__jarvisMusic(pause|resume|toggle|next|previous) — music_control
+  evals it (or close/show). Not signed in (Google blocks webview sign-in):
+  the playlist must be public/unlisted. Page: openMusicWindow → in_window;
+  an app without music_window falls back to the browser and media keys;
+  music_off closes the window. musicwin.e2e.mjs runs the REAL MUSIC_INIT
+  (sliced from main.rs) on stand-in YouTube pages (youtube.com is blocked
+  here); music.e2e.mjs sessions 1, 1b (old app), 3, 4b.
+- **Our windows come to the FRONT (2.24.0).** A window built while another
+  program is foreground opens BEHIND it (taskbar button only) and set_focus
+  loses to the foreground lock. raise_own_window: restore if iconic,
+  SetWindowPos HWND_TOPMOST then HWND_NOTOPMOST with SWP_NOACTIVATE (kept
+  topmost for "music" and while ORB_EXPANDED), and when asked
+  foreground_unlock + SetForegroundWindow. open_service_window raises every
+  pane; the page then calls front_workspace (Shopify focused). work.test,
+  workfront.e2e.mjs.
 - **Background shells die with their task.** A regression started with a
   plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
   looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &

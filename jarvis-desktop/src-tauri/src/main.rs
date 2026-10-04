@@ -1623,7 +1623,7 @@ async fn open_service_window(
             height: h as u32,
         });
         let _ = existing.show();
-        let _ = existing.set_focus();
+        raise_own_window(&existing, false);
         return Ok("reused".into());
     }
 
@@ -1646,6 +1646,7 @@ async fn open_service_window(
         height: h as u32,
     });
     let _ = win.show();
+    raise_own_window(&win, false);
     Ok("opened".into())
 }
 
@@ -2290,6 +2291,247 @@ fn media_key(key: String) -> Result<String, String> {
 #[tauri::command]
 fn media_key(key: String) -> Result<String, String> {
     Err(format!("media keys are only sent on Windows ({key})"))
+}
+
+/* ------------------------------------------------------------------
+   MUSIC IN A WINDOW OF ITS OWN (2.24.0)
+
+   "Let's put some music" opened the playlist in Chrome, on its page, not
+   playing. Now it is a small square window at the top middle of the screen,
+   rounded corners, no frame, playing from the first song: the YouTube watch
+   page itself (an embed refuses many music videos), with the page around
+   the player hidden and the picture filling the square.
+
+   Its own WebView2 profile (data_directory), because autoplay with sound
+   needs --autoplay-policy=no-user-gesture-required, and WebView2 refuses to
+   create a second webview with different browser arguments in a profile
+   that is already open. A playlist page (when the worker could not name
+   the first video) is turned into its first video by the page script. It
+   is not signed in to YouTube (Google refuses sign-in inside a webview), so
+   the playlist must be public or unlisted. Pause / next / previous / close
+   are music_control; the page script answers window.__jarvisMusic.
+------------------------------------------------------------------ */
+const MUSIC_SIDE: f64 = 360.0; // logical px, a square
+const MUSIC_TOP: f64 = 14.0; // logical px from the top of the screen
+
+const MUSIC_INIT: &str = r#"(function () {
+  if (window.__jarvisMusicReady) return;
+  window.__jarvisMusicReady = true;
+  if (!/(^|\.)youtube\.com$/.test(location.hostname)) return;
+  var CSS = [
+    'html,body,ytd-app{background:#000!important;overflow:hidden!important}',
+    '#masthead-container,ytd-masthead,#secondary,#below,#comments,#related,ytd-watch-metadata,#chat,#guide,tp-yt-app-drawer,ytd-mini-guide-renderer,#panels,.ytp-pause-overlay,.ytp-ce-element,.ytp-endscreen-content,.ytp-paid-content-overlay{display:none!important}',
+    '#movie_player{position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;z-index:2147483000!important;background:#000!important}',
+    '#movie_player .html5-video-container,#movie_player video.html5-main-video{position:absolute!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important}',
+    '#movie_player video.html5-main-video{object-fit:cover!important}'
+  ].join('\n');
+  function addStyle() {
+    if (document.getElementById('jarvis-music-css')) return;
+    var root = document.head || document.documentElement;
+    if (!root) return;
+    var s = document.createElement('style');
+    s.id = 'jarvis-music-css';
+    s.textContent = CSS;
+    root.appendChild(s);
+  }
+  var started = Date.now(), held = false, touched = false;
+  function player() { return document.getElementById('movie_player'); }
+  function video() { return document.querySelector('#movie_player video') || document.querySelector('video'); }
+  document.addEventListener('pointerdown', function (e) { if (e.isTrusted) touched = true; }, true);
+  window.addEventListener('yt-navigate-finish', function () { started = Date.now(); });
+  function tick() {
+    addStyle();
+    if (location.pathname === '/playlist') {
+      var a = document.querySelector('ytd-playlist-video-renderer a#video-title[href*="/watch"], ytd-playlist-video-renderer a[href*="/watch?v="], a[href*="/watch?v="][href*="list="]');
+      if (a && a.href) { location.replace(a.href); return; }
+    }
+    var v = video();
+    if (v && v.paused && !held && !touched && Date.now() - started < 30000) {
+      var p = player();
+      try { if (p && typeof p.playVideo === 'function') p.playVideo(); else v.play(); } catch (e) {}
+    }
+  }
+  setInterval(tick, 700);
+  document.addEventListener('DOMContentLoaded', addStyle);
+  window.__jarvisMusic = function (a) {
+    var p = player(), v = video(), b;
+    try {
+      if (a === 'pause') { held = true; if (p && p.pauseVideo) p.pauseVideo(); else if (v) v.pause(); }
+      else if (a === 'resume') { held = false; if (p && p.playVideo) p.playVideo(); else if (v) v.play(); }
+      else if (a === 'toggle') { window.__jarvisMusic(v && !v.paused ? 'pause' : 'resume'); }
+      else if (a === 'next') { held = false; if (p && p.nextVideo) p.nextVideo(); else if ((b = document.querySelector('.ytp-next-button'))) b.click(); }
+      else if (a === 'previous') { held = false; if (p && p.previousVideo) p.previousVideo(); else if ((b = document.querySelector('.ytp-prev-button'))) b.click(); }
+    } catch (e) {}
+  };
+})();"#;
+
+fn music_url(url: &str) -> Result<tauri::Url, String> {
+    let parsed = tauri::Url::parse(url.trim()).map_err(|_| format!("not a url: {}", url))?;
+    let host = parsed.host_str().unwrap_or("").to_lowercase();
+    let youtube = host == "www.youtube.com" || host == "youtube.com" || host == "m.youtube.com";
+    if parsed.scheme() != "https" || !youtube || !(parsed.path() == "/watch" || parsed.path() == "/playlist") {
+        return Err("refused: the music window only opens a YouTube watch or playlist address".into());
+    }
+    Ok(parsed)
+}
+
+/* Rounded corners and a thin JARVIS-cyan edge (Windows 11; older Windows
+   ignores both attributes and keeps square corners). */
+#[cfg(target_os = "windows")]
+fn round_corners(win: &WebviewWindow) {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
+    let Ok(h) = win.hwnd() else { return };
+    let hwnd = h.0 as isize as HWND;
+    let round: i32 = 2; // DWMWCP_ROUND
+    let cyan: u32 = 0x00FF_E500; // COLORREF 0x00BBGGRR: rgb(0, 229, 255)
+    unsafe {
+        DwmSetWindowAttribute(hwnd, 33, &round as *const i32 as *const core::ffi::c_void, 4); // DWMWA_WINDOW_CORNER_PREFERENCE
+        DwmSetWindowAttribute(hwnd, 34, &cyan as *const u32 as *const core::ffi::c_void, 4); // DWMWA_BORDER_COLOR
+    }
+}
+#[cfg(not(target_os = "windows"))]
+fn round_corners(_win: &WebviewWindow) {}
+
+#[tauri::command]
+async fn music_window(app: tauri::AppHandle, url: String) -> Result<String, String> {
+    let parsed = music_url(&url)?;
+    if let Some(existing) = app.get_webview_window("music") {
+        existing.navigate(parsed).map_err(|e| e.to_string())?;
+        let _ = existing.unminimize();
+        let _ = existing.show();
+        raise_own_window(&existing, false);
+        return Ok("reused".into());
+    }
+    let data_dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("music-webview");
+    #[allow(unused_mut)]
+    let mut builder = WebviewWindowBuilder::new(&app, "music", WebviewUrl::External(parsed))
+        .title("JARVIS \u{2014} music")
+        .decorations(false)
+        .resizable(false)
+        .shadow(true)
+        .always_on_top(true)
+        .skip_taskbar(false)
+        .focused(false)
+        .visible(false)
+        .data_directory(data_dir)
+        .initialization_script(MUSIC_INIT);
+    #[cfg(target_os = "windows")]
+    {
+        builder = builder.additional_browser_args(
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required",
+        );
+    }
+    let win = builder.build().map_err(|e| e.to_string())?;
+    /* Top middle of the main screen, placed in physical pixels after it
+       exists (the builder's numbers are logical and get scaled twice on a
+       high-DPI screen). */
+    let monitor = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| win.current_monitor().ok().flatten());
+    if let Some(m) = monitor {
+        let scale = m.scale_factor();
+        let side = (MUSIC_SIDE * scale).round() as i32;
+        let x = m.position().x + (m.size().width as i32 - side) / 2;
+        let y = m.position().y + (MUSIC_TOP * scale).round() as i32;
+        let _ = win.set_size(tauri::PhysicalSize {
+            width: side as u32,
+            height: side as u32,
+        });
+        let _ = win.set_position(tauri::PhysicalPosition { x, y });
+    }
+    round_corners(&win);
+    let _ = win.show();
+    raise_own_window(&win, false);
+    Ok("opened".into())
+}
+
+/* pause | resume | toggle | next | previous | close | show. "not_open"
+   when he has closed it himself. */
+#[tauri::command]
+fn music_control(app: tauri::AppHandle, action: String) -> Result<String, String> {
+    let win = app.get_webview_window("music").ok_or_else(|| "not_open".to_string())?;
+    match action.as_str() {
+        "close" => {
+            win.close().map_err(|e| e.to_string())?;
+            Ok("closed".into())
+        }
+        "show" => {
+            let _ = win.unminimize();
+            let _ = win.show();
+            raise_own_window(&win, false);
+            Ok("shown".into())
+        }
+        "pause" | "resume" | "toggle" | "next" | "previous" => {
+            win.eval(&format!("window.__jarvisMusic && window.__jarvisMusic('{}')", action))
+                .map_err(|e| e.to_string())?;
+            Ok(action)
+        }
+        _ => Err(format!("unknown music action {action}")),
+    }
+}
+
+/* ON THE SCREEN, NOT IN THE TASKBAR (2.24.0). A window this app creates
+   while another program is in front is shown BEHIND that program: Windows
+   will not let a background process take the foreground, so "let's start
+   working" left the three panes as taskbar buttons under whatever he was
+   using. Raised the way Windows allows it: restored if minimised, put
+   topmost and straight back (that lifts it above every ordinary window
+   without activating it), and, when asked, given the focus after an
+   unassigned key makes this the process with the last input. While the
+   orb is expanded our panes stay topmost (orb_layer). */
+#[cfg(target_os = "windows")]
+fn raise_own_window(win: &WebviewWindow, activate: bool) {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        IsIconic, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_NOTOPMOST, HWND_TOPMOST,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
+    };
+    let Ok(h) = win.hwnd() else { return };
+    let hwnd = h.0 as isize as HWND;
+    let keep_on_top = win.label() == "music" || ORB_EXPANDED.load(Ordering::SeqCst);
+    unsafe {
+        if IsIconic(hwnd) != 0 {
+            ShowWindow(hwnd, SW_RESTORE);
+        }
+        let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE;
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags);
+        if !keep_on_top {
+            SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
+        }
+        if activate {
+            foreground_unlock();
+            SetForegroundWindow(hwnd);
+        }
+    }
+}
+#[cfg(not(target_os = "windows"))]
+fn raise_own_window(win: &WebviewWindow, activate: bool) {
+    let _ = win.unminimize();
+    let _ = win.show();
+    if activate {
+        let _ = win.set_focus();
+    }
+}
+
+/* After the three panes are placed: all of them in front, Shopify (the
+   main one) with the focus. */
+#[tauri::command]
+fn front_workspace(app: tauri::AppHandle) -> Vec<String> {
+    let mut raised = Vec::new();
+    for s in ["tiktok", "instagram", "shopify"] {
+        if let Some(win) = app.get_webview_window(&format!("ws-{}", s)) {
+            raise_own_window(&win, s == "shopify");
+            raised.push(s.to_string());
+        }
+    }
+    raised
 }
 
 #[cfg(target_os = "windows")]
@@ -3214,7 +3456,10 @@ fn main() {
             drag_send,
             scroll_send,
             pointer_send,
-            media_key
+            media_key,
+            music_window,
+            music_control,
+            front_workspace
         ])
         .setup(|app| {
             let window = app
