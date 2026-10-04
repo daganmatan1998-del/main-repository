@@ -1865,3 +1865,13 @@ hopeless for a dragon or a drone. Three changes:
 For the service to be used, the worker needs a Tripo (recommended) or Meshy
 key with credits; `/health` shows `model3d: true` and `model3d_key: "set"`
 when it is ready (see "The 3D service" near the top).
+
+## Page 2.23.2: two corrections to "never a no"
+
+- **"Make a 3D model of it" with nothing to look at** is a question for him
+  again ("of what?"), not a model invented out of nothing. When a picture is
+  in play (the camera, his screen, a photo, or what he was just told about),
+  it is a model as before.
+- **When the 3D service fails for "make it a 3D model"**, he first says why
+  in one line ("The Tripo account is out of credits..."), then "I am building
+  it in code instead", and does.

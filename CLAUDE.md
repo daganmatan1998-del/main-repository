@@ -611,6 +611,14 @@ single file `dist/index.html`.
   1024x512 JPEG) and the result carries it in __attach with "rebuild once if
   it does not read as what he asked" (turnBuildReviews: the second build is
   final). complex3d.e2e.mjs scenarios 1, 4, 7-11.
+  2.23.2: NEW3D_PRONOUN ("of it/this/that", מזה, של זה...) makes it a 3D turn
+  only when a picture is in play (images, somethingToModel(),
+  lastDescribedPicture) — otherwise "of what?" is the right answer. The lock
+  fallback speaks the failure line (its reason) + "building it in code
+  instead". TESTS: a stub that answers "Understood" to a 3D request now runs
+  the whole hand-back + stand-in in the background, which speaks over the
+  NEXT scenario; wait it out (lock.e2e, fullscreen.e2e do) and count model
+  windows from the block's own start.
 - **Background shells die with their task.** A regression started with a
   plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
   looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &
