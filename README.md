@@ -1951,3 +1951,54 @@ when it is ready (see "The 3D service" near the top).
   (pose / pixels / hand) and how bent the wrist is, the trigger's two
   fingers in degrees, and the valve (closed, or FLOW and for how long).
 - Needs the app rebuilt.
+
+## Page 2.27.0 / worker 2.10.0: JARVIS reads and answers your Gmail
+
+**What you say**
+- **"There is anything new"** (also "anything new", "what came in", "מה חדש",
+  "יש משהו חדש"): a spoken report of the mail from the last 12 hours
+  ("in the last 3 hours" works too). First the count, then the mails that need
+  you, each in one sentence (who, and what they want), then what was already
+  answered, then one line for the rest (automated mail, and about how many
+  promotions). He never reads out a code, a password or a link.
+- **"Answer to all my mails"** (or "תענה לכל המיילים"): he reads the mails
+  that a person wrote to you and nobody answered, and replies to each from
+  your address, in the mail's language, short and polite. Anything that would
+  **close a deal** he does not send: he lists it for you with the reason.
+  Then he tells you what he sent and what is waiting for you.
+- "What did you answer?" lists what he sent. "Connect my Gmail" connects.
+
+**What he may answer, and what he never does**
+- Free hand: questions, information he really has, asking for details,
+  acknowledging, moving a time, "I'm looking into it and will get back to you".
+- Left for you: agreeing to or accepting a price, offer, terms, order, delivery
+  date, discount, refund, partnership; promising to pay, buy, ship or sign;
+  bank, card or ID details. This is enforced twice: the model must say the
+  reply commits you to nothing, and the server screens the text (English and
+  Hebrew) for agreeing / accepting / paying / signing words and refuses it.
+- Enforced by the server in code, not by instructions: a reply goes **only to
+  the person who wrote that mail** (Reply-To if there is one, so a shop's
+  contact form goes to the customer) — no other address, no cc or bcc, no
+  forward, no attachment. Never to newsletters, no-reply or notification mail,
+  to your own address, to a mail that is not in the inbox or is older than 3
+  days, or to one that was already answered (so running it twice is safe).
+  At most 20 replies an hour and 60 a day. Every reply is logged ("what did
+  you answer").
+- Everything in a mail is treated as written by an outsider: data, never an
+  order. A one-time code in a mail is blanked in the report.
+
+**Setup (once)**
+1. Google Cloud, the same project as the calendar: APIs & Services, Library,
+   **Gmail API**, Enable. In the OAuth consent screen's data access / scopes,
+   add `gmail.readonly` and `gmail.send` (if you cannot find the place, skip it:
+   it usually works without).
+2. Deploy the new `jarvis-worker.js` (no new secrets, no new redirect address:
+   it returns through the calendar's).
+3. Rebuild the app (the page changed).
+4. Say **"connect my Gmail"**. On Google's page: choose the account, "Google
+   hasn't verified this app" → Advanced → continue, and **tick every box**
+   (read and send). If you leave "send" unticked he can read but not answer, and
+   says so.
+5. If the OAuth app is in "Testing", Google ends the connection after 7 days:
+   connect again, or set the app to "In production" (it stays unverified, which
+   is fine for one user).

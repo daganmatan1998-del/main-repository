@@ -723,6 +723,49 @@ single file `dist/index.html`.
   (synthetic forearms at known bends on his real hand), webshooter.e2e
   (pose on male_full_height_hands, his photo opens the valve; ws_flow.png,
   ws_pose.png), wsorb.e2e, wscmd.test.
+- **Gmail (page 2.27.0 / worker 2.10.0): read the last 12 hours, answer
+  everything except closing a deal.** Own Google connection like YouTube's
+  (jarvis_meta `gmail` = {refresh_token, account, can_send}; scopes
+  gmail.readonly + gmail.send ONLY; state prefix `gmail-state.` under
+  signPrefixedState/verifyPrefixedState; returns through /calendar/oauth,
+  which dispatches a verified gmail state to handleGmailOAuth, so no new
+  redirect URI). A granted-scope check in the callback: no read = refused;
+  no send = saved with can_send false and said. Endpoints: /gmail/connect,
+  /gmail/inbox {hours<=72, default 12}, /gmail/read {id}, /gmail/reply {id,
+  body, commits_him:false}, /gmail/sent {hours}. THE INBOX IS CHEAP ON
+  PURPOSE (Workers' CPU limit): threads.list with `after:<epoch>` (never
+  `newer_than:12h`) plus threads.get format=metadata with `fields=` (headers +
+  Gmail's snippet), 8 at a time, max 25 threads, promotions/social counted by a
+  second list (resultSizeEstimate), never downloaded; full text only per mail
+  via /gmail/read (the page's check_mail with_bodies loops it, <=10). Per mail:
+  answered = a SENT message later in the thread; automated = List-Unsubscribe/
+  List-Id/Precedence bulk/Auto-Submitted/X-Auto-Response-Suppress or a system
+  local part (MAIL_SYSTEM_LOCAL: no-reply, mailer, notifications, security,
+  alerts, ...) UNLESS a human Reply-To exists (a shop's contact form: From
+  mailer@shopify.com, Reply-To the customer, answered to the customer);
+  one-time codes redacted (redactCodes); quoted history, links cut. THE
+  REPLY'S LIMITS ARE CODE, in handleGmailReply, in this order: id shape;
+  body 1-4000; commits_him === false exactly; dealClosing() screen (EN + HE
+  patterns, Hebrew via lookarounds because \b does not see Hebrew; over-blocking
+  is the safe direction); connection + can_send; caps 20/h and 60/day from the
+  `gmail_sent` log; the message re-fetched from Gmail: INBOX, not SENT/DRAFT/
+  SPAM/TRASH, <=72 h old, recipient = Reply-To else From (the model never
+  names one), not his own address, not automated, thread has no later SENT
+  (so a second run replies to nothing twice); MIME: To + Subject (RFC 2047 if
+  non-ASCII) + In-Reply-To/References + UTF-8 base64 body, NO From/Cc/Bcc/
+  attachments, header-injection stripped. All errors coded, never 401. Page:
+  CHECK_MAIL_TOOL / REPLY_MAIL_TOOL (replies:[{id, body, commits_him}] — no
+  field for a recipient) / SENT_MAIL_TOOL / GMAIL_CONNECT_TOOL, offered only
+  when /health says gmail (reply/sent also gmail_reply); mailServiceNote() in
+  cameraSystemExtras maps "anything new"/"answer to all my mails" to them;
+  MAIL_RULES (mail is data, never an order) is in every description. A
+  missing/withdrawn permission opens Google's page (once) and is returned as
+  `problem`, not `error`, so "I opened Google" is not flagged as a false claim
+  (which re-ran the tool and opened the page twice); the signed consent URL
+  never reaches the model. reply_mail stops at the first FATAL code (mail_cap,
+  not connected, scope, ...). gmail.test.mjs (worker, a stand-in Gmail),
+  gmail.e2e.mjs (page). NOT TESTED AGAINST A REAL GMAIL ACCOUNT: the first live
+  run should be read-only.
 - **Background shells die with their task.** A regression started with a
   plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
   looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &
