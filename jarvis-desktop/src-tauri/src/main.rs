@@ -2297,10 +2297,15 @@ fn media_key(key: String) -> Result<String, String> {
    MUSIC IN A WINDOW OF ITS OWN (2.24.0)
 
    "Let's put some music" opened the playlist in Chrome, on its page, not
-   playing. Now it is a small square window at the top middle of the screen,
-   rounded corners, no frame, playing from the first song: the YouTube watch
-   page itself (an embed refuses many music videos), with the page around
-   the player hidden and the picture filling the square.
+   playing. Now it is a small window at the top middle of the screen, no
+   frame, playing from the first song: the YouTube watch page itself (an
+   embed refuses many music videos), with the page around the player
+   hidden and the picture filling it. Since 2.25.0 an ELLIPSE, twice as wide
+   as it is tall (the square took too much of the screen): the window's own
+   region is the ellipse, so its corners are not there at all (not drawn,
+   not clickable), and the page draws a thin cyan ring just inside the edge,
+   which also smooths the region's stepped outline. YouTube's own controls
+   would be cut by the curve, so they are hidden: he controls it by voice.
 
    Its own WebView2 profile (data_directory), because autoplay with sound
    needs --autoplay-policy=no-user-gesture-required, and WebView2 refuses to
@@ -2311,7 +2316,8 @@ fn media_key(key: String) -> Result<String, String> {
    the playlist must be public or unlisted. Pause / next / previous / close
    are music_control; the page script answers window.__jarvisMusic.
 ------------------------------------------------------------------ */
-const MUSIC_SIDE: f64 = 360.0; // logical px, a square
+const MUSIC_W: f64 = 360.0; // logical px: an ellipse twice as wide as it is tall
+const MUSIC_H: f64 = 180.0;
 const MUSIC_TOP: f64 = 14.0; // logical px from the top of the screen
 
 const MUSIC_INIT: &str = r#"(function () {
@@ -2323,7 +2329,9 @@ const MUSIC_INIT: &str = r#"(function () {
     '#masthead-container,ytd-masthead,#secondary,#below,#comments,#related,ytd-watch-metadata,#chat,#guide,tp-yt-app-drawer,ytd-mini-guide-renderer,#panels,.ytp-pause-overlay,.ytp-ce-element,.ytp-endscreen-content,.ytp-paid-content-overlay{display:none!important}',
     '#movie_player{position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;z-index:2147483000!important;background:#000!important}',
     '#movie_player .html5-video-container,#movie_player video.html5-main-video{position:absolute!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important}',
-    '#movie_player video.html5-main-video{object-fit:cover!important}'
+    '#movie_player video.html5-main-video{object-fit:cover!important}',
+    '.ytp-chrome-top,.ytp-chrome-bottom,.ytp-gradient-top,.ytp-gradient-bottom,.ytp-watermark,.ytp-cards-button,.ytp-cards-teaser,.ytp-iv-player-content,.ytp-ce-element{display:none!important}',
+    '#jarvis-music-ring{position:fixed;left:0;top:0;width:100vw;height:100vh;border-radius:50%;pointer-events:none;z-index:2147483647;box-shadow:inset 0 0 0 2px rgba(0,229,255,0.9),inset 0 0 16px rgba(0,229,255,0.35)}'
   ].join('\n');
   function addStyle() {
     if (document.getElementById('jarvis-music-css')) return;
@@ -2334,6 +2342,17 @@ const MUSIC_INIT: &str = r#"(function () {
     s.textContent = CSS;
     root.appendChild(s);
   }
+  function addRing() {
+    if (!document.body || document.getElementById('jarvis-music-ring')) return;
+    var r = document.createElement('div');
+    r.id = 'jarvis-music-ring';
+    document.body.appendChild(r);
+  }
+  /* The skip button sits in the corner the ellipse cuts off. */
+  function skipAd() {
+    var b = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');
+    if (b && b.offsetParent !== null) { try { b.click(); } catch (e) {} }
+  }
   var started = Date.now(), held = false, touched = false;
   function player() { return document.getElementById('movie_player'); }
   function video() { return document.querySelector('#movie_player video') || document.querySelector('video'); }
@@ -2341,6 +2360,8 @@ const MUSIC_INIT: &str = r#"(function () {
   window.addEventListener('yt-navigate-finish', function () { started = Date.now(); });
   function tick() {
     addStyle();
+    addRing();
+    skipAd();
     if (location.pathname === '/playlist') {
       var a = document.querySelector('ytd-playlist-video-renderer a#video-title[href*="/watch"], ytd-playlist-video-renderer a[href*="/watch?v="], a[href*="/watch?v="][href*="list="]');
       if (a && a.href) { location.replace(a.href); return; }
@@ -2375,23 +2396,23 @@ fn music_url(url: &str) -> Result<tauri::Url, String> {
     Ok(parsed)
 }
 
-/* Rounded corners and a thin JARVIS-cyan edge (Windows 11; older Windows
-   ignores both attributes and keeps square corners). */
+/* The window IS the ellipse (2.25.0): its region, in its own physical
+   pixels. Windows owns the region once it is set (never deleted here). */
 #[cfg(target_os = "windows")]
-fn round_corners(win: &WebviewWindow) {
+fn ellipse_window(win: &WebviewWindow, w: i32, h: i32) {
     use windows_sys::Win32::Foundation::HWND;
-    use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
-    let Ok(h) = win.hwnd() else { return };
-    let hwnd = h.0 as isize as HWND;
-    let round: i32 = 2; // DWMWCP_ROUND
-    let cyan: u32 = 0x00FF_E500; // COLORREF 0x00BBGGRR: rgb(0, 229, 255)
+    use windows_sys::Win32::Graphics::Gdi::{CreateEllipticRgn, SetWindowRgn};
+    let Ok(hw) = win.hwnd() else { return };
+    let hwnd = hw.0 as isize as HWND;
     unsafe {
-        DwmSetWindowAttribute(hwnd, 33, &round as *const i32 as *const core::ffi::c_void, 4); // DWMWA_WINDOW_CORNER_PREFERENCE
-        DwmSetWindowAttribute(hwnd, 34, &cyan as *const u32 as *const core::ffi::c_void, 4); // DWMWA_BORDER_COLOR
+        let rgn = CreateEllipticRgn(0, 0, w + 1, h + 1);
+        if !rgn.is_null() {
+            SetWindowRgn(hwnd, rgn, 1);
+        }
     }
 }
 #[cfg(not(target_os = "windows"))]
-fn round_corners(_win: &WebviewWindow) {}
+fn ellipse_window(_win: &WebviewWindow, _w: i32, _h: i32) {}
 
 #[tauri::command]
 async fn music_window(app: tauri::AppHandle, url: String) -> Result<String, String> {
@@ -2413,7 +2434,7 @@ async fn music_window(app: tauri::AppHandle, url: String) -> Result<String, Stri
         .title("JARVIS \u{2014} music")
         .decorations(false)
         .resizable(false)
-        .shadow(true)
+        .shadow(false)
         .always_on_top(true)
         .skip_taskbar(false)
         .focused(false)
@@ -2435,18 +2456,18 @@ async fn music_window(app: tauri::AppHandle, url: String) -> Result<String, Stri
         .ok()
         .flatten()
         .or_else(|| win.current_monitor().ok().flatten());
+    let scale = monitor.as_ref().map(|m| m.scale_factor()).unwrap_or(1.0);
+    let (w, h) = ((MUSIC_W * scale).round() as i32, (MUSIC_H * scale).round() as i32);
+    let _ = win.set_size(tauri::PhysicalSize {
+        width: w as u32,
+        height: h as u32,
+    });
     if let Some(m) = monitor {
-        let scale = m.scale_factor();
-        let side = (MUSIC_SIDE * scale).round() as i32;
-        let x = m.position().x + (m.size().width as i32 - side) / 2;
+        let x = m.position().x + (m.size().width as i32 - w) / 2;
         let y = m.position().y + (MUSIC_TOP * scale).round() as i32;
-        let _ = win.set_size(tauri::PhysicalSize {
-            width: side as u32,
-            height: side as u32,
-        });
         let _ = win.set_position(tauri::PhysicalPosition { x, y });
     }
-    round_corners(&win);
+    ellipse_window(&win, w, h);
     let _ = win.show();
     raise_own_window(&win, false);
     Ok("opened".into())

@@ -1413,6 +1413,19 @@
        with the moment the camera captured it). */
     let lateEma = null, inferEma = null, camFps = 0, trackFps = 0, perfAt = 0, perfN = 0, perfP0 = -1, perfT0 = 0, capturedStamps = false;
     let rec = null;
+    /* A FILTER ON HIS HANDS (2.25.0, the web shooters). While one is set the
+       tracker keeps reading (two hands) and hands each read to it, and NOTHING
+       reaches the computer: no zoom, no turn, no scroll, no finger mouse.
+       Whatever was under way ends the moment it is set. It runs even with
+       hand control switched off in the settings. */
+    let filterFn = null;
+    function endGestures(){
+      relay.handle({ type: 'end', state: 'idle' });
+      pointer.handle({ type: 'end' });
+      if(gesture.state !== 'idle') manager.handle({ type: 'end' });
+      gesture.resetGesture();
+      drawOverlay(overlay, video, null, '');
+    }
     /* Which program is in front, about once a second even between
        gestures. Rust remembers the last program he was in only when it is
        asked; without this, clicking the camera window and then pinching
@@ -1556,6 +1569,13 @@
             ensureTracker().catch(() => {});
             return;
           }
+          if(filterFn){
+            if(tracker.hands !== 2 && t2 - lastHandsSwitch > 1500 && tracker.setHands(2)) lastHandsSwitch = t2;
+            try{ filterFn({ t: t2, hands, width: video.videoWidth, height: video.videoHeight }); }
+            catch(e){ if(o.onStatus) o.onStatus({ kind: 'error', reason: 'filter: ' + String((e && e.message) || e) }); }
+            if(rec) recordFrame(t2, t, meta, hands, {});
+            return;
+          }
           const ev = gesture.update({ t: t2, hands, width: video.videoWidth, height: video.videoHeight });
           lastEv = ev;
           /* ONE HAND WHILE THE FINGER IS THE MOUSE (2.21.0): the second-hand
@@ -1643,8 +1663,19 @@
           if(o.onStatus) o.onStatus({ kind: 'recording', left: secs });
         });
       },
+      /* Set a filter (a function given each read), or null to give the hands
+         back to the gestures. */
+      setFilter(fn){
+        filterFn = typeof fn === 'function' ? fn : null;
+        if(filterFn){
+          endGestures();
+          if(!running) api.start();
+        } else if(!settings.enabled) api.stop();
+        return !!filterFn;
+      },
+      get filtering(){ return !!filterFn; },
       start(){
-        if(running || !settings.enabled) return Promise.resolve(false);
+        if(running || (!settings.enabled && !filterFn)) return Promise.resolve(false);
         running = true;
         /* Whether a 3D model is open, every two seconds, for precise control. */
         if(!pingTimer && o.listen){ relay.ping(); pingTimer = setInterval(() => relay.ping(), 2000); }
@@ -1664,12 +1695,12 @@
       configure(s){
         settings = normaliseSettings(s);
         gesture.configure(settings); manager.configure(settings);
-        if(settings.enabled) api.start(); else api.stop();
+        if(settings.enabled || filterFn) api.start(); else api.stop();
       },
       stats(){ return { frames, avgMs: frames ? spent / frames : 0, running, delegate: tracker && tracker.delegate, switched,
                         missed, repeats, fps, everyFrame: byFrame, handsAt, last: lastEv,
                         camFps, trackFps, inferMs: inferEma, lateMs: lateEma, stamped: capturedStamps, recording: !!rec,
-                        hands: tracker && tracker.hands, inputW, idleSkips, resting: now() - handsAt > IDLE_AFTER_MS }; }
+                        hands: tracker && tracker.hands, inputW, idleSkips, resting: now() - handsAt > IDLE_AFTER_MS, filtering: !!filterFn }; }
     };
     return api;
   }

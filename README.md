@@ -1898,3 +1898,28 @@ when it is ready (see "The 3D service" near the top).
 - **"Let's start working"**: the three panes now open in front of whatever
   he was using, Shopify focused — not behind it, as taskbar buttons. Needs
   the app rebuilt.
+
+## Page 2.25.0: web shooters on your hands, and a smaller music window
+
+- **"Activate web shooter"** (or "web shooters on", "suit up", "תפעיל את
+  יורי הקורים") puts your WS-01 web shooter (the 3D file you sent) on your
+  wrists in the camera window: on the inner wrist, the palm trigger in the
+  palm, one on each hand (the left one mirrored), following the hand as it
+  moves and turns, and hidden behind the wrist when the back of the hand
+  faces the camera. The camera opens by itself if it is closed.
+- **While they are on, the camera controls nothing on the computer**: no
+  zoom, no scrolling, no turning, no finger mouse. They do not work together.
+- **Fold your middle and ring fingers** (index and pinky out, the Spider-Man
+  sign) and a web shoots out of the wrist: two white threads twisted
+  together, landing as a web. Aim to the side and it crosses the picture;
+  aim at the camera and it lands big, in front of you. Open the fingers and
+  fold again for the next one. Each shot has a "thwip".
+- **"Take down the web shooters"** (or "web shooters off", "תוריד את יורי
+  הקורים") takes them off, and hand control comes back.
+- "Check yourself" says so when the web shooters are why your hands control
+  nothing.
+- **The music window** is now half the height and an ellipse (360×180 at the
+  top middle of the screen), with a thin cyan edge. YouTube's own buttons are
+  hidden (the curve would cut them); stop, pause, next and previous are by
+  voice. An ad's "Skip" is pressed by itself.
+- Needs the app rebuilt.

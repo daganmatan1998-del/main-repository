@@ -637,9 +637,12 @@ single file `dist/index.html`.
   WITH a tool result (the plain-code request comes last now).
 - **Music has its own window (2.24.0).** Rust music_window(url): label
   "music", WebviewUrl::External (youtube.com /watch or /playlist only),
-  frameless, 360 logical px square at the top middle of the primary monitor
-  (placed in physical px after build), always on top, not focused, rounded
-  by DWM (attr 33 = DWMWCP_ROUND, attr 34 = cyan border), its OWN
+  frameless, 360x180 logical px at the top middle of the primary monitor
+  (placed in physical px after build), always on top, not focused; since
+  2.25.0 an ELLIPSE: SetWindowRgn(CreateEllipticRgn) in its own physical
+  px (corners neither drawn nor clickable; shadow off), the page draws
+  #jarvis-music-ring (inset cyan box-shadow, border-radius 50%) to smooth the
+  stepped edge, YouTube's chrome is hidden and skip-ad clicked; its OWN
   data_directory (music-webview) because it needs additional_browser_args
   with --autoplay-policy=no-user-gesture-required and WebView2 refuses
   different args in a profile already open. MUSIC_INIT (initialization
@@ -661,6 +664,38 @@ single file `dist/index.html`.
   foreground_unlock + SetForegroundWindow. open_service_window raises every
   pane; the page then calls front_workspace (Shopify focused). work.test,
   workfront.e2e.mjs.
+- **Web shooters (2.25.0): a filter on his hands, and the camera controls
+  nothing while it is on.** gesture-zoom.js setFilter(fn): every read goes to
+  fn({t, hands, width, height}) instead of the gestures (endGestures() ends
+  zoom/turn/pointer once; two hands asked; runs even with hand control off;
+  stats().filtering). webshooter.js (loaded lazily by camera.html with
+  three.min.js, GLTFLoader, RoomEnvironment): his WS-01 GLB in
+  dist/filters/ws-01-web-shooter.glb — metres, X along the forearm to the
+  fingers (nozzle 0.153, palm trigger 0.23-0.26), Y out of the skin (INNER
+  wrist), Z to the thumb: a RIGHT arm. handFrame: along = wrist->middle
+  knuckle, across = pinky->index knuckle, out of the palm = across x along
+  for a right hand, along x across for a left; the tracker's label IS the
+  real hand on the unmirrored video (measured: right_hands.jpg -> "Right";
+  palms to the camera give z < 0 on victory/woman_hands). A left hand's
+  basis has det -1 (three mirrors it). Scale = palm px / 0.092 m; model at
+  (-WRIST_X 0.16, LIFT_Y 0.027); occluders (colorWrite false, renderOrder
+  -1): forearm elliptic cylinder, palm box to just past the knuckles (the
+  trigger showed across the back of the hand when it was shorter). Per-hand
+  tracks by nearest wrist, handedness voted with a margin, One Euro on
+  origin/axes/scale. Thwip = middle and ring bent >= 80 deg, index <= 55,
+  pinky <= 70; once per fold (2 frames on, 2 open to re-arm; 'between' does
+  neither). The web: from the nozzle along out-of-palm + 0.35 along, two
+  threads in a double helix, lateral travel shrunk by (1 - 0.6*toward) so a
+  shot at the camera lands big in front; splat of 8 curly spokes and sagging
+  rings; 1.47 s life. camera.html: jarvis://filter {name:'web_shooter', on}
+  -> jarvis://filter-status; jarvis://web-shot -> the orb's thwipSound (a
+  generated WAV). Orb: O:webshooter in the lexicon (not "web" alone, not
+  Spider-Man), OFF gained take down/take off/remove/..., N gained "take";
+  תבטל stays FLOW_NOT (the model's, which has web_shooters). setWebShooters
+  opens the camera if needed and asks every second up to 20 s. The desktop
+  has no text-only mode (the orb forces silentMode off). Tests:
+  wsfilter.test (real photos, joints folded), webshooter.e2e (real tracker,
+  screenshots ws_*.png), wscmd.test, wsorb.e2e.
 - **Background shells die with their task.** A regression started with a
   plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
   looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &

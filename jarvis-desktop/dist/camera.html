@@ -41,6 +41,11 @@
      over the picture and mirrored with it. Never takes a click. */
   #gz{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
   #gz.mirrored{ transform:scaleX(-1); }
+  /* The web shooters (2.25.0, webshooter.js): the model on his wrists (WebGL)
+     and the webs (2D), over the picture, mirrored with it, never a click. */
+  #ws3d, #wsfx{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:none; }
+  #ws3d.on, #wsfx.on{ display:block; }
+  #ws3d.mirrored, #wsfx.mirrored{ transform:scaleX(-1); }
   #bar{
     flex:0 0 auto; display:flex; align-items:center; gap:10px;
     padding:6px 10px; background:rgba(4,12,20,0.94);
@@ -147,7 +152,8 @@
                      (s.resting ? ' · resting' : '');   // 2.22.0: no hand in view, reading ~8 a second
           showState(); emit('jarvis://gesture-status', s); return;
         }
-        if(s.kind === 'ready') gzNote = '✋ zoom';
+        if(wsOn){ /* the web shooters' line stays while they are on */ }
+        else if(s.kind === 'ready') gzNote = '✋ zoom';
         else if(s.kind === 'foreground') gzNote = '✋ zoom' + (s.supported && s.name ? ' · ' + s.name : '');
         else if(s.kind === 'failed') gzNote = 'no hand tracking';
         showState();
@@ -156,7 +162,69 @@
     });
     gz.start();
     window.__gz = gz;   // for the tests: stats() and the live gesture state
+    if(wsOn && WS) gz.setFilter(WS.update);
   }
+
+  /* THE WEB SHOOTERS (2.25.0). The orb asks on jarvis://filter; three.js,
+     its two add-ons and the model load here the first time only. While they
+     are on, the hands go to them and the camera controls nothing. */
+  var WS = null, wsLoading = null, wsOn = false;
+  function loadScript(src){
+    return new Promise(function(res, rej){
+      var s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = function(){ rej(new Error('could not load ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+  function ensureWebShooter(){
+    if(WS) return Promise.resolve(WS);
+    if(!wsLoading){
+      wsLoading = (window.THREE ? Promise.resolve() : loadScript('./vendor/three/build/three.min.js'))
+        .then(function(){ return window.THREE.GLTFLoader ? null : loadScript('./vendor/three/examples/js/loaders/GLTFLoader.js'); })
+        .then(function(){ return window.THREE.RoomEnvironment ? null : loadScript('./vendor/three/examples/js/environments/RoomEnvironment.js'); })
+        .then(function(){ return window.JarvisWebShooter ? null : loadScript('./webshooter.js'); })
+        .then(function(){
+          var ws = window.JarvisWebShooter.create({
+            stage: document.getElementById('stage'), video: feed,
+            mirrored: function(){ return mirrored; },
+            onShot: function(info){ emit('jarvis://web-shot', info); }
+          });
+          return ws.load('./filters/ws-01-web-shooter.glb').then(function(){ WS = ws; window.__ws = ws; return ws; });
+        })
+        .catch(function(e){ wsLoading = null; throw e; });
+    }
+    return wsLoading;
+  }
+  function webShooters(on){
+    if(!on){
+      wsOn = false;
+      if(WS) WS.show(false);
+      if(gz) gz.setFilter(null);
+      if(/WEB SHOOTERS/.test(gzNote)) gzNote = '';
+      showState();
+      emit('jarvis://filter-status', { name: 'web_shooter', on: false });
+      return;
+    }
+    ensureWebShooter().then(function(ws){
+      wsOn = true;
+      ws.setMirrored(mirrored);
+      ws.show(true);
+      if(gz) gz.setFilter(ws.update);
+      gzNote = '\ud83d\udd78 WEB SHOOTERS';
+      showState();
+      emit('jarvis://filter-status', { name: 'web_shooter', on: true, tracking: !!gz });
+    }, function(err){
+      emit('jarvis://filter-status', { name: 'web_shooter', on: false, error: String((err && err.message) || err) });
+    });
+  }
+  if(ev.listen) ev.listen('jarvis://filter', function(e){
+    var p = (e && e.payload) || {};
+    if(p.name !== 'web_shooter') return;
+    /* Asked again while already so (the orb repeats until it hears back):
+       answered, not redone. */
+    if(!!p.on === wsOn && (!p.on || WS)){ emit('jarvis://filter-status', { name: 'web_shooter', on: wsOn, tracking: !!gz }); return; }
+    webShooters(!!p.on);
+  });
   if(ev.listen) ev.listen('jarvis://gesture-settings', function(e){
     var s = e && e.payload;
     if(!s || typeof s !== 'object') return;
@@ -459,6 +527,7 @@
     mirrored = !mirrored;
     feed.classList.toggle('mirrored', mirrored);
     if(gzOverlay) gzOverlay.classList.toggle('mirrored', mirrored);
+    if(WS) WS.setMirrored(mirrored);
   });
 
   /* The orb asks for one out of turn, when it wants to look right now

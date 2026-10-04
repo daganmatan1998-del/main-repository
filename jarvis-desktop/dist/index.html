@@ -2521,7 +2521,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.24.0';
+const APP_VERSION = '2.25.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -7621,6 +7621,7 @@ async function selfCheck(){
     /* 4. Things on this side that look like "he is ignoring me". */
     let muted = false; try{ muted = !!(window.__orbMuted && window.__orbMuted()); }catch(e){}
     if(muted) said.push(he ? 'ההקשבה שלי כבויה — בתפריט, "הפעל הקשבה".' : 'My listening is switched off — "Listen" in this menu turns it back on.');
+    if(webShootersOn) said.push(he ? 'יורי הקורים מופעלים, אז השליטה בידיים כבויה עד שתוריד אותם.' : 'The web shooters are on, so hand control is off until you take them down.');
     else if(pttMode) said.push(he ? 'לחץ-ודבר פועל: אני שומע רק כשהמקש לחוץ.' : 'Push-to-talk is on: I only hear you while the key is held.');
     if(modelLock) said.push(he ? 'אני נעול על בניית מודל תלת מימד עד שהוא יסתיים.' : 'I am locked on building a 3D model until it finishes.');
     if(liveActive()){
@@ -9115,6 +9116,108 @@ async function callMusicTool(input){
                          note: action === 'play' ? (r.in_window ? 'It is playing from the first video in his music window at the top of the screen. Confirm in a few words.' : 'It is playing on YouTube from the first video. Confirm in a few words.') : 'Done. Confirm in a few words.' };
   return { ok: false, code: r && r.code, error: (r && r.error) || 'failed', tell_the_user: musicLine(r, false, action),
            needs_connect: !!(r && r.needs_connect), connect_opened: !!(r && r.connect_opened) };
+}
+
+/* ------------------------------------------------------------------
+   WEB SHOOTERS (2.25.0). His WS-01 web shooter (his own 3D file) as a
+   filter on his hands in the camera window (webshooter.js): "activate web
+   shooter" puts them on, opening the camera if it is closed; "take down the
+   web shooters" takes them off. While they are on, the camera controls
+   nothing on the computer; folding the middle and ring fingers fires a web,
+   and the camera window tells the orb (jarvis://web-shot), which makes the
+   "thwip". The camera window is asked until it answers (it may still be
+   opening, and loads three.js and the model the first time).
+------------------------------------------------------------------ */
+const WEB_SHOOTER_TOOL = {
+  name: 'web_shooters',
+  description: "His WS-01 web shooters, as a filter on his hands in the camera window (desktop only). on=true puts them on — \"activate web shooter\", \"web shooters on\", \"suit up\", \"תפעיל את יורי הקורים\" — and opens the camera if it is closed; on=false takes them off — \"take down the web shooters\", \"תוריד את יורי הקורים\". While they are on, hand control of the computer is OFF (no zoom, scrolling, turning or finger mouse); folding the middle and ring fingers fires a web. Confirm in a few words; if it returns tell_the_user, say that instead.",
+  input_schema: {
+    type: 'object',
+    properties: { on: { type: 'boolean', description: 'true puts them on, false takes them down.' } },
+    required: ['on']
+  }
+};
+let webShootersOn = false, wsWaiter = null, wsHinted = false;
+async function setWebShooters(on){
+  on = !!on;
+  if(!IS_DESKTOP) return { ok: false, code: 'desktop_only', error: "the web shooters are in the desktop app's camera window" };
+  const ev = window.__TAURI__ && window.__TAURI__.event;
+  if(!ev || !ev.emit) return { ok: false, code: 'no_bridge', error: 'the desktop bridge is unavailable' };
+  if(!on && !liveActive()){ webShootersOn = false; return { ok: true, on: false, already: true }; }
+  if(on && !liveActive()){
+    try{ await startLive(); }catch(err){}
+    if(!liveActive()) return { ok: false, code: 'no_camera', error: 'the camera would not open' };
+  }
+  return await new Promise((resolve) => {
+    let tries = 0, timer = null;
+    const finish = (r) => { clearInterval(timer); wsWaiter = null; resolve(r); };
+    wsWaiter = (p) => {
+      if(p.error) finish({ ok: false, code: 'filter_failed', error: String(p.error) });
+      else if(!!p.on === on) finish({ ok: true, on });
+    };
+    const ask = () => { try{ const r = ev.emit('jarvis://filter', { name: 'web_shooter', on }); if(r && r.catch) r.catch(() => {}); }catch(e){} };
+    ask();
+    timer = setInterval(() => {
+      if(++tries > 20){ finish({ ok: false, code: 'no_answer', error: 'the camera window did not answer' }); return; }
+      ask();
+    }, 1000);
+  });
+}
+function webShooterLine(r, on, he){
+  if(r && r.ok){
+    if(!on) return r.already ? (he ? 'יורי הקורים כבר למטה.' : 'The web shooters are already down.')
+                             : (he ? 'הורדתי את יורי הקורים. השליטה בידיים חזרה.' : 'Web shooters down. Hand control is back.');
+    const first = !wsHinted;
+    wsHinted = true;
+    return he ? 'יורי הקורים מופעלים.' + (first ? ' תקפל את האמה והקמיצה כדי לירות.' : '')
+              : 'Web shooters online.' + (first ? ' Fold your middle and ring fingers to fire.' : '');
+  }
+  const code = r && r.code;
+  if(code === 'no_camera') return he ? 'המצלמה לא נפתחה, אז אין על מה להלביש אותם.' : 'The camera would not open, so there is nothing to put them on.';
+  if(code === 'no_answer') return he ? 'חלון המצלמה לא ענה. אם האפליקציה עוד לא נבנתה מחדש, צריך לבנות אותה.' : 'The camera window did not answer. If the app has not been rebuilt yet, it needs rebuilding.';
+  if(code === 'filter_failed') return he ? 'לא הצלחתי לטעון את יורי הקורים: ' + r.error : 'I could not load the web shooters: ' + r.error;
+  return he ? 'יורי הקורים עובדים רק באפליקציה.' : 'The web shooters only work in the desktop app.';
+}
+async function callWebShooterTool(input){
+  const on = !(input && input.on === false);
+  const r = await setWebShooters(on);
+  if(r.ok) return { ok: true, on, note: on
+    ? 'They are on his hands in the camera window; hand control of the computer is off until they come down. Confirm in a few words; the first time, say that folding the middle and ring fingers fires a web.'
+    : 'They are down and hand control is back. Confirm in a few words.' };
+  return { ok: false, code: r.code, error: r.error, tell_the_user: webShooterLine(r, on, false) };
+}
+/* The "thwip": a quarter second of noise through a closing filter with a
+   falling chirp, made once as a WAV and played like his voice is. Not in
+   text-only mode. */
+let thwipUrl = null;
+function thwipSound(){
+  if(silentMode || !IS_DESKTOP) return;
+  try{
+    if(!thwipUrl){
+      const rate = 22050, n = Math.round(rate * 0.24), pcm = new Int16Array(n);
+      let lp = 0, seed = 12345;
+      for(let i = 0; i < n; i++){
+        const t = i / rate;
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        const noise = seed / 0x3fffffff - 1;
+        lp += (noise - lp) * (0.55 - 0.45 * (t / 0.24));
+        const env = Math.min(1, t / 0.006) * Math.exp(-t * 18);
+        const tone = Math.sin(2 * Math.PI * (1800 - 5200 * t) * t) * 0.25 * Math.exp(-t * 30);
+        pcm[i] = Math.round(Math.max(-1, Math.min(1, (lp * 0.9 + tone) * env)) * 22000);
+      }
+      const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+      const w = (o, s) => { for(let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+      w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true);
+      v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true);
+      v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+      new Int16Array(buf, 44).set(pcm);
+      thwipUrl = URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+    }
+    const a = new Audio(thwipUrl);
+    a.volume = 0.55;
+    const p = a.play();
+    if(p && p.catch) p.catch(() => {});
+  }catch(e){}
 }
 
 /* WhatsApp to his own phone, through the worker. There is deliberately no
@@ -12127,7 +12230,16 @@ const LOOSE_LEXICON = new Map();
                   'playlist', 'my playlist', 'the playlist', 'some beats', 'beats', 'a few songs',
                   'מוזיקה', 'המוזיקה', 'מוסיקה', 'המוסיקה', 'מוזיקה טובה', 'שירים', 'השירים', 'שיר', 'השיר', 'פלייליסט',
                   'הפלייליסט', 'פליליסט', 'הפליליסט', 'מנגינה', 'קצת מוזיקה', 'קצת שירים']);
+  /* The web shooters (2.25.0). Not "web" alone ("open the web"), and not
+     Spider-Man (a film, a game). */
+  add('O:webshooter', ['web shooter', 'web shooters', 'webshooter', 'webshooters', 'web shooting', 'web shoot', 'web slinger',
+                       'web slingers', 'web blaster', 'web blasters', 'web launcher', 'web launchers', 'webs', 'the webs',
+                       'web shooter filter', 'web shooters filter',
+                       'יורה קורים', 'יורי קורים', 'יורה הקורים', 'יורי הקורים', 'משגר קורים', 'משגרי קורים', 'משגרי הקורים',
+                       'קורים', 'הקורים', 'וב שוטר', 'ווב שוטר', 'וב שוטרס', 'ווב שוטרס', 'ווב שוטרים', 'וב שוטרים']);
   add('ON', ['open', 'open up', 'start', 'start up', 'turn on', 'switch on', 'activate', 'enable', 'show', 'show me',
+             'equip', 'suit up', 'gear up', 'wear', 'arm', 'engage', 'deploy', 'online', 'power up',
+             'תלביש', 'להלביש', 'תלבש', 'ללבוש', 'לבש', 'תחמש',
              'see', 'let me see', 'view', 'bring up', 'pull up', 'fire up', 'boot up', 'launch', 'load', 'put on',
              'go', 'go to', 'go into', 'enter', 'visit', 'take me to', 'navigate to', 'switch to', 'display', 'run',
              'begin', 'on', 'up', 'maximize', 'maximise', 'expand', 'set up', 'setup', 'prepare',
@@ -12140,13 +12252,15 @@ const LOOSE_LEXICON = new Map();
              'תגדיל', 'להגדיל', 'תציג', 'להציג', 'הצג', 'תכין', 'להכין', 'תסדר', 'לסדר', 'תקפיץ', 'דלוקה', 'פתוחה',
              'נשמע', 'לשמוע', 'תשמיע', 'השמע', 'להשמיע', 'תשמיעי', 'נגן', 'תנגן', 'לנגן', 'ננגן', 'תנגני', 'נקשיב', 'להקשיב']);
   add('OFF', ['close', 'shut', 'shut down', 'shut off', 'turn off', 'switch off', 'stop', 'kill', 'disable', 'deactivate',
+              'take down', 'take off', 'remove', 'disengage', 'unequip', 'disarm', 'offline', 'power down', 'stand down',
+              'תסיר', 'להסיר', 'הסר', 'תפרק',
               'hide', 'end', 'exit', 'leave', 'quit', 'get out of', 'go out of', 'get rid of', 'put away', 'cancel',
               'minimize', 'minimise', 'off', 'down', 'out of', 'away', 'pause', 'pausing',
               'closing', 'turning off', 'switching off', 'shutting', 'shutting down', 'stopping', 'killing', 'hiding',
               'סגור', 'תסגור', 'תסגרי', 'לסגור', 'נסגור', 'כבה', 'תכבה', 'תכבי', 'לכבות', 'נכבה', 'תפסיק', 'להפסיק',
               'הפסק', 'תעצור', 'לעצור', 'עצור', 'תוריד', 'להוריד', 'תסתיר', 'להסתיר', 'צא', 'תצא', 'לצאת', 'צאי', 'נצא',
               'תבטל', 'לבטל', 'בטל', 'תקטין', 'להקטין', 'כבויה', 'סגורה']);
-  add('N', ['turn', 'switch', 'put', 'get', 'bring', 'pull', 'fire', 'make', 'make it', 'make yourself', 'give me', 'get me',
+  add('N', ['turn', 'switch', 'put', 'get', 'bring', 'pull', 'fire', 'make', 'make it', 'make yourself', 'give me', 'get me', 'take',
             'תעשה', 'לעשות', 'עשה', 'תביא', 'להביא', 'הבא', 'תשים', 'לשים', 'שים', 'נשים', 'תשימי', 'שימי']);
   add('WANT', ['want', 'need', 'i want', 'i need', 'i wanna', 'i would like', 'id like',
                'רוצה', 'אני רוצה', 'צריך', 'אני צריך', 'צריכה', 'אני צריכה']);
@@ -12299,7 +12413,8 @@ function atlasCommand(text){
 }
 
 const LOOSE_FLOWS = { camera: { on: 'camera_on', off: 'camera_off' }, fs: { on: 'fullscreen', off: 'fullscreen_exit' },
-                      ws: { on: 'workspace' }, site: { on: 'open_site' }, music: { on: 'music_on', off: 'music_off' } };
+                      ws: { on: 'workspace' }, site: { on: 'open_site' }, music: { on: 'music_on', off: 'music_off' },
+                      webshooter: { on: 'webshooter_on', off: 'webshooter_off' } };
 function understandCommand(text){
   const words = looseTokens(text);
   if(!words.length || words.length > 12) return null;
@@ -12326,6 +12441,8 @@ function understandCommand(text){
           : (roles.includes('N') || roles.includes('WANT')) ? 'on' : null;
   /* "Music, please" / "some music" / "מוזיקה": music alone is a request for it. */
   if(!dir && kind === 'music' && roles.every(r => r === 'O:music' || r === 'P')) dir = 'on';
+  /* "Web shooters!" alone puts them on. */
+  if(!dir && kind === 'webshooter' && roles.every(r => r === 'O:webshooter' || r === 'P')) dir = 'on';
   if(!dir) return null;                // "the camera" alone: the strict rules, or the model
   const flow = LOOSE_FLOWS[kind] && LOOSE_FLOWS[kind][dir];
   if(!flow) return null;
@@ -12409,6 +12526,8 @@ async function doImpliedFlow(implied){
     case 'fullscreen_exit': return { tool: 'set_full_screen', input: { on: false }, res: await exitFullScreenLayer() };
     case 'workspace':       return { tool: 'open_workspace', input: {}, res: await callWorkspaceTool({}) };
     case 'open_site':       return { tool: 'open_url', input: { url: implied.site.url }, res: await callOpenUrlTool({ url: implied.site.url }) };
+    case 'webshooter_on':   return { tool: 'web_shooters', input: { on: true }, res: await setWebShooters(true) };
+    case 'webshooter_off':  return { tool: 'web_shooters', input: { on: false }, res: await setWebShooters(false) };
   }
   return null;
 }
@@ -12897,7 +13016,8 @@ function splitRequests(text){
    the model, so in a compound sentence they go to it with the rest. */
 const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'fullscreen', 'fullscreen_exit',
                                       'live_full', 'live_full_exit', 'workspace', 'open_site', 'bring_window',
-                                      'workspace3d', 'workspace3d_project', 'agent_atlas', 'music_on', 'music_off']);
+                                      'workspace3d', 'workspace3d_project', 'agent_atlas', 'music_on', 'music_off',
+                                      'webshooter_on', 'webshooter_off']);
 
 /* { steps: [{flow, part}], rest: [parts for the model] }, or null when the
    sentence is one request (or none) and the ordinary path should have it. */
@@ -13799,6 +13919,21 @@ async function runWorkflowCommand(flow, text){
     persistCurrentSession();
     if(IS_DESKTOP && typeof speak === 'function') speak(line);
   };
+
+  /* "Activate web shooter" / "take down the web shooters" (2.25.0). */
+  if(flow === 'webshooter_on' || flow === 'webshooter_off'){
+    const on = flow === 'webshooter_on';
+    const r = await setWebShooters(on);
+    const line = webShooterLine(r, on, he);
+    if(r && r.ok) say(line);
+    else {
+      addMessage('assistant', line);
+      chatHistory.push({ role:'assistant', content: line });
+      persistCurrentSession();
+      if(IS_DESKTOP && typeof speak === 'function') speak(line);
+    }
+    return true;
+  }
 
   /* "Let's put some music" (2.22.0): the jarvis playlist, from the top. */
   if(flow === 'music_on' || flow === 'music_off'){
@@ -15754,7 +15889,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                           TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                           WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
-                                          NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL);
+                                          NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL, WEB_SHOOTER_TOOL);
   } else {
     /* The mode boundary is enforced HERE, by which tools exist, rather than by
        asking the model to hold back. A prompt instruction is something it can
@@ -15774,7 +15909,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                       TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                       WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
-                                      NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL);
+                                      NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL, WEB_SHOOTER_TOOL);
     /* Music (2.23.0): his YouTube playlist, through the worker. */
     everydayTools.push(MUSIC_TOOL, YOUTUBE_CONNECT_TOOL);
     /* The report needs a connected store, not a desktop — it reads the same
@@ -16353,6 +16488,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callConnectCalendarTool();
           } else if(tu.name === 'play_music'){
             payload = await callMusicTool(tu.input);
+          } else if(tu.name === 'web_shooters'){
+            payload = await callWebShooterTool(tu.input);
           } else if(tu.name === 'connect_youtube'){
             payload = await callConnectYoutubeTool();
           } else if(tu.name === 'send_whatsapp'){
@@ -18883,6 +19020,15 @@ adjustLayout();
     };
 
     ev.listen('jarvis://camera-open',   ()=>{ liveWinOpen = true; pushGestureSettings(); });
+    /* The web shooters (2.25.0): on or off as the camera window says, and
+       the sound of each shot. */
+    ev.listen('jarvis://filter-status', (e)=>{
+      const p = (e && e.payload) || {};
+      if(p.name !== 'web_shooter') return;
+      if(!p.error) webShootersOn = !!p.on;
+      if(wsWaiter) wsWaiter(p);
+    });
+    ev.listen('jarvis://web-shot', ()=>{ thwipSound(); });
     /* What the gesture zoom is doing, shown in the GESTURES panel. */
     ev.listen('jarvis://gesture-status', (e)=>{
       const s = (e && e.payload) || {};
@@ -18922,7 +19068,7 @@ adjustLayout();
                      : s.kind === 'turn-idle'  ? ''
                      : el.textContent;
     });
-    ev.listen('jarvis://camera-closed', ()=>{ wentAway(null); });
+    ev.listen('jarvis://camera-closed', ()=>{ webShootersOn = false; wentAway(null); });
     ev.listen('jarvis://camera-error',  (e)=>{
       wentAway('DEBUG (camera): ' + String((e && e.payload) || 'unknown'));
     });
