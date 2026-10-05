@@ -1,0 +1,18 @@
+[package]
+name = "ws01"
+version = "1.0.0"
+description = "WS-01 web shooter: the engineering sheet as a desktop app"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+# Links in the sheet open in the default browser, not inside the app.
+tauri-plugin-opener = "2"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true

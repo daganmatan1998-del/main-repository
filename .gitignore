@@ -1,3 +1,6 @@
 # The delivery zip, rebuilt from jarvis-desktop/ on every change and sent
 # to the user directly (see CLAUDE.md). Not source.
 /jarvis-desktop.zip
+
+# The WS-01 app zip, built from ws01-desktop/ and sent to him directly.
+/ws01-desktop.zip

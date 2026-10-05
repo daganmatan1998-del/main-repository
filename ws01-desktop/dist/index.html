@@ -1,0 +1,962 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>מטול קורים WS-01</title>
+<link rel="stylesheet" href="./fonts/fonts.css">
+<style>
+/* Layout: drawing-sheet engineering document — title block, live 3D stage, then numbered spec sections that follow the brief's order */
+:root{
+  --paper:#ECEFF2; --panel:#FFFFFF; --ink:#141920; --muted:#59636F; --line:#CBD2DA;
+  --accent:#A8162C; --accent2:#1E4C8A; --ok:#2C7A4B; --warn:#A86B12; --bad:#A8162C; --exp:#6B4FA8;
+  --stage:#171C22; --stage-ink:#D9DEE4; --stage-line:#2E363F; --chip:#E3E8EE;
+  --f-body:"IBM Plex Sans Hebrew", "Segoe UI", Arial, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0E1115; --panel:#151A20; --ink:#E4E8EC; --muted:#93A0AD; --line:#29313A;
+  --accent:#E4566A; --accent2:#74A0E4; --ok:#5DBB83; --warn:#E0A443; --bad:#E4566A; --exp:#A68BE8;
+  --stage:#171C22; --stage-ink:#D9DEE4; --stage-line:#2E363F; --chip:#1E252D; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0E1115; --panel:#151A20; --ink:#E4E8EC; --muted:#93A0AD; --line:#29313A;
+  --accent:#E4566A; --accent2:#74A0E4; --ok:#5DBB83; --warn:#E0A443; --bad:#E4566A; --exp:#A68BE8;
+  --stage:#171C22; --stage-ink:#D9DEE4; --stage-line:#2E363F; --chip:#1E252D; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.65;padding-inline:16px;padding-block:0 64px}
+.wrap{max-width:1120px;margin:0 auto}
+.mono,code,.num{font-family:var(--f-mono)}
+.num{font-variant-numeric:tabular-nums}
+h1,h2,h3{text-wrap:balance;line-height:1.2;margin:0}
+h1{font-size:clamp(2rem,5.5vw,3.4rem);font-weight:700;letter-spacing:-.01em}
+h2{font-size:1.55rem;font-weight:700}
+h3{font-size:1.08rem;font-weight:600}
+p{margin:0;max-width:68ch}
+a{color:var(--accent2)}
+.ltr{direction:ltr;unicode-bidi:isolate}
+.eyebrow{font-family:var(--f-mono);font-size:.74rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+
+/* hero + title block */
+header.hero{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:28px;padding-block:36px 24px;align-items:end;border-bottom:2px solid var(--ink)}
+.hero .lead{font-size:1.08rem;color:var(--muted);margin-top:14px}
+.tblock{border:1.5px solid var(--ink);display:grid;grid-template-columns:1fr 1fr;font-family:var(--f-mono);font-size:.78rem;background:var(--panel)}
+.tblock div{padding:7px 10px;border-inline-start:1px solid var(--line);border-bottom:1px solid var(--line);min-width:0}
+.tblock div:nth-child(odd){border-inline-start:0}
+.tblock span{display:block;color:var(--muted);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase}
+.tblock b{font-weight:600;font-size:.9rem}
+.tblock .wide{grid-column:1/-1;border-inline-start:0}
+@media (max-width:820px){header.hero{grid-template-columns:1fr}}
+
+section{padding-block:44px 8px}
+.sec-head{display:flex;gap:14px;align-items:baseline;margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:10px}
+.sec-head .no{font-family:var(--f-mono);color:var(--accent);font-size:.9rem;font-weight:600}
+.stack{display:grid;gap:14px}
+
+/* changes list */
+.changes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.chg{background:var(--panel);border:1px solid var(--line);padding:14px 16px;min-width:0}
+.chg .from{font-family:var(--f-mono);font-size:.78rem;color:var(--muted);text-decoration:line-through}
+.chg .to{font-weight:600;margin-block:2px 6px}
+.chg p{font-size:.93rem;color:var(--muted)}
+
+/* 3D stage */
+.viewer{display:grid;grid-template-columns:minmax(0,1fr) 300px;background:var(--stage);color:var(--stage-ink);border:1px solid var(--stage-line)}
+#stage{position:relative;height:min(68vh,620px);min-height:360px;touch-action:none}
+#stage canvas{display:block;width:100%;height:100%}
+.stage-hud{position:absolute;inset-inline-start:12px;top:10px;font-family:var(--f-mono);font-size:.7rem;letter-spacing:.08em;color:#8C97A3;pointer-events:none;direction:ltr}
+.stage-hud b{color:#E4566A;font-weight:600}
+.side{border-inline-start:1px solid var(--stage-line);padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.ctl-label{font-family:var(--f-mono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:#8C97A3}
+.views{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.views button,.tog button{font:inherit;font-size:.8rem;background:#222932;color:var(--stage-ink);border:1px solid #333C46;padding:7px 4px;cursor:pointer}
+.views button[aria-pressed="true"],.tog button[aria-pressed="true"]{background:#E4566A;border-color:#E4566A;color:#14080A;font-weight:600}
+.views button:hover,.tog button:hover{border-color:#6B7684}
+button:focus-visible,select:focus-visible,summary:focus-visible,input:focus-visible{outline:2px solid #74A0E4;outline-offset:2px}
+.tog{display:flex;gap:6px;flex-wrap:wrap}
+.tog button{flex:1 1 auto;padding-inline:8px}
+input[type=range]{width:100%;accent-color:#E4566A}
+select{width:100%;font:inherit;font-size:.85rem;background:#222932;color:var(--stage-ink);border:1px solid #333C46;padding:7px}
+.info{background:#1D232A;border:1px solid #2E363F;padding:12px;font-size:.86rem;line-height:1.55;flex:1;overflow:auto;min-height:150px}
+.info h3{font-size:1rem;color:#fff}
+.info .code{font-family:var(--f-mono);font-size:.7rem;color:#E4566A;letter-spacing:.06em}
+.info dl{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin:10px 0 0}
+.info dt{color:#8C97A3;font-size:.76rem}
+.info dd{margin:0}
+@media (max-width:900px){.viewer{grid-template-columns:1fr}.side{border-inline-start:0;border-top:1px solid var(--stage-line)}#stage{height:56vh;min-height:330px}}
+
+/* tables */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:start;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--chip);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.m{font-family:var(--f-mono);font-size:.82rem;white-space:nowrap;direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums}
+
+/* tree */
+pre.tree{font-family:var(--f-mono);font-size:.82rem;line-height:1.6;background:var(--panel);border:1px solid var(--line);padding:16px;overflow-x:auto;direction:ltr;text-align:left;margin:0}
+pre.tree .c{color:var(--muted)}
+pre.tree .k{color:var(--accent);font-weight:600}
+
+/* block diagrams */
+.flow{direction:ltr;display:flex;flex-wrap:wrap;align-items:stretch;gap:0;row-gap:10px;font-family:var(--f-mono);font-size:.8rem}
+.flow .n{background:var(--panel);border:1.5px solid var(--ink);padding:9px 12px;min-width:0}
+.flow .n small{display:block;color:var(--muted);font-size:.68rem}
+.flow .n.hot{border-color:var(--accent);color:var(--accent)}
+.flow .ar{align-self:center;padding:0 6px;color:var(--muted)}
+.diagram{background:var(--chip);border:1px solid var(--line);padding:16px;display:grid;gap:12px}
+.diagram .cap{font-family:var(--f-mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);direction:ltr;text-align:left}
+
+/* badges */
+.b{display:inline-block;font-family:var(--f-mono);font-size:.68rem;font-weight:600;letter-spacing:.06em;padding:3px 7px;border:1.5px solid currentColor;white-space:nowrap;direction:ltr}
+.b.rt{color:var(--ok)}.b.pe{color:var(--accent2)}.b.ex{color:var(--exp)}.b.np{color:var(--bad)}
+
+/* accordion */
+details.part{background:var(--panel);border:1px solid var(--line)}
+details.part+details.part{border-top:0}
+details.part summary{cursor:pointer;padding:12px 16px;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;list-style:none}
+details.part summary::-webkit-details-marker{display:none}
+details.part summary::before{content:"+";font-family:var(--f-mono);color:var(--accent);width:1ch}
+details.part[open] summary::before{content:"−"}
+details.part summary .code{font-family:var(--f-mono);font-size:.72rem;color:var(--muted);direction:ltr}
+details.part summary .mass{margin-inline-start:auto;font-family:var(--f-mono);font-size:.8rem;color:var(--muted)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px 22px;padding:2px 16px 16px 16px;font-size:.92rem}
+.pgrid div{min-width:0}
+.pgrid b{display:block;font-size:.72rem;letter-spacing:.08em;color:var(--accent);font-weight:600}
+
+/* misc */
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.card{background:var(--panel);border:1px solid var(--line);padding:16px;min-width:0}
+.calc{font-family:var(--f-mono);font-size:.85rem;line-height:1.8;direction:ltr;text-align:left;background:var(--chip);padding:12px 14px;border:1px solid var(--line);overflow-x:auto}
+pre.code{font-family:var(--f-mono);font-size:.8rem;line-height:1.55;background:var(--stage);color:var(--stage-ink);padding:16px;overflow-x:auto;direction:ltr;text-align:left;margin:0;border:1px solid var(--stage-line)}
+pre.code .cm{color:#7E8B98}
+pre.code .kw{color:#E4566A}
+ol.steps{margin:0;padding-inline-start:1.4em;display:grid;gap:6px}
+ul.clean{margin:0;padding-inline-start:1.2em;display:grid;gap:4px}
+.note{border-inline-start:3px solid var(--accent);padding:10px 14px;background:var(--panel);font-size:.95rem}
+.states{direction:ltr;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-family:var(--f-mono);font-size:.78rem}
+.st{border:1.5px solid var(--ink);padding:6px 10px;background:var(--panel)}
+.st.safe{border-color:var(--ok);color:var(--ok)}.st.arm{border-color:var(--warn);color:var(--warn)}.st.fire{border-color:var(--accent);color:var(--accent)}.st.fault{background:var(--accent);color:var(--paper);border-color:var(--accent)}
+footer{margin-top:48px;border-top:2px solid var(--ink);padding-top:14px;font-size:.85rem;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+
+<div class="wrap" dir="rtl" lang="he">
+
+<header class="hero">
+  <div>
+    <div class="eyebrow">אב־טיפוס הנדסי · REV A · אוקטובר 2026</div>
+    <h1>מטול קורים <span class="ltr">WS-01</span></h1>
+    <p class="lead">מכשיר שורש כף יד בהשראת מטולי הקורים של ספיידרמן, שתוכנן מחדש סביב רכיבים שאפשר לקנות היום. משאבה חשמלית מחליפה את בלון ה־CO₂, המחסנית לא נמצאת בלחץ, וההפעלה דורשת דריכה מכנית ולחיצה של שתי אצבעות. המכשיר מפזר חוט ג'ל דביק לטווח של מטר עד שניים. הוא לא נושא משקל של אדם, ובדיקת ההיתכנות בסוף אומרת את זה במפורש.</p>
+  </div>
+  <div class="tblock" aria-label="טבלת שרטוט">
+    <div><span>Drawing</span><b class="ltr">WS-01-000</b></div>
+    <div><span>Rev</span><b>A</b></div>
+    <div><span>Envelope (mm)</span><b class="num ltr">152 × 62 × 37</b></div>
+    <div><span>Units</span><b>mm · g · bar</b></div>
+    <div><span>Mass on wrist</span><b class="num ltr" id="tbMass">—</b></div>
+    <div><span>CG from datum</span><b class="num ltr" id="tbCg">—</b></div>
+    <div><span>Power</span><b class="ltr">2S LiPo 450 mAh</b></div>
+    <div><span>Max line pressure</span><b class="num ltr">5.0 bar</b></div>
+    <div class="wide"><span>Datum</span><b>קצה פרוקסימלי, תחתית פלטת הבסיס, קו מרכז · X לכיוון כף היד · Y כלפי מעלה · Z לצד הרדיאלי</b></div>
+  </div>
+</header>
+
+<section id="changes">
+  <div class="sec-head"><span class="no">00</span><h2>מה שיניתי מהגרסה של הסרט</h2></div>
+  <div class="changes">
+    <div class="chg"><div class="from">CO₂ cartridge + regulator</div><div class="to">משאבת גלגלי שיניים חשמלית</div><p>בלון CO₂ של 12 גרם מחזיק כ־57 bar ב־20°C ועולה מעל 70 bar בחום גוף או בשמש. זה כלי לחץ על היד, צרכן מתכלה ווסת כבד. המשאבה מגיעה לכל היותר ל־5 bar, נשלטת בזרם ונטענת ב־USB-C.</p></div>
+    <div class="chg"><div class="from">Pressurized fluid canister</div><div class="to">מחסנית שקית־בתוך־מעטפת, בלחץ אטמוספרי</div><p>כשהמכשיר כבוי אין בו שום לחץ אגור. החומר נשאב מתוך שקית מתקפלת, כך שאין אוויר בקו ואין צורך באטימה ללחץ בזמן אחסון.</p></div>
+    <div class="chg"><div class="from">Nozzle past the wrist crease</div><div class="to">הפייה נגמרת 5 מ״מ לפני קפל שורש כף היד</div><p>פייה שבולטת לכף היד חוסמת כיפוף פלמרי של כ־70°–80° ונתקעת בכל תנועה. כאן כף היד חופשית לגמרי, והקו מכוון לאורך האמה.</p></div>
+    <div class="chg"><div class="from">Exposed palm button</div><div class="to">פד TPU מוסתר עם שני חיישני Hall</div><p>ירי דורש מצב ARM מכני, לחיצה של שתי אצבעות בו־זמנית והסכמה בין שני חיישנים. נגיעה מקרית בכף היד לא מספיקה.</p></div>
+    <div class="chg"><div class="from">Open skeleton, exposed parts</div><div class="to">שלד גלוי, אלקטרוניקה אטומה</div><p>מסילות הצד האדומות נשארות גלויות בשביל השפה החזותית, אבל האלקטרוניקה והמשאבה סגורות מאחורי כיסויים עם אטם TPU, ברמת <span class="ltr">IP54</span>.</p></div>
+  </div>
+</section>
+
+<section id="model">
+  <div class="sec-head"><span class="no">01</span><h2>מודל תלת־ממד ומבטים</h2></div>
+  <div class="viewer">
+    <div id="stage" aria-label="מודל תלת־ממד של המכשיר. גרירה לסיבוב, צביטה או גלגלת לזום">
+      <div class="stage-hud" id="hud">WS-01 · <b id="hudView">ISO</b> · drag to orbit</div>
+    </div>
+    <div class="side">
+      <div>
+        <div class="ctl-label">מבט</div>
+        <div class="views" role="group" aria-label="בחירת מבט">
+          <button type="button" data-view="front">קדמי</button>
+          <button type="button" data-view="back">אחורי</button>
+          <button type="button" data-view="side">צד</button>
+          <button type="button" data-view="top">עליון</button>
+          <button type="button" data-view="bottom">תחתון</button>
+          <button type="button" data-view="iso" aria-pressed="true">איזו</button>
+          <button type="button" data-view="exploded" style="grid-column:span 2">מבט מפוצץ</button>
+        </div>
+      </div>
+      <div>
+        <label class="ctl-label" for="explode">פיצוץ רכיבים</label>
+        <input type="range" id="explode" min="0" max="100" value="0">
+      </div>
+      <div class="tog" role="group" aria-label="תצוגה">
+        <button type="button" id="tXray" aria-pressed="false">שקיפות מעטפת</button>
+        <button type="button" id="tArm" aria-pressed="true">יד</button>
+      </div>
+      <div>
+        <label class="ctl-label" for="partSelect">רכיב</label>
+        <select id="partSelect"><option value="">בחר רכיב או הקש על המודל</option></select>
+      </div>
+      <div class="info" id="info" aria-live="polite">
+        <h3>הקש על רכיב במודל</h3>
+        <p style="margin-top:6px;color:#9AA5B1">כל רכיב מראה מה הוא עושה, למה הוא נמצא במקום שלו, מאיזה חומר הוא עשוי ואיך מחליפים אותו. "שקיפות מעטפת" חושפת את הפנים.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="arch">
+  <div class="sec-head"><span class="no">02</span><h2>ארכיטקטורה פנימית</h2></div>
+  <div class="stack">
+    <p>המכשיר בנוי משני נתיבים לאורך האמה. הנתיב האולנרי (צד הזרת) מחזיק את מה שכבד ושקט: סוללה, לוח ראשי ושסתום. הנתיב הרדיאלי (צד האגודל) מחזיק את קו החומר בקו ישר: מחסנית, משאבה, מניפולד ופייה. כך הצינור קצר, בלי פיתולים, והחומר לא עובר ליד האלקטרוניקה.</p>
+    <div class="two">
+      <div class="card stack">
+        <h3>למה כל דבר נמצא איפה שהוא</h3>
+        <ul class="clean">
+          <li><b>סוללה פרוקסימלית ונמוכה.</b> המסה הכבדה ביותר קרוב למרפק מקטינה את המומנט על שורש כף היד. פלטת הבסיס וריפוד הסיליקון מבודדים אותה תרמית מהעור.</li>
+          <li><b>מחסנית מתחת לחלון.</b> רואים את מפלס החומר בלי לפתוח. היא נשלפת מלמעלה, כך שלא צריך להוריד את המכשיר מהיד.</li>
+          <li><b>משאבה על בולמי סיליקון, מתחת לפתחי אוורור.</b> זה מקור הרעידות והחום היחיד. הבולמים מנתקים רעידות מהשלד, והכיסוי מאלומיניום מפזר חום.</li>
+          <li><b>מניפולד מרוכז.</b> חיישן לחץ, שסתום NC ושסתום פריקה יושבים על בלוק אחד, כמה מילימטרים מהפייה. נפח מת קטן אומר תגובה מהירה וטפטוף מינימלי.</li>
+          <li><b>הדק בכף היד, לא על המכשיר.</b> המכשיר נשאר נקי מכפתורים שאפשר ללחוץ בטעות. הכבל עובר עם מחבר מגנטי שמתנתק במשיכה.</li>
+        </ul>
+      </div>
+      <div class="card stack">
+        <h3>מסה ומרכז כובד</h3>
+        <p id="massText">—</p>
+        <div class="tbl-wrap"><table id="massTable"><thead><tr><th>מודול</th><th>מסה (g)</th></tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="activation">
+  <div class="sec-head"><span class="no">03</span><h2>מערכת ההפעלה והבטיחות</h2></div>
+  <div class="stack">
+    <p>ירי קורה רק כשכל התנאים מתקיימים יחד. כל תנאי נבדק בשכבה נפרדת, כך שתקלה בשכבה אחת לא מספיקה כדי לירות.</p>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>שכבה</th><th>מנגנון</th><th>מה היא מונעת</th></tr></thead>
+      <tbody>
+        <tr><td>1. מכנית</td><td>מתג ARM מחליק בצד המכשיר, עם נקודת עצירה. מנתק פיזית את מתח המשאבה והשסתום, בטור לכל השאר.</td><td>ירי כשהמכשיר בתיק, בטעינה או על השולחן. אין תוכנה שיכולה לעקוף אותו.</td></tr>
+        <tr><td>2. חירום</td><td>לחצן אדום ננעל עם טבעת מגן. פותח את מתג העומס בחומרה ושולח פסיקה לבקר. שחרור דורש כיבוי והדלקה.</td><td>מצב שבו משהו השתבש באמצע ירי.</td></tr>
+        <tr><td>3. הדק כפול</td><td>פד TPU בכף היד עם שני חיישני Hall אנלוגיים מתחת לשתי כיפות. שתיהן צריכות לעבור 70% מהלך תוך 80 ms זו מזו ולהישאר 60 ms.</td><td>לחיצה מקרית של אצבע אחת, אחיזת חפץ, נגיעה.</td></tr>
+        <tr><td>4. הסכמת חיישנים</td><td>שני ערוצי ה־Hall חייבים להסכים בטווח של 30%. ערך מחוץ לטווח החוקי פירושו מגנט חסר או כבל קרוע.</td><td>חיישן תקוע או כבל קצור שמדמה לחיצה.</td></tr>
+        <tr><td>5. תוכנה</td><td>בדיקות לחץ, סוללה, מחסנית וזמן ירי מקסימלי לפני כל ירי ובמהלכו, ב־1 kHz.</td><td>ירי עם מחסנית ריקה, סתימה, לחץ חריג או סוללה חלשה.</td></tr>
+        <tr><td>6. הידראולית</td><td>שסתום NC (סגור בלי חשמל) ושסתום פריקה קפיצי ב־5.5 bar שמחזיר חומר למחסנית.</td><td>לחץ יתר גם אם הבקר, הדרייבר והחיישן כשלו יחד.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note">חיבור ה־Bluetooth קורא נתונים ומריץ תחזוקה בלבד, ורק כשהמכשיר במצב SAFE. אין פקודת ירי באוויר, ואין דרך להוסיף כזו בלי לשנות את הקושחה.</div>
+  </div>
+</section>
+
+<section id="electronics">
+  <div class="sec-head"><span class="no">04</span><h2>אלקטרוניקה</h2></div>
+  <div class="stack">
+    <div class="diagram">
+      <div class="cap">Signal path</div>
+      <div class="flow">
+        <div class="n">Palm trigger<small>2× DRV5055 Hall</small></div><span class="ar">→</span>
+        <div class="n">Controller<small>nRF52840</small></div><span class="ar">→</span>
+        <div class="n hot">Safety check<small>ARM · P · V · cart · Hall agree</small></div><span class="ar">→</span>
+        <div class="n">Actuator<small>DRV8871 pump + NC valve</small></div><span class="ar">→</span>
+        <div class="n">Output<small>Ø1.0 mm nozzle</small></div>
+      </div>
+      <div class="cap">Power path</div>
+      <div class="flow">
+        <div class="n">Battery<small>2S 7.4 V · PCM · NTC</small></div><span class="ar">→</span>
+        <div class="n">Power mgmt<small>BQ25887 charge · INA226</small></div><span class="ar">→</span>
+        <div class="n hot">ARM switch + E-stop<small>hardware series cut</small></div><span class="ar">→</span>
+        <div class="n">Actuator rail<small>7.4 V pump / valve</small></div>
+      </div>
+      <div class="flow">
+        <div class="n">Power mgmt</div><span class="ar">→</span>
+        <div class="n">3.3 V buck<small>TPS62840</small></div><span class="ar">→</span>
+        <div class="n">Logic<small>MCU · sensors · LEDs</small></div>
+      </div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>תפקיד</th><th>רכיב</th><th>למה הוא</th></tr></thead>
+      <tbody>
+        <tr><td>בקר ו־Bluetooth</td><td class="m">nRF52840 (Raytac MDBT50Q)</td><td>BLE 5 מובנה, צריכה נמוכה, תמיכה מלאה ב־Zephyr. מודול מאושר רגולטורית חוסך תכנון RF.</td></tr>
+        <tr><td>סוללה</td><td class="m">2S LiPo 450 mAh, 3.3 Wh</td><td>מנוע המשאבה צריך 6–7.4 V. קיבולת קטנה מספיקה כי החומר נגמר הרבה לפני הסוללה (חישוב למטה).</td></tr>
+        <tr><td>טעינה</td><td class="m">TI BQ25887 + USB-C</td><td>מטען Boost מ־5 V לסוללת 2S עם איזון תאים. מספיק USB-C רגיל, בלי PD.</td></tr>
+        <tr><td>הגנת סוללה</td><td class="m">PCM + NTC 10k</td><td>מתח יתר, מתח חסר, זרם יתר וקצר. ה־NTC חוסם טעינה וירי מעל 50°C.</td></tr>
+        <tr><td>ניטור הספק</td><td class="m">TI INA226</td><td>מתח וזרם של מסילת המשאבה. זרם הוא גם מדד עקיף ללחץ ולסתימה.</td></tr>
+        <tr><td>מתח לוגי</td><td class="m">TI TPS62840</td><td>ממיר 3.3 V עם זרם המתנה של 60 nA. המכשיר יכול לשבת שבועות במצב שינה.</td></tr>
+        <tr><td>דרייבר משאבה</td><td class="m">TI DRV8871</td><td>מגבלת זרם בנגד חיצוני. זו תקרת לחץ בחומרה, בלי קשר לקושחה.</td></tr>
+        <tr><td>דרייבר שסתום</td><td class="m">N-MOSFET + diode</td><td>Hit-and-hold: 100% ל־30 ms, ואז PWM של 40%. פחות חום ופחות צריכה.</td></tr>
+        <tr><td>חיישן לחץ</td><td class="m">TE MS5837-30BA</td><td>MEMS ממולא ג'ל, עמיד לנוזלים, I²C. דוגם ב־1 kHz בזמן ירי.</td></tr>
+        <tr><td>חיישני הדק</td><td class="m">2× TI DRV5055</td><td>Hall אנלוגי. מודד מהלך ולא רק מגע, כך שאפשר לזהות חיישן תקוע.</td></tr>
+        <tr><td>זיהוי מחסנית</td><td class="m">DS28E07 + DRV5032</td><td>EEPROM בחיבור 1-Wire שומר סוג חומר, נפח ומספר סדרתי. חיישן Hall דיגיטלי מוודא שהמחסנית נעולה.</td></tr>
+        <tr><td>תנועה ונפילה</td><td class="m">Bosch BMI270</td><td>מזהה פגיעה מעל 8 g ומנטרל. מזהה גם חוסר תנועה ממושך ועובר לשינה.</td></tr>
+        <tr><td>משוב</td><td class="m">DRV2605L + LRA 8 mm, 2× RGB</td><td>רטט מאשר ARM ותקלה בלי להסתכל. שני מובילי אור דרך הכיסוי מראים מצב וסוללה.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="two">
+      <div class="card stack"><h3>אנרגיה לירייה</h3>
+        <div class="calc">pump    7.4 V × 0.55 A ≈ 4.0 W<br>valve   hold ≈ 1.5 W<br>shot    0.4 s → ≈ 2.2 J<br>battery 3.3 Wh ≈ 11.9 kJ → &gt; 4000 shots<br>cartridge 25 mL ÷ 2 mL/shot ≈ 12 shots</div>
+        <p>צוואר הבקבוק הוא כמות החומר, לא הסוללה. לכן נבחרה סוללה קטנה וקלה, ומה שנחסך במשקל הולך למחסנית.</p>
+      </div>
+      <div class="card stack"><h3>פיזיקה של הסילון</h3>
+        <div class="calc">Q   ≈ 5 mL/s (micro gear pump, viscous)<br>A   = π·(0.5 mm)² ≈ 0.785 mm²<br>v   = Q/A ≈ 6.4 m/s<br>R₃₀° (no drag) = v²·sin60°/g ≈ 3.6 m<br>reaction F = ρ·Q·v ≈ 0.03 N</div>
+        <p>בלי גרר הטווח התיאורטי הוא 3.6 מטר. סילון ג'ל צמיג מתפרק קודם, ולכן הטווח האפקטיבי הוא כמטר עד שניים. כוח הרתע זניח.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="firmware">
+  <div class="sec-head"><span class="no">05</span><h2>קושחה</h2></div>
+  <div class="stack">
+    <p>הקושחה רצה על Zephyr עם משימות בעדיפויות קבועות. משימת הבטיחות היא בעדיפות הגבוהה ביותר, והיא היחידה שמורשית להדליק את המשאבה. כל תקלה מובילה למצב בטוח, וכל אתחול מתחיל ב־SAFE, לעולם לא ב־ARMED.</p>
+    <div class="diagram">
+      <div class="cap">State machine</div>
+      <div class="states">
+        <span class="st">BOOT</span>→<span class="st">SELF-TEST</span>→<span class="st safe">SAFE</span>⇄<span class="st arm">ARMED</span>→<span class="st fire">FIRING</span>→<span class="st arm">ARMED</span>
+      </div>
+      <div class="states"><span class="st">any state</span>→<span class="st fault">FAULT (latched)</span>→<span class="st safe">SAFE</span><span style="color:var(--muted)">after condition clears + ARM cycled</span></div>
+      <div class="states"><span class="st">any state</span>→<span class="st fault">E-STOP LOCKOUT</span>→<span class="st">BOOT</span><span style="color:var(--muted)">power cycle only</span></div>
+      <div class="states"><span class="st safe">SAFE</span>+ USB + E-stop held 3 s →<span class="st">MAINTENANCE</span><span style="color:var(--muted)">prime · purge @1 bar · valve test · sensor zero</span></div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>משימה</th><th>קצב</th><th>אחריות</th></tr></thead>
+      <tbody>
+        <tr><td class="m">safety_task</td><td class="m">1 kHz</td><td>מכונת המצבים, בדיקות הקדם, פיקוח על ירי, watchdog. היחידה שמפעילה משאבה ושסתום.</td></tr>
+        <tr><td class="m">sensor_task</td><td class="m">200 Hz</td><td>דגימת Hall, לחץ, זרם, IMU. סינון ובדיקת טווח. כל ערך מגיע עם חותמת זמן, וערך ישן נחשב לא תקין.</td></tr>
+        <tr><td class="m">power_task</td><td class="m">10 Hz</td><td>מתח תאים, טמפרטורה, טעינה. מצב סוללה חלשה: מתחת ל־15% זמן ירי מקסימלי יורד ל־0.25 s. מתחת ל־5% רק SAFE.</td></tr>
+        <tr><td class="m">cartridge_task</td><td class="m">אירוע</td><td>קריאת EEPROM בהכנסה, אימות CRC וסוג חומר, מעקב נפח לפי סיבובי משאבה ושמירת היתרה בשבב.</td></tr>
+        <tr><td class="m">ui_task / ble_task</td><td class="m">נמוך</td><td>לדים, רטט, אבחון בטלפון: לחץ, סוללה, יומן תקלות, מספר יריות. קריאה בלבד מחוץ למצב תחזוקה.</td></tr>
+      </tbody>
+    </table></div>
+    <h3>קודי תקלה</h3>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>קוד</th><th>תנאי</th><th>תגובה</th></tr></thead>
+      <tbody>
+        <tr><td class="m">F01 BATT_UV</td><td>תא מתחת ל־3.3 V</td><td>נעילת ירי, לד ענבר מהבהב</td></tr>
+        <tr><td class="m">F02 BATT_OT</td><td>NTC מעל 50°C</td><td>נעילת ירי וטעינה עד קירור</td></tr>
+        <tr><td class="m">F03 PRESS_HI</td><td>לחץ מעל 5.0 bar למשך 20 ms</td><td>סגירת שסתום, עצירת משאבה, FAULT ננעל</td></tr>
+        <tr><td class="m">F04 PRESS_NO_RISE</td><td>משאבה פועלת 150 ms והלחץ מתחת ל־0.5 bar</td><td>מחסנית ריקה או דליפה. עצירה</td></tr>
+        <tr><td class="m">F05 PRESS_REST</td><td>מעל 0.3 bar במנוחה</td><td>שסתום תקוע או סתימה. ARM נחסם</td></tr>
+        <tr><td class="m">F06 SENSOR_BAD</td><td>I²C timeout, CRC, ערך מחוץ לטווח או ישן</td><td>עצירה, ARM נחסם</td></tr>
+        <tr><td class="m">F07 MOTOR_OC</td><td>זרם משאבה מעל 1.2 A</td><td>מגבלת הדרייבר פועלת בחומרה, הקושחה עוצרת</td></tr>
+        <tr><td class="m">F08 CART_INVALID</td><td>אין מגנט, EEPROM לא תקין או מחסנית ריקה</td><td>מעבר ל־SAFE</td></tr>
+        <tr><td class="m">F09 TRIG_DISAGREE</td><td>ערוצי Hall לא מסכימים או מחוץ לטווח</td><td>נעילה עד ARM מחדש</td></tr>
+        <tr><td class="m">F10 WDT_RESET</td><td>ה־watchdog אתחל את הבקר</td><td>אתחול ל־SAFE ותיעוד ביומן</td></tr>
+        <tr><td class="m">F11 IMPACT</td><td>תאוצה מעל 8 g</td><td>ניטרול ARM</td></tr>
+        <tr><td class="m">F12 FIRE_TIMEOUT</td><td>ירי ארוך מ־600 ms</td><td>עצירה כפויה, צריך לשחרר את ההדק</td></tr>
+      </tbody>
+    </table></div>
+    <pre class="code"><span class="cm">// safety_task — runs every 1 ms. Default answer is always "do not fire".</span>
+<span class="kw">static bool</span> fire_permitted(<span class="kw">const</span> sys_t *s) {
+  <span class="kw">if</span> (s->state != ST_ARMED)              <span class="kw">return</span> false;
+  <span class="kw">if</span> (!hw_arm_switch_closed())            <span class="kw">return</span> false;  <span class="cm">// read back, not assumed</span>
+  <span class="kw">if</span> (s->faults)                          <span class="kw">return</span> false;
+  <span class="kw">if</span> (!fresh(s->p, 5) || !fresh(s->hall, 10)) <span class="kw">return</span> false;  <span class="cm">// stale data = invalid</span>
+  <span class="kw">if</span> (s->cart.state != CART_OK)          <span class="kw">return</span> false;
+  <span class="kw">if</span> (s->batt.pct &lt; 5 || s->batt.temp_c &gt; 50) <span class="kw">return</span> false;
+  <span class="kw">if</span> (!trigger_both_pressed(&amp;s->hall))   <span class="kw">return</span> false;  <span class="cm">// 70% travel, agree ±30%, 60 ms hold</span>
+  <span class="kw">return</span> true;
+}
+
+<span class="kw">void</span> safety_tick(sys_t *s) {
+  wdt_feed();
+  <span class="kw">if</span> (s->state == ST_FIRING) {
+    <span class="kw">if</span> (!fire_permitted_while_firing(s) || s->fire_ms &gt; s->fire_max_ms) {
+      actuators_off();                       <span class="cm">// valve closes first, then pump stops</span>
+      s->state = s->faults ? ST_FAULT : ST_ARMED;
+    }
+  } <span class="kw">else if</span> (fire_permitted(s)) {
+    actuators_on();  s->state = ST_FIRING;  s->fire_ms = 0;
+  }
+}</pre>
+  </div>
+</section>
+
+<section id="mech">
+  <div class="sec-head"><span class="no">06</span><h2>תכנון מכני לפי רכיב</h2></div>
+  <p style="margin-bottom:14px">כל רכיב במודל, עם הסיבה שהוא קיים, למה הוא מחובר, איזה עומס הוא סופג, מאיזה חומר הוא עשוי, איך מייצרים אותו ואיך מחליפים אותו.</p>
+  <div id="partList"></div>
+</section>
+
+<section id="mfg">
+  <div class="sec-head"><span class="no">07</span><h2>ייצור והרכבה</h2></div>
+  <div class="stack">
+    <p>המעטפת מחולקת לשמונה חלקים שמתברגים לפלטת בסיס אחת. אין מעטפת חד־חלקית שאי אפשר לפתוח, ואין הדבקות באזורים שצריך לתחזק. אב־טיפוס ראשון אפשר להדפיס כולו ב־FDM מ־PA-CF, ולעבור ל־CNC רק בחלקים שבאמת צריכים את זה.</p>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>חלק</th><th>אב־טיפוס</th><th>סדרה קטנה</th></tr></thead>
+      <tbody>
+        <tr><td>פלטת בסיס</td><td>FDM, PA-CF, 4 דפנות, 40% מילוי ג'ירואיד</td><td>MJF ב־PA12-CF או הזרקה ב־PA6-GF30</td></tr>
+        <tr><td>מסילות צד</td><td>FDM PA-CF, או חיתוך לייזר מאלומיניום 5 מ״מ</td><td>CNC מ־6061-T6, אנודייז אדום</td></tr>
+        <tr><td>כיסויים ושדרה</td><td>הדפסת שרף קשיח או FDM</td><td>CNC 6061-T6 אנודייז שחור, או הזרקת PC/ABS</td></tr>
+        <tr><td>חלון מחסנית</td><td>פוליקרבונט 1.5 מ״מ מכופף בחום</td><td>יציקת PC שקופה</td></tr>
+        <tr><td>מניפולד</td><td>CNC 6061-T6, חובה כבר באב־טיפוס</td><td>CNC 6061-T6</td></tr>
+        <tr><td>פייה</td><td>חריטה מ־316L</td><td>חריטה במחרטה שוויצרית</td></tr>
+        <tr><td>מחסנית</td><td>הדפסת שרף שקוף + שקית PE מסחרית</td><td>הזרקת PETG + שקית EVOH מרותכת</td></tr>
+        <tr><td>ריפוד והדק</td><td>יציקת סיליקון בתבנית מודפסת, הדפסת TPU 85A</td><td>הזרקת LSR / TPU</td></tr>
+      </tbody>
+    </table></div>
+    <div class="two">
+      <div class="card stack"><h3>חומרה סטנדרטית</h3>
+        <ul class="clean">
+          <li><span class="ltr">M2.5×6 ISO 14580</span> טורקס, נירוסטה A2 ×16</li>
+          <li><span class="ltr">M2×4</span> למשאבה ×2, דרך גרומטים מסיליקון</li>
+          <li>תותבות הברגה בחום <span class="ltr">M2.5×4</span> פליז ×16 בפלטת הבסיס</li>
+          <li>טבעות O מ־FKM: <span class="ltr">18×1.5</span> (מחסנית), <span class="ltr">4×1</span> ×3 (מניפולד), <span class="ltr">6×1</span> (פייה)</li>
+          <li>פין ציר נירוסטה <span class="ltr">Ø1.5×74</span> לדלת</li>
+          <li>מגנטים N52 <span class="ltr">Ø3×1.5</span> ×5: נעילת דלת ×2, הדק ×2, מחסנית ×1</li>
+          <li>אין מסבים כדוריים. החלק המסתובב היחיד הוא המשאבה, והמסבים שלה בתוכה.</li>
+        </ul>
+      </div>
+      <div class="card stack"><h3>סדר הרכבה</h3>
+        <ol class="steps">
+          <li>תותבות בחום לפלטת הבסיס, הדבקת ריפוד הסיליקון.</li>
+          <li>מסילות צד לפלטה, 4 ברגים מלמטה בכל צד.</li>
+          <li>סוללה עם פד קצף, ואז הלוח הראשי על 4 עמודונים.</li>
+          <li>משאבה על גרומטים, מניפולד עם שסתום, חיישן ופייה כיחידה אחת שנבדקה בלחץ מראש.</li>
+          <li>צנרת וחיווט, בדיקת לחץ של 8 bar לחמש דקות.</li>
+          <li>שדרה עם פין ודלת, כיסוי אלקטרוניקה, כיסוי משאבה, מגן חרטום.</li>
+          <li>רצועות, חיבור הדק בכבל מגנטי.</li>
+          <li>צריבת קושחה, בדיקה עצמית, כיול אפס של חיישן הלחץ.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="note">טולרנסים: CNC <span class="ltr">±0.05</span>, הדפסת MJF <span class="ltr">±0.3</span>. לכן כל התאמה קריטית מעובדת או משויפת: חור הציר מקורצף ל־<span class="ltr">Ø1.5 H7</span>, ובתי טבעות ה־O מתוכננים לדחיסה של 20%–25% ונמצאים רק על חלקי מתכת.</div>
+  </div>
+</section>
+
+<section id="cad">
+  <div class="sec-head"><span class="no">08</span><h2>נתונים ל־CAD</h2></div>
+  <div class="stack">
+    <pre class="tree"><span class="k">WEB_SHOOTER</span>  <span class="c">WS-01-000</span>
+├── <span class="k">OUTER_HOUSING</span>       <span class="c">-100</span>
+│   ├── SIDE_RAILS ×2      <span class="c">6061-T6, red anodize</span>
+│   ├── CENTER_SPINE       <span class="c">door hinge</span>
+│   ├── COVER_ELEC         <span class="c">light pipes, TPU gasket</span>
+│   ├── CART_DOOR          <span class="c">PC window, magnetic latch</span>
+│   ├── COVER_PUMP         <span class="c">vent slots</span>
+│   └── FASTENERS
+├── <span class="k">WRIST_MOUNT</span>         <span class="c">-200</span>
+│   ├── BASE_PLATE         <span class="c">R70 transverse curve</span>
+│   ├── SKIN_LINER         <span class="c">silicone 30A</span>
+│   └── STRAPS ×2          <span class="c">22 mm webbing, G-hook</span>
+├── <span class="k">FRONT_MODULE</span>        <span class="c">-300</span>
+│   └── NOSE_SHROUD
+├── <span class="k">OUTPUT_MODULE</span>       <span class="c">-400  (pre-tested sub-assembly)</span>
+│   ├── MANIFOLD
+│   ├── SOLENOID_VALVE     <span class="c">2/2 NC</span>
+│   └── NOZZLE             <span class="c">316L, Ø1.0, duckbill check</span>
+├── <span class="k">CARTRIDGE_MODULE</span>    <span class="c">-500  (consumable)</span>
+│   └── CARTRIDGE          <span class="c">bag-in-shell, 25 mL, EEPROM</span>
+├── <span class="k">ACTUATION_MODULE</span>    <span class="c">-600</span>
+│   ├── GEAR_PUMP
+│   └── TUBING             <span class="c">FEP 3×2, barb + clip</span>
+├── <span class="k">ELECTRONICS_MODULE</span>  <span class="c">-700</span>
+│   ├── MAIN_PCB
+│   └── HARNESS
+├── <span class="k">BATTERY_MODULE</span>      <span class="c">-800</span>
+│   └── BATTERY_2S
+└── <span class="k">SAFETY_MODULE</span>       <span class="c">-900</span>
+    ├── ARM_ESTOP
+    ├── PRESSURE_SENSOR
+    ├── RELIEF_VALVE
+    └── PALM_TRIGGER</pre>
+    <h3>מעטפות רכיבים</h3>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>רכיב</th><th>X (mm)</th><th>Y (mm)</th><th>Z (mm)</th><th>הערה</th></tr></thead>
+      <tbody>
+        <tr><td>פלטת בסיס</td><td class="m">2 … 148</td><td class="m">−6.4 … 4</td><td class="m">−30 … 30</td><td>קשת רוחבית R70</td></tr>
+        <tr><td>מסילות צד</td><td class="m">6 … 146</td><td class="m">−1 … 25</td><td class="m">±27 … ±31</td><td>עובי 4</td></tr>
+        <tr><td>סוללה</td><td class="m">10 … 58</td><td class="m">4.5 … 13.5</td><td class="m">−28 … 0</td><td>מרווח 0.5 לניפוח</td></tr>
+        <tr><td>לוח ראשי</td><td class="m">6 … 68</td><td class="m">17.2 … 21</td><td class="m">−27 … −1</td><td>עמודונים h3.7</td></tr>
+        <tr><td>מחסנית</td><td class="m">10 … 79</td><td class="m">5 … 29</td><td class="m">2 … 26</td><td>Ø24, ציר y17 z14</td></tr>
+        <tr><td>משאבה</td><td class="m">84 … 120</td><td class="m">7 … 23</td><td class="m">6 … 22</td><td>ראש 84–98, מנוע 98–120</td></tr>
+        <tr><td>מניפולד</td><td class="m">118 … 132</td><td class="m">6 … 20</td><td class="m">−5 … 17</td><td>חיישן למעלה עד y25</td></tr>
+        <tr><td>שסתום</td><td class="m">119 … 131</td><td class="m">7 … 19</td><td class="m">−21 … −3</td><td>Ø12, ציר Z</td></tr>
+        <tr><td>פייה</td><td class="m">132 … 153.5</td><td class="m">8 … 18</td><td class="m">1 … 11</td><td>ציר y13 z6</td></tr>
+        <tr><td>כיסויים</td><td class="m">4 … 128</td><td class="m">24.5 … 28</td><td class="m">−31 … 31</td><td>חלון מחסנית עד y31.5</td></tr>
+      </tbody>
+    </table></div>
+    <div class="two">
+      <div class="card stack"><h3>מרווחים ותנועה</h3>
+        <div class="tbl-wrap"><table>
+          <tbody>
+            <tr><td>מחסנית בתוך הקדח</td><td class="m">Ø24.6 / 0.3 radial</td></tr>
+            <tr><td>מהלך ARM</td><td class="m">4.0, detent</td></tr>
+            <tr><td>מהלך הדק</td><td class="m">1.5, trip @ 70%</td></tr>
+            <tr><td>פתיחת דלת</td><td class="m">110°, 0.5 swing clearance</td></tr>
+            <tr><td>משאבה לשלד</td><td class="m">≥ 1.0 (grommet travel)</td></tr>
+            <tr><td>פייה לקפל שורש היד</td><td class="m">≥ 5</td></tr>
+            <tr><td>רכיבים לכיסוי</td><td class="m">≥ 1.5</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="card stack"><h3>ממשק שורש היד</h3>
+        <ul class="clean">
+          <li>מתאים להיקף אמה של <span class="ltr">150–200 mm</span> במקום הרצועות.</li>
+          <li>רצועות ברוחב 22 מ״מ ב־<span class="ltr">X=20</span> וב־<span class="ltr">X=120</span>, הרחק מבליטת עצם הזרת.</li>
+          <li>לחץ מגע מתוכנן עד <span class="ltr">4 kPa</span>, מתחת לסף שבו זרימת דם שטחית נפגעת.</li>
+          <li>כבל הדק באורך <span class="ltr">110 mm</span> עם שרוול נגד קיפול ומחבר מגנטי שמתנתק ב־<span class="ltr">~8 N</span>.</li>
+          <li>ברגי כיסוי: <span class="ltr">(6,28,−28) (74,28,−28) (6,28,−4) (74,28,−4)</span> ו־<span class="ltr">(84,28,±27) (124,28,±27)</span>.</li>
+          <li>ברגי מסילה מלמטה: <span class="ltr">X = 12, 50, 100, 140</span> בכל צד.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="feas">
+  <div class="sec-head"><span class="no">09</span><h2>בדיקת היתכנות</h2></div>
+  <div class="stack">
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>תת־מערכת</th><th>סיווג</th><th>נימוק</th></tr></thead>
+      <tbody>
+        <tr><td>מעטפת, שלד וריתום לשורש היד</td><td><span class="b rt">REALISTIC TODAY</span></td><td>חומרים ותהליכים סטנדרטיים. דומה לסדי שורש כף יד ולמכשירים לבישים קיימים.</td></tr>
+        <tr><td>אלקטרוניקה, טעינה ו־Bluetooth</td><td><span class="b rt">REALISTIC TODAY</span></td><td>כל הרכיבים זמינים מהמדף.</td></tr>
+        <tr><td>הדק Hall כפול ושכבות בטיחות</td><td><span class="b rt">REALISTIC TODAY</span></td><td>טכניקות סטנדרטיות מכלים חשמליים ומכשור רפואי.</td></tr>
+        <tr><td>מניפולד, שסתום NC ושסתום פריקה</td><td><span class="b rt">REALISTIC TODAY</span></td><td>רכיבי מיקרו־פלואידיקה קיימים בגדלים האלה.</td></tr>
+        <tr><td>מחסנית שקית־בתוך־מעטפת</td><td><span class="b rt">REALISTIC TODAY</span></td><td>אותו עיקרון כמו במחסניות דבק ובמזרקים מתכלים.</td></tr>
+        <tr><td>משאבת גלגלי שיניים לג'ל צמיג ב־5 bar</td><td><span class="b pe">PLAUSIBLE WITH ENGINEERING</span></td><td>משאבות כאלה קיימות, אבל צריך להתאים אותן לצמיגות של החומר ולוודא שהחומר לא מתקשה בתוך ראש המשאבה.</td></tr>
+        <tr><td>חוט דביק שנוצר באוויר</td><td><span class="b ex">EXPERIMENTAL</span></td><td>מעבדה ב־Tufts הראתה ב־2024 סיבי משי שמתמצקים כשהם יוצאים ממחט קואקסיאלית עם מעטפת אצטון, ומרימים חפצים מכ־12 ס״מ. החוט חלש פי אלף בערך ממשי עכביש. אין פורמולציה צרכנית.</td></tr>
+        <tr><td>טווח מעל 5 מטר עם חוט רציף</td><td><span class="b np">NOT CURRENTLY PRACTICAL</span></td><td>ב־5 bar ובספיקה של מיקרו־משאבה הסילון מתפרק אחרי מטר־שניים. לחץ גבוה יותר מחזיר את בעיית כלי הלחץ על היד.</td></tr>
+        <tr><td>הנפה ונשיאת משקל אדם</td><td><span class="b np">NOT CURRENTLY PRACTICAL</span></td><td>תנופה של 80 ק״ג יוצרת עומס דינמי של 2–3 kN. צריך חבל של כ־6 מ״מ שמעוגן כראוי, ושורש כף היד לא בנוי לשאת את זה. זה לא תוכנן כאן ולא צריך לנסות.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note"><b>מה שתוכנן מחדש בגלל היתכנות:</b> בלון ה־CO₂ הוחלף במשאבה, המחסנית הפכה ללא־לחוצה, הפייה קוצרה מאחורי קפל שורש היד, וההבטחה של "קורים לנדנוד" הוחלפה בהגדרה כנה: מפזר חוט ג'ל לטווח קצר. גרסה עתידית יכולה להשתמש במחסנית דו־תאית ובפייה קואקסיאלית כמו במחקר של Tufts, אבל אצטון ליד העור ומול הפנים דורש הערכת סיכונים נפרדת.</div>
+  </div>
+</section>
+
+<footer>
+  מקורות: <a href="https://now.tufts.edu/2024/10/10/inspired-spider-man-lab-recreates-web-slinging-technology" target="_blank" rel="noopener">Tufts Now, "Inspired by Spider-Man, a Lab Recreates Web-Slinging Technology" (2024)</a>. מספרי חלקים הם בחירה ראשונית לאב־טיפוס ויש לאמת זמינות ונתונים מול גיליונות היצרן לפני הזמנה.
+</footer>
+</div>
+
+<script src="./vendor/three/three.min.js"></script>
+<script src="./vendor/three/OrbitControls.js"></script>
+<script>
+(function(){
+// ---------- Part data (single source for 3D info panel, mechanical section, mass) ----------
+const PARTS = {
+  base:{code:"BASE_PLATE",he:"פלטת בסיס",mod:"WRIST_MOUNT",m:26,c:[75,1,0],
+    why:"מעגנת את כל המודולים למבנה אחד ומעבירה את העומסים לרצועות.",
+    conn:"מסילות הצד (8×M2.5 מלמטה), עמודוני הלוח, עריסת המחסנית, לולאות הרצועות.",
+    load:"כפיפה ממתיחת הרצועות (30–50 N לרצועה), מומנט מתנועת היד, מכה בנפילה.",
+    mat:"PA12 מחוזק סיבי פחמן (PA12-CF).",
+    mfg:"MJF או SLS. באב־טיפוס FDM מ־PA-CF. קשת רוחבית R70 שמתאימה לאמה.",
+    svc:"מתפרקת אחרונה. מחזיקה 16 תותבות פליז, כך שאפשר לפתוח ולסגור ברגים עשרות פעמים בלי לשחוק פלסטיק."},
+  liner:{code:"SKIN_LINER",he:"ריפוד מגע לעור",mod:"WRIST_MOUNT",m:9,c:[75,-2,0],
+    why:"מפזר לחץ, מונע החלקה ומבודד את העור מחום הסוללה.",
+    conn:"נצמד לפלטת הבסיס בשמונה פיני סנאפ.",
+    load:"לחץ מגע עד 4 kPa, זיעה, שחיקה.",
+    mat:"סיליקון 30A ברמה רפואית, 2 מ״מ, עם חריצי אוורור.",
+    mfg:"יציקה בתבנית מודפסת. בסדרה LSR.",
+    svc:"נשלף ונשטף. מתכלה, מוחלף בלי כלים."},
+  straps:{code:"STRAPS",he:"רצועות עם שחרור מהיר",mod:"WRIST_MOUNT",m:22,c:[70,-24,0],
+    why:"מקבעות את המכשיר לאמה בשתי נקודות, כך שהוא לא מסתובב סביב היד.",
+    conn:"לולאות בפלטת הבסיס, אבזם G בצד הפנימי.",
+    load:"מתיחה של 30–50 N בהידוק, עומס פיתול מהמומנט של המכשיר.",
+    mat:"רצועת ניילון 22 מ״מ, סקוץ', אבזם אלומיניום.",
+    mfg:"רכיבים מוכנים, תפירה.",
+    svc:"מוחלפות בנפרד. האבזם מאפשר להוריד את המכשיר ביד אחת."},
+  rails:{code:"SIDE_RAILS",he:"מסילות צד (השלד)",mod:"OUTER_HOUSING",m:18,c:[76,12,0],
+    why:"הקורה הקשיחה של המכשיר. מונעות פיתול ונושאות את הכיסויים. זה גם השלד האדום שנותן את השפה החזותית.",
+    conn:"פלטת הבסיס מלמטה, כל הכיסויים מלמעלה, מתג ARM בצד האולנרי.",
+    load:"כפיפה ופיתול, מכה צדית בנפילה, עומס הברגה.",
+    mat:"אלומיניום 6061-T6, אנודייז אדום.",
+    mfg:"CNC מפלטה של 5 מ״מ עם כיסי הקלה. באב־טיפוס חיתוך לייזר או FDM.",
+    svc:"לא חלק שחוק. מתפרקות רק לתיקון אחרי נפילה."},
+  battery:{code:"BATTERY_2S",he:"סוללת 2S LiPo",mod:"BATTERY_MODULE",m:26,c:[34,9,-14],
+    why:"מקור האנרגיה. ממוקמת פרוקסימלית ונמוכה כדי שהמסה הכבדה תשב קרוב למרפק.",
+    conn:"מחבר JST-PH לכוח ו־JST-XH לאיזון, אל הלוח הראשי.",
+    load:"רעידות, מעיכה. LiPo מתנפחת עם הגיל.",
+    mat:"תא שקית 7.4 V 450 mAh עם PCM ו־NTC, על פד קצף 1 מ״מ.",
+    mfg:"רכיב מדף.",
+    svc:"דרך כיסוי האלקטרוניקה, 4 ברגים, בלי הלחמה. מרווח של 0.5 מ״מ סביבה מאפשר התנפחות בלי ללחוץ על הלוח."},
+  pcb:{code:"MAIN_PCB",he:"לוח ראשי",mod:"ELECTRONICS_MODULE",m:12,c:[37,19,-14],
+    why:"בקר, טעינה, דרייברים, חיישני תנועה ומשוב, על לוח אחד.",
+    conn:"סוללה, משאבה, שסתום, חיישן לחץ, הדק, זיהוי מחסנית, USB-C.",
+    load:"רעידות מהמשאבה. חום מהדרייבר, עד 1 W בשיא.",
+    mat:"FR-4 ארבע שכבות, ENIG, ציפוי קונפורמלי.",
+    mfg:"ייצור והרכבה סטנדרטיים (JLCPCB/PCBWay).",
+    svc:"4 ברגי M2. כל החיבורים במחברים. משטח נחושת מעביר חום למסילה."},
+  cart:{code:"CARTRIDGE",he:"מחסנית חומר",mod:"CARTRIDGE_MODULE",m:34,c:[44,17,14],
+    why:"מחזיקה 25 מ״ל חומר. הצרכן היחיד במכשיר.",
+    conn:"נעילת באיונט ברבע סיבוב אל כניסת המשאבה דרך ספטום. מגעי 1-Wire ומגנט לזיהוי.",
+    load:"כמעט אפס לחץ. המשאבה יונקת מתוך שקית מתקפלת, והמעטפת מאווררת.",
+    mat:"מעטפת PETG שקופה, שקית PE/EVOH, צווארון אלומיניום כחול, טבעת O מ־FKM 18×1.5.",
+    mfg:"הזרקה. באב־טיפוס הדפסת שרף שקוף ושקית מסחרית.",
+    svc:"פותחים את הדלת, רבע סיבוב, שולפים. בלי כלים, בלי להוריד את המכשיר מהיד."},
+  pump:{code:"GEAR_PUMP",he:"משאבת גלגלי שיניים",mod:"ACTUATION_MODULE",m:32,c:[102,15,14],
+    why:"משאבה בתזוזה חיובית: הספיקה נשלטת, היא עובדת עם חומר צמיג, ואין צורך בגז דחוס.",
+    conn:"כניסה מהמחסנית, יציאה בצינור FEP אל המניפולד. 2 ברגי M2 דרך גרומטים.",
+    load:"מומנט תגובה, רעידה סביב 200 Hz, לחץ עד 5 bar בראש המשאבה.",
+    mat:"ראש PPS או נירוסטה עם גלגלי PEEK, מנוע DC מוברש 6–7.4 V.",
+    mfg:"רכיב מדף.",
+    svc:"מחברי ברב וקליפס. מוחלפת כיחידה תוך כמה דקות."},
+  tubing:{code:"TUBING",he:"צנרת נוזל",mod:"ACTUATION_MODULE",m:2,c:[105,12,8],
+    why:"מחברת בין המשאבה למניפולד בקו קצר ככל האפשר.",
+    conn:"ברבים בראש המשאבה ובמניפולד.",
+    load:"לחץ פנימי עד 5 bar, כיפוף קל.",
+    mat:"FEP בקוטר 3×2 מ״מ. עמיד כימית ולא נדבק אליו חומר.",
+    mfg:"חיתוך מגליל.",
+    svc:"מוחלפת כשיש סתימה או אחרי החלפת סוג חומר."},
+  manifold:{code:"MANIFOLD",he:"בלוק מניפולד",mod:"OUTPUT_MODULE",m:8,c:[125,13,6],
+    why:"מרכז חיישן, שסתום ושסתום פריקה בבלוק אחד ליד הפייה. נפח מת קטן, פחות טפטוף.",
+    conn:"צינור מהמשאבה, השסתום, החיישן, שסתום הפריקה, הפייה בהברגה.",
+    load:"לחץ עבודה 5 bar. בדיקת לחץ ב־8 bar. מקדם ביטחון גבוה מאוד באלומיניום.",
+    mat:"אלומיניום 6061-T6, אנודייז קשה.",
+    mfg:"CNC, ערוצים בקידוח Ø1.5 עם פקקים, אטימת פנים בטבעות O 4×1.",
+    svc:"יחידה שנבדקת מראש ומוחלפת כמכלול אחד עם השסתום והפייה."},
+  valve:{code:"SOLENOID_VALVE",he:"שסתום סולנואיד NC",mod:"OUTPUT_MODULE",m:13,c:[125,13,-12],
+    why:"פותח וסוגר את הקו. סגור בלי חשמל, כך שכל כשל חשמלי סוגר אותו.",
+    conn:"מושב במניפולד, כבל לדרייבר בלוח.",
+    load:"הפרש לחץ עד 5 bar, חום מהסליל.",
+    mat:"גוף נירוסטה, אטם FKM, סליל 6–7.4 V.",
+    mfg:"רכיב מדף.",
+    svc:"שני ברגים למניפולד. נבדק במצב תחזוקה."},
+  sensor:{code:"PRESSURE_SENSOR",he:"חיישן לחץ",mod:"SAFETY_MODULE",m:2,c:[125,22,10],
+    why:"מודד לחץ קו. מזהה לחץ יתר, מחסנית ריקה, סתימה ודליפה.",
+    conn:"פתח במניפולד, I²C ללוח.",
+    load:"לחץ הקו, פולסים מהמשאבה.",
+    mat:"MEMS ממולא ג'ל (TE MS5837-30BA), טבעת O.",
+    mfg:"רכיב מדף על לוח בת קטן.",
+    svc:"כיול אפס במצב תחזוקה. מוחלף עם המניפולד."},
+  relief:{code:"RELIEF_VALVE",he:"שסתום פריקת לחץ",mod:"SAFETY_MODULE",m:1,c:[125,13,20],
+    why:"שכבת בטיחות מכנית שלא תלויה בתוכנה. נפתח ב־5.5 bar ומחזיר חומר למחסנית.",
+    conn:"מניפולד, צינור חזרה למחסנית.",
+    load:"קפיץ ופתיחה חוזרת.",
+    mat:"מחסנית פריקה מנירוסטה, קפיץ קבוע.",
+    mfg:"רכיב מדף.",
+    svc:"נבדק בבדיקת הלחץ. מוחלף עם המניפולד."},
+  nozzle:{code:"NOZZLE",he:"פייה",mod:"OUTPUT_MODULE",m:6,c:[142,13,6],
+    why:"מגדירה את קוטר הסילון ואת כיוונו.",
+    conn:"מתברגת למניפולד בהברגת M8×0.75 עם טבעת O 6×1.",
+    load:"לחץ קו. כוח רתע של 0.03 N, זניח.",
+    mat:"נירוסטה 316L. קדח Ø1.0 באורך פי 4 מהקוטר. שסתום דאקביל פנימי נגד טפטוף וכניסת אוויר.",
+    mfg:"חריטה.",
+    svc:"שטוחי מפתח 7 מ״מ. נשלפת לניקוי סתימה ומוחלפת לקוטר אחר."},
+  shroud:{code:"NOSE_SHROUD",he:"מגן חרטום",mod:"FRONT_MODULE",m:6,c:[139,13,4],
+    why:"מגן על הפייה ממכות ומלכלוך, וסוגר את קדמת המכשיר.",
+    conn:"שני ברגים למסילות.",
+    load:"מכות ישירות. זה החלק הראשון שפוגע בקיר.",
+    mat:"PA12-CF, טבעת אלומיניום כחולה סביב הפייה.",
+    mfg:"MJF או FDM.",
+    svc:"חלק מתכלה. מוחלף בשני ברגים בלי לפתוח את המכשיר."},
+  coverE:{code:"COVER_ELEC",he:"כיסוי אלקטרוניקה",mod:"OUTER_HOUSING",m:9,c:[40,26.5,-15],
+    why:"סוגר את הסוללה והלוח, ומחזיק מובילי אור לחיווי.",
+    conn:"4 ברגים למסילות, אטם TPU היקפי.",
+    load:"מכה, לחץ מלמעלה.",
+    mat:"אלומיניום 6061 אנודייז שחור, או PC/ABS.",
+    mfg:"CNC או הזרקה.",
+    svc:"4 ברגים. נפתח רק להחלפת סוללה או לוח."},
+  door:{code:"CART_DOOR",he:"דלת מחסנית עם חלון",mod:"OUTER_HOUSING",m:10,c:[41,26,14],
+    why:"מאפשרת לראות את מפלס החומר ולהחליף מחסנית בלי כלים.",
+    conn:"ציר על השדרה, נעילה מגנטית למסילה.",
+    load:"מכה, פתיחה וסגירה חוזרות.",
+    mat:"פוליקרבונט שקוף 1.5 מ״מ, עמיד בפני שבירה.",
+    mfg:"כיפוף בחום, ובסדרה יציקה.",
+    svc:"הפין נשלף, והדלת מוחלפת אם נשרטה."},
+  spine:{code:"CENTER_SPINE",he:"שדרה מרכזית וציר",mod:"OUTER_HOUSING",m:6,c:[41,22,0],
+    why:"מפרידה בין שני הנתיבים, נושאת את ציר הדלת ומקשיחה את החלק העליון.",
+    conn:"פלטת הבסיס, הדלת, כיסוי האלקטרוניקה.",
+    load:"כפיפה מהדלת הפתוחה.",
+    mat:"אלומיניום 6061, אנודייז טבעי.",
+    mfg:"CNC.",
+    svc:"לא מתפרקת בשימוש רגיל."},
+  coverP:{code:"COVER_PUMP",he:"כיסוי משאבה עם פתחי אוורור",mod:"OUTER_HOUSING",m:12,c:[104,26.5,0],
+    why:"סוגר את המשאבה והמניפולד ומפזר חום דרך חריצים מעל המנוע.",
+    conn:"4 ברגים למסילות. לחצן החירום מורכב עליו.",
+    load:"מכה, חום מהמנוע.",
+    mat:"אלומיניום 6061 אנודייז שחור.",
+    mfg:"CNC.",
+    svc:"4 ברגים. גישה למשאבה ולמניפולד."},
+  safety:{code:"ARM_ESTOP",he:"מתג ARM ולחצן חירום",mod:"SAFETY_MODULE",m:4,c:[94,20,-24],
+    why:"שני הניתוקים המכניים: ARM שמאפשר ירי, וחירום שעוצר הכול.",
+    conn:"בטור למסילת המשאבה והשסתום, ובמקביל לכניסה של הבקר.",
+    load:"הפעלה חוזרת, מכה.",
+    mat:"מתג מחליק עם ידית כתומה, לחצן ננעל אדום עם טבעת מגן מאלומיניום.",
+    mfg:"רכיבי מדף, ידית מודפסת.",
+    svc:"מוחלפים דרך הכיסויים."},
+  trigger:{code:"PALM_TRIGGER",he:"הדק כף יד (Hall כפול)",mod:"SAFETY_MODULE",m:10,c:[245,-2,0],onPalm:true,
+    why:"ממשק ההפעלה. יושב בכף היד מתחת לכפפה או לשרוול, כך שהוא מוסתר ולא בולט מהמכשיר.",
+    conn:"כבל 4 גידים, מחבר מגנטי בקדמת המכשיר.",
+    load:"לחיצה של עד 20 N, זיעה, כיפוף של הכבל.",
+    mat:"TPU 85A, שתי כיפות עם מגנטים, שני חיישני Hall.",
+    mfg:"הדפסת TPU, לוח גמיש קטן בפנים.",
+    svc:"מתנתק במגנט. מוחלף בלי לפתוח את המכשיר."},
+  harness:{code:"HARNESS",he:"חיווט",mod:"ELECTRONICS_MODULE",m:6,c:[90,15,-10],
+    why:"מחבר את הלוח למשאבה, לשסתום, לחיישן ולהדק.",
+    conn:"מחברי JST-SH בלוח.",
+    load:"רעידות, כיפוף בהרכבה.",
+    mat:"חוטי סיליקון AWG 26–30, שרוול.",
+    mfg:"חיתוך ולחיצת פינים.",
+    svc:"כל חוט במחבר. אין חיבור מולחם בין מודולים."},
+  fasteners:{code:"FASTENERS",he:"ברגים ותותבות",mod:"OUTER_HOUSING",m:6,c:[75,15,0],
+    why:"גודל בורג אחד לכל המכשיר, כך שמברג טורקס אחד מספיק.",
+    conn:"תותבות פליז בפלטה ובמסילות.",
+    load:"מומנט הידוק 0.3 N·m.",
+    mat:"M2.5 נירוסטה A2, תותבות פליז.",
+    mfg:"מדף.",
+    svc:"Loctite 222 בברגי המסילות בלבד."}
+};
+const MOD_HE = {WRIST_MOUNT:"ריתום לשורש היד",OUTER_HOUSING:"מעטפת",FRONT_MODULE:"חזית",OUTPUT_MODULE:"מודול יציאה",CARTRIDGE_MODULE:"מחסנית",ACTUATION_MODULE:"הנעה",ELECTRONICS_MODULE:"אלקטרוניקה",BATTERY_MODULE:"סוללה",SAFETY_MODULE:"בטיחות"};
+
+// ---------- mass + CG ----------
+let M=0,MP=0,cx=0,cy=0; const byMod={};
+for(const k in PARTS){const p=PARTS[k]; byMod[p.mod]=(byMod[p.mod]||0)+p.m;
+  if(p.onPalm){MP+=p.m;continue} M+=p.m; cx+=p.m*p.c[0]; cy+=p.m*p.c[1];}
+cx/=M; cy/=M;
+document.getElementById('tbMass').textContent = M+' g (+'+MP+' g palm)';
+document.getElementById('tbCg').textContent = 'X '+cx.toFixed(0)+' · Y '+cy.toFixed(0)+' mm';
+document.getElementById('massText').innerHTML = 'מסה על האמה: <b class="num">'+M+' g</b>, ועוד <span class="num">'+MP+' g</span> להדק בכף היד. מרכז הכובד נמצא ב־<span class="num ltr">X = '+cx.toFixed(0)+' mm</span>, כלומר כ־<span class="num">'+(155-cx).toFixed(0)+'</span> מ״מ לפני קפל שורש היד, ובגובה <span class="num ltr">'+cy.toFixed(0)+' mm</span> מעל העור. המומנט על שורש היד כשהזרוע אופקית הוא בערך <span class="num ltr">'+(M/1000*9.81*(155-cx)/1000).toFixed(2)+' N·m</span>. כדי להקטין אותו עוד, הרכיבים הכבדים (סוללה ומחסנית) ממוקמים בחצי הפרוקסימלי.';
+const mt=document.querySelector('#massTable tbody');
+Object.keys(byMod).sort((a,b)=>byMod[b]-byMod[a]).forEach(k=>{const tr=document.createElement('tr');
+  tr.innerHTML='<td>'+MOD_HE[k]+' <span class="ltr" style="color:var(--muted);font-family:var(--f-mono);font-size:.72rem">'+k+'</span></td><td class="m">'+byMod[k]+'</td>';mt.appendChild(tr);});
+
+// ---------- mechanical accordion + select ----------
+const list=document.getElementById('partList'), sel=document.getElementById('partSelect');
+const esc=s=>s;
+for(const k in PARTS){const p=PARTS[k];
+  const d=document.createElement('details'); d.className='part'; d.id='p-'+k;
+  d.innerHTML='<summary><span>'+p.he+'</span><span class="code">'+p.code+'</span><span class="mass">'+p.m+' g</span></summary>'+
+   '<div class="pgrid"><div><b>למה הוא שם</b>'+p.why+'</div><div><b>מחובר אל</b>'+p.conn+'</div><div><b>עומס</b>'+p.load+'</div><div><b>חומר</b>'+p.mat+'</div><div><b>ייצור</b>'+p.mfg+'</div><div><b>החלפה ושירות</b>'+p.svc+'</div></div>';
+  list.appendChild(d);
+  const o=document.createElement('option'); o.value=k; o.textContent=p.he; sel.appendChild(o);}
+
+// ---------- 3D ----------
+if(!window.THREE){document.getElementById('hud').textContent='3D failed to load';return;}
+const stage=document.getElementById('stage');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.outputEncoding=THREE.sRGBEncoding;
+stage.appendChild(renderer.domElement);
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x171C22);
+const camera=new THREE.PerspectiveCamera(22,1,1,5000);
+const T=new THREE.Vector3(80,12,0);
+const controls=new THREE.OrbitControls(camera,renderer.domElement);
+controls.target.copy(T); controls.enableDamping=true; controls.dampingFactor=.08; controls.minDistance=120; controls.maxDistance=1600;
+
+scene.add(new THREE.HemisphereLight(0xdfe8f2,0x2a2f36,.85));
+const key=new THREE.DirectionalLight(0xffffff,1.05); key.position.set(160,320,240); scene.add(key);
+const rim=new THREE.DirectionalLight(0x9db8e0,.55); rim.position.set(-260,120,-200); scene.add(rim);
+const fill=new THREE.DirectionalLight(0xffe2d0,.35); fill.position.set(300,-80,120); scene.add(fill);
+
+const grid=new THREE.GridHelper(600,60,0x2E363F,0x232A32); grid.position.set(80,-60,0); scene.add(grid);
+
+function mat(color,o={}){return new THREE.MeshStandardMaterial(Object.assign({color,metalness:.3,roughness:.5},o));}
+const MAT={
+  alu:()=>mat(0xB9C0C8,{metalness:.65,roughness:.32}), red:()=>mat(0xA3172B,{metalness:.5,roughness:.38}),
+  blue:()=>mat(0x1E3F75,{metalness:.55,roughness:.35}), graph:()=>mat(0x2A2F36,{metalness:.35,roughness:.5}),
+  black:()=>mat(0x15181C,{roughness:.6}), steel:()=>mat(0x8E959C,{metalness:.75,roughness:.28}),
+  ss:()=>mat(0xC9CED4,{metalness:.85,roughness:.22}), sil:()=>mat(0x3A4450,{roughness:.9,metalness:0}),
+  web:()=>mat(0x1F2329,{roughness:.95,metalness:0}), batt:()=>mat(0xC4C9CF,{metalness:.35,roughness:.45}),
+  pcb:()=>mat(0x173A2C,{roughness:.55,metalness:.1}), gold:()=>mat(0xC9A24A,{metalness:.8,roughness:.3}),
+  clear:()=>mat(0xDDEBF3,{transparent:true,opacity:.26,roughness:.1,metalness:0,depthWrite:false}),
+  gel:()=>mat(0xB9D4E6,{transparent:true,opacity:.85,roughness:.2,metalness:0}),
+  orange:()=>mat(0xE0841C,{roughness:.45}), tpu:()=>mat(0x7A1626,{roughness:.8,metalness:0})
+};
+
+function rbox(lx,ly,lz,r=2){
+  const b=Math.min(.6,ly/4); const w=lx-2*b, d=lz-2*b, rr=Math.max(.2,Math.min(r-b,w/2-.01,d/2-.01));
+  const s=new THREE.Shape(), x=-w/2, y=-d/2;
+  s.moveTo(x+rr,y); s.lineTo(x+w-rr,y); s.quadraticCurveTo(x+w,y,x+w,y+rr); s.lineTo(x+w,y+d-rr);
+  s.quadraticCurveTo(x+w,y+d,x+w-rr,y+d); s.lineTo(x+rr,y+d); s.quadraticCurveTo(x,y+d,x,y+d-rr); s.lineTo(x,y+rr); s.quadraticCurveTo(x,y,x+rr,y);
+  const g=new THREE.ExtrudeGeometry(s,{depth:Math.max(.01,ly-2*b),bevelEnabled:true,bevelThickness:b,bevelSize:b,bevelSegments:2,curveSegments:6});
+  g.translate(0,0,-(ly-2*b)/2); g.rotateX(-Math.PI/2); g.computeVertexNormals(); return g;
+}
+function cylX(r1,r2,len,seg=28){const g=new THREE.CylinderGeometry(r1,r2,len,seg);g.rotateZ(-Math.PI/2);return g;}
+function cylY(r,len,seg=24){return new THREE.CylinderGeometry(r,r,len,seg);}
+function cylZ(r,len,seg=24){const g=new THREE.CylinderGeometry(r,r,len,seg);g.rotateX(Math.PI/2);return g;}
+function bend(g,R){const p=g.attributes.position;for(let i=0;i<p.count;i++){const z=p.getZ(i);p.setY(i,p.getY(i)-z*z/(2*R));}g.computeVertexNormals();return g;}
+
+const groups=[]; const byId={}; const pickables=[];
+function part(id,ex,opts={}){const g=new THREE.Group(); g.userData={id,ex:new THREE.Vector3(...ex),cover:!!opts.cover,hideEx:!!opts.hideEx};
+  scene.add(g); groups.push(g); (byId[id]=byId[id]||[]).push(g);
+  return (geo,m,pos=[0,0,0],rot)=>{const mesh=new THREE.Mesh(geo,m); mesh.position.set(...pos); if(rot)mesh.rotation.set(...rot);
+    mesh.userData.id=id; mesh.userData.baseOpacity=m.opacity; mesh.userData.baseTransparent=m.transparent; g.add(mesh); pickables.push(mesh); return mesh;};}
+
+// forearm + hand ghost
+const ghostM=new THREE.MeshStandardMaterial({color:0xD8A889,transparent:true,opacity:.16,roughness:.8,depthWrite:false});
+const arm=new THREE.Group(); scene.add(arm);
+function ghost(geo,pos,sc){const m=new THREE.Mesh(geo,ghostM);m.position.set(...pos);if(sc)m.scale.set(...sc);m.raycast=()=>{};arm.add(m);return m;}
+ghost(cylX(1,1.06,250,40),[35,-24,0],[1,22,32]);
+ghost(cylX(1,1,100,40),[205,-19,0],[1,14.5,42]);
+[-27,-9,9,27].forEach((z,i)=>ghost(cylX(1,.85,[62,72,68,52][i],20),[255+[62,72,68,52][i]/2,-18,z],[1,7.5,8]));
+const th=ghost(cylX(1,.85,60,20),[195,-16,-52],[1,9,9]); th.rotation.y=-.55;
+
+// --- WRIST_MOUNT
+let a=part('base',[0,-20,0]); a(bend(rbox(146,4,60,9),70),MAT.graph(),[75,2,0]);
+a=part('liner',[0,-38,0]); a(bend(rbox(142,2.2,57,8),70),MAT.sil(),[75,-1.2,0]);
+a=part('straps',[0,-58,0]);
+[20,120].forEach(x=>{const g=new THREE.CylinderGeometry(1,1,22,48,1,true);g.rotateZ(-Math.PI/2);
+  const m=a(g,MAT.web(),[x,-24,0]); m.scale.set(1,24.6,34.6); m.material.side=THREE.DoubleSide;
+  a(rbox(26,4,16,2),MAT.alu(),[x,-49,0]);});
+
+// --- SIDE RAILS (red skeleton)
+[-1,1].forEach(s=>{const r=part('rails',[0,0,38*s]);
+  r(rbox(140,26,4,4),MAT.red(),[76,12,29*s]);
+  [30,62,100].forEach(x=>r(rbox(20,10,1,3),MAT.black(),[x,12,31.1*s]));});
+
+// --- BATTERY + PCB
+a=part('battery',[0,16,0]); a(rbox(48,9,28,2),MAT.batt(),[34,9,-14]);
+a(rbox(30,.4,18,1),MAT.blue(),[34,13.7,-14]);
+a=part('pcb',[0,36,0]); a(rbox(62,1.6,26,1.5),MAT.pcb(),[37,18,-14]);
+a(rbox(16,2.2,11,.6),MAT.steel(),[32,19.8,-16]);
+a(rbox(5,1,5,.4),MAT.black(),[52,19.3,-7]); a(rbox(4,1,4,.4),MAT.black(),[18,19.3,-22]);
+a(rbox(5,1,5,.4),MAT.black(),[46,19.3,-22]); a(cylY(4,2.6),MAT.steel(),[60,20.1,-22]);
+a(rbox(7,3.2,9,1.2),MAT.steel(),[8,19.6,-14]);
+
+// --- CARTRIDGE
+a=part('cart',[0,64,0]);
+a(cylX(12,12,62,36),MAT.clear(),[41,17,14]);
+a(cylX(10.6,10.6,40,32),MAT.gel(),[50,17,14]);
+a(cylX(10.6,10.6,12,32),MAT.clear(),[24,17,14]);
+a(cylX(12.6,12.6,7,32),MAT.blue(),[75.5,17,14]);
+a(cylX(4,4,4,16),MAT.alu(),[81,17,14]);
+a(cylX(9,9,3,24),MAT.alu(),[9.5,17,14]);
+
+// --- PUMP
+a=part('pump',[0,42,0]);
+a(rbox(14,16,16,2),MAT.black(),[91,15,14]);
+a(cylX(7.5,7.5,22,28),MAT.steel(),[109,15,14]);
+a(cylX(5,5,2,20),MAT.alu(),[121,15,14]);
+a(cylY(2.4,4,12),mat(0x5A646E),[91,6,9]); a(cylY(2.4,4,12),mat(0x5A646E),[91,6,19]);
+
+// --- TUBING (hidden when exploded)
+a=part('tubing',[0,0,0],{hideEx:true});
+const tube=(pts,r,m)=>a(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p))),48,r,10,false),m);
+tube([[91,15,5.8],[96,12,3],[110,9,2],[116,12,4],[118.5,13,5]],1.6,mat(0xDCE6EE,{transparent:true,opacity:.7,roughness:.15}));
+tube([[125,13,23],[118,8,27],[90,6,25],[80,10,24]],1.1,mat(0xDCE6EE,{transparent:true,opacity:.6,roughness:.15}));
+
+// --- OUTPUT: manifold, valve, sensor, relief, nozzle
+a=part('manifold',[16,48,0]); a(rbox(14,14,22,1.5),MAT.alu(),[125,13,6]);
+a=part('valve',[16,48,-34]); a(cylZ(6,18,28),MAT.black(),[125,13,-12]); a(cylZ(6.4,3,28),MAT.alu(),[125,13,-20.5]);
+a(cylZ(2,3,12),MAT.steel(),[125,13,-23.5]);
+a=part('sensor',[16,70,0]); a(cylY(4,5,20),mat(0x3A4048),[125,22.5,10]); a(cylY(3,1,20),MAT.gold(),[125,25.3,10]);
+a=part('relief',[16,48,28]); a(cylZ(2.6,6,16),MAT.ss(),[125,13,20]); a(cylZ(3.2,1.5,6),MAT.ss(),[125,13,23.2]);
+a=part('nozzle',[44,48,0]);
+a(cylX(2.6,5,18,28),MAT.ss(),[141,13,6]);
+a(cylX(2.9,2.9,3.5,20),MAT.ss(),[151.7,13,6]);
+a(cylX(.55,.55,.6,12),MAT.black(),[153.5,13,6]);
+
+// --- FRONT: shroud
+a=part('shroud',[34,84,0],{cover:true});
+a(rbox(18,20,58,5),MAT.graph(),[137,13,0]);
+a(cylX(7.5,7.5,3,28),MAT.blue(),[147,13,6]);
+
+// --- HOUSING TOP
+a=part('coverE',[0,96,0],{cover:true}); a(rbox(72,3.5,33,3),MAT.graph(),[40,26.2,-14.5]);
+[[20,-24,0x5DBB83],[28,-24,0xE0A443]].forEach(([x,z,c])=>a(cylY(1.5,1.4,12),mat(c,{emissive:c,emissiveIntensity:.9}),[x,28.3,z]));
+a(rbox(4,.3,10,.2),MAT.black(),[3.6,19.6,-14]);
+a=part('spine',[0,80,0],{cover:true}); a(rbox(76,10,4.2,1.5),MAT.alu(),[41,22.5,0]);
+a(cylX(1.6,1.6,74,12),MAT.ss(),[41,27.4,1]);
+a=part('door',[0,112,10],{cover:true});
+{const g=new THREE.CylinderGeometry(14.6,14.6,70,40,1,true,Math.PI,Math.PI);g.rotateZ(-Math.PI/2);
+ const m=a(g,mat(0xCFE3F0,{transparent:true,opacity:.2,roughness:.05,metalness:0,side:THREE.DoubleSide,depthWrite:false}),[41,17,14]);}
+[6,76].forEach(x=>{const g=new THREE.TorusGeometry(14.6,1.3,8,32,Math.PI);g.rotateY(Math.PI/2);a(g,MAT.red(),[x,17,14]);});
+a(rbox(70,1.4,3,.6),MAT.alu(),[41,17.5,28.4]);
+a=part('coverP',[0,96,0],{cover:true}); a(rbox(48,3.5,62,4),MAT.graph(),[104,26.2,0]);
+[0,1,2,3,4].forEach(i=>a(rbox(2,.4,16,.8),MAT.black(),[100+i*4.5,28.05,14]));
+
+// --- SAFETY: ARM slider + E-stop
+a=part('safety',[0,0,-34]); a(rbox(16,7,1.4,1.5),MAT.black(),[92,14,-31.7]); a(rbox(6,5,3,1),MAT.orange(),[90,14,-33.2]);
+a=part('safety',[0,116,0]); a(cylY(4.6,3,28),mat(0xD7263D,{emissive:0x3a050b}),[94,29.4,-16]);
+{const g=new THREE.TorusGeometry(6.4,1.1,10,32);g.rotateX(Math.PI/2);a(g,MAT.alu(),[94,28.6,-16]);}
+
+// --- TRIGGER on palm + cable
+a=part('trigger',[0,0,0]); a(rbox(30,3.2,36,6),MAT.tpu(),[244,-3.6,0]);
+a(new THREE.SphereGeometry(4.2,20,12,0,Math.PI*2,0,Math.PI/2),MAT.tpu(),[244,-2,-8]);
+a(new THREE.SphereGeometry(4.2,20,12,0,Math.PI*2,0,Math.PI/2),MAT.tpu(),[244,-2,8]);
+a=part('harness',[0,0,0],{hideEx:true});
+const wire=(pts,c,r=.7)=>a(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p))),60,r,8,false),mat(c,{roughness:.6}));
+wire([[66,18.5,-6],[80,16,4],[98,20,12],[112,22,10]],0xA3172B);
+wire([[66,18.5,-10],[95,14,-14],[118,12,-14],[125,13,-22]],0x111418);
+wire([[66,18.5,-4],[90,22,2],[118,24,6],[125,25,10]],0x1E3F75,.5);
+wire([[60,18,-24],[100,8,-25],[140,5,-24],[156,-1,-24],[190,-3.2,-20],[226,-2.6,-8],[232,-2.5,0]],0x111418,1.1);
+a(rbox(8,6,6,2),MAT.alu(),[147,6,-24]);
+
+// fasteners
+a=part('fasteners',[0,124,0],{cover:true});
+[[6,-28],[74,-28],[6,-4],[74,-4]].forEach(([x,z])=>a(cylY(2.2,1.2,12),MAT.steel(),[x,28.4,z]));
+[[84,-27],[124,-27],[84,27],[124,27]].forEach(([x,z])=>a(cylY(2.2,1.2,12),MAT.steel(),[x,28.4,z]));
+
+// ---------- interactions ----------
+let explodeT=0, explodeTarget=0, xray=false, armOn=true, selected=null;
+const exInput=document.getElementById('explode');
+function applyExplode(){groups.forEach(g=>{g.position.copy(g.userData.ex).multiplyScalar(explodeT); if(g.userData.hideEx) g.visible=explodeT<.04;});}
+function applyXray(){groups.forEach(g=>{if(!g.userData.cover)return; g.children.forEach(m=>{
+  if(xray){m.material.transparent=true;m.material.opacity=Math.min(m.userData.baseOpacity??1,.13);m.material.depthWrite=false;}
+  else{m.material.transparent=!!m.userData.baseTransparent;m.material.opacity=m.userData.baseOpacity??1;m.material.depthWrite=!m.userData.baseTransparent;}
+  m.material.needsUpdate=true;});});}
+function select(id){
+  if(selected)(byId[selected]||[]).forEach(g=>g.children.forEach(m=>m.material.emissive&&m.material.emissive.setHex(m.userData.em??0)));
+  selected=id||null; sel.value=selected||'';
+  const info=document.getElementById('info');
+  if(!selected){info.innerHTML='<h3>הקש על רכיב במודל</h3>';return;}
+  (byId[selected]||[]).forEach(g=>g.children.forEach(m=>{if(!m.material.emissive)return; if(m.userData.em===undefined)m.userData.em=m.material.emissive.getHex(); m.material.emissive.setHex(0x5a1420);}));
+  const p=PARTS[selected];
+  info.innerHTML='<div class="code">'+p.code+' · '+p.mod+'</div><h3>'+p.he+'</h3><dl>'+
+   '<dt>תפקיד</dt><dd>'+p.why+'</dd><dt>חומר</dt><dd>'+p.mat+'</dd><dt>עומס</dt><dd>'+p.load+'</dd><dt>שירות</dt><dd>'+p.svc+'</dd><dt>מסה</dt><dd class="num">'+p.m+' g</dd></dl>'+
+   '<p style="margin-top:8px"><a href="#p-'+selected+'" style="color:#74A0E4">פרטים מלאים ↓</a></p>';
+}
+sel.addEventListener('change',()=>select(sel.value));
+document.getElementById('partList').addEventListener('click',e=>{const d=e.target.closest('details');});
+document.getElementById('info').addEventListener('click',e=>{const l=e.target.closest('a[href^="#p-"]');if(l){const d=document.querySelector(l.getAttribute('href'));if(d)d.open=true;}});
+
+const ray=new THREE.Raycaster(), mouse=new THREE.Vector2(); let down=null;
+renderer.domElement.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];});
+renderer.domElement.addEventListener('pointerup',e=>{if(!down)return; const moved=Math.hypot(e.clientX-down[0],e.clientY-down[1]); down=null; if(moved>6)return;
+  const r=renderer.domElement.getBoundingClientRect(); mouse.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(mouse,camera);
+  const hits=ray.intersectObjects(pickables.filter(m=>{let o=m;while(o){if(!o.visible)return false;o=o.parent;}return true;}),false)
+    .filter(h=>!(xray && h.object.parent.userData.cover));
+  select(hits.length?hits[0].object.userData.id:null);});
+
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const VIEWS={iso:[[150,175,265],'ISO'],front:[[330,0,0],'FRONT · distal'],back:[[-330,0,0],'BACK · proximal'],side:[[0,0,470],'SIDE · radial'],
+  top:[[0,470,.01],'TOP'],bottom:[[0,-470,.01],'BOTTOM'],exploded:[[215,260,380],'EXPLODED']};
+let tween=null;
+function setView(v){const [off,label]=VIEWS[v]; const asp=stage.clientWidth/stage.clientHeight; const k=asp<1.15?1.15/asp:1;
+  const to=T.clone().add(new THREE.Vector3(...off).multiplyScalar(k));
+  const hideArm=(v==='back'||v==='bottom'||v==='front'); arm.visible=armOn&&!hideArm;
+  byId.straps.forEach(g=>g.visible=!(v==='bottom'));
+  const ex=v==='exploded'?1:0; explodeTarget=ex; exInput.value=ex*100;
+  document.getElementById('hudView').textContent=label;
+  document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===v));
+  tween={from:camera.position.clone(),to,tf:controls.target.clone(),t0:performance.now(),dur:reduce?1:750,exFrom:explodeT};}
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+exInput.addEventListener('input',()=>{explodeT=explodeTarget=exInput.value/100; tween&&(tween.exFrom=explodeT); applyExplode();});
+document.getElementById('tXray').addEventListener('click',e=>{xray=!xray;e.currentTarget.setAttribute('aria-pressed',xray);applyXray();});
+document.getElementById('tArm').addEventListener('click',e=>{armOn=!armOn;e.currentTarget.setAttribute('aria-pressed',armOn);arm.visible=armOn;});
+
+function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
+new ResizeObserver(resize).observe(stage); resize();
+camera.position.copy(T).add(new THREE.Vector3(...VIEWS.iso[0]).multiplyScalar(stage.clientWidth/stage.clientHeight<1.15?1.15/(stage.clientWidth/stage.clientHeight):1));
+controls.update();
+
+function loop(now){requestAnimationFrame(loop);
+  if(tween){const p=Math.min(1,(now-tween.t0)/tween.dur), e=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+    camera.position.lerpVectors(tween.from,tween.to,e); controls.target.lerpVectors(tween.tf,T,e);
+    explodeT=tween.exFrom+(explodeTarget-tween.exFrom)*e; applyExplode(); if(p>=1)tween=null;}
+  controls.update(); renderer.render(scene,camera);}
+applyExplode(); requestAnimationFrame(loop);
+window.__ws={setView,select,toggleXray:()=>document.getElementById('tXray').click()};
+})();
+</script>
+
+<script>
+/* WS-01 desktop: a link to a web page opens in the default browser, never
+   inside this window (which has no back button). */
+document.addEventListener('click', function (e) {
+  var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+  if (!a) return;
+  var href = a.getAttribute('href') || '';
+  if (!/^https?:/i.test(href)) return;
+  e.preventDefault();
+  var o = window.__TAURI__ && window.__TAURI__.opener;
+  if (o && o.openUrl) o.openUrl(href).catch(function () {});
+}, true);
+</script>
+</body></html>
