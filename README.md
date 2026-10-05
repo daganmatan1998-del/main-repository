@@ -2113,3 +2113,21 @@ for `"model3d_provider": "tripo"` and `"model3d_key": "set"`.
 
 **Setup**: replace `dist/index.html`, rebuild the app (Rust changed), and
 deploy the new `jarvis-worker.js`.
+
+## Page 2.30.1: JARVIS speaks again (needs the app rebuilt)
+
+**What was wrong.** Every line JARVIS says waits for the one before it. If one
+voice clip started and never reported that it had finished (or the sound system
+was still waiting for a first click before it would play anything), that line
+never ended, and every line after it waited behind it for good: commands still
+ran, but he said nothing — not "YouTube is open", not the answer to a question.
+
+**What changed.**
+- A voice clip is over at its own length plus three seconds, whatever the
+  player reports, and the wait for the sound system to be ready is a moment,
+  not for ever. When a clip cannot play, the line goes to the computer's own
+  voice instead. The server check every line waits for gives up after 10 s.
+- The app itself is allowed to play sound without a click first (the
+  WebView2 autoplay setting, the same for all of JARVIS's windows).
+- "Check yourself" now says if his voice had a problem recently, and what it
+  was, and the full report names the state of the audio.

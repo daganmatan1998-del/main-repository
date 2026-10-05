@@ -870,6 +870,22 @@ single file `dist/index.html`.
   content, sends the task again with only the certain fields. selfCheck
   speaks when the 3D provider is not tripo or its key is not 'set'. Tests:
   chrome.e2e, tripofirst.e2e, tripo.test (68).
+- **The speech queue must never wait for ever (2.30.1).** runSpeechQueue
+  plays one item at a time, so ONE hung promise silences him for good while
+  every action still runs ("does everything, says nothing"). Bounded now:
+  playAudioBlob races unlockAudio (AudioContext.resume stays pending until a
+  click under the default autoplay rule) with 1.2 s, and ends a clip at
+  duration + 3 s (60 s cap) even if 'ended' never fires; fetchVoiceAudio
+  waits for backendProbe at most 4 s; runBackendProbe's /health has a 10 s
+  abort. Failures go to lastVoiceProblem (noteVoiceProblem), which selfCheck
+  speaks. main.rs sets WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS (Tauri's own
+  --disable-features + --autoplay-policy=no-user-gesture-required) before
+  the first webview, unless the user set it: the same args for every window,
+  so no two webviews in one profile disagree (the music window's own args are
+  the same set). Any new await in the speech path needs a bound too.
+  voicehang.e2e (HANG=noend reproduces the silence on 2.30.0; HANG=resume).
+  understand.e2e is timing-flaky in the sandbox (the simulated mic splits
+  the long courtesy sentence); it fails on 2.28.0 too, now and then.
 - **Background shells die with their task.** A regression started with a
   plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
   looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &

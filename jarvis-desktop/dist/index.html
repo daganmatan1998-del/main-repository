@@ -2523,7 +2523,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.30.0';
+const APP_VERSION = '2.30.1';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -6958,7 +6958,13 @@ async function runBackendProbe(){
   if(!backendUrl) return;
   clearTimeout(probeRetryTimer);
   try{
-    const res = await fetch(backendUrl + '/health');
+    /* Never for ever (2.30.1): every voice line waits for this probe, so a
+       /health that never answered meant he never spoke again. */
+    const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const probeTimer = setTimeout(() => { try{ ac && ac.abort(); }catch(e){} }, 10000);
+    let res;
+    try{ res = await fetch(backendUrl + '/health', ac ? { signal: ac.signal } : {}); }
+    finally{ clearTimeout(probeTimer); }
     if(!res.ok) throw new Error('no /health');
     const data = await res.json();
     backendCapabilities = data;
@@ -7618,6 +7624,10 @@ async function selfCheck(){
                        : 'I cannot hear you right now: ' + (quota ? 'the transcription allowance is used up' : sttBrokenWhy) + '.' + (quota && via !== 'groq' ? ' A Groq key in the worker fixes that.' : ''));
         }
         if(health.voice === false || !workerVoiceAvailable) detail.push('voice: the computer\'s own (no worker voice)');
+        detail.push('audio: ' + (audioCtx ? audioCtx.state : 'no context') + (lastVoiceProblem ? ' — last problem: ' + lastVoiceProblem : ''));
+        if(lastVoiceProblem){
+          said.push(he ? 'הקול שלי נתקע לאחרונה: ' + lastVoiceProblem + '.' : 'My voice had a problem recently: ' + lastVoiceProblem + '.');
+        }
         /* 3D (2.30.0): which service makes his models, said when it is not Tripo. */
         detail.push('3d: ' + (health.model3d_provider || 'none') + (health.model3d_key ? ' (key ' + health.model3d_key + (health.model3d_key_name ? ', ' + health.model3d_key_name : '') + ')' : ''));
         if(health.model3d_provider !== 'tripo'){
@@ -7982,7 +7992,7 @@ cartesiaClearBtn.addEventListener('click', async ()=>{
 async function fetchVoiceAudio(text){
   // Wait for the capability probe rather than racing it — otherwise the first
   // few sentences all fire at a worker we are about to discover has no /tts.
-  if(backendProbe){ try{ await backendProbe; }catch(err){} }
+  if(backendProbe){ try{ await Promise.race([backendProbe, new Promise(r => setTimeout(r, 4000))]); }catch(err){} }
   const language = currentLang === 'he' ? 'he' : 'en';
   const voiceId = cartesiaVoiceId || DEFAULT_CARTESIA_VOICE_ID;
 
@@ -8075,8 +8085,21 @@ function fetchCartesiaDirect(key, text, voiceId, language){
   });
 }
 
+/* THE VOICE NEVER STOPS THE QUEUE (2.30.1). Every line he says waits for the
+   one before it, so one clip that never finished silenced him for good:
+   everything still happened, and he said nothing. Two places could wait for
+   ever. Unlocking audio (AudioContext.resume) stays pending until a click
+   when the system has not let the page play sound yet, and a clip that
+   started could fail to report its end. Now the unlock gets a moment and no
+   more, and a clip is over at its own length plus three seconds (a minute at
+   most) whatever the player says. A failure is remembered for "Check yourself". */
+let lastVoiceProblem = '';
+function noteVoiceProblem(why){ lastVoiceProblem = String(why || '').slice(0, 160); }
+
 async function playAudioBlob(blob){
-  if(!audioUnlocked) await unlockAudio(); // may still fail — handled below
+  if(!audioUnlocked){
+    try{ await Promise.race([unlockAudio(), new Promise(r => setTimeout(r, 1200))]); }catch(e){}
+  }
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
   audio.preload = 'auto';
@@ -8094,17 +8117,27 @@ async function playAudioBlob(blob){
       if(err) reject(err); else resolve();
     };
     audio.onended = ()=> finish(null);
-    audio.onerror = ()=> finish(new Error('audio playback failed'));
+    audio.onerror = ()=> { noteVoiceProblem('the voice clip could not be played'); finish(new Error('audio playback failed')); };
+    /* Over at its own length plus three seconds, a minute at most. */
+    let endGuard = null;
+    const armEnd = ()=>{
+      clearTimeout(endGuard);
+      const d = isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 57;
+      endGuard = setTimeout(()=> finish(null), Math.min(60000, (d + 3) * 1000));
+    };
+    audio.onloadedmetadata = armEnd;
     // If the audio element stalls entirely — the classic symptom of a blocked
     // or mis-routed context — don't hang the whole speech queue on it.
     const guard = setTimeout(()=>{
       if(!settled && audio.currentTime === 0){
         noteAudioBlocked();
+        noteVoiceProblem('the voice never started playing');
         finish(new Error('playback never started'));
       }
     }, 3000);
-    audio.onplaying = ()=> clearTimeout(guard);
-    audio.play().catch(err=>{ clearTimeout(guard); noteAudioBlocked(); finish(err); });
+    audio.onplaying = ()=> { clearTimeout(guard); if(!endGuard) armEnd(); };
+    audio.play().catch(err=>{ clearTimeout(guard); clearTimeout(endGuard); noteAudioBlocked();
+                              noteVoiceProblem('the system would not let the voice play (' + ((err && err.name) || err) + ')'); finish(err); });
   });
 }
 
@@ -8204,7 +8237,7 @@ function speakWithBrowser(text){
     let done = false;
     const finish = ()=>{ if(!done){ done = true; resolve(); } };
     utter.onend = finish;
-    utter.onerror = finish;
+    utter.onerror = (e)=>{ noteVoiceProblem('the computer voice failed (' + ((e && e.error) || 'error') + ')'); finish(); };
     setTimeout(finish, Math.max(4000, text.length * 120)); // watchdog: some browsers never fire onend
     window.speechSynthesis.speak(utter);
   });
@@ -8296,6 +8329,7 @@ function enqueueSpeech(text){
   const item = { text: clean, audio: null };
   // Kick the fetch off now — this is what makes the queue feel instant.
   item.audio = fetchVoiceAudioQueued(clean).catch(err=>{
+    noteVoiceProblem('the voice service: ' + ((err && err.message) || err));
     if(!item.reported){ item.reported = true; item.error = err; }
     return null;
   });

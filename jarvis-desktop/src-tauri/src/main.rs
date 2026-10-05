@@ -4365,6 +4365,19 @@ fn list_processes(limit: Option<u32>) -> Result<String, String> {
 }
 
 fn main() {
+    /* JARVIS TALKS WITHOUT A CLICK (2.30.1). WebView2 follows Chromium's
+       autoplay rule: no sound from a page until someone has clicked it. A
+       voice assistant spoken to, never clicked, could then not answer out
+       loud. Set before the first webview exists, the same arguments for
+       every window of the app (Tauri's own --disable-features, plus
+       autoplay), so no two webviews in one profile disagree. */
+    #[cfg(target_os = "windows")]
+    if std::env::var_os("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_none() {
+        std::env::set_var(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required",
+        );
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
