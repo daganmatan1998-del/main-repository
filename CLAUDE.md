@@ -851,6 +851,25 @@ single file `dist/index.html`.
   (drops the browser's inline completion). Tests: shutdown.test/e2e,
   closetab.test/e2e, browserwrite.test/e2e. NOT TESTED ON REAL WINDOWS:
   the tab stepping and the desktop program search.
+- **Chrome first, Tripo first (page 2.30.0 / worker 2.11.0).** Every web
+  page the page opens goes through openWebUrl → Rust `open_in_chrome` (http/
+  https parsed; chrome.exe under Program Files / Program Files (x86) /
+  LocalAppData, else "chrome.exe" through App Paths, via ShellExecuteW with
+  the URL quoted as the one argument); `{opened:false}` or an old app falls
+  back to opener.openUrl (the Windows default — Edge on his machine). The
+  ms-settings / camera targets stay on the opener. Tests stub the opener:
+  orbsim's invoke returns null for open_in_chrome, so they still see
+  __OPENED. 3D: in a turn with turnWants3d && model3dServiceUp() the tool
+  list has NO build_3d_model (engines given both picked code every time),
+  and a build_3d_model called from memory gets an error telling it to call
+  generate_3d_model; once the service fails in the turn (model3dServiceUp
+  false) the builder is back, and guaranteed3dModel still ends in code.
+  Worker startTripo sends tripoExtras (texture_quality 'detailed' unless
+  TRIPO_TEXTURE_QUALITY says standard/other; TRIPO_MODEL_VERSION when it
+  looks like a version) and, on any refusal other than key/credits/busy/
+  content, sends the task again with only the certain fields. selfCheck
+  speaks when the 3D provider is not tripo or its key is not 'set'. Tests:
+  chrome.e2e, tripofirst.e2e, tripo.test (68).
 - **Background shells die with their task.** A regression started with a
   plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
   looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &

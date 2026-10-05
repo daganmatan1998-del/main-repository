@@ -90,7 +90,7 @@
                                every configured engine, before you need them
    ===================================================================== */
 
-const WORKER_VERSION = '2.10.0';
+const WORKER_VERSION = '2.11.0';
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_VOICE_ID = 'ef191366-f52f-447a-a398-ed8c0f2943a1';
@@ -1072,14 +1072,31 @@ async function startTripo(image, prompt, env) {
   } else {
     payload = { type: 'text_to_model', prompt };
   }
-  const res = await tripoFetch('/task', env, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-  });
-  const t = await tripoRead(res, env);
+  const send = (p) => tripoFetch('/task', env, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p)
+  }).then(r => tripoRead(r, env));
+  /* Better models (2.11.0): the detailed texture pass, and the model version
+     he names in TRIPO_MODEL_VERSION (Tripo's default otherwise). If Tripo
+     refuses one of these settings, the task goes once more with only the
+     certain ones, so a setting can never cost him the model. */
+  const extras = tripoExtras(env);
+  let t = await send(Object.assign({}, payload, extras));
+  if (t.failure && Object.keys(extras).length && !/^tripo_(?:key|credits|busy|content)$/.test(t.failure.code)) {
+    t = await send(payload);
+  }
   if (t.failure) return t;
   const id = t.data.task_id;
   if (!id) return { failure: { code: 'tripo_error', error: 'Tripo did not return a task id: ' + JSON.stringify(t.body).slice(0, 200) } };
   return { taskId: 'tripo:' + id };
+}
+
+function tripoExtras(env) {
+  const x = {};
+  const q = String(env.TRIPO_TEXTURE_QUALITY == null ? 'detailed' : env.TRIPO_TEXTURE_QUALITY).trim().toLowerCase();
+  if (q === 'detailed' || q === 'standard') x.texture_quality = q;
+  const v = String(env.TRIPO_MODEL_VERSION || '').trim();
+  if (/^[A-Za-z0-9._-]{2,40}$/.test(v)) x.model_version = v;
+  return x;
 }
 
 function tripoUrl(v) {

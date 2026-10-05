@@ -2298,6 +2298,66 @@ fn shell_open(target: &std::path::Path, arg: Option<&std::path::Path>) -> Result
     }
 }
 
+/* OPENED IN CHROME (2.30.0). Web pages open in Google Chrome, which is his
+   browser, whatever Windows has as its default (Edge on his machine: "open
+   YouTube" landed there). Chrome is found where it installs itself (for
+   everyone, or for him alone), else by the name Windows registers it under
+   (App Paths), and handed the address as its one argument. Only http and
+   https, parsed first. No Chrome at all is {opened: false}, and the page
+   then uses the default browser. */
+#[cfg(target_os = "windows")]
+fn chrome_candidates() -> Vec<std::path::PathBuf> {
+    let mut v = Vec::new();
+    for k in ["ProgramFiles", "ProgramW6432", "ProgramFiles(x86)", "LOCALAPPDATA"] {
+        if let Some(p) = std::env::var_os(k) {
+            v.push(std::path::PathBuf::from(p).join("Google").join("Chrome").join("Application").join("chrome.exe"));
+        }
+    }
+    v
+}
+
+#[cfg(target_os = "windows")]
+fn shell_open_with(program: &std::ffi::OsStr, arg: &str) -> bool {
+    use windows_sys::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE};
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    use std::os::windows::ffi::OsStrExt;
+    let wide = |s: &std::ffi::OsStr| -> Vec<u16> { s.encode_wide().chain(std::iter::once(0)).collect() };
+    let verb = wide(std::ffi::OsStr::new("open"));
+    let file = wide(program);
+    let params = wide(std::ffi::OsStr::new(&format!("\"{}\"", arg)));
+    let code = unsafe {
+        CoInitializeEx(std::ptr::null(), (COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) as u32);
+        ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), file.as_ptr(), params.as_ptr(), std::ptr::null(), SW_SHOWNORMAL)
+    } as isize;
+    code > 32
+}
+
+#[tauri::command]
+fn open_in_chrome(url: String) -> Result<serde_json::Value, String> {
+    let parsed = tauri::Url::parse(url.trim()).map_err(|_| format!("not a web address: {url}"))?;
+    if parsed.scheme() != "https" && parsed.scheme() != "http" {
+        return Err("only http and https addresses open in Chrome".into());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        for exe in chrome_candidates() {
+            if exe.is_file() && shell_open_with(exe.as_os_str(), parsed.as_str()) {
+                return Ok(serde_json::json!({ "opened": true, "via": "chrome", "path": exe.display().to_string() }));
+            }
+        }
+        if shell_open_with(std::ffi::OsStr::new("chrome.exe"), parsed.as_str()) {
+            return Ok(serde_json::json!({ "opened": true, "via": "chrome" }));
+        }
+        Ok(serde_json::json!({ "opened": false, "reason": "no_chrome" }))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = parsed;
+        Ok(serde_json::json!({ "opened": false, "reason": "not_windows" }))
+    }
+}
+
 #[cfg(not(target_os = "windows"))]
 fn shell_open(target: &std::path::Path, arg: Option<&std::path::Path>) -> Result<(), String> {
     let mut cmd = std::process::Command::new(if cfg!(target_os = "macos") { "open" } else { "xdg-open" });
@@ -4349,7 +4409,8 @@ fn main() {
             front_workspace,
             adjust_window,
             type_text,
-            shutdown_app
+            shutdown_app,
+            open_in_chrome
         ])
         .setup(|app| {
             let window = app

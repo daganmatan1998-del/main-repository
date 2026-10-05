@@ -2090,3 +2090,26 @@ browser suggests is removed before Enter, so "you" stays "you".
 
 **Setup**: replace `dist/index.html` and rebuild the app (Rust changed). The
 worker is unchanged.
+
+## Page 2.30.0 / worker 2.11.0: pages open in Chrome, and 3D models come from Tripo (needs the app rebuilt and the worker deployed)
+
+**Chrome, not Edge.** "Open YouTube", every site JARVIS opens, Google's
+sign-in pages for the calendar, YouTube and Gmail, and searches all open in
+Google Chrome now, whatever Windows has as its default browser. With no
+Chrome installed, the default browser is used as before.
+
+**3D models through Tripo.** Given the choice, JARVIS kept building models in
+code (fast, but only boxes and cylinders) and almost never asked Tripo. Now,
+while the 3D service is up, a 3D request is offered Tripo only; the code
+builder comes back only if Tripo fails in that request. Tripo is also asked
+for its detailed texture pass (`TRIPO_TEXTURE_QUALITY=standard` turns that
+off), and `TRIPO_MODEL_VERSION` in Cloudflare picks a Tripo model version if
+you want one. If Tripo refuses a setting, the request is sent again without
+it, so a setting never costs you the model.
+**To check that Tripo is really the one:** say **"check yourself"**. JARVIS
+now says so when his 3D models are not made by Tripo (no key, or a key that
+does not start with `tsk_`). Or open `<your worker address>/health` and look
+for `"model3d_provider": "tripo"` and `"model3d_key": "set"`.
+
+**Setup**: replace `dist/index.html`, rebuild the app (Rust changed), and
+deploy the new `jarvis-worker.js`.

@@ -2523,7 +2523,7 @@ const TOKEN_KEY = 'jarvis:session_token';
 /* Bump on every release. A screenshot of an error is only useful if it says
    which build produced it — otherwise "did you upload the new file?" costs a
    round trip every single time. */
-const APP_VERSION = '2.29.0';
+const APP_VERSION = '2.30.0';
 // The PIN is NOT stored here any more — it lives as a secret on the worker,
 // which validates it and hands back a signed, expiring session token.
 let sessionToken = '';
@@ -7618,6 +7618,14 @@ async function selfCheck(){
                        : 'I cannot hear you right now: ' + (quota ? 'the transcription allowance is used up' : sttBrokenWhy) + '.' + (quota && via !== 'groq' ? ' A Groq key in the worker fixes that.' : ''));
         }
         if(health.voice === false || !workerVoiceAvailable) detail.push('voice: the computer\'s own (no worker voice)');
+        /* 3D (2.30.0): which service makes his models, said when it is not Tripo. */
+        detail.push('3d: ' + (health.model3d_provider || 'none') + (health.model3d_key ? ' (key ' + health.model3d_key + (health.model3d_key_name ? ', ' + health.model3d_key_name : '') + ')' : ''));
+        if(health.model3d_provider !== 'tripo'){
+          said.push(he ? (health.model3d_provider === 'meshy' ? 'את מודלי התלת־ממד שלי מייצר Meshy, לא Tripo: אין לי מפתח Tripo בשרת.' : 'אין לי שירות תלת־ממד בשרת, אז אני בונה מודלים בקוד בלבד. מפתח Tripo בשם TRIPO_API_KEY ב-Cloudflare פותר את זה.')
+                       : (health.model3d_provider === 'meshy' ? 'My 3D models are made by Meshy, not Tripo: my server has no Tripo key.' : 'My server has no 3D service, so I can only build models in code. A Tripo key named TRIPO_API_KEY in Cloudflare fixes that.'));
+        } else if(health.model3d_key && health.model3d_key !== 'set'){
+          said.push(he ? 'מפתח ה-Tripo בשרת לא נראה נכון: הוא צריך להתחיל ב-tsk_.' : 'The Tripo key on my server does not look right: it should start with tsk_.');
+        }
       }
     }
     /* 4. Things on this side that look like "he is ignoring me". */
@@ -8925,7 +8933,7 @@ async function callConnectCalendarTool(){
   }
   const opener = window.__TAURI__ && window.__TAURI__.opener;
   try{
-    if(IS_DESKTOP && opener && opener.openUrl) await opener.openUrl(data.url);
+    if(IS_DESKTOP && opener && opener.openUrl) await openWebUrl(data.url);
     else if(!window.open(data.url, '_blank', 'noopener')) throw new Error('the browser blocked the new tab');
   }catch(err){
     /* Shown to him, never handed to the model: it carries the signed state. */
@@ -8984,7 +8992,7 @@ async function openInBrowser(url){
   if(!/^https:\/\/(?:www\.)?youtube\.com\/(?:watch|playlist)\?/.test(String(url || ''))) return false;
   const opener = window.__TAURI__ && window.__TAURI__.opener;
   try{
-    if(IS_DESKTOP && opener && opener.openUrl){ await opener.openUrl(url); return true; }
+    if(IS_DESKTOP && opener && opener.openUrl){ await openWebUrl(url); return true; }
     return !!window.open(url, '_blank', 'noopener');
   }catch(err){ console.warn('JARVIS: could not open YouTube —', err); return false; }
 }
@@ -8994,7 +9002,7 @@ async function callConnectYoutubeTool(){
   if(!data.url) return { error: data.error || 'could not start the YouTube connection', code: data.code, tell_the_user: data.tell_the_user, redirect_uri: data.redirect_uri };
   const opener = window.__TAURI__ && window.__TAURI__.opener;
   try{
-    if(IS_DESKTOP && opener && opener.openUrl) await opener.openUrl(data.url);
+    if(IS_DESKTOP && opener && opener.openUrl) await openWebUrl(data.url);
     else if(!window.open(data.url, '_blank', 'noopener')) throw new Error('the browser blocked the new tab');
   }catch(err){
     addMessage('system', 'YouTube: ' + data.url);   // shown to him, never to the model (it carries the signed state)
@@ -9546,7 +9554,7 @@ function mailServiceNote(){
 async function openGoogleConsent(url){
   const opener = window.__TAURI__ && window.__TAURI__.opener;
   try{
-    if(IS_DESKTOP && opener && opener.openUrl) await opener.openUrl(url);
+    if(IS_DESKTOP && opener && opener.openUrl) await openWebUrl(url);
     else if(!window.open(url, '_blank', 'noopener')) throw new Error('the browser blocked the new tab');
     return true;
   }catch(err){
@@ -12379,6 +12387,25 @@ const OPEN_URL_TOOL_BASE = {
   }
 };
 
+/* CHROME FIRST (2.30.0). Every web page JARVIS opens goes to Google Chrome,
+   his browser, not to whatever Windows has as the default (Edge on his
+   machine: "open YouTube" landed there). open_in_chrome in main.rs finds
+   Chrome and hands it the address; with no Chrome, or an app built before
+   2.30.0, the default browser opens it as before. */
+async function openWebUrl(url){
+  const opener = window.__TAURI__ && window.__TAURI__.opener;
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(IS_DESKTOP && invoke && /^https?:\/\//i.test(String(url || ''))){
+    try{
+      const r = await invoke('open_in_chrome', { url: String(url) });
+      if(r && r.opened) return 'chrome';
+    }catch(err){ /* an older app: the default browser, below */ }
+  }
+  if(!opener || !opener.openUrl) throw new Error('the opener plugin is not available');
+  await opener.openUrl(url);
+  return 'default';
+}
+
 async function callOpenUrlTool(input){
   const raw = String((input && input.url) || '').trim();
   if(!raw) return { error: 'no url given' };
@@ -12455,7 +12482,7 @@ async function callOpenUrlTool(input){
       try{
         const opener = window.__TAURI__ && window.__TAURI__.opener;
         const url = 'https://www.google.com/search?q=' + encodeURIComponent(q);
-        await opener.openUrl(url);
+        await openWebUrl(url);
         addMessage('system', '\u25B8 searched for ' + q);
         return { ok: true, searched: q,
                  note: 'That site was not one you could resolve, so a Google search for it was opened instead. Tell him plainly that you searched rather than opened it.' };
@@ -12475,15 +12502,11 @@ async function callOpenUrlTool(input){
        is Edge — and being thrown into a browser you do not use, without your
        logins or extensions, makes the whole feature useless. Falling back to
        the default keeps it working if Chrome is not installed. */
-    /* Opened with the system default, not by naming Chrome. Passing an app
-       name needs a separate capability with an allowlist of permitted
-       applications, which was never granted — so the call was refused at the
-       permission layer in a way the catch below never saw. The result was the
-       worst kind of failure: he reported success and nothing happened.
-
-       If Chrome should be the browser, set it as the Windows default; that
-       is one setting and it applies everywhere, not just here. */
-    await opener.openUrl(parsed.href);
+    /* In Chrome since 2.30.0 (openWebUrl: the app's own open_in_chrome, not
+       the opener's "open with", whose app allowlist was never granted and
+       refused the call silently). The Windows default only when there is
+       no Chrome. */
+    await openWebUrl(parsed.href);
     addMessage('system', '\u25B8 opened ' + parsed.host);
     return { ok: true, opened: parsed.href,
              note: 'It is open on his screen now. You cannot see the page — say what you opened and stop.' };
@@ -16663,7 +16686,15 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
        the invitation-to-fail pattern every other conditional tool here
        already avoids. */
     if(agentRegistryCache) everydayTools.push(MULTI_AGENT_TOOL, AGENT_SYSTEM_TOOL);
-    const advancedTools = [BUILD3D_TOOL, MODEL3D_TOOL, PHOTO3D_TOOL, GENERATE_IMAGE_TOOL, MAKE_ZIP_TOOL];
+    /* TRIPO FIRST (2.30.0). While his 3D service is up and has not failed in
+       this turn, a 3D request is not offered the code builder at all: given
+       both, the engines kept choosing code (fast, no waiting) and the
+       service was never asked. build_3d_model comes back the moment the
+       service fails, and guaranteed3dModel still ends in code if it must. */
+    const serviceFirst = turnWants3d && model3dServiceUp();
+    const advancedTools = serviceFirst
+      ? [MODEL3D_TOOL, PHOTO3D_TOOL, GENERATE_IMAGE_TOOL, MAKE_ZIP_TOOL]
+      : [BUILD3D_TOOL, MODEL3D_TOOL, PHOTO3D_TOOL, GENERATE_IMAGE_TOOL, MAKE_ZIP_TOOL];
     /* Only from a worker that has the check (2.6.7): offered to an older
        one it could only ever answer "not found". */
     if(caps.model3d_check) advancedTools.push(CHECK3D_TOOL);
@@ -17245,6 +17276,11 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callCallTool(tu.input);
           } else if(tu.name === 'manage_scheduled'){
             payload = await callScheduledManageTool(tu.input);
+          } else if(tu.name === 'build_3d_model' && turnWants3d && model3dServiceUp()){
+            /* Called from memory while the service is up and untried: the
+               service makes it, so he gets a real sculpted model. */
+            payload = { error: 'the 3D service is available for this request',
+                        tell_the_user: 'Call generate_3d_model now with a full description of the object (shape and proportions, every part and where it sits, materials, finishes and colours). build_3d_model is only for when the service has failed.' };
           } else if(tu.name === 'build_3d_model'){
             payload = await callBuild3dTool(tu.input);
           } else if(tu.name === 'generate_3d_model'){
