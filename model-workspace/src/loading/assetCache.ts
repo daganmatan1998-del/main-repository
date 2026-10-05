@@ -8,16 +8,11 @@ import { getAsset, setAssetBounds } from '../persistence/assetRepo';
 import type { Bounds, ModelFormat } from '../project/types';
 
 // BVH-accelerated raycasting: hover/pick stays fast on multi-million-triangle models.
-THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
-THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+// (three-mesh-bvh ships its own type augmentation for these prototype methods.)
+const geoProto = THREE.BufferGeometry.prototype as unknown as Record<string, unknown>;
+geoProto.computeBoundsTree = computeBoundsTree;
+geoProto.disposeBoundsTree = disposeBoundsTree;
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
-
-declare module 'three' {
-  interface BufferGeometry {
-    computeBoundsTree: typeof computeBoundsTree;
-    disposeBoundsTree: typeof disposeBoundsTree;
-  }
-}
 
 export interface LoadedAsset {
   id: string;

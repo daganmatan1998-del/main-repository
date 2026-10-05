@@ -2,12 +2,12 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { EnvironmentPreset } from '../project/types';
 
-/** Warm product-photography studio: big key softbox, cool-neutral fill, rim strip. */
-function warmStudioScene(): THREE.Scene {
+/** Cool tech studio: neutral key softbox, blue fill and rim strips (JARVIS lab). */
+function coolStudioScene(): THREE.Scene {
   const s = new THREE.Scene();
   const room = new THREE.Mesh(
     new THREE.BoxGeometry(20, 12, 20),
-    new THREE.MeshBasicMaterial({ color: '#1c1410', side: THREE.BackSide }),
+    new THREE.MeshBasicMaterial({ color: '#0a1018', side: THREE.BackSide }),
   );
   room.position.y = 4;
   s.add(room);
@@ -20,10 +20,10 @@ function warmStudioScene(): THREE.Scene {
     m.lookAt(0, 1, 0);
     s.add(m);
   };
-  panel(7, 4, '#fff1e0', 9, [-5, 7, 5]); // key
-  panel(5, 3, '#e8eef5', 3, [7, 3, 3]); // fill
-  panel(1.2, 8, '#ffd9b0', 7, [0, 4, -8.5]); // rim
-  panel(14, 14, '#4a3324', 0.9, [0, -1.9, 0]); // floor bounce
+  panel(7, 4, '#f4f8ff', 9, [-5, 7, 5]); // key
+  panel(5, 3, '#9fd2ff', 3.2, [7, 3, 3]); // fill
+  panel(1.2, 8, '#5cc4ff', 7, [0, 4, -8.5]); // rim
+  panel(14, 14, '#14263a', 0.9, [0, -1.9, 0]); // floor bounce
   return s;
 }
 
@@ -32,9 +32,9 @@ function softDomeScene(): THREE.Scene {
   const s = new THREE.Scene();
   const geo = new THREE.SphereGeometry(10, 48, 24);
   const colors: number[] = [];
-  const top = new THREE.Color('#f2ece4').multiplyScalar(2.2);
-  const mid = new THREE.Color('#bba48e').multiplyScalar(1.2);
-  const bottom = new THREE.Color('#3a2a1f');
+  const top = new THREE.Color('#f1f6ff').multiplyScalar(2.2);
+  const mid = new THREE.Color('#9fb2c6').multiplyScalar(1.2);
+  const bottom = new THREE.Color('#122030');
   const pos = geo.attributes.position;
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
@@ -55,7 +55,7 @@ export function getEnvironmentMap(renderer: THREE.WebGLRenderer, preset: Environ
   if (hit) return hit;
   const pmrem = new THREE.PMREMGenerator(renderer);
   const scene =
-    preset === 'warm' ? warmStudioScene() : preset === 'soft' ? softDomeScene() : new RoomEnvironment();
+    preset === 'cool' ? coolStudioScene() : preset === 'soft' ? softDomeScene() : new RoomEnvironment();
   const tex = pmrem.fromScene(scene, 0.035).texture;
   pmrem.dispose();
   scene.traverse((o) => {

@@ -171,6 +171,7 @@ export function Lights() {
     l.shadow.bias = -0.0002;
     l.shadow.normalBias = r * 0.0025;
     l.shadow.radius = 4;
+    viewport.requestShadowUpdate();
   });
 
   return (
@@ -178,10 +179,10 @@ export function Lights() {
       <directionalLight
         ref={sun}
         intensity={lighting.sunIntensity}
-        color="#fff4e6"
+        color="#f5f9ff"
         castShadow={lighting.shadows}
       />
-      <hemisphereLight args={['#f1e6da', '#3b2a1f', lighting.fillIntensity]} />
+      <hemisphereLight args={['#dceaff', '#0a1520', lighting.fillIntensity]} />
     </>
   );
 }

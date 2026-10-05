@@ -7,6 +7,8 @@ interface StatsState {
   triangles: number;
   textures: number;
   geometries: number;
+  /** Adaptive resolution, % of the quality mode's maximum. */
+  resolutionScale: number;
   set: (s: Partial<Omit<StatsState, 'set'>>) => void;
 }
 
@@ -17,5 +19,6 @@ export const useStats = create<StatsState>()((set) => ({
   triangles: 0,
   textures: 0,
   geometries: 0,
+  resolutionScale: 100,
   set: (s) => set(s),
 }));

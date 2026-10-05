@@ -4,8 +4,8 @@ export function Logo({ size = 22 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
       <defs>
         <linearGradient id="lg-a" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#d3a074" />
-          <stop offset="1" stopColor="#7d5134" />
+          <stop offset="0" stopColor="#7fd6ff" />
+          <stop offset="1" stopColor="#0d5fd0" />
         </linearGradient>
         <clipPath id="lg-clip">
           <path d="M16 2 30 16 16 30 2 16Z" />

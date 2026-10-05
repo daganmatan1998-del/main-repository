@@ -70,7 +70,7 @@ for (const q of ['Ultra', 'Performance', 'Balanced']) {
     await page.screenshot({ path: join(SHOTS, '12-ultra.png') });
   }
 }
-for (const e of ['Warm', 'Overcast', 'Studio']) {
+for (const e of ['Cool', 'Overcast', 'Studio']) {
   await page.click(`[data-testid=scene-props] .segmented button:has-text("${e}")`);
   await page.waitForTimeout(500);
 }

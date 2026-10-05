@@ -7,6 +7,7 @@ import { registry } from './registry';
 import { gizmoState } from './gizmoState';
 import { viewport } from './viewportServices';
 import type { Vec3 } from '../project/types';
+import { useTools } from '../state/toolsStore';
 
 const MIN_SCALE = 1e-4;
 
@@ -48,7 +49,10 @@ export function Gizmo() {
     return registry.subscribe(update);
   }, [primary]);
 
-  const enabled = !!obj && !!inst && inst.visible && !inst.locked;
+  // The gizmo steps aside while measuring, so clicks land on the model, not on a handle.
+  const measuring = useTools((s) => s.measuring);
+  const isolatedOut = useTools((s) => !!s.isolated && !!primary && !s.isolated.includes(primary));
+  const enabled = !!obj && !!inst && inst.visible && !inst.locked && !measuring && !isolatedOut;
 
   useEffect(() => {
     if (enabled && obj) controls.attach(obj);
@@ -100,7 +104,7 @@ export function Gizmo() {
     controls.addEventListener('dragging-changed', onDragging);
     controls.addEventListener('axis-changed', onHover);
     const onChange = () => useEditor.getState().bumpLive();
-    const redraw = () => viewport.invalidate();
+    const redraw = () => viewport.requestShadowUpdate();
     controls.addEventListener('change', redraw);
     controls.addEventListener('objectChange', onChange);
     return () => {

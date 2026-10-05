@@ -1,5 +1,5 @@
 import { DEFAULT_CAMERA, normalizeSettings } from './defaults';
-import { PROJECT_SCHEMA_VERSION, type CameraState, type InstanceState, type ProjectDoc, type Vec3 } from './types';
+import { PROJECT_SCHEMA_VERSION, type CameraState, type InstanceState, type ProjectDoc, type SavedView, type Vec3 } from './types';
 
 export class ProjectLoadError extends Error {
   constructor(public kind: 'not-found' | 'corrupted', message: string) {
@@ -38,6 +38,7 @@ function instance(v: unknown): InstanceState | null {
             playing: (o.animation as Record<string, unknown>).playing === true,
           }
         : undefined,
+    notes: isStr(o.notes) && o.notes ? o.notes.slice(0, 20000) : undefined,
   };
 }
 
@@ -51,6 +52,18 @@ function camera(v: unknown): CameraState {
     fov: isNum(o.fov) && o.fov > 5 && o.fov < 120 ? o.fov : DEFAULT_CAMERA.fov,
     zoom: isNum(o.zoom) && o.zoom > 0 ? o.zoom : 1,
   };
+}
+
+function views(v: unknown): SavedView[] {
+  if (!Array.isArray(v)) return [];
+  const out: SavedView[] = [];
+  for (const item of v) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    if (!isStr(o.id) || !isStr(o.name)) continue;
+    out.push({ id: o.id, name: o.name, camera: camera(o.camera) });
+  }
+  return out.slice(0, 100);
 }
 
 /**
@@ -95,5 +108,6 @@ export function parseProjectDoc(raw: unknown): ProjectDoc {
     camera: camera(o.camera),
     settings: normalizeSettings(o.settings),
     thumbnail: isStr(o.thumbnail) ? o.thumbnail : null,
+    views: views(o.views),
   };
 }

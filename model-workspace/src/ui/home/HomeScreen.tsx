@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, KeyRound, Search, FolderOpen, Pencil, Copy, Trash2, Hash, HardDrive, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, KeyRound, Search, FolderOpen, Pencil, Copy, Trash2, Hash, HardDrive, X, FileUp, Package } from 'lucide-react';
+import { buildProjectFile, importProjectFile, PROJECT_FILE_EXT } from '../../project/projectFile';
+import { downloadBlob, safeFilename } from '../../editor/exporters';
 import {
-  createProject, deleteProject, duplicateProject, listProjects, renameProject, type ProjectSummary,
+  createProject, deleteProject, duplicateProject, listProjects, loadProject, renameProject, type ProjectSummary,
 } from '../../project/projectService';
 import { useUI, toast } from '../../state/uiStore';
 import { ProjectCard } from './ProjectCard';
@@ -36,6 +38,8 @@ export function HomeScreen() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [usage, setUsage] = useState<number | null>(null);
   const menu = useMenu();
+  const importInput = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -104,6 +108,20 @@ export function HomeScreen() {
           );
         },
       },
+      {
+        label: 'Export project file',
+        icon: <Package />,
+        disabled: p.corrupted,
+        onSelect: async () => {
+          try {
+            const doc = await loadProject(p.id);
+            downloadBlob(await buildProjectFile(doc), `${safeFilename(doc.name)}${PROJECT_FILE_EXT}`);
+            toast('success', 'Project exported', `${safeFilename(doc.name)}${PROJECT_FILE_EXT}`);
+          } catch (e) {
+            toast('error', 'Export failed', (e as Error).message);
+          }
+        },
+      },
       'separator',
       { label: 'Delete…', icon: <Trash2 />, danger: true, onSelect: () => setDialog({ kind: 'delete', p }) },
     ]);
@@ -140,6 +158,31 @@ export function HomeScreen() {
             <button className="btn btn-lg" onClick={() => setDialog({ kind: 'code' })} data-testid="open-by-code">
               <KeyRound /> Open with Save Code
             </button>
+            <button className="btn btn-lg" disabled={importing} onClick={() => importInput.current?.click()} data-testid="import-project">
+              {importing ? <span className="spinner" /> : <FileUp />} Import project
+            </button>
+            <input
+              ref={importInput}
+              type="file"
+              accept={PROJECT_FILE_EXT}
+              style={{ display: 'none' }}
+              data-testid="import-project-input"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (!f) return;
+                setImporting(true);
+                try {
+                  const doc = await importProjectFile(f);
+                  toast('success', 'Project imported', `${doc.name} · ${doc.saveCode}`);
+                  await refresh();
+                } catch (err) {
+                  toast('error', 'Couldn’t import project', (err as Error).message);
+                } finally {
+                  setImporting(false);
+                }
+              }}
+            />
           </div>
         </div>
       </section>

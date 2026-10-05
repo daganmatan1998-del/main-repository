@@ -58,9 +58,9 @@ export function PanelToggles({ left, right, onLeft, onRight }: { left: boolean; 
 }
 
 const AXES: { key: ViewName; neg: ViewName; dir: THREE.Vector3; color: string; label: string }[] = [
-  { key: 'right', neg: 'left', dir: new THREE.Vector3(1, 0, 0), color: '#e0675a', label: 'X' },
-  { key: 'top', neg: 'bottom', dir: new THREE.Vector3(0, 1, 0), color: '#8fc06a', label: 'Y' },
-  { key: 'front', neg: 'back', dir: new THREE.Vector3(0, 0, 1), color: '#5f95e0', label: 'Z' },
+  { key: 'right', neg: 'left', dir: new THREE.Vector3(1, 0, 0), color: '#ff5f6d', label: 'X' },
+  { key: 'top', neg: 'bottom', dir: new THREE.Vector3(0, 1, 0), color: '#5fe39a', label: 'Y' },
+  { key: 'front', neg: 'back', dir: new THREE.Vector3(0, 0, 1), color: '#4aa8ff', label: 'Z' },
 ];
 
 /** Orientation widget: shows the world axes from the camera; click an end to look along it. */
@@ -99,7 +99,7 @@ export function AxisWidget() {
         {items.map((it) => (
           <g key={it.view} className="ax" onClick={() => cameraApi.setView(it.view)}>
             {it.positive && <line x1={0} y1={0} x2={it.x} y2={it.y} stroke={it.color} strokeWidth={2} strokeLinecap="round" opacity={0.9} />}
-            <circle cx={it.x} cy={it.y} r={it.positive ? 8 : 5.5} fill={it.positive ? it.color : 'rgba(20,16,14,0.9)'} stroke={it.color} strokeWidth={it.positive ? 0 : 1.5} opacity={it.z < 0 && !it.positive ? 0.65 : 1} />
+            <circle cx={it.x} cy={it.y} r={it.positive ? 8 : 5.5} fill={it.positive ? it.color : 'rgba(4,8,12,0.9)'} stroke={it.color} strokeWidth={it.positive ? 0 : 1.5} opacity={it.z < 0 && !it.positive ? 0.65 : 1} />
             {it.positive && <text x={it.x} y={it.y + 3} textAnchor="middle">{it.label}</text>}
           </g>
         ))}
@@ -154,7 +154,7 @@ export function SelectionChip() {
   const mode = useEditor((s) => s.gizmoMode);
   if (!primary) return null;
   return (
-    <div className="vp-hud tl" style={{ left: 104 }}>
+    <div className="vp-hud tl" style={{ top: 58, left: 62 }}>
       <span className="vp-chip">
         {n > 1 ? <b>{n} selected</b> : <b>{primary.name}</b>}
         <span>· {primary.locked ? 'Locked' : mode === 'translate' ? 'Move' : mode === 'rotate' ? 'Rotate' : 'Scale'}</span>

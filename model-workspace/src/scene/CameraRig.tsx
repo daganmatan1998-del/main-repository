@@ -15,6 +15,7 @@ import { DEFAULT_CAMERA } from '../project/defaults';
  */
 export function CameraRig() {
   const set = useThree((s) => s.set);
+  const setEvents = useThree((s) => s.setEvents);
   const size = useThree((s) => s.size);
   const projection = useEditor((s) => s.camera?.projection ?? 'perspective');
   // Callback ref: the setup effect runs whenever a controls instance actually exists.
@@ -67,14 +68,34 @@ export function CameraRig() {
       const st = cameraApi.read();
       if (st) useEditor.getState().setCamera(st);
     };
+    // While the user drags the camera, skip per-move hover hit-testing against every model.
+    // A real click jitters a pixel or two: only a sustained drag counts as orbiting.
+    let orbiting = false;
+    let moves = 0;
+    const onControl = () => {
+      if (orbiting || ++moves < 5) return;
+      orbiting = true;
+      setEvents({ enabled: false });
+      useEditor.getState().setHovered(null);
+    };
+    const onControlEnd = () => {
+      moves = 0;
+      save();
+      if (!orbiting) return;
+      orbiting = false;
+      setEvents({ enabled: true });
+    };
     c.addEventListener('rest', save);
-    c.addEventListener('controlend', save);
+    c.addEventListener('control', onControl);
+    c.addEventListener('controlend', onControlEnd);
     return () => {
       c.removeEventListener('rest', save);
-      c.removeEventListener('controlend', save);
+      c.removeEventListener('control', onControl);
+      c.removeEventListener('controlend', onControlEnd);
+      setEvents({ enabled: true });
       if (viewport.controls === c) viewport.controls = null;
     };
-  }, [controls, projection, persp]);
+  }, [controls, projection, persp, setEvents]);
 
   // Depth range follows the orbit distance: close-up inspection without z-fighting far away.
   const tgt = useMemo(() => new THREE.Vector3(), []);

@@ -1,6 +1,6 @@
 [package]
 name = "workspace-3d"
-version = "0.1.0"
+version = "0.2.0"
 description = "3D Workspace — a personal studio for 3D models"
 edition = "2021"
 

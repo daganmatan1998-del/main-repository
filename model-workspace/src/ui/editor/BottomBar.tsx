@@ -8,6 +8,7 @@ import { Tooltip } from '../common/Tooltip';
 import { formatCount } from '../../core/format';
 import type { QualityMode } from '../../project/types';
 import { QUALITY } from '../../scene/quality';
+import { ViewsMenu } from './ViewsMenu';
 
 const VIEWS: { v: ViewName; label: string; key: string }[] = [
   { v: 'front', label: 'Front', key: '1' },
@@ -21,16 +22,18 @@ const VIEWS: { v: ViewName; label: string; key: string }[] = [
 function Perf() {
   const fps = useStats((s) => s.fps);
   const ms = useStats((s) => s.frameMs);
+  const res = useStats((s) => s.resolutionScale);
   const tris = useStats((s) => s.triangles);
   const calls = useStats((s) => s.drawCalls);
   const tex = useStats((s) => s.textures);
   return (
     <div className="perf" data-testid="perf">
       <span title="Frames drawn per second — the view only redraws when something changes">{fps === 0 ? <>Idle</> : <>FPS <b className={fps >= 50 ? 'good' : fps >= 25 ? '' : 'warn'}>{fps}</b></>}</span>
+      <span title="Adaptive resolution: drops while the GPU can't keep up, recovers when it can">Res <b className={res >= 90 ? 'good' : res >= 65 ? '' : 'warn'}>{res}%</b></span>
       <span title="CPU time to submit one frame">Frame <b className={ms < 12 ? 'good' : ms < 30 ? '' : 'warn'}>{ms.toFixed(1)}ms</b></span>
       <span>Tris <b>{formatCount(tris)}</b></span>
-      <span>Draws <b>{calls}</b></span>
-      <span>Tex <b>{tex}</b></span>
+      <span className="opt">Draws <b>{calls}</b></span>
+      <span className="opt">Tex <b>{tex}</b></span>
     </div>
   );
 }
@@ -60,6 +63,8 @@ export function BottomBar() {
           <button className="vbtn" onClick={() => cameraApi.reset()}><RotateCcw /> Reset</button>
         </Tooltip>
       </div>
+      <div className="vsep" />
+      <ViewsMenu />
       <div className="vsep" />
       <Segmented
         value={projection}

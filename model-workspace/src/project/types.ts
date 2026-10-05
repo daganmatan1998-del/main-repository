@@ -3,7 +3,7 @@ export type Vec3 = [number, number, number];
 export type ModelFormat = 'glb' | 'gltf' | 'obj' | 'fbx' | 'stl' | 'ply' | 'builtin';
 
 export type QualityMode = 'performance' | 'balanced' | 'ultra';
-export type EnvironmentPreset = 'studio' | 'warm' | 'soft';
+export type EnvironmentPreset = 'studio' | 'cool' | 'soft';
 
 export interface InstanceAnimation {
   clip: string | null;
@@ -22,6 +22,15 @@ export interface InstanceState {
   visible: boolean;
   locked: boolean;
   animation?: InstanceAnimation;
+  /** Free-text notes about this model. */
+  notes?: string;
+}
+
+/** A named camera position the user saved to come back to. */
+export interface SavedView {
+  id: string;
+  name: string;
+  camera: CameraState;
 }
 
 export interface CameraState {
@@ -92,6 +101,8 @@ export interface ProjectDoc {
   settings: SceneSettings;
   /** JPEG data URL of the viewport, captured on save. */
   thumbnail: string | null;
+  /** Saved camera bookmarks. */
+  views: SavedView[];
 }
 
 export interface Bounds {

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { uid } from '../core/ids';
-import type { CameraState, InstanceState, ProjectDoc, SceneSettings, Vec3 } from '../project/types';
+import type { CameraState, InstanceState, ProjectDoc, SavedView, SceneSettings, Vec3 } from '../project/types';
 
 export type GizmoMode = 'translate' | 'rotate' | 'scale';
 export type SaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
@@ -29,6 +29,7 @@ export interface EditorState {
   instances: InstanceState[];
   settings: SceneSettings | null;
   camera: CameraState | null;
+  views: SavedView[];
   selection: string[];
   hovered: string | null;
   gizmoMode: GizmoMode;
@@ -63,6 +64,8 @@ export interface EditorState {
   reorderInstance: (id: string, toIndex: number) => void;
   updateSettings: (mutate: (s: SceneSettings) => void, label: string, coalesce?: string) => void;
   setCamera: (cam: CameraState) => void;
+  /** Camera bookmarks are saved with the project but are not undo steps. */
+  setViews: (views: SavedView[]) => void;
 
   select: (ids: string[], mode?: 'replace' | 'toggle' | 'add') => void;
   setHovered: (id: string | null) => void;
@@ -87,6 +90,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
   instances: [],
   settings: null,
   camera: null,
+  views: [],
   selection: [],
   hovered: null,
   gizmoMode: 'translate',
@@ -111,6 +115,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
       instances: clone(doc.instances),
       settings: clone(doc.settings),
       camera: clone(doc.camera),
+      views: clone(doc.views ?? []),
       selection: [],
       hovered: null,
       revision: 0,
@@ -127,7 +132,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
 
   closeDoc: () =>
     set({
-      project: null, instances: [], settings: null, camera: null, selection: [], hovered: null,
+      project: null, instances: [], settings: null, camera: null, views: [], selection: [], hovered: null,
       past: [], future: [], assetLoad: {}, saveStatus: 'idle', revision: 0, cameraRevision: 0,
     }),
 
@@ -238,6 +243,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
     get().commit(label, (d) => mutate(d.settings), { coalesce: coalesce ?? label }),
 
   setCamera: (cam) => set({ camera: cam, cameraRevision: get().cameraRevision + 1 }),
+  setViews: (views) => set({ views, revision: get().revision + 1 }),
 
   select: (ids, mode = 'replace') => {
     const cur = get().selection;

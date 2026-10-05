@@ -88,7 +88,7 @@ function lamp() {
   g.add(mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.03, 48), brass, 'Base', [0, 0.015, 0]));
   g.add(mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.3, 16), brass, 'Stem', [0, 0.67, 0]));
   const shade = new THREE.MeshPhysicalMaterial({
-    name: 'Shade', color: '#efe3cf', roughness: 0.8, transmission: 0.35, thickness: 0.02, side: THREE.DoubleSide,
+    name: 'Shade', color: '#eef4fa', roughness: 0.8, transparent: true, opacity: 0.88, side: THREE.DoubleSide,
   });
   g.add(mesh(new THREE.CylinderGeometry(0.14, 0.24, 0.3, 48, 1, true), shade, 'Shade', [0, 1.3, 0]));
   const bulb = new THREE.MeshStandardMaterial({ name: 'Bulb', color: '#fff4dc', emissive: '#ffd59a', emissiveIntensity: 4 });
@@ -102,7 +102,7 @@ function car() {
     name: 'CarPaint', color: '#7b1f1a', metalness: 0.6, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.06,
   });
   const glass = new THREE.MeshPhysicalMaterial({
-    name: 'Glass', color: '#9fb3bf', metalness: 0, roughness: 0.05, transmission: 0.9, transparent: true, opacity: 0.6,
+    name: 'Glass', color: '#1c2a36', metalness: 0.2, roughness: 0.04, transparent: true, opacity: 0.55, envMapIntensity: 1.6,
   });
   const tyre = plastic('#121212', 0.85, 'Rubber');
   const rim = metal('#d0d0d4', 0.18);
@@ -174,7 +174,7 @@ function materialSpheres() {
     metal('#e8c48c', 0.15),
     metal('#b8b8bc', 0.55),
     plastic('#6f4630', 0.35, 'Clay'),
-    new THREE.MeshPhysicalMaterial({ name: 'Glass', color: '#ffffff', roughness: 0, transmission: 1, thickness: 0.4, ior: 1.5 }),
+    new THREE.MeshPhysicalMaterial({ name: 'Glass', color: '#dbefff', roughness: 0, metalness: 0.1, transparent: true, opacity: 0.35, envMapIntensity: 2 }),
     new THREE.MeshStandardMaterial({ name: 'Emissive', color: '#222', emissive: '#e08b4a', emissiveIntensity: 2 }),
   ];
   mats.forEach((m, i) => g.add(mesh(geo, m, m.name, [(i - 2) * 0.72, 0.3, 0])));

@@ -3,7 +3,12 @@ import * as THREE from 'three';
 import {
   ChevronDown, Focus, Copy, Trash2, Eye, EyeOff, Lock, Unlock, ArrowDownToLine, RotateCcw, Crosshair, Columns3, LayoutGrid,
   AlignHorizontalSpaceAround, AlignVerticalSpaceAround, AlignStartVertical, AlignCenterVertical, AlignEndVertical, Play, Pause, Link2, Link2Off,
+  Download, ScanSearch,
 } from 'lucide-react';
+import { exportGLB } from '../../editor/exporters';
+import { toast } from '../../state/uiStore';
+import { useTools } from '../../state/toolsStore';
+import { getLoadedAsset as loadedAsset } from '../../loading/assetCache';
 import { useShallow } from 'zustand/react/shallow';
 import { selectPrimary, useEditor } from '../../state/editorStore';
 import { getLoadedAsset, type LoadedAsset } from '../../loading/assetCache';
@@ -14,7 +19,7 @@ import { IconButton } from '../common/Tooltip';
 import { formatBytes, formatCount, formatLength } from '../../core/format';
 import { FORMAT_LABEL } from '../../loading/formats';
 import { cameraApi } from '../../scene/cameraApi';
-import { registry, preciseBounds } from '../../scene/registry';
+import { registry } from '../../scene/registry';
 import { gizmoState } from '../../scene/gizmoState';
 import type { InstanceState, QualityMode, SceneSettings, Vec3 } from '../../project/types';
 import { QUALITY } from '../../scene/quality';
@@ -144,18 +149,18 @@ function useAsset(assetId: string): LoadedAsset | undefined {
 function InstanceProps({ inst }: { inst: InstanceState }) {
   const asset = useAsset(inst.assetId);
   const st = useEditor.getState;
-  const revision = useEditor((s) => s.revision);
-  const liveTick = useEditor((s) => s.liveTick);
   const [name, setName] = useState(inst.name);
   useEffect(() => setName(inst.name), [inst.name]);
-  const [dims, setDims] = useState<THREE.Vector3 | null>(null);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      const o = registry.get(inst.id);
-      if (o && asset) setDims(preciseBounds(o).getSize(new THREE.Vector3()));
-    });
-    return () => cancelAnimationFrame(id);
-  }, [inst.id, asset, revision, liveTick]);
+  // The model's own size × its scale — from the bounds measured once at load, so it
+  // costs nothing even on multi-million-triangle models (no per-vertex pass per frame).
+  const t = useLiveTransform(inst);
+  const dims = asset
+    ? new THREE.Vector3(
+        (asset.bounds.max[0] - asset.bounds.min[0]) * Math.abs(t.scale[0]),
+        (asset.bounds.max[1] - asset.bounds.min[1]) * Math.abs(t.scale[1]),
+        (asset.bounds.max[2] - asset.bounds.min[2]) * Math.abs(t.scale[2]),
+      )
+    : null;
 
   const format = asset?.format ?? cachedAssetInfo(inst.assetId)?.format ?? (getBuiltin(inst.assetId) ? 'builtin' : undefined);
   const stats = asset?.stats;
@@ -197,6 +202,8 @@ function InstanceProps({ inst }: { inst: InstanceState }) {
           <IconButton label="Duplicate" shortcut="Ctrl D" onClick={() => st().duplicateInstances([inst.id])} data-testid="props-duplicate"><Copy /></IconButton>
           <IconButton label={inst.visible ? 'Hide' : 'Show'} shortcut="H" onClick={() => st().toggleVisible(inst.id)}>{inst.visible ? <Eye /> : <EyeOff />}</IconButton>
           <IconButton label={inst.locked ? 'Unlock' : 'Lock'} shortcut="L" active={inst.locked} onClick={() => st().toggleLocked(inst.id)}>{inst.locked ? <Lock /> : <Unlock />}</IconButton>
+          <IconButton label="Isolate — hide everything else" shortcut="I" onClick={() => useTools.getState().setIsolated([inst.id])}><ScanSearch /></IconButton>
+          <IconButton label="Export as GLB" onClick={() => runExport([inst.id])} data-testid="props-export"><Download /></IconButton>
           <div style={{ flex: 1 }} />
           <IconButton label="Delete" shortcut="Del" onClick={() => st().removeInstances([inst.id])}><Trash2 /></IconButton>
         </div>
@@ -291,7 +298,41 @@ function InstanceProps({ inst }: { inst: InstanceState }) {
           )}
         </Section>
       )}
+
+      <NotesSection inst={inst} />
     </div>
+  );
+}
+
+export async function runExport(ids: string[]) {
+  try {
+    const name = await exportGLB(ids);
+    toast('success', 'Exported', name);
+  } catch (e) {
+    toast('error', 'Export failed', (e as Error).message);
+  }
+}
+
+function NotesSection({ inst }: { inst: InstanceState }) {
+  const [text, setText] = useState(inst.notes ?? '');
+  useEffect(() => setText(inst.notes ?? ''), [inst.notes]);
+  const commit = () => {
+    const v = text.trim() ? text : undefined;
+    if ((v ?? '') !== (inst.notes ?? '')) useEditor.getState().updateInstance(inst.id, { notes: v }, 'Edit notes');
+  };
+  return (
+    <Section title="Notes" defaultOpen={!!inst.notes}>
+      <textarea
+        className="notes"
+        placeholder="Source, licence, materials to fix, ideas…"
+        value={text}
+        maxLength={20000}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.stopPropagation()}
+        data-testid="notes"
+      />
+    </Section>
   );
 }
 
@@ -338,6 +379,8 @@ function MultiProps({ ids }: { ids: string[] }) {
           <button className="btn" onClick={() => st().commit(allLocked ? 'Unlock' : 'Lock', (d) => d.instances.forEach((i) => ids.includes(i.id) && (i.locked = !allLocked)))}>
             {allLocked ? <Unlock /> : <Lock />} {allLocked ? 'Unlock' : 'Lock'}
           </button>
+          <button className="btn" onClick={() => useTools.getState().setIsolated(ids)}><ScanSearch /> Isolate</button>
+          <button className="btn" onClick={() => runExport(ids)}><Download /> Export GLB</button>
           <button className="btn btn-danger" onClick={() => st().removeInstances(ids)}><Trash2 /> Delete</button>
         </div>
       </Section>
@@ -358,12 +401,29 @@ function SliderRow({ label, value, min, max, step, onChange, fmt }: { label: str
 function SceneProps() {
   const s = useEditor((st) => st.settings!);
   const count = useEditor((st) => st.instances.length);
+  const instances = useEditor((st) => st.instances);
+  const loads = useEditor((st) => st.assetLoad);
+  const totals = instances.reduce(
+    (t, i) => {
+      const a = loadedAsset(i.assetId);
+      if (a) { t.tris += a.stats.triangles; t.meshes += a.stats.meshes; t.tex += a.stats.textures.length; }
+      return t;
+    },
+    { tris: 0, meshes: 0, tex: 0 },
+  );
+  void loads;
   const update = (label: string, fn: (d: SceneSettings) => void) => useEditor.getState().updateSettings(fn, label);
   return (
     <div className="panel-scroll" data-testid="scene-props">
       <div className="multi-head">
         <div className="big">Scene</div>
         <div className="hint">{count} {count === 1 ? 'model' : 'models'} · select a model to inspect it</div>
+        {count > 0 && (
+          <div className="stat-grid" style={{ marginTop: 10 }}>
+            <div className="stat"><div className="k">Triangles</div><div className="v">{formatCount(totals.tris)}</div></div>
+            <div className="stat"><div className="k">Meshes</div><div className="v">{formatCount(totals.meshes)}</div></div>
+          </div>
+        )}
       </div>
       <Section title="Render quality">
         <Segmented<QualityMode>
@@ -393,7 +453,7 @@ function SceneProps() {
           onChange={(v) => update('Environment', (d) => void (d.environment.preset = v))}
           options={[
             { value: 'studio', label: 'Studio', title: 'Neutral studio room' },
-            { value: 'warm', label: 'Warm', title: 'Warm softbox studio' },
+            { value: 'cool', label: 'Cool', title: 'Cool studio with blue rim light' },
             { value: 'soft', label: 'Overcast', title: 'Soft, even dome light' },
           ]}
         />

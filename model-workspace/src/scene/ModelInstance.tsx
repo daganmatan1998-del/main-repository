@@ -8,6 +8,7 @@ import { registry } from './registry';
 import { assetBounds } from '../editor/bounds';
 import { toast } from '../state/uiStore';
 import { gizmoState } from './gizmoState';
+import { useTools } from '../state/toolsStore';
 
 const reportedErrors = new Set<string>();
 
@@ -25,7 +26,7 @@ function Placeholder({ assetId, error }: { assetId: string; error: boolean }) {
   return (
     <mesh position={center}>
       <boxGeometry args={size} />
-      <meshBasicMaterial ref={ref} color={error ? '#d0473a' : '#c89a6c'} wireframe transparent opacity={0.4} />
+      <meshBasicMaterial ref={ref} color={error ? '#ff5a6a' : '#38b6ff'} wireframe transparent opacity={0.4} />
     </mesh>
   );
 }
@@ -103,11 +104,15 @@ function ModelInstanceImpl({ inst }: { inst: InstanceState }) {
   useFrame((state, dt) => {
     if (mixer && playing) {
       mixer.update(Math.min(dt, 0.1));
+      state.gl.shadowMap.needsUpdate = true;
       state.invalidate();
     }
   });
 
-  const interactive = inst.visible;
+  // Isolation hides everything but the isolated models, without touching saved visibility.
+  const isolatedOut = useTools((s) => !!s.isolated && !s.isolated.includes(inst.id));
+  const shown = inst.visible && !isolatedOut;
+  const interactive = shown;
   const handlers = interactive
     ? {
         onPointerOver: (e: ThreeEvent<PointerEvent>) => {
@@ -120,6 +125,10 @@ function ModelInstanceImpl({ inst }: { inst: InstanceState }) {
         onClick: (e: ThreeEvent<MouseEvent>) => {
           e.stopPropagation();
           if (e.delta > 4 || gizmoState.recentlyUsed()) return;
+          if (useTools.getState().measuring) {
+            useTools.getState().addMeasurePoint(e.point.toArray());
+            return;
+          }
           const additive = e.nativeEvent.shiftKey || e.nativeEvent.ctrlKey || e.nativeEvent.metaKey;
           useEditor.getState().select([inst.id], additive ? 'toggle' : 'replace');
         },
@@ -131,7 +140,7 @@ function ModelInstanceImpl({ inst }: { inst: InstanceState }) {
     : {};
 
   return (
-    <group ref={group} name={inst.name} visible={inst.visible} {...handlers}>
+    <group ref={group} name={inst.name} visible={shown} {...handlers}>
       {content ? <primitive object={content} /> : <Placeholder assetId={inst.assetId} error={!!error} />}
     </group>
   );

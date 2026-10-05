@@ -5,6 +5,7 @@ const mod = navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl';
 const GROUPS: [string, [string, string[]][]][] = [
   ['Transform', [['Move', ['W']], ['Rotate', ['E']], ['Scale', ['R']], ['Toggle world / local', ['X']], ['Toggle snapping', ['S']], ['Hold to snap while dragging', ['Shift']]]],
   ['Edit', [['Undo', [mod, 'Z']], ['Redo', [mod, '⇧', 'Z']], ['Duplicate', [mod, 'D']], ['Delete', ['Del']], ['Rename', ['F2']], ['Hide / show', ['H']], ['Lock / unlock', ['L']], ['Select all', [mod, 'A']], ['Deselect', ['Esc']]]],
+  ['Tools', [['Command palette', [mod, 'K']], ['Measure distance', ['M']], ['Section plane', ['C']], ['Cycle view mode', ['V']], ['Isolate selection', ['I']], ['Turntable', ['T']], ['Capture image', ['P']], ['Hide / show panels', ['Tab']]]],
   ['Camera', [['Focus selected', ['F']], ['Fit scene', ['A']], ['Front / Back', ['1', '/', mod, '1']], ['Right / Left', ['3', '/', mod, '3']], ['Top / Bottom', ['7', '/', mod, '7']], ['Perspective / ortho', ['5']], ['Reset camera', ['Home']], ['Orbit', ['Left drag']], ['Pan', ['Right drag']], ['Zoom', ['Wheel']]]],
 ];
 

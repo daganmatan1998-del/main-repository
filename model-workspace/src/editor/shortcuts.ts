@@ -3,6 +3,10 @@ import { selectPrimary, useEditor } from '../state/editorStore';
 import { cameraApi } from '../scene/cameraApi';
 import { setProjection } from '../scene/CameraRig';
 import { viewport } from '../scene/viewportServices';
+import { useTools, type ViewMode } from '../state/toolsStore';
+import { toggleIsolate } from '../ui/editor/ViewportBar';
+
+const MODES: ViewMode[] = ['shaded', 'clay', 'wireframe', 'xray', 'normals'];
 
 function typing(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null;
@@ -11,15 +15,26 @@ function typing(e: KeyboardEvent) {
 }
 
 /** Editor keyboard shortcuts. Ignored while typing or when a dialog is open. */
-export function useEditorShortcuts(opts: { onShortcuts: () => void; enabled: boolean }) {
+export function useEditorShortcuts(opts: { onShortcuts: () => void; onCapture: () => void; enabled: boolean }) {
   useEffect(() => {
     if (!opts.enabled) return;
     const onKey = (e: KeyboardEvent) => {
-      if (typing(e) || document.querySelector('.modal-backdrop')) return;
       const s = useEditor.getState();
+      const t = useTools.getState();
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
+      if (mod && key === 'k') {
+        e.preventDefault();
+        t.setPaletteOpen(!t.paletteOpen);
+        return;
+      }
+      if (typing(e) || document.querySelector('.modal-backdrop, .palette-backdrop')) return;
       const primary = selectPrimary(s);
+      if (key === 'tab' && !mod && !e.altKey) {
+        e.preventDefault();
+        t.setUiHidden(!t.uiHidden);
+        return;
+      }
 
       if (mod && key === 'z') {
         e.preventDefault();
@@ -79,7 +94,19 @@ export function useEditorShortcuts(opts: { onShortcuts: () => void; enabled: boo
             s.removeInstances(s.selection);
           }
           break;
-        case 'escape': s.select([]); break;
+        case 'escape':
+          // Leave the innermost mode first: measuring → isolation → selection.
+          if (t.measuring) t.setMeasuring(false);
+          else if (t.isolated) t.setIsolated(null);
+          else if (t.turntable) t.setTurntable(false);
+          else s.select([]);
+          break;
+        case 'm': t.setMeasuring(!t.measuring); break;
+        case 't': t.setTurntable(!t.turntable); break;
+        case 'i': toggleIsolate(); break;
+        case 'c': t.setSection({ enabled: !t.section.enabled }); break;
+        case 'v': t.setViewMode(MODES[(MODES.indexOf(t.viewMode) + (e.shiftKey ? MODES.length - 1 : 1)) % MODES.length]); break;
+        case 'p': opts.onCapture(); break;
         case '?': opts.onShortcuts(); break;
         case 'arrowleft': cameraApi.orbit(15, 0); break;
         case 'arrowright': cameraApi.orbit(-15, 0); break;
@@ -110,5 +137,5 @@ export function useEditorShortcuts(opts: { onShortcuts: () => void; enabled: boo
       window.removeEventListener('keydown', onShift);
       window.removeEventListener('keyup', onShift);
     };
-  }, [opts.enabled, opts.onShortcuts]);
+  }, [opts.enabled, opts.onShortcuts, opts.onCapture]);
 }

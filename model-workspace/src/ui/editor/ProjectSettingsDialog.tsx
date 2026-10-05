@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Settings, Copy, Trash2, CopyPlus, Check } from 'lucide-react';
+import { Settings, Copy, Trash2, CopyPlus, Check, Package, Download } from 'lucide-react';
+import { exportCurrentProject } from '../../editor/projectExport';
+import { runExport } from './PropertiesPanel';
 import { Modal } from '../common/Modal';
 import { ConfirmDialog } from '../common/dialogs';
 import { useEditor } from '../../state/editorStore';
@@ -89,6 +91,12 @@ export function ProjectSettingsDialog({
       <div className="settings-actions">
         <button className="btn" disabled={busy} onClick={async () => { setBusy(true); try { await onDuplicate(); } finally { setBusy(false); } }}>
           <CopyPlus /> Duplicate project
+        </button>
+        <button className="btn" onClick={() => exportCurrentProject()} data-testid="export-project">
+          <Package /> Export project file
+        </button>
+        <button className="btn" onClick={() => runExport(useEditor.getState().instances.filter((i) => i.visible).map((i) => i.id))}>
+          <Download /> Export scene GLB
         </button>
         <div style={{ flex: 1 }} />
         <button className="btn btn-danger" onClick={() => setConfirmDelete(true)}>

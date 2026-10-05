@@ -21,14 +21,14 @@ export const DEFAULT_SETTINGS: SceneSettings = {
   },
   environment: {
     preset: 'studio',
-    horizonColor: '#2a211a',
-    skyColor: '#0d0b09',
+    horizonColor: '#0c1824',
+    skyColor: '#020407',
   },
   grid: {
     visible: true,
     spacing: 1,
     opacity: 0.55,
-    floorColor: '#4b3326',
+    floorColor: '#0b1622',
     floorVisible: true,
   },
   snapping: {
@@ -42,6 +42,14 @@ export const DEFAULT_SETTINGS: SceneSettings = {
 export function cloneSettings(s: SceneSettings): SceneSettings {
   return structuredClone(s);
 }
+
+/** Colours the app used to ship as defaults; saved projects still using them follow the new theme. */
+const LEGACY_DEFAULT_COLOURS: Record<string, string> = {
+  '#2a211a': DEFAULT_SETTINGS.environment.horizonColor,
+  '#0d0b09': DEFAULT_SETTINGS.environment.skyColor,
+  '#4b3326': DEFAULT_SETTINGS.grid.floorColor,
+  '#5a4030': DEFAULT_SETTINGS.grid.floorColor,
+};
 
 /** Deep-merges persisted settings over defaults so older saves gain new fields. */
 export function normalizeSettings(input: unknown): SceneSettings {
@@ -59,5 +67,11 @@ export function normalizeSettings(input: unknown): SceneSettings {
       out[key] = v;
     }
   }
+  const env = base.environment;
+  env.horizonColor = LEGACY_DEFAULT_COLOURS[env.horizonColor] ?? env.horizonColor;
+  env.skyColor = LEGACY_DEFAULT_COLOURS[env.skyColor] ?? env.skyColor;
+  base.grid.floorColor = LEGACY_DEFAULT_COLOURS[base.grid.floorColor] ?? base.grid.floorColor;
+  if ((env.preset as string) === 'warm') env.preset = 'cool';
+  if (!['studio', 'cool', 'soft'].includes(env.preset)) env.preset = 'studio';
   return base;
 }

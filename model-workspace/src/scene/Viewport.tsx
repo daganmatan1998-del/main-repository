@@ -14,6 +14,9 @@ import { setTextureAnisotropy } from '../loading/assetCache';
 import { gizmoState } from './gizmoState';
 import { cameraApi } from './cameraApi';
 import { registry } from './registry';
+import { AdaptiveResolution } from './AdaptiveResolution';
+import { floorPointAt, Measurements, SectionPlane, Turntable, ViewModes } from './Inspection';
+import { useTools } from '../state/toolsStore';
 
 function Services() {
   const gl = useThree((s) => s.gl);
@@ -24,6 +27,12 @@ function Services() {
     viewport.gl = gl;
     viewport.scene = scene;
     viewport.invalidate = invalidate;
+    gl.shadowMap.autoUpdate = false;
+    gl.shadowMap.needsUpdate = true;
+    viewport.requestShadowUpdate = () => {
+      gl.shadowMap.needsUpdate = true;
+      invalidate();
+    };
     setLoaderRenderer(gl);
     return () => {
       viewport.gl = null;
@@ -35,8 +44,11 @@ function Services() {
   }, [gl, quality]);
   // On-demand rendering: draw only when something changed, so an idle scene costs nothing.
   useEffect(() => {
-    const unsubStore = useEditor.subscribe(() => invalidate());
-    const unsubReg = registry.subscribe(() => invalidate());
+    const unsubStore = useEditor.subscribe((s, p) => {
+      if (s.instances !== p.instances || s.settings !== p.settings || s.liveTick !== p.liveTick) viewport.requestShadowUpdate();
+      else invalidate();
+    });
+    const unsubReg = registry.subscribe(() => viewport.requestShadowUpdate());
     return () => {
       unsubStore();
       unsubReg();
@@ -64,11 +76,17 @@ export default function Viewport() {
       gl={{ antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false }}
       onPointerMissed={(e) => {
         if (gizmoState.recentlyUsed() || e.button !== 0) return;
+        if (useTools.getState().measuring) {
+          const p = floorPointAt(e.clientX, e.clientY);
+          if (p) useTools.getState().addMeasurePoint(p);
+          return;
+        }
         if (!(e.shiftKey || e.ctrlKey || e.metaKey)) useEditor.getState().select([]);
       }}
       raycaster={{ params: { Points: { threshold: 0.02 }, Line: { threshold: 0.02 } } as never }}
     >
       <Services />
+      <AdaptiveResolution maxDpr={maxDpr} />
       <RendererSetup />
       <CameraRig />
       <Backdrop />
@@ -78,6 +96,10 @@ export default function Viewport() {
         <Instances />
       </Suspense>
       <Gizmo />
+      <ViewModes />
+      <SectionPlane />
+      <Measurements />
+      <Turntable />
       <PostFX />
     </Canvas>
   );

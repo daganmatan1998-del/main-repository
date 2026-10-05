@@ -15,9 +15,10 @@ import { useUI } from './state/uiStore';
 import { viewport } from './scene/viewportServices';
 import { registry } from './scene/registry';
 import { useStats } from './state/statsStore';
+import { useTools } from './state/toolsStore';
 
 // Handles for automated end-to-end tests and debugging from the console.
-(window as unknown as { __workspace: unknown }).__workspace = { editor: useEditor, ui: useUI, viewport, registry, stats: useStats };
+(window as unknown as { __workspace: unknown }).__workspace = { editor: useEditor, ui: useUI, tools: useTools, viewport, registry, stats: useStats };
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

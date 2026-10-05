@@ -40,6 +40,7 @@ export function buildDoc(withThumbnail: boolean): ProjectDoc | null {
     camera: cameraApi.read() ?? s.camera ?? DEFAULT_CAMERA,
     settings: s.settings,
     thumbnail,
+    views: s.views,
   };
 }
 

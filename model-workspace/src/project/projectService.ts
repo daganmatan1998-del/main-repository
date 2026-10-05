@@ -44,6 +44,7 @@ export async function createProject(name: string): Promise<ProjectDoc> {
     camera: structuredClone(DEFAULT_CAMERA),
     settings: cloneSettings(DEFAULT_SETTINGS),
     thumbnail: null,
+    views: [],
   };
   await putProject(doc);
   return doc;

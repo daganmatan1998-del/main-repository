@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Upload, AlertTriangle } from 'lucide-react';
 import { useEditor } from '../../state/editorStore';
 import { useUI, toast } from '../../state/uiStore';
@@ -19,6 +19,12 @@ import { ProjectSettingsDialog } from './ProjectSettingsDialog';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import { Logo } from '../common/Logo';
+import { ViewportBar, MeasurePanel, IsolationBanner } from './ViewportBar';
+import { CaptureDialog } from './CaptureDialog';
+import { CommandPalette, type PaletteActions } from './CommandPalette';
+import { useTools } from '../../state/toolsStore';
+import { exportCurrentProject } from '../../editor/projectExport';
+
 
 const Viewport = lazy(() => import('../../scene/Viewport'));
 
@@ -27,13 +33,21 @@ function Workspace() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const dragDepth = useRef(0);
-  const [dialog, setDialog] = useState<'settings' | 'shortcuts' | null>(null);
+  const [dialog, setDialog] = useState<'settings' | 'shortcuts' | 'capture' | null>(null);
+  const uiHidden = useTools((s) => s.uiHidden);
+  const measuring = useTools((s) => s.measuring);
   const [collapsed, setCollapsed] = useState({ left: false, right: false });
   const [leftKey, setLeftKey] = useState(0);
 
   useAutosave();
   const openShortcuts = useCallback(() => setDialog('shortcuts'), []);
-  useEditorShortcuts({ onShortcuts: openShortcuts, enabled: true });
+  const openCapture = useCallback(() => setDialog('capture'), []);
+  useEditorShortcuts({ onShortcuts: openShortcuts, onCapture: openCapture, enabled: true });
+  // Inspection tools are per-session: start clean, leave clean.
+  useEffect(() => {
+    useTools.getState().reset();
+    return () => useTools.getState().reset();
+  }, []);
 
   const goHome = useCallback(async () => {
     try {
@@ -46,6 +60,14 @@ function Workspace() {
   }, [navigate]);
 
   const openImport = () => fileInput.current?.click();
+  const paletteActions = useMemo<PaletteActions>(() => ({
+    importModels: () => fileInput.current?.click(),
+    capture: () => setDialog('capture'),
+    settings: () => setDialog('settings'),
+    shortcuts: () => setDialog('shortcuts'),
+    home: () => goHome(),
+    exportProject: () => exportCurrentProject(),
+  }), [goHome]);
 
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -57,11 +79,11 @@ function Workspace() {
   };
 
   return (
-    <div className={`editor ${collapsed.left ? 'left-collapsed' : ''} ${collapsed.right ? 'right-collapsed' : ''}`}>
+    <div className={`editor ${collapsed.left ? 'left-collapsed' : ''} ${collapsed.right ? 'right-collapsed' : ''} ${uiHidden ? 'ui-hidden' : ''}`}>
       <TopBar onHome={goHome} onImport={openImport} onSettings={() => setDialog('settings')} onShortcuts={openShortcuts} />
-      {!collapsed.left && <ScenePanel key={leftKey} onImport={openImport} />}
+      {!collapsed.left && !uiHidden && <ScenePanel key={leftKey} onImport={openImport} />}
       <main
-        className="viewport"
+        className={`viewport ${measuring ? 'measuring' : ''}`}
         onDragEnter={(e) => {
           if (!e.dataTransfer.types.includes('Files')) return;
           dragDepth.current++;
@@ -87,6 +109,9 @@ function Workspace() {
           </Suspense>
         </ErrorBoundary>
         <GizmoToolbar />
+        <ViewportBar onCapture={openCapture} />
+        <IsolationBanner />
+        <MeasurePanel />
         <PanelToggles
           left={collapsed.left}
           right={collapsed.right}
@@ -114,7 +139,7 @@ function Workspace() {
           </div>
         )}
       </main>
-      {!collapsed.right && <PropertiesPanel />}
+      {!collapsed.right && !uiHidden && <PropertiesPanel />}
       <BottomBar />
 
       <input
@@ -152,6 +177,8 @@ function Workspace() {
         />
       )}
       {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
+      {dialog === 'capture' && <CaptureDialog onClose={() => setDialog(null)} />}
+      <CommandPalette actions={paletteActions} />
     </div>
   );
 }
