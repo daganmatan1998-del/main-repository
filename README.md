@@ -2057,3 +2057,36 @@ still answered from your connected calendar as before.
 **Setup**: replace `dist/index.html` and `dist/model.html` and **rebuild the
 app** (Rust and a new capability file, `capabilities/music.json`, changed). The
 worker is unchanged.
+
+## Page 2.29.0: "close my computer", closing one tab by its name, and writing in the browser (needs the app rebuilt)
+
+**"Close my computer"** (shut down / turn off my computer, "תכבה את המחשב",
+"תסגור את המחשב"): JARVIS looks on your desktop for **your own program named
+"shut down"** (a shortcut, .exe, .bat/.cmd, .py or link named "shut down",
+"shutdown", "shut-down" or "כיבוי"), asks **"Shut down the computer, sir? Say
+yes to confirm."**, and starts it only when you answer **"yes"** ("כן") within
+30 seconds. "No" cancels, anything else drops the question, and his own voice
+coming back through the microphone does not count as a yes. If there is no
+such program on the desktop, he says so. JARVIS never turns the computer off
+by himself and never runs anything else; even the model's tool for it only
+asks you.
+
+**Closing in the browser**
+- **"Close the browser"** / "close Chrome" / "תסגור את הדפדפן": the whole browser,
+  every window of it.
+- **"Close the YouTube window"** / "close the Shopify tab" / "תסגור את החלון של
+  יוטיוב": only that tab. It no longer has to be the tab in front: JARVIS steps
+  through your tabs (Ctrl+PageDown) until it finds it, closes it, and goes
+  back to the tab you were on. "Close this tab" closes the tab in front.
+- A name with no tab ("close Spotify") closes that program's window instead.
+  Nothing found: he says so (the open tabs are listed in the log).
+
+**"Write ... on the browser"** ("write best pizza in Tel Aviv on the browser",
+"type weather tomorrow in Chrome", "תכתוב מזג אוויר מחר בדפדפן"): a new tab, your
+words exactly as you said them, Enter. No site is chosen first, so it is the
+browser's own search. It runs locally (no model involved). If no browser is
+open, the same search opens in your browser instead. A completed address the
+browser suggests is removed before Enter, so "you" stays "you".
+
+**Setup**: replace `dist/index.html` and rebuild the app (Rust changed). The
+worker is unchanged.

@@ -240,108 +240,240 @@ fn close_window_named(_name: String) -> Result<String, String> {
     Err("only available on Windows".into())
 }
 
-/* Closing a single browser tab. This is a different class of action from
-   everything else here: WM_CLOSE politely ASKS a window to close, whereas a
-   tab has no window of its own, so the only way in is to focus the browser
-   and send it Ctrl+W — synthetic keystrokes aimed at whatever happens to be
-   in front.
+/* CLOSING ONE TAB BY ITS NAME, AND THE WHOLE BROWSER (2.29.0).
 
-   That is what makes it risky, and what the guard below is for. If focus
-   moves between finding the window and sending the keys — a notification
-   steals it, the user clicks something — Ctrl+W lands somewhere else, and in
-   an editor that closes a file. So focus is set, then VERIFIED, and the
-   keystroke is only sent if the intended window really is in front. If it
-   is not, nothing is sent and the caller is told. */
+   "Close the YouTube window" means the YouTube TAB, wherever it is among
+   his tabs. A browser window is titled after its ACTIVE tab only, so the
+   old way (find a window whose title names it, send Ctrl+W) closed a tab
+   only when it happened to be the one in front, and otherwise found
+   nothing or the wrong thing. Now:
+     1. a browser window whose active tab already names it: that tab;
+     2. otherwise each browser window in turn (topmost first) is brought to
+        the front and its tabs are stepped through with Ctrl+PageDown (next
+        tab in order, in Chrome, Edge and Firefox alike), reading the title
+        after each step, until a tab names it or the first tab comes round
+        again; the tab found is closed with Ctrl+W and the window goes back
+        to the tab he was on.
+   Every keystroke goes only to a window verified to be in front at that
+   moment; if anything else comes in front, nothing more is sent. An empty
+   name means the active tab of the browser in front. Nothing found is
+   {ok:false, code:"not_found", tabs:[every title seen]}.
+
+   close_browser closes the WHOLE browser: every window of it, by WM_CLOSE
+   (the same as clicking each X). Which browser: the one named, else the
+   one whose window is highest on the screen. */
 #[cfg(target_os = "windows")]
-#[tauri::command]
-fn close_browser_tab(name: String) -> Result<String, String> {
-    use std::{thread, time::Duration};
-    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+fn browser_windows(own: &[(String, isize)]) -> Vec<BringCandidate> {
+    bring_app_windows(own)
+        .into_iter()
+        .filter(|c| TYPE_BROWSERS.contains(&c.exe.as_str()))
+        .collect()
+}
+
+#[cfg(target_os = "windows")]
+fn browser_exe_for(which: &str) -> Option<&'static str> {
+    let w = which.trim().to_lowercase();
+    if w.contains("chrome") || w.contains("כרום") {
+        Some("chrome")
+    } else if w.contains("edge") || w.contains("אדג") {
+        Some("msedge")
+    } else if w.contains("firefox") || w.contains("פיירפוקס") {
+        Some("firefox")
+    } else if w.contains("brave") {
+        Some("brave")
+    } else if w.contains("opera") {
+        Some("opera")
+    } else if w.contains("vivaldi") {
+        Some("vivaldi")
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn close_tab_blocking(own: Vec<(String, isize)>, name: String) -> Result<serde_json::Value, String> {
+    use std::{thread::sleep, time::Duration};
+    use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-        SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY,
-        VK_CONTROL, VK_W,
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CONTROL, VK_NEXT,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetForegroundWindow, GetWindowTextW, IsWindowVisible, SetForegroundWindow,
+        GetForegroundWindow, IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE,
     };
+    const VK_W: VIRTUAL_KEY = 0x57;
 
     let needle = name.trim().to_lowercase();
-    if needle.is_empty() {
-        return Err("no window name given".into());
+    let wins = browser_windows(&own);
+    if wins.is_empty() {
+        return Ok(serde_json::json!({ "ok": false, "code": "no_browser" }));
     }
-
-    struct Search { needle: String, found: Option<(isize, String)> }
-
-    unsafe extern "system" fn visit(hwnd: HWND, lparam: LPARAM) -> BOOL {
-        unsafe {
-            let search = &mut *(lparam as *mut Search);
-            if search.found.is_some() || IsWindowVisible(hwnd) == 0 { return 1; }
-            let mut buf = [0u16; 512];
-            let len = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
-            if len <= 0 { return 1; }
-            let title = String::from_utf16_lossy(&buf[..len as usize]);
-            if title == "JARVIS" { return 1; }
-            if title.to_lowercase().contains(&search.needle) {
-                search.found = Some((hwnd as isize, title));
-                return 0;
-            }
-            1
-        }
-    }
-
-    let mut search = Search { needle, found: None };
-    unsafe { EnumWindows(Some(visit), &mut search as *mut Search as LPARAM); }
-
-    let (hwnd, title) = search.found.ok_or_else(|| format!("no open window matching \"{}\"", name))?;
-
-    unsafe {
-        SetForegroundWindow(hwnd as HWND);
-        thread::sleep(Duration::from_millis(120));
-
-        /* The guard. Without it a stolen focus turns this into a keystroke
-           fired blindly at someone else's window. */
-        if GetForegroundWindow() != hwnd as HWND {
-            return Err(format!(
-                "could not bring \"{}\" to the front, so nothing was sent",
-                title
-            ));
-        }
-
-        let key = |vk: VIRTUAL_KEY, up: bool| INPUT {
-            r#type: INPUT_KEYBOARD,
-            Anonymous: windows_sys::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
-                ki: KEYBDINPUT {
-                    wVk: vk,
-                    wScan: 0,
-                    dwFlags: if up { KEYEVENTF_KEYUP } else { 0 },
-                    time: 0,
-                    dwExtraInfo: 0,
-                },
+    let key = |vk: VIRTUAL_KEY, up: bool| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: vk,
+                wScan: 0,
+                dwFlags: if up { KEYEVENTF_KEYUP } else { 0 },
+                time: 0,
+                dwExtraInfo: 0,
             },
-        };
+        },
+    };
+    let chord = |vk: VIRTUAL_KEY| -> bool {
+        let mut k = [key(VK_CONTROL, false), key(vk, false), key(vk, true), key(VK_CONTROL, true)];
+        unsafe { SendInput(4, k.as_mut_ptr(), std::mem::size_of::<INPUT>() as i32) == 4 }
+    };
+    let front = |h: isize| unsafe { GetForegroundWindow() } as isize == h;
+    let bring = |h: isize| -> bool {
+        unsafe {
+            if IsIconic(h as HWND) != 0 {
+                ShowWindow(h as HWND, SW_RESTORE);
+            }
+            if !front(h) {
+                foreground_unlock();
+                SetForegroundWindow(h as HWND);
+            }
+        }
+        for _ in 0..25 {
+            if front(h) {
+                sleep(Duration::from_millis(100));
+                return true;
+            }
+            sleep(Duration::from_millis(40));
+        }
+        false
+    };
+    let title = |h: isize| unsafe { zoom_title_of(h as HWND) };
+    /* After a tab switch the title follows a moment later. */
+    let next_title = |h: isize, before: &str| -> String {
+        for _ in 0..24 {
+            sleep(Duration::from_millis(30));
+            let t = title(h);
+            if t != before {
+                return t;
+            }
+        }
+        title(h)
+    };
+    let names_it = |t: &str| !needle.is_empty() && t.to_lowercase().contains(&needle);
+    let close_active = |h: isize, t: String| -> Result<serde_json::Value, String> {
+        if !front(h) {
+            return Ok(serde_json::json!({ "ok": false, "code": "not_front", "title": t }));
+        }
+        if !chord(VK_W) {
+            return Ok(serde_json::json!({ "ok": false, "code": "blocked", "title": t }));
+        }
+        Ok(serde_json::json!({ "ok": true, "closed": t }))
+    };
 
-        let mut inputs = [
-            key(VK_CONTROL, false),
-            key(VK_W, false),
-            key(VK_W, true),
-            key(VK_CONTROL, true),
-        ];
-        let sent = SendInput(
-            inputs.len() as u32,
-            inputs.as_mut_ptr(),
-            std::mem::size_of::<INPUT>() as i32,
-        );
-        if sent == 0 {
-            return Err("Windows rejected the keystroke".into());
+    // An empty name: the active tab of the browser in front (or highest).
+    if needle.is_empty() || needle == "this" || needle == "current" {
+        let w = &wins[0];
+        if !bring(w.hwnd) {
+            return Ok(serde_json::json!({ "ok": false, "code": "not_front", "title": w.title }));
+        }
+        return close_active(w.hwnd, title(w.hwnd));
+    }
+    // 1. A window whose active tab already names it.
+    if let Some(w) = wins.iter().find(|w| names_it(&w.title)) {
+        if !bring(w.hwnd) {
+            return Ok(serde_json::json!({ "ok": false, "code": "not_front", "title": w.title }));
+        }
+        let t = title(w.hwnd);
+        if names_it(&t) {
+            return close_active(w.hwnd, t);
         }
     }
+    // 2. Every tab of every browser window, in order.
+    let mut seen: Vec<String> = Vec::new();
+    for w in wins.iter().take(6) {
+        if !bring(w.hwnd) {
+            continue;
+        }
+        let start = title(w.hwnd);
+        seen.push(start.clone());
+        let mut now = start.clone();
+        let mut found: Option<(String, usize)> = None;
+        for step in 1..=60 {
+            if !front(w.hwnd) || !chord(VK_NEXT) {
+                return Ok(serde_json::json!({ "ok": false, "code": "focus_lost", "tabs": seen }));
+            }
+            now = next_title(w.hwnd, &now);
+            if now == start {
+                break; // round to where he was: not in this window
+            }
+            seen.push(now.clone());
+            if names_it(&now) {
+                found = Some((now.clone(), step));
+                break;
+            }
+        }
+        if let Some((t, _)) = found {
+            let r = close_active(w.hwnd, t)?;
+            if r.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+                /* Back to the tab he was on. */
+                sleep(Duration::from_millis(150));
+                let mut cur = title(w.hwnd);
+                for _ in 0..60 {
+                    if cur == start || !front(w.hwnd) {
+                        break;
+                    }
+                    if !chord(VK_NEXT) {
+                        break;
+                    }
+                    cur = next_title(w.hwnd, &cur);
+                }
+            }
+            return Ok(r);
+        }
+    }
+    seen.dedup();
+    Ok(serde_json::json!({ "ok": false, "code": "not_found", "tabs": seen }))
+}
 
-    Ok(title)
+#[cfg(target_os = "windows")]
+#[tauri::command]
+async fn close_browser_tab(app: tauri::AppHandle, name: String) -> Result<serde_json::Value, String> {
+    let own = zoom_own_windows(&app);
+    tauri::async_runtime::spawn_blocking(move || close_tab_blocking(own, name))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn close_browser(app: tauri::AppHandle, which: Option<String>) -> Result<serde_json::Value, String> {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+    let wins = browser_windows(&zoom_own_windows(&app));
+    let exe: String = match which.as_deref().and_then(browser_exe_for) {
+        Some(e) => e.to_string(),
+        None => match wins.first() {
+            Some(w) => w.exe.clone(),
+            None => return Ok(serde_json::json!({ "ok": false, "code": "no_browser" })),
+        },
+    };
+    let mut closed = 0;
+    for w in wins.iter().filter(|w| w.exe == exe) {
+        if unsafe { PostMessageW(w.hwnd as HWND, WM_CLOSE, 0, 0) } != 0 {
+            closed += 1;
+        }
+    }
+    if closed == 0 {
+        return Ok(serde_json::json!({ "ok": false, "code": "no_browser", "exe": exe }));
+    }
+    Ok(serde_json::json!({ "ok": true, "exe": exe, "windows": closed }))
 }
 
 #[cfg(not(target_os = "windows"))]
 #[tauri::command]
-fn close_browser_tab(_name: String) -> Result<String, String> {
+async fn close_browser_tab(_name: String) -> Result<serde_json::Value, String> {
+    Err("only available on Windows".into())
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn close_browser(_which: Option<String>) -> Result<serde_json::Value, String> {
     Err("only available on Windows".into())
 }
 
@@ -2219,6 +2351,103 @@ async fn launch_3d_workspace(
     }))
 }
 
+/* ------------------------------------------------------------------
+   "CLOSE MY COMPUTER" (2.29.0)
+
+   He wrote his own program that turns the computer off and keeps it on his
+   desktop as "shut down". JARVIS starts THAT program, the way a double-click
+   on its icon would; nothing here turns Windows off by itself or runs
+   anything else. Looked for only on his desktops (his own, OneDrive's and
+   the shared one), only by its name ("shut down", "shutdown", "shut-down",
+   "כיבוי"), and only a shortcut, a program, a batch file, a Python script
+   or a link. The page finds it first (launch: false), asks him out loud,
+   and starts it (launch: true) only after his own spoken "yes".
+------------------------------------------------------------------ */
+fn shutdown_app_score(file_name: &str) -> i32 {
+    let lower = file_name.to_lowercase();
+    let (stem, ext) = match lower.rfind('.') {
+        Some(i) if i > 0 => (&lower[..i], &lower[i + 1..]),
+        _ => (lower.as_str(), ""),
+    };
+    let s = ws3d_squeeze(stem);
+    if s.contains("uninstall") || s.contains("unins") || s.contains("setup") || s.contains("installer") {
+        return 0;
+    }
+    let named = matches!(
+        s.as_str(),
+        "shutdown" | "shutdownpc" | "shutdowncomputer" | "shutdownmycomputer" | "כיבוי" | "כיבוימחשב" | "כיבויהמחשב"
+    );
+    let loose = s.contains("shutdown") || s.contains("כיבוי");
+    if !named && !loose {
+        return 0;
+    }
+    let kind = match ext {
+        "lnk" => 30,
+        "exe" => 28,
+        "bat" | "cmd" => 26,
+        "appref-ms" => 24,
+        "url" => 22,
+        "py" | "pyw" => 20,
+        _ => return 0,
+    };
+    kind + if named { 50 } else { 20 }
+}
+
+fn shutdown_app_places() -> Vec<std::path::PathBuf> {
+    let mut v: Vec<std::path::PathBuf> = Vec::new();
+    if let Some(d) = dirs_next::desktop_dir() {
+        v.push(d);
+    }
+    if let Some(h) = dirs_next::home_dir() {
+        v.push(h.join("OneDrive").join("Desktop"));
+    }
+    for k in ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"] {
+        if let Some(p) = std::env::var_os(k) {
+            v.push(std::path::PathBuf::from(p).join("Desktop"));
+        }
+    }
+    if let Some(p) = std::env::var_os("PUBLIC") {
+        v.push(std::path::PathBuf::from(p).join("Desktop"));
+    }
+    v.dedup();
+    v
+}
+
+/* The best-named file on any of his desktops, the desktop itself only. */
+fn find_shutdown_app() -> Option<std::path::PathBuf> {
+    let mut best: Option<(i32, std::path::PathBuf)> = None;
+    for dir in shutdown_app_places() {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for entry in rd.flatten() {
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(true) {
+                continue;
+            }
+            let score = shutdown_app_score(&entry.file_name().to_string_lossy());
+            if score > 0 && best.as_ref().map_or(true, |(b, _)| score > *b) {
+                best = Some((score, entry.path()));
+            }
+        }
+    }
+    best.map(|(_, p)| p)
+}
+
+#[tauri::command]
+fn shutdown_app(launch: bool) -> Result<serde_json::Value, String> {
+    let Some(path) = find_shutdown_app() else {
+        let searched: Vec<String> = shutdown_app_places().iter().map(|d| d.display().to_string()).collect();
+        return Ok(serde_json::json!({ "found": false, "launched": false, "searched": searched }));
+    };
+    let name = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if !launch {
+        return Ok(serde_json::json!({ "found": true, "launched": false, "name": name, "app_path": path.display().to_string() }));
+    }
+    shell_open(&path, None)?;
+    Ok(serde_json::json!({ "found": true, "launched": true, "name": name, "app_path": path.display().to_string() }))
+}
+
 /* "LET ME SEE YOUR AGENT SYSTEM" (2.15.0) — his JARVIS Agent Atlas, the
    3D map of the agents, built as its own Tauri app. Found the same way as
    3D Workspace; and since it is a map he keeps coming back to, an Atlas
@@ -3086,7 +3315,16 @@ fn type_text_blocking(
     if submit {
         sleep(Duration::from_millis(60));
         if still_front() {
-            let mut keys = vec![key(VK_RETURN, false), key(VK_RETURN, true)];
+            /* In the address bar the browser may have completed what he said
+               into an address he once visited ("you" -> youtube.com), shown
+               selected after the cursor; Delete drops that, so Enter goes
+               with exactly his words. */
+            let mut keys = if address_bar || new_tab {
+                const VK_DELETE: VIRTUAL_KEY = 0x2E;
+                vec![key(VK_DELETE, false), key(VK_DELETE, true), key(VK_RETURN, false), key(VK_RETURN, true)]
+            } else {
+                vec![key(VK_RETURN, false), key(VK_RETURN, true)]
+            };
             submitted = send(&mut keys);
         }
     }
@@ -4073,6 +4311,7 @@ fn main() {
             close_foreground_window,
             close_window_named,
             close_browser_tab,
+            close_browser,
             take_screenshot,
             capture_screen_frame,
             open_model_window,
@@ -4109,7 +4348,8 @@ fn main() {
             music_control,
             front_workspace,
             adjust_window,
-            type_text
+            type_text,
+            shutdown_app
         ])
         .setup(|app| {
             let window = app

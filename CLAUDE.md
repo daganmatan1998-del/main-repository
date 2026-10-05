@@ -817,6 +817,40 @@ single file `dist/index.html`.
   bridge and the real capability schema via `cargo check`), and typing into a
   real Chrome. If a drag does nothing, read the music window's console error
   first ("not allowed by ACL" = the capability URL pattern).
+- **"Close my computer", one tab by name, writing in the browser (2.29.0).**
+  Shutdown: Rust `shutdown_app(launch)` looks ONLY on his desktops (his,
+  OneDrive's, Public) for a file named like "shut down"/"shutdown"/"כיבוי"
+  (lnk/exe/bat/cmd/url/py; never setup/uninstall; shutdown_app_score) and
+  ShellExecutes it; nothing here turns Windows off itself. The page:
+  shutdownCommand (looseTokens, whole sentence) → askShutdown (launch:false,
+  not found / old app said) → pendingShutdown + the spoken question →
+  handleSend checks it FIRST: shutdownEcho (his own question heard back) is
+  ignored, shutdownAnswer yes/no within SHUTDOWN_CONFIRM_MS (30 s) acts,
+  anything else drops it. runShutdown speaks, waits 1.5 s, launch:true. The
+  model's SHUTDOWN_TOOL only asks — never wire it to launch:true. Tabs:
+  `close_browser_tab(name)` now returns {ok, closed} | {ok:false, code:
+  no_browser|not_found (tabs: titles seen)|not_front|focus_lost|blocked}:
+  a browser window whose active tab names it, else each browser window (top
+  first) stepped with Ctrl+PageDown (strict next tab in Chrome/Edge/Firefox;
+  Ctrl+Tab is MRU in Firefox) until a title names it or the start title comes
+  round; Ctrl+W; then back to his tab. Every key only to a verified
+  foreground. Empty name = active tab. An old app answers a string (the page
+  still accepts it). `close_browser(which)` WM_CLOSEs every window of that
+  browser exe (or the topmost browser's). Page: closeRequestOf (flow
+  close_thing; in the sliced WORKING DAY region) — browser names → close_browser,
+  anything else → the tab (site names via OPEN_SITES → site.en lowercased),
+  falling back to close_window_named for a program; understandCommand wins
+  first (camera/music/full screen keep their rules) and CLOSE_STOP keeps
+  JARVIS's own things and "close it/this/the window" out. Writing:
+  browserWriteOf (raw text, his capitals; verb first, browser/chrome/new tab
+  last; ≤ 10 words) is checked in detectWorkflowCommand BEFORE FLOW_LATER
+  ("weather tomorrow" is the text, not a plan); flow browser_write →
+  type_text {target:'browser', field:'new_tab', submit:true}; nothing typed
+  (no_window / not_front / old app) → open google.com/search?q=; focus_lost is
+  said, never retried. type_text sends Delete before Enter in the address bar
+  (drops the browser's inline completion). Tests: shutdown.test/e2e,
+  closetab.test/e2e, browserwrite.test/e2e. NOT TESTED ON REAL WINDOWS:
+  the tab stepping and the desktop program search.
 - **Background shells die with their task.** A regression started with a
   plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
   looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &
