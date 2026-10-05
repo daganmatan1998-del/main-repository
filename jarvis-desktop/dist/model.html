@@ -24,6 +24,12 @@
   between, all the way round, about the model's own centre. STRAIGHTEN in
   the menu puts it back the way it arrived.
 
+  Since 2.28.0 the window is HIS to arrange without a title bar or a
+  modifier key: a handle at the top moves it, a ring in each corner stretches
+  it (the frame's own resizing), Ctrl+wheel or + / - make it bigger or
+  smaller, the arrow keys turn the model, and the menu has BIGGER / SMALLER.
+  The handles show only while the pointer is over the window.
+
   The model to show arrives in the query string: model.html?glb=<url>.
 -->
 <style>
@@ -86,13 +92,35 @@
   #menu button.on::after{ content:' \2713'; }
   #menu hr{ border:none; border-top:1px solid rgba(95,232,255,0.18); margin:4px 0; }
   #menu #closeItem{ color:#ff9d9d; }
+  /* Handles: the window has no frame, so these are the frame. Hidden until
+     the pointer is over the window; hidden again in full screen. */
+  .grip{
+    position:fixed; z-index:9; display:flex; align-items:center; justify-content:center;
+    color:var(--cyan); background:rgba(5,7,13,0.72); border:1px solid rgba(95,232,255,0.55);
+    opacity:0; transition:opacity .25s ease; user-select:none; -webkit-user-select:none;
+    font-size:11px; line-height:1;
+  }
+  body:hover .grip{ opacity:0.6; }
+  .grip:hover{ opacity:1 !important; background:rgba(95,232,255,0.2); }
+  body.full .grip{ display:none; }
+  #gripMove{ left:50%; top:6px; transform:translateX(-50%); width:60px; height:18px; border-radius:9px; cursor:move; }
+  .corner{ width:20px; height:20px; border-radius:50%; }
+  #gripNW{ left:6px; top:6px; cursor:nwse-resize; }
+  #gripNE{ right:6px; top:6px; cursor:nesw-resize; }
+  #gripSW{ left:6px; bottom:6px; cursor:nesw-resize; }
+  #gripSE{ right:6px; bottom:6px; cursor:nwse-resize; }
 </style>
 </head>
 <body>
 <div id="stage"></div>
 <div id="note">loading…</div>
-<div id="hint">drag: turn · shift+drag: move · double-click: full screen · right-click: save, close</div>
+<div id="hint">drag: turn · top handle: move · corners: resize · ctrl+wheel: size · double-click: full screen · right-click: more</div>
 <div id="toast"></div>
+<div id="gripMove" class="grip" title="Drag to move the window">&#10021;&nbsp;&#10021;</div>
+<div id="gripNW" class="grip corner" title="Drag to resize">&#9700;</div>
+<div id="gripNE" class="grip corner" title="Drag to resize">&#9701;</div>
+<div id="gripSW" class="grip corner" title="Drag to resize">&#9699;</div>
+<div id="gripSE" class="grip corner" title="Drag to resize">&#9698;</div>
 <div id="menu" role="menu">
   <button id="spinBtn" class="on" role="menuitem">SPIN</button>
   <button id="wireBtn" role="menuitem">WIREFRAME</button>
@@ -100,6 +128,8 @@
   <button id="straightBtn" role="menuitem">STRAIGHTEN</button>
   <button id="bgBtn" class="on" role="menuitem">BACKDROP</button>
   <button id="fsBtn" role="menuitem">FULL SCREEN</button>
+  <button id="biggerBtn" role="menuitem">WINDOW BIGGER</button>
+  <button id="smallerBtn" role="menuitem">WINDOW SMALLER</button>
   <hr>
   <button id="saveBtn" role="menuitem">SAVE</button>
   <button id="closeItem" role="menuitem">CLOSE</button>
@@ -148,11 +178,12 @@
     const w = tauriWin();
     if(!w || typeof w.setFullscreen !== 'function') return;
     try{ await w.setFullscreen(!!on); full = !!on; }catch(e){ return; }
+    document.body.classList.toggle('full', full);
     const b = document.getElementById('fsBtn');
     if(b) b.textContent = full ? 'EXIT FULL SCREEN' : 'FULL SCREEN';
   }
   document.getElementById('fsBtn').addEventListener('click', () => { closeMenu(); setFull(!full); });
-  document.addEventListener('dblclick', (e) => { if(!menu.contains(e.target)) setFull(!full); });
+  document.addEventListener('dblclick', (e) => { if(!menu.contains(e.target) && !(e.target.closest && e.target.closest('.grip'))) setFull(!full); });
 
   let toastTimer = null;
   function toast(text, bad){
@@ -178,6 +209,52 @@
     e.preventDefault(); e.stopPropagation();
     w.startDragging().catch(() => {});
   }, true);
+
+  /* HIS HANDS ON THE WINDOW (2.28.0). The top handle moves it, a ring in
+     each corner stretches it from that corner: both are the frame's own
+     drag and resize, started on a press. */
+  function startMove(e){
+    if(e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const w = tauriWin();
+    if(w && typeof w.startDragging === 'function') w.startDragging().catch(() => {});
+  }
+  function startSize(direction){
+    return (e) => {
+      if(e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const w = tauriWin();
+      if(w && typeof w.startResizeDragging === 'function') w.startResizeDragging(direction).catch(() => {});
+    };
+  }
+  document.getElementById('gripMove').addEventListener('mousedown', startMove);
+  [['gripNW', 'NorthWest'], ['gripNE', 'NorthEast'], ['gripSW', 'SouthWest'], ['gripSE', 'SouthEast']]
+    .forEach(([id, dir]) => document.getElementById(id).addEventListener('mousedown', startSize(dir)));
+
+  /* A quarter bigger or a fifth smaller, about the window's centre
+     (adjust_window in main.rs, the same command the voice uses). */
+  function sizeStep(action){
+    closeMenu();
+    const inv = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+    if(!inv) return;
+    inv('adjust_window', { window: 'model', action }).then((r) => {
+      if(r && r.note === 'at_max') toast('That is as big as the screen allows.');
+      else if(r && r.note === 'at_min') toast('That is as small as it goes.');
+    }).catch(() => {});
+  }
+  document.getElementById('biggerBtn').addEventListener('click', () => sizeStep('bigger'));
+  document.getElementById('smallerBtn').addEventListener('click', () => sizeStep('smaller'));
+  /* Ctrl+wheel sizes the WINDOW (the plain wheel zooms the model inside it). */
+  stage.addEventListener('wheel', (e) => {
+    if(!e.ctrlKey) return;
+    e.preventDefault(); e.stopPropagation();
+    if(e.deltaY < 0) sizeStep('bigger'); else if(e.deltaY > 0) sizeStep('smaller');
+  }, { capture: true, passive: false });
+  document.addEventListener('keydown', (e) => {
+    if(e.ctrlKey || e.altKey || e.metaKey) return;
+    if(e.key === '+' || e.key === '=') sizeStep('bigger');
+    else if(e.key === '-' || e.key === '_') sizeStep('smaller');
+  });
 
   function fail(msg){
     note.style.display = 'none';
@@ -398,6 +475,16 @@
     model.position.sub(pivot).applyQuaternion(q).add(pivot);
     model.quaternion.premultiply(q);
   }
+
+  /* The arrow keys turn it a step at a time (15 degrees). */
+  document.addEventListener('keydown', (e) => {
+    if(e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    const step = 15;
+    if(e.key === 'ArrowLeft'){ e.preventDefault(); turnBy(-step, 0); }
+    else if(e.key === 'ArrowRight'){ e.preventDefault(); turnBy(step, 0); }
+    else if(e.key === 'ArrowUp'){ e.preventDefault(); turnBy(0, -step); }
+    else if(e.key === 'ArrowDown'){ e.preventDefault(); turnBy(0, step); }
+  });
 
   (function listenForGestures(){
     const ev = window.__TAURI__ && window.__TAURI__.event;

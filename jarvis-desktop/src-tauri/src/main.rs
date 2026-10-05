@@ -2319,6 +2319,76 @@ fn media_key(key: String) -> Result<String, String> {
 const MUSIC_W: f64 = 360.0; // logical px: an ellipse twice as wide as it is tall
 const MUSIC_H: f64 = 180.0;
 const MUSIC_TOP: f64 = 14.0; // logical px from the top of the screen
+const MUSIC_MIN_W: f64 = 160.0; // the smallest he can make it (logical px)
+const MUSIC_MIN_H: f64 = 80.0;
+
+/* WHERE HE PUT IT (2.28.0). The music window is his to move and stretch
+   (drag it, scroll over it, the handle on its rim, or "make the music
+   bigger"); the last place and size are kept in memory and, a moment after
+   the last change, in a small file next to the app's data, so the next
+   "put some music" opens it where he left it. Physical pixels, as the
+   window reports them: x, y, width, height; a width of 0 means unknown. */
+static MUSIC_GEOM: std::sync::Mutex<[i32; 4]> = std::sync::Mutex::new([0, 0, 0, 0]);
+static MUSIC_SAVE_PENDING: AtomicBool = AtomicBool::new(false);
+
+fn music_geom_file(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_local_data_dir().ok().map(|d| d.join("music-window.txt"))
+}
+
+fn music_geom_save(app: &tauri::AppHandle) {
+    let g = *MUSIC_GEOM.lock().unwrap_or_else(|e| e.into_inner());
+    if g[2] <= 0 || g[3] <= 0 {
+        return;
+    }
+    if let Some(file) = music_geom_file(app) {
+        if let Some(dir) = file.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::write(file, format!("{} {} {} {}", g[0], g[1], g[2], g[3]));
+    }
+}
+
+/* Saved only if it still makes sense: a sensible size, and its middle on a
+   screen that is still there (a second monitor may be gone). */
+fn music_geom_load(app: &tauri::AppHandle) -> Option<[i32; 4]> {
+    let text = std::fs::read_to_string(music_geom_file(app)?).ok()?;
+    let v: Vec<i32> = text.split_whitespace().filter_map(|t| t.parse().ok()).collect();
+    if v.len() != 4 {
+        return None;
+    }
+    let g = [v[0], v[1], v[2], v[3]];
+    if g[2] < 100 || g[3] < 50 || g[2] > 8000 || g[3] > 4000 {
+        return None;
+    }
+    let (cx, cy) = (g[0] + g[2] / 2, g[1] + g[3] / 2);
+    let on_screen = app
+        .available_monitors()
+        .map(|ms| {
+            ms.iter().any(|m| {
+                let (p, s) = (m.position(), m.size());
+                cx >= p.x && cx < p.x + s.width as i32 && cy >= p.y && cy < p.y + s.height as i32
+            })
+        })
+        .unwrap_or(false);
+    if on_screen {
+        Some(g)
+    } else {
+        None
+    }
+}
+
+/* Writes ~1 s after the LAST change, not on every pixel of a drag. */
+fn music_geom_changed(app: &tauri::AppHandle) {
+    if MUSIC_SAVE_PENDING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+        MUSIC_SAVE_PENDING.store(false, Ordering::SeqCst);
+        music_geom_save(&app);
+    });
+}
 
 const MUSIC_INIT: &str = r#"(function () {
   if (window.__jarvisMusicReady) return;
@@ -2331,7 +2401,9 @@ const MUSIC_INIT: &str = r#"(function () {
     '#movie_player .html5-video-container,#movie_player video.html5-main-video{position:absolute!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important}',
     '#movie_player video.html5-main-video{object-fit:cover!important}',
     '.ytp-chrome-top,.ytp-chrome-bottom,.ytp-gradient-top,.ytp-gradient-bottom,.ytp-watermark,.ytp-cards-button,.ytp-cards-teaser,.ytp-iv-player-content,.ytp-ce-element{display:none!important}',
-    '#jarvis-music-ring{position:fixed;left:0;top:0;width:100vw;height:100vh;border-radius:50%;pointer-events:none;z-index:2147483647;box-shadow:inset 0 0 0 2px rgba(0,229,255,0.9),inset 0 0 16px rgba(0,229,255,0.35)}'
+    '#jarvis-music-ring{position:fixed;left:0;top:0;width:100vw;height:100vh;border-radius:50%;pointer-events:none;z-index:2147483647;box-shadow:inset 0 0 0 2px rgba(0,229,255,0.9),inset 0 0 16px rgba(0,229,255,0.35)}',
+    '#jarvis-music-grip{position:fixed;left:81%;top:81%;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:rgba(0,12,24,0.72);box-shadow:0 0 0 1.5px rgba(0,229,255,0.9);color:#00e5ff;font:12px/22px sans-serif;text-align:center;cursor:nwse-resize;z-index:2147483647;opacity:0.45;transition:opacity .2s;user-select:none;-webkit-user-select:none}',
+    '#jarvis-music-grip:hover{opacity:1}'
   ].join('\n');
   function addStyle() {
     if (document.getElementById('jarvis-music-css')) return;
@@ -2348,10 +2420,92 @@ const MUSIC_INIT: &str = r#"(function () {
     r.id = 'jarvis-music-ring';
     document.body.appendChild(r);
   }
+  /* Resize by hand: a small handle on the lower right of the rim, which hands
+     the press to the window frame's own sizing (the page cannot resize a
+     window itself). */
+  function addGrip() {
+    if (!document.body || document.getElementById('jarvis-music-grip')) return;
+    var g = document.createElement('div');
+    g.id = 'jarvis-music-grip';
+    g.title = 'Drag to resize';
+    g.textContent = '\u25E2';
+    g.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      inv('plugin:window|start_resize_dragging', { label: LABEL, value: 'SouthEast' }).catch(function () {});
+    }, true);
+    document.body.appendChild(g);
+  }
   /* The skip button sits in the corner the ellipse cuts off. */
   function skipAd() {
     var b = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');
     if (b && b.offsetParent !== null) { try { b.click(); } catch (e) {} }
+  }
+  /* HIS HANDS ON THE WINDOW (2.28.0). Drag it anywhere to move it, turn the
+     wheel over it to make it bigger or smaller, or take the handle on the
+     rim to stretch it. The window is YouTube's page, so the page cannot move
+     or size it by itself: it asks the window plugin, which the music
+     capability (capabilities/music.json) allows for this one window and
+     these addresses only. A press that has not moved is still a click on
+     the player. */
+  var LABEL = 'music';
+  function inv(cmd, args) {
+    try {
+      var T = window.__TAURI_INTERNALS__;
+      if (T && typeof T.invoke === 'function') return Promise.resolve(T.invoke(cmd, args || {}));
+    } catch (e) {}
+    return Promise.reject(new Error('no bridge'));
+  }
+  var pend = null, swallow = 0;
+  document.addEventListener('mousedown', function (e) {
+    if (e.button !== 0 || !e.isTrusted) return;
+    if (e.target && e.target.id === 'jarvis-music-grip') return;
+    pend = { x: e.clientX, y: e.clientY };
+  }, true);
+  document.addEventListener('mousemove', function (e) {
+    if (!pend) return;
+    if ((e.buttons & 1) === 0) { pend = null; return; }
+    if (Math.abs(e.clientX - pend.x) + Math.abs(e.clientY - pend.y) < 6) return;
+    pend = null;
+    swallow = Date.now() + 600;
+    inv('plugin:window|start_dragging', { label: LABEL }).catch(function () {});
+  }, true);
+  document.addEventListener('mouseup', function () { pend = null; }, true);
+  ['click', 'dblclick'].forEach(function (n) {
+    document.addEventListener(n, function (e) {
+      /* A double click would send YouTube's player full screen inside a
+         window that is a few hundred pixels wide. */
+      if (n === 'dblclick' || Date.now() < swallow) { e.stopImmediatePropagation(); e.preventDefault(); }
+    }, true);
+  });
+  var wheelAcc = 0, wheelBusy = false, wheelTimer = 0;
+  document.addEventListener('wheel', function (e) {
+    if (!e.isTrusted) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    wheelAcc += e.deltaY * (e.deltaMode === 1 ? 40 : 1);
+    if (!wheelTimer) wheelTimer = setTimeout(applyWheel, 60);
+  }, { capture: true, passive: false });
+  function applyWheel() {
+    wheelTimer = 0;
+    if (wheelBusy) { wheelTimer = setTimeout(applyWheel, 60); return; }
+    var f = Math.exp(-wheelAcc * 0.0012);
+    wheelAcc = 0;
+    if (!(f > 0) || Math.abs(f - 1) < 0.004) return;
+    wheelBusy = true;
+    Promise.all([inv('plugin:window|outer_size', { label: LABEL }), inv('plugin:window|outer_position', { label: LABEL })]).then(function (r) {
+      var s = r[0], p = r[1], d = window.devicePixelRatio || 1;
+      var minW = 160 * d, maxW = Math.max(minW, (screen.availWidth || 1920) * d * 0.95);
+      /* Bigger never shrinks a window that is already past the limit, and
+         smaller never grows one that is already under it. */
+      var w = f > 1 ? Math.max(s.width, Math.min(maxW, s.width * f)) : Math.min(s.width, Math.max(minW, s.width * f));
+      var h = Math.max(1, s.height * (w / s.width));
+      return Promise.all([
+        inv('plugin:window|set_size', { label: LABEL, value: { Physical: { width: Math.round(w), height: Math.round(h) } } }),
+        inv('plugin:window|set_position', { label: LABEL, value: { Physical: { x: Math.round(p.x + (s.width - w) / 2), y: Math.round(p.y + (s.height - h) / 2) } } })
+      ]);
+    }).catch(function () {}).then(function () { wheelBusy = false; });
   }
   var started = Date.now(), held = false, touched = false;
   function player() { return document.getElementById('movie_player'); }
@@ -2361,6 +2515,7 @@ const MUSIC_INIT: &str = r#"(function () {
   function tick() {
     addStyle();
     addRing();
+    addGrip();
     skipAd();
     if (location.pathname === '/playlist') {
       var a = document.querySelector('ytd-playlist-video-renderer a#video-title[href*="/watch"], ytd-playlist-video-renderer a[href*="/watch?v="], a[href*="/watch?v="][href*="list="]');
@@ -2382,6 +2537,19 @@ const MUSIC_INIT: &str = r#"(function () {
       else if (a === 'toggle') { window.__jarvisMusic(v && !v.paused ? 'pause' : 'resume'); }
       else if (a === 'next') { held = false; if (p && p.nextVideo) p.nextVideo(); else if ((b = document.querySelector('.ytp-next-button'))) b.click(); }
       else if (a === 'previous') { held = false; if (p && p.previousVideo) p.previousVideo(); else if ((b = document.querySelector('.ytp-prev-button'))) b.click(); }
+      else if (a === 'volume_up' || a === 'volume_down') {
+        var vol = (p && p.getVolume) ? p.getVolume() : (v ? v.volume * 100 : 50);
+        vol = Math.max(0, Math.min(100, vol + (a === 'volume_up' ? 15 : -15)));
+        if (p && p.setVolume) { p.setVolume(vol); if (vol > 0 && p.isMuted && p.isMuted() && p.unMute) p.unMute(); }
+        else if (v) { v.volume = vol / 100; v.muted = false; }
+      }
+      else if (a === 'mute') { if (p && p.mute) p.mute(); else if (v) v.muted = true; }
+      else if (a === 'unmute') { if (p && p.unMute) p.unMute(); else if (v) v.muted = false; }
+      else if (a === 'forward' || a === 'back' || a === 'restart') {
+        var now = (p && p.getCurrentTime) ? p.getCurrentTime() : (v ? v.currentTime : 0);
+        var to = a === 'restart' ? 0 : Math.max(0, now + (a === 'forward' ? 15 : -15));
+        if (p && p.seekTo) p.seekTo(to, true); else if (v) v.currentTime = to;
+      }
     } catch (e) {}
   };
 })();"#;
@@ -2433,7 +2601,8 @@ async fn music_window(app: tauri::AppHandle, url: String) -> Result<String, Stri
     let mut builder = WebviewWindowBuilder::new(&app, "music", WebviewUrl::External(parsed))
         .title("JARVIS \u{2014} music")
         .decorations(false)
-        .resizable(false)
+        .resizable(true)
+        .min_inner_size(MUSIC_MIN_W, MUSIC_MIN_H)
         .shadow(false)
         .always_on_top(true)
         .skip_taskbar(false)
@@ -2448,8 +2617,38 @@ async fn music_window(app: tauri::AppHandle, url: String) -> Result<String, Stri
         );
     }
     let win = builder.build().map_err(|e| e.to_string())?;
-    /* Top middle of the main screen, placed in physical pixels after it
-       exists (the builder's numbers are logical and get scaled twice on a
+    /* The ellipse follows the size, whoever changes it: him dragging the
+       handle, the wheel, "make it bigger". */
+    {
+        let (w2, a2) = (win.clone(), app.clone());
+        win.on_window_event(move |ev| match ev {
+            tauri::WindowEvent::Resized(size) => {
+                if size.width > 0 && size.height > 0 {
+                    ellipse_window(&w2, size.width as i32, size.height as i32);
+                    let mut g = MUSIC_GEOM.lock().unwrap_or_else(|e| e.into_inner());
+                    g[2] = size.width as i32;
+                    g[3] = size.height as i32;
+                    drop(g);
+                    music_geom_changed(&a2);
+                }
+            }
+            tauri::WindowEvent::Moved(pos) => {
+                // A minimised window reports a position far off the screen.
+                if pos.x > -30000 && pos.y > -30000 {
+                    let mut g = MUSIC_GEOM.lock().unwrap_or_else(|e| e.into_inner());
+                    g[0] = pos.x;
+                    g[1] = pos.y;
+                    drop(g);
+                    music_geom_changed(&a2);
+                }
+            }
+            tauri::WindowEvent::Destroyed => music_geom_save(&a2),
+            _ => {}
+        });
+    }
+    /* Where he left it, if that is still on a screen; otherwise the top
+       middle of the main screen. Placed in physical pixels after it exists
+       (the builder's numbers are logical and get scaled twice on a
        high-DPI screen). */
     let monitor = app
         .primary_monitor()
@@ -2457,15 +2656,28 @@ async fn music_window(app: tauri::AppHandle, url: String) -> Result<String, Stri
         .flatten()
         .or_else(|| win.current_monitor().ok().flatten());
     let scale = monitor.as_ref().map(|m| m.scale_factor()).unwrap_or(1.0);
-    let (w, h) = ((MUSIC_W * scale).round() as i32, (MUSIC_H * scale).round() as i32);
+    let (mut w, mut h) = ((MUSIC_W * scale).round() as i32, (MUSIC_H * scale).round() as i32);
+    let mut place: Option<(i32, i32)> = monitor.as_ref().map(|m| {
+        (
+            m.position().x + (m.size().width as i32 - w) / 2,
+            m.position().y + (MUSIC_TOP * scale).round() as i32,
+        )
+    });
+    if let Some(g) = music_geom_load(&app) {
+        place = Some((g[0], g[1]));
+        w = g[2];
+        h = g[3];
+    }
     let _ = win.set_size(tauri::PhysicalSize {
         width: w as u32,
         height: h as u32,
     });
-    if let Some(m) = monitor {
-        let x = m.position().x + (m.size().width as i32 - w) / 2;
-        let y = m.position().y + (MUSIC_TOP * scale).round() as i32;
+    if let Some((x, y)) = place {
         let _ = win.set_position(tauri::PhysicalPosition { x, y });
+    }
+    {
+        let (x, y) = place.unwrap_or((0, 0));
+        *MUSIC_GEOM.lock().unwrap_or_else(|e| e.into_inner()) = [x, y, w, h];
     }
     ellipse_window(&win, w, h);
     let _ = win.show();
@@ -2473,13 +2685,15 @@ async fn music_window(app: tauri::AppHandle, url: String) -> Result<String, Stri
     Ok("opened".into())
 }
 
-/* pause | resume | toggle | next | previous | close | show. "not_open"
+/* pause | resume | toggle | next | previous | volume_up | volume_down | mute |
+   unmute | forward | back | restart | close | show. "not_open"
    when he has closed it himself. */
 #[tauri::command]
 fn music_control(app: tauri::AppHandle, action: String) -> Result<String, String> {
     let win = app.get_webview_window("music").ok_or_else(|| "not_open".to_string())?;
     match action.as_str() {
         "close" => {
+            music_geom_save(&app);
             win.close().map_err(|e| e.to_string())?;
             Ok("closed".into())
         }
@@ -2489,13 +2703,426 @@ fn music_control(app: tauri::AppHandle, action: String) -> Result<String, String
             raise_own_window(&win, false);
             Ok("shown".into())
         }
-        "pause" | "resume" | "toggle" | "next" | "previous" => {
+        "pause" | "resume" | "toggle" | "next" | "previous" | "volume_up" | "volume_down" | "mute"
+        | "unmute" | "forward" | "back" | "restart" => {
             win.eval(&format!("window.__jarvisMusic && window.__jarvisMusic('{}')", action))
                 .map_err(|e| e.to_string())?;
             Ok(action)
         }
         _ => Err(format!("unknown music action {action}")),
     }
+}
+
+/* ------------------------------------------------------------------
+   HIS WINDOWS, BIGGER, SMALLER, SOMEWHERE ELSE (2.28.0)
+
+   "Make the music bigger", "put the 3D model in the corner": the same
+   thing his hands do on the window itself (drag, wheel, the handles),
+   asked for by voice. One command for the two windows he is allowed to
+   rearrange, the music window and the 3D viewer. A step is a quarter
+   bigger or a fifth smaller about the window's centre, never past 95% of
+   the usable screen or under the smallest size, and the window is kept
+   whole on the screen it is on (the taskbar is not part of it). The music
+   window's ellipse follows by itself (its Resized handler).
+
+   action: bigger | smaller | reset | place. horizontal: left | center |
+   right; vertical: top | middle | bottom. The answer carries `note`:
+   "at_max" / "at_min" when it could go no further.
+------------------------------------------------------------------ */
+#[tauri::command]
+fn adjust_window(
+    app: tauri::AppHandle,
+    window: String,
+    action: String,
+    horizontal: Option<String>,
+    vertical: Option<String>,
+    steps: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    let (label, min_w, min_h, def_w, def_h) = match window.as_str() {
+        "music" => ("music", MUSIC_MIN_W, MUSIC_MIN_H, MUSIC_W, MUSIC_H),
+        "model" => ("model", 240.0, 240.0, 620.0, 620.0),
+        _ => return Err(format!("unknown window {window}")),
+    };
+    let win = app
+        .get_webview_window(label)
+        .ok_or_else(|| "not_open".to_string())?;
+    if win.is_fullscreen().unwrap_or(false) {
+        return Err("full_screen".into());
+    }
+    let pos = win.outer_position().map_err(|e| e.to_string())?;
+    let size = win.outer_size().map_err(|e| e.to_string())?;
+    let mon = win
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| app.primary_monitor().ok().flatten())
+        .ok_or_else(|| "no_monitor".to_string())?;
+    let scale = mon.scale_factor();
+    let (mp, ms) = (*mon.position(), *mon.size());
+    // The usable part of the screen, taskbar excluded: left, top, right, bottom.
+    #[allow(unused_mut)]
+    let mut area = [mp.x, mp.y, mp.x + ms.width as i32, mp.y + ms.height as i32];
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(h) = win.hwnd() {
+            if let Some(a) = unsafe { bring_work_area_of(h.0 as isize) } {
+                area = a;
+            }
+        }
+    }
+    let (area_w, area_h) = ((area[2] - area[0]) as f64, (area[3] - area[1]) as f64);
+    let (cw, ch) = (size.width as f64, size.height as f64);
+    let (mut nw, mut nh) = (cw, ch);
+    let (mut x, mut y) = (pos.x, pos.y);
+    let mut note = "ok";
+    match action.as_str() {
+        "bigger" | "smaller" => {
+            let steps = steps.unwrap_or(1).clamp(1, 6) as i32;
+            let want: f64 = if action == "bigger" { 1.25f64.powi(steps) } else { 0.8f64.powi(steps) };
+            let mut f = want.min(area_w * 0.95 / cw).min(area_h * 0.95 / ch);
+            f = f.max(min_w * scale / cw).max(min_h * scale / ch);
+            if want > 1.0 {
+                f = f.max(1.0);
+                if f < 1.02 {
+                    note = "at_max";
+                }
+            } else {
+                f = f.min(1.0);
+                if f > 0.98 {
+                    note = "at_min";
+                }
+            }
+            nw = (cw * f).round();
+            nh = (ch * f).round();
+            x = pos.x + ((cw - nw) / 2.0).round() as i32;
+            y = pos.y + ((ch - nh) / 2.0).round() as i32;
+        }
+        "reset" => {
+            nw = (def_w * scale).round();
+            nh = (def_h * scale).round();
+            x = area[0] + ((area_w - nw) / 2.0).round() as i32;
+            y = if label == "music" {
+                mp.y + (MUSIC_TOP * scale).round() as i32
+            } else {
+                area[1] + ((area_h - nh) / 2.0).round() as i32
+            };
+        }
+        "place" | "move" => {
+            if horizontal.is_none() && vertical.is_none() {
+                return Err("no_place".into());
+            }
+        }
+        _ => return Err(format!("unknown action {action}")),
+    }
+    let margin = (14.0 * scale).round() as i32;
+    let (iw, ih) = (nw as i32, nh as i32);
+    match horizontal.as_deref() {
+        Some("left") => x = area[0] + margin,
+        Some("right") => x = area[2] - iw - margin,
+        Some("center") | Some("middle") => x = area[0] + (area[2] - area[0] - iw) / 2,
+        _ => {}
+    }
+    match vertical.as_deref() {
+        Some("top") => y = area[1] + margin,
+        Some("bottom") => y = area[3] - ih - margin,
+        Some("middle") | Some("center") => y = area[1] + (area[3] - area[1] - ih) / 2,
+        _ => {}
+    }
+    // Never off the screen.
+    x = x.max(area[0]).min((area[2] - iw).max(area[0]));
+    y = y.max(area[1]).min((area[3] - ih).max(area[1]));
+    if (nw - cw).abs() > 0.5 || (nh - ch).abs() > 0.5 {
+        win.set_size(tauri::PhysicalSize {
+            width: nw as u32,
+            height: nh as u32,
+        })
+        .map_err(|e| e.to_string())?;
+    }
+    win.set_position(tauri::PhysicalPosition { x, y })
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "ok": true, "window": window, "action": action, "note": note,
+        "width": iw, "height": ih, "x": x, "y": y
+    }))
+}
+
+/* ------------------------------------------------------------------
+   TYPING FOR HIM (2.28.0)
+
+   "Write this in Chrome" without a site-specific tool: the text is typed
+   as keystrokes into the window he names, or into the one he is in, the
+   way his own hands would (Unicode key events, so Hebrew and emoji land
+   as written whatever the keyboard layout). Chrome is found in the list
+   of program windows and brought to the front; a field is chosen only
+   when he asks for one: the address bar (Ctrl+L) or a fresh tab (Ctrl+T)
+   in a browser, else whatever already has the cursor.
+
+   What keeps it safe:
+     - it types ONLY into a window that is verified to be the foreground
+       window, before the first key and again before every batch; if he
+       clicks elsewhere half way, it stops and says how far it got;
+     - never into a shell, a terminal, a script host, the registry
+       editor, Task Manager or a security prompt (TYPE_REFUSED_EXE): text
+       typed into those runs as a command;
+     - never into one of our own windows;
+     - 4000 characters at most; a new line is Shift+Enter (a line break,
+       not "send"); Enter is pressed only when `submit` is asked for.
+   Answers are { ok, ... }; the failures a person can act on are {ok:false,
+   code} rather than errors: no_window, refused_app, not_browser, not_front,
+   focus_lost (typed = how many characters landed), blocked, no_text,
+   too_long.
+------------------------------------------------------------------ */
+#[cfg(target_os = "windows")]
+const TYPE_REFUSED_EXE: &[&str] = &[
+    "cmd", "powershell", "pwsh", "powershell_ise", "windowsterminal", "wt", "conhost",
+    "openconsole", "wsl", "wslhost", "bash", "mshta", "wscript", "cscript", "regedit", "mmc",
+    "taskmgr", "consent", "credentialuibroker", "logonui", "lockapp", "msiexec", "runas",
+];
+
+#[cfg(target_os = "windows")]
+const TYPE_BROWSERS: &[&str] = &["chrome", "msedge", "firefox", "brave", "opera", "vivaldi"];
+
+#[cfg(target_os = "windows")]
+fn type_text_blocking(
+    own: Vec<(String, isize)>,
+    text: String,
+    target: Option<String>,
+    field: Option<String>,
+    submit: bool,
+) -> Result<serde_json::Value, String> {
+    use std::{thread::sleep, time::Duration};
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE,
+        VIRTUAL_KEY, VK_CONTROL, VK_RETURN, VK_SHIFT, VK_TAB,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE,
+    };
+
+    let fail = |code: &str, extra: serde_json::Value| -> Result<serde_json::Value, String> {
+        let mut v = serde_json::json!({ "ok": false, "code": code });
+        if let (Some(o), Some(e)) = (v.as_object_mut(), extra.as_object()) {
+            for (k, val) in e {
+                o.insert(k.clone(), val.clone());
+            }
+        }
+        Ok(v)
+    };
+
+    let text: String = text
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .chars()
+        .filter(|c| *c == '\n' || *c == '\t' || !c.is_control())
+        .collect();
+    let units: Vec<u16> = text.encode_utf16().collect();
+    if units.is_empty() {
+        return fail("no_text", serde_json::json!({}));
+    }
+    if units.len() > 4000 {
+        return fail("too_long", serde_json::json!({ "limit": 4000 }));
+    }
+
+    // Which window.
+    let want = target
+        .as_deref()
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "focused".to_string());
+    let windows = bring_app_windows(&own);
+    let fg_now = unsafe { GetForegroundWindow() } as isize;
+    let pick: Option<&BringCandidate> = match want.as_str() {
+        "focused" | "foreground" | "current" | "this" => windows
+            .iter()
+            .find(|c| c.hwnd == fg_now)
+            .or_else(|| windows.first()),
+        "chrome" | "google chrome" => windows.iter().find(|c| c.exe == "chrome"),
+        "browser" | "the browser" => windows
+            .iter()
+            .find(|c| TYPE_BROWSERS.contains(&c.exe.as_str())),
+        other => {
+            let needle = vec![other.to_string()];
+            let mut best: Option<(i32, &BringCandidate)> = None;
+            for c in windows.iter() {
+                let s = bring_score(c, &needle, &needle);
+                if s > 0 && best.map(|(b, _)| s > b).unwrap_or(true) {
+                    best = Some((s, c));
+                }
+            }
+            best.map(|(_, c)| c)
+        }
+    };
+    let Some(c) = pick else {
+        return fail("no_window", serde_json::json!({ "wanted": want }));
+    };
+    if TYPE_REFUSED_EXE.contains(&c.exe.as_str()) {
+        return fail("refused_app", serde_json::json!({ "exe": c.exe, "title": c.title }));
+    }
+    let field = field
+        .as_deref()
+        .map(|s| s.trim().to_lowercase())
+        .unwrap_or_default();
+    let is_browser = TYPE_BROWSERS.contains(&c.exe.as_str());
+    let (address_bar, new_tab) = (
+        matches!(field.as_str(), "address_bar" | "address" | "url" | "search"),
+        field == "new_tab",
+    );
+    if (address_bar || new_tab) && !is_browser {
+        return fail("not_browser", serde_json::json!({ "exe": c.exe, "title": c.title }));
+    }
+
+    // In front, and checked.
+    let hwnd = c.hwnd as HWND;
+    unsafe {
+        if IsIconic(hwnd) != 0 {
+            ShowWindow(hwnd, SW_RESTORE);
+        }
+        if GetForegroundWindow() as isize != c.hwnd {
+            foreground_unlock();
+            SetForegroundWindow(hwnd);
+        }
+    }
+    let mut front = false;
+    for _ in 0..25 {
+        if unsafe { GetForegroundWindow() } as isize == c.hwnd {
+            front = true;
+            break;
+        }
+        sleep(Duration::from_millis(40));
+    }
+    if !front {
+        return fail("not_front", serde_json::json!({ "exe": c.exe, "title": c.title }));
+    }
+    sleep(Duration::from_millis(120));
+
+    let key = |vk: VIRTUAL_KEY, up: bool| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: vk,
+                wScan: 0,
+                dwFlags: if up { KEYEVENTF_KEYUP } else { 0 },
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+    let unit = |u: u16, up: bool| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: 0,
+                wScan: u,
+                dwFlags: KEYEVENTF_UNICODE | if up { KEYEVENTF_KEYUP } else { 0 },
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+    let still_front = || unsafe { GetForegroundWindow() } as isize == c.hwnd;
+    let send = |inputs: &mut Vec<INPUT>| -> bool {
+        if inputs.is_empty() {
+            return true;
+        }
+        let n = unsafe { SendInput(inputs.len() as u32, inputs.as_mut_ptr(), std::mem::size_of::<INPUT>() as i32) };
+        let all = n as usize == inputs.len();
+        inputs.clear();
+        all
+    };
+
+    // The field, if he asked for one.
+    if address_bar || new_tab {
+        let letter: VIRTUAL_KEY = if new_tab { 0x54 } else { 0x4C }; // T, L
+        let mut keys = vec![key(VK_CONTROL, false), key(letter, false), key(letter, true), key(VK_CONTROL, true)];
+        if !send(&mut keys) {
+            return fail("blocked", serde_json::json!({ "exe": c.exe }));
+        }
+        sleep(Duration::from_millis(if new_tab { 380 } else { 180 }));
+        if !still_front() {
+            return fail("focus_lost", serde_json::json!({ "typed": 0, "exe": c.exe }));
+        }
+    }
+
+    // The text, in small batches, checking the window each time.
+    let mut typed = 0usize;
+    let mut batch: Vec<INPUT> = Vec::with_capacity(200);
+    let mut in_batch = 0usize;
+    for &u in units.iter() {
+        match u {
+            0x0A => {
+                batch.extend([key(VK_SHIFT, false), key(VK_RETURN, false), key(VK_RETURN, true), key(VK_SHIFT, true)]);
+            }
+            0x09 => {
+                batch.extend([key(VK_TAB, false), key(VK_TAB, true)]);
+            }
+            _ => {
+                batch.extend([unit(u, false), unit(u, true)]);
+            }
+        }
+        in_batch += 1;
+        if in_batch >= 40 {
+            if !still_front() {
+                return fail("focus_lost", serde_json::json!({ "typed": typed, "exe": c.exe }));
+            }
+            if !send(&mut batch) {
+                return fail("blocked", serde_json::json!({ "typed": typed, "exe": c.exe }));
+            }
+            typed += in_batch;
+            in_batch = 0;
+            sleep(Duration::from_millis(8));
+        }
+    }
+    if in_batch > 0 {
+        if !still_front() {
+            return fail("focus_lost", serde_json::json!({ "typed": typed, "exe": c.exe }));
+        }
+        if !send(&mut batch) {
+            return fail("blocked", serde_json::json!({ "typed": typed, "exe": c.exe }));
+        }
+        typed += in_batch;
+    }
+    let mut submitted = false;
+    if submit {
+        sleep(Duration::from_millis(60));
+        if still_front() {
+            let mut keys = vec![key(VK_RETURN, false), key(VK_RETURN, true)];
+            submitted = send(&mut keys);
+        }
+    }
+    let shown: String = c.title.chars().take(80).collect();
+    Ok(serde_json::json!({
+        "ok": true, "typed": typed, "exe": c.exe, "title": shown,
+        "submitted": submitted, "field": if address_bar { "address_bar" } else if new_tab { "new_tab" } else { "focused" }
+    }))
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+async fn type_text(
+    app: tauri::AppHandle,
+    text: String,
+    target: Option<String>,
+    field: Option<String>,
+    submit: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    let own = zoom_own_windows(&app);
+    tauri::async_runtime::spawn_blocking(move || {
+        type_text_blocking(own, text, target, field, submit.unwrap_or(false))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+async fn type_text(
+    _text: String,
+    _target: Option<String>,
+    _field: Option<String>,
+    _submit: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    Err("typing for him is only available on Windows".into())
 }
 
 /* ON THE SCREEN, NOT IN THE TASKBAR (2.24.0). A window this app creates
@@ -3480,7 +4107,9 @@ fn main() {
             media_key,
             music_window,
             music_control,
-            front_workspace
+            front_workspace,
+            adjust_window,
+            type_text
         ])
         .setup(|app| {
             let window = app

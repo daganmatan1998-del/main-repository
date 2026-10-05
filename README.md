@@ -2002,3 +2002,58 @@ when it is ready (see "The 3D service" near the top).
 5. If the OAuth app is in "Testing", Google ends the connection after 7 days:
    connect again, or set the app to "In production" (it stays unverified, which
    is fine for one user).
+
+## Page 2.28.0: your windows are yours to move and size, JARVIS types for you, Google Calendar opens (needs the app rebuilt)
+
+**The music window (the YouTube ellipse)**
+- **Drag it anywhere** with the mouse (press and move; a plain click still
+  pauses / plays). **Scroll over it** to make it bigger or smaller (the shape
+  stays). **The round handle on its lower-right rim** stretches it freely; the
+  ellipse follows. A double-click does nothing (it would send YouTube full
+  screen inside a small window).
+- By voice: **"make the music bigger"**, "a bit smaller", "a lot bigger",
+  **"move the music to the left"**, "put the music in the bottom right
+  corner", "reset the music window"; in Hebrew "תגדיל את המוזיקה", "תזיז את
+  המוזיקה שמאלה". Each step is a quarter bigger or a fifth smaller, never past
+  95% of the screen or under 160 px wide; it stays whole on the screen.
+- It opens where you left it (the position and size are kept in
+  `music-window.txt` in the app's data folder), on a screen that is still
+  there; otherwise at the top middle.
+- Everything else keeps running while you do this: the window never takes the
+  keyboard away from JARVIS.
+- Playback by voice, while the music window is open: **"turn the music up /
+  down"** (15% a step), "mute" / "unmute", "forward" / "back" (15 seconds),
+  "restart this song", on top of pause / resume / next / previous / stop.
+
+**The 3D model window**
+- A **handle at the top** moves it (no Shift needed any more), **a ring in each
+  corner** stretches it, **Ctrl+wheel** or **+ / -** make it bigger or smaller,
+  **the arrow keys** turn the model (drag with the mouse still turns it, the
+  plain wheel zooms inside it). The menu has WINDOW BIGGER / WINDOW SMALLER.
+  The handles show only while the pointer is over the window.
+- By voice: "make the 3D model bigger", "move the model to the top left",
+  "center the model", "תקטין את המודל". "Make a bigger 3D model of a house" is
+  still a request for a new model, not for the window.
+
+**JARVIS types for you (no site-specific tool)**
+- "Type hello in Chrome", "write this in the search box", "תכתוב בכרום ...":
+  the text appears as keystrokes in Chrome (it is found, brought to the front
+  and checked, even if minimised) or in the window you are in. "In the address
+  bar" / "in a new tab" for a search without going to any site first; "and
+  press Enter" / "and search" presses Enter. New lines are line breaks, not
+  "send".
+- Limits, in code: it types only into a window it has verified is in front
+  (before the first key and before every batch; if you switch away it stops and
+  says how far it got); never into PowerShell, cmd, a terminal, a script host,
+  the registry editor, Task Manager or a security prompt, never into JARVIS's
+  own windows; 4000 characters at most. It types only what **you** told it to:
+  never text from a web page, a mail or a file, never a password.
+
+**Google Calendar is a site he opens**: "open Google Calendar", "open my
+calendar", "תפתח את היומן" open calendar.google.com straight away (no model
+involved). Questions about your schedule ("what is on my calendar today") are
+still answered from your connected calendar as before.
+
+**Setup**: replace `dist/index.html` and `dist/model.html` and **rebuild the
+app** (Rust and a new capability file, `capabilities/music.json`, changed). The
+worker is unchanged.

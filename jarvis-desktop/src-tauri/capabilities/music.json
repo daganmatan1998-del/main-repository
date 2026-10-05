@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "music",
+  "description": "The music window: YouTube's own page in a frameless ellipse. The page is not ours, so this is a REMOTE capability, limited to YouTube's addresses and to this one window, and to nothing but moving and sizing that window: drag it (start-dragging), take the handle on its rim (start-resize-dragging) and scroll over it to make it bigger or smaller (read its size and position, set both). No events, no opener, no filesystem, no custom commands.",
+  "windows": ["music"],
+  "remote": {
+    "urls": [
+      "https://www.youtube.com/*",
+      "https://youtube.com/*",
+      "https://m.youtube.com/*"
+    ]
+  },
+  "permissions": [
+    "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-outer-size",
+    "core:window:allow-outer-position"
+  ]
+}

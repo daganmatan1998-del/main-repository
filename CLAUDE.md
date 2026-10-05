@@ -766,6 +766,57 @@ single file `dist/index.html`.
   not connected, scope, ...). gmail.test.mjs (worker, a stand-in Gmail),
   gmail.e2e.mjs (page). NOT TESTED AGAINST A REAL GMAIL ACCOUNT: the first live
   run should be read-only.
+- **His windows, his keyboard (page 2.28.0).** The music window is
+  resizable now (min 160x80 logical) and the page inside it (MUSIC_INIT) moves
+  it by calling the window plugin through `__TAURI_INTERNALS__.invoke`, which a
+  remote page can do ONLY because `capabilities/music.json` has `remote.urls`
+  (YouTube) and `windows: ["music"]` with exactly start-dragging,
+  start-resize-dragging, set/outer size/position. Remote origins can never
+  reach app commands (no app manifest, `!is_local` is refused in
+  webview/mod.rs), so the page cannot use `adjust_window` — only the plugin
+  commands. Drag = a press that moves 6 px (a still click is YouTube's own
+  play/pause; clicks within 600 ms of a drag start are swallowed; dblclick is
+  always swallowed), wheel = f=exp(-delta*0.0012) about the centre (never
+  shrinks on up, never grows on down), handle `#jarvis-music-grip` =
+  start_resize_dragging SouthEast. The ellipse is re-applied from the window's
+  own `Resized` event (never from the caller), and size/position are kept in
+  `MUSIC_GEOM` and written to `music-window.txt` ~1 s after the last change
+  (loaded only if its centre is on a monitor that still exists). The page-side
+  command is `adjust_window(window: music|model, action: bigger|smaller|place|
+  reset, horizontal, vertical, steps)`: a step is x1.25 / x0.8, 95% of the
+  usable area at most, taskbar excluded (bring_work_area_of), never off
+  screen; `note` is at_max / at_min. The local rule is `windowAdjustOf` (kept
+  in the sliced WORKING DAY region on purpose: the sliced tests need every
+  matcher FLOW_RULES calls to live between "THE WORKING DAY" and
+  CLOSE_WINDOW_TOOL) — the whole sentence must be a window (music/3D model), a
+  size or a place and filler; "a" before the size or the thing means a NEW
+  object ("make a bigger 3D model"), Hebrew needs את / ה- / חלון (no articles
+  in Hebrew), and "turn the music up" must stay the model's (volume). It also
+  matters to `wantsNew3dModel`: a sentence that arranges the viewer ("make the
+  3D window bigger") is NOT a request for a model, or the never-no machinery
+  builds one. model.html: five `.grip` handles (move at the top, a ring per
+  corner via startResizeDragging), Ctrl+wheel and +/- call adjust_window,
+  arrows turn, `body.full` hides the handles; capabilities/model.json gained
+  start-resize-dragging. `type_text(text, target, field, submit)`: target
+  chrome|browser|focused|<program name>, field address_bar (Ctrl+L) | new_tab
+  (Ctrl+T); only into a window brought to the front and CHECKED (before the
+  first key and each 40-character batch), never into TYPE_REFUSED_EXE
+  (shells, terminals, script hosts, regedit, Task Manager, UAC), never into our
+  own windows (the foreground being ours falls back to the topmost external
+  window), 4000 characters, Unicode key events, "\n" = Shift+Enter; failures
+  are {ok:false, code} (no_window, refused_app, not_browser, not_front,
+  focus_lost with `typed`, blocked, too_long) and the tool description forbids
+  typing anything that did not come from HIM. Google Calendar is an OPEN_SITES
+  entry ("calendar" alone included, so "show my calendar" opens the site; a
+  question about the schedule still goes to the model's calendar tools).
+  The music window also answers volume_up/volume_down (15 a step), mute,
+  unmute, forward/back (15 s) and restart through music_control ->
+  `__jarvisMusic` (play_music's actions; window only, no media-key twin).
+  NOT TESTED ON REAL WINDOWS: whether WebView2 lets the YouTube page's
+  start_dragging / start_resize_dragging run (tested against a stand-in
+  bridge and the real capability schema via `cargo check`), and typing into a
+  real Chrome. If a drag does nothing, read the music window's console error
+  first ("not allowed by ACL" = the capability URL pattern).
 - **Background shells die with their task.** A regression started with a
   plain `&` was killed when the tool call ended (twice, at 55 and 70 suites,
   looking like a hang). Start it `setsid nohup bash -c '...' </dev/null &
