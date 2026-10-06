@@ -6,8 +6,8 @@ REM
 REM   Run once. It makes a JARVIS icon on the desktop and in the
 REM   Start menu that opens
 REM     https://jarvis-main-version.daganmatan1998.workers.dev/
-REM   in its own window - no address bar, no tabs - using Edge
-REM   (or Chrome if Edge is missing).
+REM   in its own window - no address bar, no tabs - using Chrome
+REM   (its voices are part of JARVIS). Edge only if Chrome is missing.
 REM
 REM   Nothing is copied to the computer but an icon: the window
 REM   loads the site every time, so whatever is deployed to
@@ -28,17 +28,22 @@ $Dir  = Join-Path $env:LOCALAPPDATA 'JARVIS-App'
 try {
   New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 
-  # 1. The browser that will run it. Edge ships with Windows; Chrome as a fallback.
+  # 1. The browser that will run it. Chrome first: JARVIS speaks with Chrome's
+  #    voices, and that is the browser he uses. Edge only if Chrome is missing.
   $candidates = @(
-    (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
-    (Join-Path $env:ProgramFiles        'Microsoft\Edge\Application\msedge.exe'),
     (Join-Path $env:ProgramFiles        'Google\Chrome\Application\chrome.exe'),
     (Join-Path ${env:ProgramFiles(x86)} 'Google\Chrome\Application\chrome.exe'),
-    (Join-Path $env:LOCALAPPDATA        'Google\Chrome\Application\chrome.exe')
+    (Join-Path $env:LOCALAPPDATA        'Google\Chrome\Application\chrome.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
+    (Join-Path $env:ProgramFiles        'Microsoft\Edge\Application\msedge.exe')
   )
   $browser = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
   if (-not $browser) { throw 'Neither Microsoft Edge nor Google Chrome was found.' }
   Write-Host "  browser : $browser"
+  if ($browser -like '*msedge.exe') {
+    Write-Host '  WARNING : Chrome is not installed, so this uses Edge. Install Chrome' -ForegroundColor Yellow
+    Write-Host '            and run this again to switch JARVIS over to it.' -ForegroundColor Yellow
+  }
 
   # 2. The icon: the site's own icon-192.png, wrapped as a .ico (Windows has
   #    read PNG-inside-ICO since Vista). If the site cannot be reached, the
