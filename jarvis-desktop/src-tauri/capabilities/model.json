@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "model",
+  "description": "The 3D viewer window, and nothing else. It has no title bar: it moves by its top handle (or Shift-drag), stretches by its corner handles (start-resize-dragging), and closes itself from its own right-click menu, moves itself on Shift-drag and goes full screen from that menu; it listens for gesture zoom and precise control (one hand turning the model) from the camera window, and emits only to say a model is open (jarvis://model-pong / model-gone). Saving a model goes through the app's own save_model_file command, which writes only .glb files into the JARVIS folder. No opener, no shell, no filesystem.",
+  "windows": [
+    "model"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging",
+    "core:window:allow-set-focus",
+    "core:event:allow-emit",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen"
+  ]
+}

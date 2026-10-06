@@ -1,5 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
+set "NEWBAT="
 title JARVIS - update
 color 0B
 
@@ -19,7 +20,7 @@ set "STAGE=%USERPROFILE%\jarvis-update-tmp"
 set "ZIP=%STAGE%\latest.zip"
 set "UNPACK=%STAGE%\unpacked"
 set "FALLBACK=%USERPROFILE%\Downloads\jarvis-desktop.zip"
-set "SOURCE=https://github.com/daganmatan1998-del/Glowpulse-pro/archive/refs/heads/claude/file-download-0u216w.zip"
+set "SOURCE=https://github.com/daganmatan1998-del/main-repository/archive/refs/heads/claude/file-download-0u216w.zip"
 
 REM ------------------------------------------------------------
 echo.
@@ -47,10 +48,27 @@ REM  curl can leave a short or empty file behind when it gives up, and
 REM  "the file exists" would then be true of something unusable.
 if exist "%ZIP%" for %%Z in ("%ZIP%") do if %%~zZ LSS 100000 del /Q "%ZIP%"
 if not exist "%ZIP%" (
-  REM  No internet, or the address moved. A zip sent by hand still works.
-  if exist "%FALLBACK%" (
-    echo        could not download - using the zip in your Downloads instead.
-    copy /Y "%FALLBACK%" "%ZIP%" >nul
+  REM  No internet, or the address moved. A zip sent by hand still works -
+  REM  but it may be weeks old, and installing it quietly is how an update
+  REM  puts an OLD version back. So: the newest one there, said out loud, and
+  REM  only once he has agreed. A browser saves a second download under a new
+  REM  name with a number on the end, so every jarvis-desktop*.zip counts.
+  set "FALLBACK="
+  for /f "delims=" %%Z in ('dir /B /O-D "%USERPROFILE%\Downloads\jarvis-desktop*.zip" 2^>nul') do (
+    if not defined FALLBACK set "FALLBACK=%USERPROFILE%\Downloads\%%Z"
+  )
+  if defined FALLBACK (
+    for %%Z in ("!FALLBACK!") do set "FALLBACKDATE=%%~tZ"
+    echo.
+    echo  WARNING - COULD NOT DOWNLOAD the latest version from github.
+    echo      The newest zip in your Downloads is:
+    echo        !FALLBACK!
+    echo        saved !FALLBACKDATE!
+    echo      If that is not from today it is probably an OLD version.
+    echo.
+    echo      Press any key to install it anyway, or close this window.
+    pause >nul
+    copy /Y "!FALLBACK!" "%ZIP%" >nul
   ) else (
     echo  [X] STOP - could not download, and no zip in Downloads either.
     echo.
@@ -127,14 +145,49 @@ if not exist "!SRC!\dist\index.html" (
   goto :fail
 )
 
+REM  Which version this is, and whether it is any different from the one
+REM  already installed. A github zip stamps every file with the time of its
+REM  commit, so the date below is the date of the version itself.
+for %%F in ("!SRC!\dist\index.html") do set "NEWDATE=%%~tF"
+set "OLDDATE=nothing installed yet"
+if exist "%PROJECT%\dist\index.html" for %%F in ("%PROJECT%\dist\index.html") do set "OLDDATE=%%~tF"
+echo.
+echo   installed version : !OLDDATE!
+echo   this version      : !NEWDATE!
+set "SAMEPAGE="
+if exist "%PROJECT%\dist\index.html" (
+  fc /B "!SRC!\dist\index.html" "%PROJECT%\dist\index.html" >nul 2>&1
+  if not errorlevel 1 set "SAMEPAGE=1"
+)
+if defined SAMEPAGE (
+  echo   ^(the page is identical to what you already have - nothing new in it^)
+)
+echo.
+
+REM  The newest copy of THIS script, kept aside so it can replace itself at
+REM  the very end. Without that, a fix to the updater itself never reaches
+REM  the copy he actually runs, which is exactly how an old one gets stuck.
+set "NEWBAT="
+if exist "!SRC!\JARVIS-UPDATE.bat" (
+  fc /B "!SRC!\JARVIS-UPDATE.bat" "%~f0" >nul 2>&1
+  if errorlevel 1 (
+    copy /Y "!SRC!\JARVIS-UPDATE.bat" "%TEMP%\jarvis-update-new.bat" >nul 2>&1
+    if not errorlevel 1 set "NEWBAT=%TEMP%\jarvis-update-new.bat"
+  )
+)
+
 REM --- 6. copy EVERYTHING except the things that must survive --
 REM     target/ is the build cache - deleting it turns a
 REM     3 minute build into a 30 minute one.
 REM     node_modules/ is installed, not shipped.
 echo  [4/8] copying the new files...
 echo.
+REM     JARVIS-UPDATE.bat is left out on purpose: cmd reads a running
+REM     script from disk line by line, so overwriting it mid-run makes it
+REM     carry on from the wrong place in the new file. It is replaced at
+REM     the very end instead, where that cannot happen.
 robocopy "!SRC!" "%PROJECT%" /E /NFL /NDL /NJH /NJS /NP ^
-  /XD "node_modules" "target" "gen" ".git" >nul
+  /XD "node_modules" "target" "gen" ".git" /XF "JARVIS-UPDATE.bat" >nul
 if errorlevel 8 (
   echo  [X] STOP - copying failed.
   goto :fail
@@ -260,6 +313,15 @@ echo   it starts hidden on purpose.
 echo.
 start "" "%EXE%"
 timeout /t 8 >nul
+REM  One block: cmd reads all of it before running any of it, so replacing
+REM  the file it came from cannot derail what comes after.
+if defined NEWBAT (
+  echo   JARVIS-UPDATE.bat updated itself too.
+  copy /Y "%NEWBAT%" "%~f0" >nul 2>&1
+  copy /Y "%NEWBAT%" "%PROJECT%\JARVIS-UPDATE.bat" >nul 2>&1
+  del /Q "%NEWBAT%" >nul 2>&1
+  exit /b 0
+)
 exit /b 0
 
 :fail
@@ -269,4 +331,11 @@ echo    STOPPED. Nothing was started.
 echo  ============================================
 echo.
 pause
+REM  Even a failed run takes the newer updater with it, in case the fix for
+REM  whatever just failed is in the updater itself.
+if defined NEWBAT (
+  copy /Y "%NEWBAT%" "%~f0" >nul 2>&1
+  del /Q "%NEWBAT%" >nul 2>&1
+  exit /b 1
+)
 exit /b 1

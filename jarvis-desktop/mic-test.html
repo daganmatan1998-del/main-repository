@@ -56,11 +56,11 @@
 <body>
 <div class="wrap">
   <h1>MICROPHONE CHECK</h1>
-  <div class="sub">Measures the exact value JARVIS uses to decide whether you are speaking.</div>
+  <div class="sub">Checks the one rule JARVIS listens by: any sound above the minimum keeps him listening, and one full second below it means you have finished.</div>
 
   <div class="meter">
     <div id="bar"></div>
-    <div id="thresholdMark" title="current threshold"></div>
+    <div id="thresholdMark" title="the minimum (VAD_LEVEL)"></div>
   </div>
   <div class="scale"><span>0.000</span><span>0.025</span><span>0.050</span><span>0.075+</span></div>
 
@@ -89,23 +89,17 @@
    approximated: an RMS over one analyser frame of time-domain samples. If
    the numbers here did not come from the identical calculation, comparing
    them against the thresholds below would be meaningless. */
-const VAD_MIN_LEVEL = 0.009;
-const VAD_MAX_LEVEL = 0.038;
-/* Also copied rather than approximated: these two decide how much of the room
-   he actually gets to hear before he has to commit to a threshold. */
-const VAD_CALIBRATE_MS = 350;
-const VAD_METER_MS     = 50;
-
-function thresholdFor(floor){
-  const mult   = floor < 0.010 ? 1.45 : floor < 0.025 ? 1.40 : 1.25;
-  const offset = floor < 0.010 ? 0 : 0.004;
-  return Math.min(VAD_MAX_LEVEL, Math.max(VAD_MIN_LEVEL, floor * mult + offset));
-}
+/* Copied from dist/index.html, not approximated. Change them there and they
+   must change here, or this page starts judging a rule JARVIS no longer uses. */
+const VAD_LEVEL          = 0.020;
+const VAD_END_SILENCE_MS = 1000;
+const VAD_METER_MS       = 50;
 const toDb = rms => rms > 0 ? (20 * Math.log10(rms)).toFixed(1) : '-inf';
 
 let ctx, analyser, buf, stream, running = false;
-let latest = 0, currentThreshold = VAD_MIN_LEVEL;
-let roomFloor = null, voiceLevel = null, roomSpread = null;
+let latest = 0;
+const currentThreshold = VAD_LEVEL;
+let roomFloor = null, voiceLevel = null, roomRaw = null, voiceRaw = null;
 
 const $ = id => document.getElementById(id);
 
@@ -179,31 +173,30 @@ function collect(seconds, onDone){
   }, seconds * 1000);
 }
 
-/* Five seconds of room is a much better measurement than JARVIS ever gets.
-   He calibrates for VAD_CALIBRATE_MS from the moment the microphone opens —
-   350ms, which at one sample every 50ms is seven readings — and takes their
-   MEAN, not a median over a hundred. So a number averaged over five seconds
-   answers a question he is never asked, and this page was quietly flattering
-   itself: a steady five-second median hides exactly the variance that decides
-   whether a given turn is heard.
-
-   This replays the recording as he would see it: every consecutive
-   seven-sample window, each one a calibration that could have been the one
-   he ran, and the threshold each would have produced. The spread between
-   them is the real answer to "why does it hear me sometimes". */
-function shortWindowThresholds(raw){
-  const size = Math.max(1, Math.round(VAD_CALIBRATE_MS / VAD_METER_MS));
-  if(!raw || raw.length < size) return null;
-  const out = [];
-  for(let i = 0; i + size <= raw.length; i++){
-    let sum = 0;
-    for(let j = i; j < i + size; j++) sum += raw[j];
-    out.push(thresholdFor(sum / size));
+/* What actually decides whether a turn ends: not the room's average, but
+   whether it ever stays under the minimum for a whole second. Every
+   one-second stretch of the recording is checked; the share that stayed
+   under is how often he would notice you had finished on time. */
+function quietSecondShare(raw){
+  const need = Math.round(VAD_END_SILENCE_MS / VAD_METER_MS);
+  if(!raw || raw.length < need) return null;
+  let good = 0, total = 0;
+  for(let i = 0; i + need <= raw.length; i++){
+    total++;
+    let quiet = true;
+    for(let j = i; j < i + need; j++) if(raw[j] >= VAD_LEVEL){ quiet = false; break; }
+    if(quiet) good++;
   }
-  out.sort((a,b)=> a-b);
-  return { size: size, lowest: out[0], highest: out[out.length - 1],
-           typical: out[Math.floor(out.length / 2)] };
+  return good / total;
 }
+/* The longest stretch under the minimum while you were talking. A gap of a
+   full second or more is where a turn would be sent early. */
+function longestQuietMs(raw){
+  let run = 0, best = 0;
+  for(const v of raw || []){ run = v < VAD_LEVEL ? run + 1 : 0; if(run > best) best = run; }
+  return best * VAD_METER_MS;
+}
+const pct = (arr, p) => { const s = arr.slice().sort((a,b)=> a-b); return s[Math.min(s.length - 1, Math.floor(s.length * p))]; };
 
 $('startBtn').addEventListener('click', start);
 
@@ -212,8 +205,7 @@ $('roomBtn').addEventListener('click', ()=>{
   $('status').textContent = 'Stay quiet… 5s';
   collect(5, r=>{
     roomFloor = r.median;
-    roomSpread = shortWindowThresholds(r.raw);
-    currentThreshold = thresholdFor(roomFloor);
+    roomRaw = r.raw;
     $('status').textContent = 'Room measured. Step 2: speak normally for 5 seconds.';
     $('voiceBtn').disabled = false;
     render();
@@ -225,6 +217,7 @@ $('voiceBtn').addEventListener('click', ()=>{
   $('status').textContent = 'Speak normally… 5s';
   collect(5, r=>{
     voiceLevel = r.loud;      // the level of the words, not the gaps
+    voiceRaw = r.raw;
     $('status').textContent = 'Done.';
     $('roomBtn').disabled = false;
     $('voiceBtn').disabled = false;
@@ -234,49 +227,57 @@ $('voiceBtn').addEventListener('click', ()=>{
 
 function render(){
   if(roomFloor === null) return;
-  const thr = thresholdFor(roomFloor);
-  currentThreshold = thr;
-  /* The worst calibration he could land on, not the average one. A turn is
-     heard or missed on the threshold he happened to compute when that
-     recording opened, so the highest one is what has to be cleared. */
-  const worst = roomSpread ? Math.max(thr, roomSpread.highest) : thr;
+  const quiet = quietSecondShare(roomRaw);
+  const roomHigh = pct(roomRaw, 0.95);
   const rows = [
-    ['Room noise floor (5s median)', roomFloor.toFixed(4) + '  (' + toDb(roomFloor) + ' dBFS)'],
-    ['Threshold from that floor', thr.toFixed(4) + '  (' + toDb(thr) + ' dBFS)']
+    ['Room noise (5s median)', roomFloor.toFixed(4) + '  (' + toDb(roomFloor) + ' dBFS)'],
+    ['Room at its loudest (95th percentile)', roomHigh.toFixed(4) + '  (' + toDb(roomHigh) + ' dBFS)'],
+    ['The minimum JARVIS uses (VAD_LEVEL)', VAD_LEVEL.toFixed(4) + '  (' + toDb(VAD_LEVEL) + ' dBFS)'],
+    ['Minimum above the room', (VAD_LEVEL / roomFloor).toFixed(1) + '×'],
+    ['Seconds of room that read as silence', quiet === null ? '—' : Math.round(quiet * 100) + '%']
   ];
-  if(roomSpread){
-    rows.push(['Threshold he actually computes<br><span style="color:var(--dim);font-size:10px">' +
-               VAD_CALIBRATE_MS + 'ms of room, ' + roomSpread.size + ' samples — every window in the recording</span>',
-               roomSpread.lowest.toFixed(4) + ' … ' + roomSpread.highest.toFixed(4) +
-               '<br><span style="color:var(--dim);font-size:10px">typically ' + roomSpread.typical.toFixed(4) + '</span>']);
-  }
+  let suggest = null, gap = null;
   if(voiceLevel !== null){
+    gap = longestQuietMs(voiceRaw);
+    /* The geometric middle of room and voice: the same ratio of headroom on
+       both sides, which is how 0.020 was chosen in the first place. */
+    suggest = Math.sqrt(roomFloor * voiceLevel);
     rows.push(['Your speaking level', voiceLevel.toFixed(4) + '  (' + toDb(voiceLevel) + ' dBFS)']);
-    rows.push(['Margin above the worst threshold', (voiceLevel / worst).toFixed(2) + '×']);
+    rows.push(['Voice above the minimum', (voiceLevel / VAD_LEVEL).toFixed(1) + '×']);
+    rows.push(['Longest gap under the minimum while talking', gap + 'ms']);
+    rows.push(['Middle of room and voice (suggested VAD_LEVEL)', suggest.toFixed(4)]);
   }
   $('table').innerHTML = rows.map(r=> '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>').join('');
   $('results').classList.add('show');
 
   const v = $('verdict'), a = $('advice');
+  const change = s => ' Set <code>VAD_LEVEL</code> in dist/index.html (and here) to about <code>' + s.toFixed(3) + '</code>.';
+  if(quiet !== null && quiet < 0.95){
+    v.className = 'verdict bad';
+    v.textContent = 'The room itself crosses the minimum — only ' + Math.round(quiet * 100) + '% of its seconds read as silence, so JARVIS will often wait past the end of what you said.';
+    a.innerHTML = 'Quiet the room (a fan, an open window) or raise the minimum.' + (suggest ? change(Math.max(suggest, roomHigh * 1.5)) : ' Measure your voice too, for a suggested value.');
+    return;
+  }
   if(voiceLevel === null){
-    v.className = 'verdict warn';
-    v.textContent = 'Now measure your voice to see whether it clears the threshold.';
+    v.className = 'verdict ok';
+    v.textContent = 'The room stays under the minimum. Now measure your voice.';
     a.textContent = '';
     return;
   }
-  const margin = voiceLevel / worst;
+  const margin = voiceLevel / VAD_LEVEL;
   if(margin >= 2){
     v.className = 'verdict ok';
-    v.textContent = 'Good separation. Your voice sits ' + margin.toFixed(1) + '× above the threshold, so speech and room noise are clearly distinguishable.';
-    a.textContent = '';
+    v.textContent = 'Good. Your voice is ' + margin.toFixed(1) + '× the minimum and the room stays under it, so every sentence keeps him listening and one second of quiet sends it.';
+    a.textContent = gap >= VAD_END_SILENCE_MS
+      ? 'You paused for ' + gap + 'ms while talking — a pause that long sends what you had said so far.' : '';
   } else if(margin >= 1.3){
     v.className = 'verdict warn';
-    v.textContent = 'Workable but tight — ' + margin.toFixed(2) + '× above the threshold. Quieter sentences may be missed.';
-    a.innerHTML = 'Try moving closer to the microphone, or reduce steady noise (a fan, an open window). If it stays tight, lowering <code>VAD_MIN_LEVEL</code> toward <code>' + Math.max(0.008, voiceLevel / 2.5).toFixed(3) + '</code> in dist/index.html would help.';
+    v.textContent = 'Workable but tight — your voice is only ' + margin.toFixed(2) + '× the minimum. Softer words may fall under it.';
+    a.innerHTML = 'Move closer to the microphone, or lower the minimum.' + change(suggest);
   } else {
     v.className = 'verdict bad';
-    v.textContent = 'Too close to call — only ' + margin.toFixed(2) + '× above the threshold. JARVIS will miss a lot of what you say.';
-    a.innerHTML = 'Either the room is noisy or the microphone is quiet. Worth trying: move closer, switch input device, or set <code>VAD_MIN_LEVEL</code> to about <code>' + Math.max(0.006, voiceLevel / 2.2).toFixed(3) + '</code> and <code>VAD_MAX_LEVEL</code> to <code>' + Math.max(0.012, voiceLevel / 1.6).toFixed(3) + '</code> in dist/index.html.';
+    v.textContent = 'Your voice barely clears the minimum (' + margin.toFixed(2) + '×). JARVIS will miss a lot of what you say.';
+    a.innerHTML = 'Move closer or switch microphone.' + change(suggest);
   }
 }
 </script>

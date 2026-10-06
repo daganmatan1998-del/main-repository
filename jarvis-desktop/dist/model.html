@@ -9,48 +9,130 @@
   The orb's page is one 600KB file that starts a microphone, a scheduler, a
   hologram and a conversation the moment it loads. Opening a second copy of
   that to look at a mesh would run all of it twice. This is the viewer and
-  nothing else, off the same vendored three.js, so the model can sit beside
-  the work it is about — resized, dragged and closed like any other window.
+  nothing else, off the same vendored three.js.
+
+  Since 2.9.3 the window has no frame. Since 2.11.0 the model stands on a
+  blue blueprint backdrop with grid lines, as he asked (BACKDROP in the menu
+  takes it away again, back to the model floating on the desktop). Drag
+  turns it, the wheel or his two hands zoom it, Shift- or Alt-drag moves the
+  window, FULL SCREEN (or a double-click) fills the screen and Esc comes
+  back, SAVE writes the .glb into his JARVIS folder, and the only ways to
+  close it are right-click → Close and the taskbar.
+
+  Since 2.12.0 one pinched hand in front of the camera turns the model
+  (precise control, gesture-zoom.js): right, left, up, down and every way
+  between, all the way round, about the model's own centre. STRAIGHTEN in
+  the menu puts it back the way it arrived.
+
+  Since 2.28.0 the window is HIS to arrange without a title bar or a
+  modifier key: a handle at the top moves it, a ring in each corner stretches
+  it (the frame's own resizing), Ctrl+wheel or + / - make it bigger or
+  smaller, the arrow keys turn the model, and the menu has BIGGER / SMALLER.
+  The handles show only while the pointer is over the window.
 
   The model to show arrives in the query string: model.html?glb=<url>.
 -->
 <style>
-  :root{
-    --cyan:#5fe8ff; --bg:#05070d; --dim:170,200,220;
-  }
+  :root{ --cyan:#5fe8ff; --dim:170,200,220; }
   *{ box-sizing:border-box; }
-  html,body{ height:100%; margin:0; background:var(--bg); overflow:hidden;
-             font-family:'Courier New',monospace; color:var(--cyan); }
+  html,body{ height:100%; margin:0; background:transparent; overflow:hidden;
+             font-family:'Courier New',monospace; color:var(--cyan); user-select:none; }
+  /* The blueprint: deep blue, a fine grid every 20 px and a stronger one
+     every 100 px, lighter toward the middle where the model stands. */
+  body.backdrop{
+    background-color:#06244d;
+    background-image:
+      linear-gradient(rgba(130,205,255,0.20) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(130,205,255,0.20) 1px, transparent 1px),
+      linear-gradient(rgba(130,205,255,0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(130,205,255,0.08) 1px, transparent 1px),
+      radial-gradient(120% 95% at 50% 42%, #0f4a8c 0%, #07295a 58%, #041b3c 100%);
+    background-size:100px 100px, 100px 100px, 20px 20px, 20px 20px, 100% 100%;
+    background-position:center center;
+  }
+  #toast{
+    position:absolute; left:50%; bottom:14px; transform:translateX(-50%); max-width:90%;
+    padding:7px 12px; font-size:11px; letter-spacing:0.6px; color:#dff6ff; text-align:center;
+    background:rgba(4,16,34,0.88); border:1px solid rgba(95,232,255,0.4); border-radius:5px;
+    opacity:0; transition:opacity .35s ease; pointer-events:none; word-break:break-all;
+  }
+  #toast.show{ opacity:1; }
+  #toast.bad{ color:#ffb3b3; border-color:rgba(255,120,120,0.45); }
   #stage{ position:absolute; inset:0; }
-  canvas{ display:block; }
-  #bar{
-    position:absolute; left:0; right:0; bottom:0; display:flex; gap:1px;
-    background:rgba(0,0,0,0.55); border-top:1px solid rgba(95,232,255,0.25);
-  }
-  #bar button{
-    flex:1; min-height:34px; background:rgba(95,232,255,0.06); border:none;
-    border-right:1px solid rgba(95,232,255,0.18); color:var(--cyan);
-    font-family:inherit; font-size:10px; letter-spacing:1.5px; cursor:pointer;
-  }
-  #bar button:last-child{ border-right:none; }
-  #bar button:hover{ background:rgba(95,232,255,0.18); }
-  #bar button.on{ background:rgba(95,232,255,0.22); }
+  canvas{ display:block; background:transparent; }
   #note{
-    position:absolute; left:0; right:0; top:0; padding:8px 10px; font-size:11px;
-    letter-spacing:1px; color:rgba(var(--dim),0.75); background:rgba(0,0,0,0.4);
-    pointer-events:none;
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    font-size:12px; letter-spacing:2px; color:var(--cyan);
+    text-shadow:0 0 8px rgba(95,232,255,0.9), 0 0 2px #000; pointer-events:none;
   }
-  #err{ padding:14px; font-size:12px; line-height:1.6; color:#ff9d9d; }
+  #hint{
+    position:absolute; left:50%; bottom:10px; transform:translateX(-50%);
+    width:max-content; max-width:calc(100% - 24px); text-align:center; line-height:1.5;
+    font-size:10px; letter-spacing:1px; color:rgba(var(--dim),0.9);
+    text-shadow:0 0 3px #000, 0 0 6px #000; pointer-events:none;
+    opacity:0; transition:opacity .6s ease;
+  }
+  #hint.show{ opacity:1; }
+  #err{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:min(86%,360px);
+    padding:14px; font-size:12px; line-height:1.6; color:#ffb3b3;
+    background:rgba(5,7,13,0.82); border:1px solid rgba(255,120,120,0.35); border-radius:8px;
+  }
+  #menu{
+    position:fixed; display:none; min-width:150px; padding:4px 0; z-index:10;
+    background:rgba(5,7,13,0.92); border:1px solid rgba(95,232,255,0.35); border-radius:6px;
+    box-shadow:0 6px 24px rgba(0,0,0,0.5), 0 0 12px rgba(95,232,255,0.15);
+  }
+  #menu.open{ display:block; }
+  #menu button{
+    display:block; width:100%; padding:7px 14px; text-align:left; background:none; border:none;
+    color:var(--cyan); font-family:inherit; font-size:11px; letter-spacing:1.5px; cursor:pointer;
+  }
+  #menu button:hover{ background:rgba(95,232,255,0.14); }
+  #menu button.on::after{ content:' \2713'; }
+  #menu hr{ border:none; border-top:1px solid rgba(95,232,255,0.18); margin:4px 0; }
+  #menu #closeItem{ color:#ff9d9d; }
+  /* Handles: the window has no frame, so these are the frame. Hidden until
+     the pointer is over the window; hidden again in full screen. */
+  .grip{
+    position:fixed; z-index:9; display:flex; align-items:center; justify-content:center;
+    color:var(--cyan); background:rgba(5,7,13,0.72); border:1px solid rgba(95,232,255,0.55);
+    opacity:0; transition:opacity .25s ease; user-select:none; -webkit-user-select:none;
+    font-size:11px; line-height:1;
+  }
+  body:hover .grip{ opacity:0.6; }
+  .grip:hover{ opacity:1 !important; background:rgba(95,232,255,0.2); }
+  body.full .grip{ display:none; }
+  #gripMove{ left:50%; top:6px; transform:translateX(-50%); width:60px; height:18px; border-radius:9px; cursor:move; }
+  .corner{ width:20px; height:20px; border-radius:50%; }
+  #gripNW{ left:6px; top:6px; cursor:nwse-resize; }
+  #gripNE{ right:6px; top:6px; cursor:nesw-resize; }
+  #gripSW{ left:6px; bottom:6px; cursor:nesw-resize; }
+  #gripSE{ right:6px; bottom:6px; cursor:nwse-resize; }
 </style>
 </head>
 <body>
 <div id="stage"></div>
 <div id="note">loading…</div>
-<div id="bar">
-  <button id="spinBtn" class="on">SPIN</button>
-  <button id="wireBtn">WIRE</button>
-  <button id="bgBtn">BACKDROP</button>
-  <button id="fitBtn">FIT</button>
+<div id="hint">drag: turn · top handle: move · corners: resize · ctrl+wheel: size · double-click: full screen · right-click: more</div>
+<div id="toast"></div>
+<div id="gripMove" class="grip" title="Drag to move the window">&#10021;&nbsp;&#10021;</div>
+<div id="gripNW" class="grip corner" title="Drag to resize">&#9700;</div>
+<div id="gripNE" class="grip corner" title="Drag to resize">&#9701;</div>
+<div id="gripSW" class="grip corner" title="Drag to resize">&#9699;</div>
+<div id="gripSE" class="grip corner" title="Drag to resize">&#9698;</div>
+<div id="menu" role="menu">
+  <button id="spinBtn" class="on" role="menuitem">SPIN</button>
+  <button id="wireBtn" role="menuitem">WIREFRAME</button>
+  <button id="fitBtn" role="menuitem">FIT</button>
+  <button id="straightBtn" role="menuitem">STRAIGHTEN</button>
+  <button id="bgBtn" class="on" role="menuitem">BACKDROP</button>
+  <button id="fsBtn" role="menuitem">FULL SCREEN</button>
+  <button id="biggerBtn" role="menuitem">WINDOW BIGGER</button>
+  <button id="smallerBtn" role="menuitem">WINDOW SMALLER</button>
+  <hr>
+  <button id="saveBtn" role="menuitem">SAVE</button>
+  <button id="closeItem" role="menuitem">CLOSE</button>
 </div>
 
 <script src="./vendor/three/build/three.min.js"></script>
@@ -61,24 +143,144 @@
   "use strict";
   const note = document.getElementById('note');
   const stage = document.getElementById('stage');
+  const menu = document.getElementById('menu');
+  const hint = document.getElementById('hint');
+  const tauriWin = () => {
+    try{ return window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrentWindow(); }
+    catch(e){ return null; }
+  };
+
+  /* The one way out besides the taskbar. Wired before anything else, so
+     even a window whose model failed to load can still be closed. */
+  function closeWindow(){
+    closeMenu();
+    const w = tauriWin();
+    if(w && typeof w.close === 'function') w.close().catch(() => window.close());
+    else window.close();
+  }
+  function openMenu(x, y){
+    menu.classList.add('open');
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(4, Math.min(x, innerWidth - r.width - 4)) + 'px';
+    menu.style.top = Math.max(4, Math.min(y, innerHeight - r.height - 4)) + 'px';
+  }
+  function closeMenu(){ menu.classList.remove('open'); }
+  document.addEventListener('contextmenu', (e) => { e.preventDefault(); openMenu(e.clientX, e.clientY); });
+  document.addEventListener('pointerdown', (e) => { if(!menu.contains(e.target)) closeMenu(); }, true);
+  document.addEventListener('keydown', (e) => {
+    if(e.key === 'Escape'){ closeMenu(); setFull(false); }
+    if(e.key === 'F11'){ e.preventDefault(); setFull(!full); }
+  });
+
+  /* FULL SCREEN, from the menu, a double-click, F11; Esc leaves it. */
+  let full = false;
+  async function setFull(on){
+    const w = tauriWin();
+    if(!w || typeof w.setFullscreen !== 'function') return;
+    try{ await w.setFullscreen(!!on); full = !!on; }catch(e){ return; }
+    document.body.classList.toggle('full', full);
+    const b = document.getElementById('fsBtn');
+    if(b) b.textContent = full ? 'EXIT FULL SCREEN' : 'FULL SCREEN';
+  }
+  document.getElementById('fsBtn').addEventListener('click', () => { closeMenu(); setFull(!full); });
+  document.addEventListener('dblclick', (e) => { if(!menu.contains(e.target) && !(e.target.closest && e.target.closest('.grip'))) setFull(!full); });
+
+  let toastTimer = null;
+  function toast(text, bad){
+    const el = document.getElementById('toast');
+    el.textContent = text; el.classList.toggle('bad', !!bad); el.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), bad ? 7000 : 5000);
+  }
+
+  /* THE BACKDROP: on unless he turned it off, remembered between models. */
+  const BG_KEY = 'jarvis:model-backdrop';
+  let backdrop = true;
+  try{ backdrop = localStorage.getItem(BG_KEY) !== 'off'; }catch(e){}
+  document.body.classList.toggle('backdrop', backdrop);
+  document.getElementById('bgBtn').classList.toggle('on', backdrop);
+  document.getElementById('closeItem').addEventListener('click', closeWindow);
+
+  /* Moving a window that has no title bar: Shift- or Alt-drag anywhere.
+     Taken in the capture phase, before the orbit controls see the press. */
+  stage.addEventListener('pointerdown', (e) => {
+    if(e.button !== 0 || !(e.shiftKey || e.altKey)) return;
+    const w = tauriWin();
+    if(!w || typeof w.startDragging !== 'function') return;
+    e.preventDefault(); e.stopPropagation();
+    w.startDragging().catch(() => {});
+  }, true);
+
+  /* HIS HANDS ON THE WINDOW (2.28.0). The top handle moves it, a ring in
+     each corner stretches it from that corner: both are the frame's own
+     drag and resize, started on a press. */
+  function startMove(e){
+    if(e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    const w = tauriWin();
+    if(w && typeof w.startDragging === 'function') w.startDragging().catch(() => {});
+  }
+  function startSize(direction){
+    return (e) => {
+      if(e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const w = tauriWin();
+      if(w && typeof w.startResizeDragging === 'function') w.startResizeDragging(direction).catch(() => {});
+    };
+  }
+  document.getElementById('gripMove').addEventListener('mousedown', startMove);
+  [['gripNW', 'NorthWest'], ['gripNE', 'NorthEast'], ['gripSW', 'SouthWest'], ['gripSE', 'SouthEast']]
+    .forEach(([id, dir]) => document.getElementById(id).addEventListener('mousedown', startSize(dir)));
+
+  /* A quarter bigger or a fifth smaller, about the window's centre
+     (adjust_window in main.rs, the same command the voice uses). */
+  function sizeStep(action){
+    closeMenu();
+    const inv = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+    if(!inv) return;
+    inv('adjust_window', { window: 'model', action }).then((r) => {
+      if(r && r.note === 'at_max') toast('That is as big as the screen allows.');
+      else if(r && r.note === 'at_min') toast('That is as small as it goes.');
+    }).catch(() => {});
+  }
+  document.getElementById('biggerBtn').addEventListener('click', () => sizeStep('bigger'));
+  document.getElementById('smallerBtn').addEventListener('click', () => sizeStep('smaller'));
+  /* Ctrl+wheel sizes the WINDOW (the plain wheel zooms the model inside it). */
+  stage.addEventListener('wheel', (e) => {
+    if(!e.ctrlKey) return;
+    e.preventDefault(); e.stopPropagation();
+    if(e.deltaY < 0) sizeStep('bigger'); else if(e.deltaY > 0) sizeStep('smaller');
+  }, { capture: true, passive: false });
+  document.addEventListener('keydown', (e) => {
+    if(e.ctrlKey || e.altKey || e.metaKey) return;
+    if(e.key === '+' || e.key === '=') sizeStep('bigger');
+    else if(e.key === '-' || e.key === '_') sizeStep('smaller');
+  });
 
   function fail(msg){
     note.style.display = 'none';
-    stage.innerHTML = '<div id="err">' + msg + '</div>';
+    const box = document.createElement('div');
+    box.id = 'err';
+    box.textContent = msg + ' Right-click to close.';
+    stage.appendChild(box);
   }
   if(!window.THREE){ fail('three.js did not load from ./vendor/three/.'); return; }
 
-  const glb = new URLSearchParams(location.search).get('glb');
+  const params = new URLSearchParams(location.search);
+  const glb = params.get('glb');
+  const modelName = (params.get('name') || 'model').trim();
   if(!glb){ fail('No model was given. This window is opened by JARVIS with a model to show.'); return; }
 
-  const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, preserveDrawingBuffer:true });
+  /* Transparent all the way down: the page, the canvas and the scene. What
+     is left on the desktop is the model and nothing around it. */
+  const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, premultipliedAlpha:true, preserveDrawingBuffer:true });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x000000, 0);
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.physicallyCorrectLights = true;
   stage.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x05070d);
+  scene.background = null;
   const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 2000);
 
   /* Three lights, not one. A single source makes every curve read as a flat
@@ -93,12 +295,20 @@
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
+  controls.enablePan = false;          // the right button belongs to the menu
 
-  let model = null, spin = true, wire = false, dark = true;
+  let model = null, spin = true, wire = false, bytes = null, floorGrid = null;
+  /* Precise control: degrees still to turn (eased in over a few frames),
+     and the model's pose as it arrived, for STRAIGHTEN. */
+  const turnPending = { x: 0, y: 0 };
+  let home = null;
+  /* Gesture zoom's distance, eased toward (see below). */
+  let fitDist = 0, wantDist = 0;
 
   function resize(){
-    const w = innerWidth, h = Math.max(1, innerHeight - 34);
+    const w = innerWidth, h = Math.max(1, innerHeight);
     renderer.setSize(w, h, false);
+    renderer.domElement.style.width = w + 'px';
     renderer.domElement.style.height = h + 'px';
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
@@ -106,51 +316,227 @@
   addEventListener('resize', resize);
 
   /* Framed from the bounding sphere and the NARROWER of the two fields of
-     view, so a wide flat object still fits when the window is tall and thin.
-     Re-run on FIT, because the window can be resized to any shape. */
+     view, so a wide flat object still fits when the window is tall and thin. */
   function frame(){
     if(!model) return;
     const sphere = new THREE.Box3().setFromObject(model).getBoundingSphere(new THREE.Sphere());
     const vFov = camera.fov * Math.PI / 180;
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
     const dist = (sphere.radius / Math.sin(Math.min(vFov, hFov) / 2)) * 1.15;
+    fitDist = dist; wantDist = 0;
+    /* The closest the camera may come is just outside the model's bounding
+       sphere — a fraction of the framing distance put it INSIDE a turned
+       box, where everything is culled and the window goes empty. */
+    controls.minDistance = sphere.radius * 1.15;
+    controls.maxDistance = dist * 8;
     controls.target.copy(sphere.center);
     camera.position.set(sphere.center.x, sphere.center.y + sphere.radius * 0.3, sphere.center.z + dist);
     camera.near = Math.max(0.001, dist / 1000);
     camera.far = dist * 20;
     camera.updateProjectionMatrix();
     controls.update();
+    placeFloorGrid(sphere);
   }
 
-  new THREE.GLTFLoader().load(glb, (gltf)=>{
+  /* A grid under the model on the blueprint backdrop, so it stands on
+     something; sized to it and hidden with the backdrop. */
+  function placeFloorGrid(sphere){
+    if(floorGrid){ scene.remove(floorGrid); floorGrid = null; }
+    if(!model) return;
+    const box = new THREE.Box3().setFromObject(model);
+    const span = Math.max(sphere.radius * 4, 0.01);
+    floorGrid = new THREE.GridHelper(span, 16, 0x7fd3ff, 0x2f6fa8);
+    floorGrid.material.transparent = true; floorGrid.material.opacity = 0.55;
+    floorGrid.position.set(sphere.center.x, box.min.y, sphere.center.z);
+    floorGrid.visible = backdrop;
+    scene.add(floorGrid);
+  }
+
+  const shown = (gltf)=>{
     model = gltf.scene;
     scene.add(model);
+    home = { position: model.position.clone(), quaternion: model.quaternion.clone() };
     resize();
     frame();
+    announce();
     note.style.display = 'none';
-  }, (ev)=>{
-    if(ev && ev.total) note.textContent = 'loading… ' + Math.round(ev.loaded / ev.total * 100) + '%';
-  }, ()=>{
+    hint.classList.add('show');
+    setTimeout(() => hint.classList.remove('show'), 4500);
+  };
+  const lost = ()=>{
     fail('The model could not be loaded. The link may have expired — ask JARVIS to make it again.');
+  };
+  /* The model as BYTES first, whichever way it came — so what Save writes is
+     exactly what is on screen:
+       stash:KEY  a model JARVIS built in code, left with the app
+                  (stash_model in main.rs) and asked for here;
+       data:      a small one carried in the address itself;
+       anything else is fetched. */
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  const fromB64 = (b64) => { const bin = atob(String(b64 || '')); const u = new Uint8Array(bin.length);
+                             for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; };
+  function loadBytes(){
+    if(glb.indexOf('stash:') === 0){
+      if(!invoke) return Promise.reject(new Error('no bridge'));
+      return invoke('stashed_model', { key: glb.slice(6) }).then(fromB64);
+    }
+    if(glb.indexOf('data:') === 0) return Promise.resolve(fromB64(glb.slice(glb.indexOf(',') + 1)));
+    return fetch(glb).then(r => { if(!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); });
+  }
+  loadBytes().then((buf)=>{
+    bytes = buf;
+    new THREE.GLTFLoader().parse(buf, '', shown, lost);
+  }).catch(lost);
+
+  /* SAVE: the .glb into his JARVIS folder (save_model_file in main.rs). */
+  function toB64(buf){
+    const u = new Uint8Array(buf); let s = '';
+    for(let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    closeMenu();
+    if(!bytes){ toast('The model has not finished loading yet.', true); return; }
+    if(!invoke){ toast('Saving needs the JARVIS app.', true); return; }
+    toast('Saving…');
+    try{
+      const r = await invoke('save_model_file', { b64: toB64(bytes), name: modelName });
+      toast('Saved to ' + (r && r.path ? r.path : 'the JARVIS folder'));
+    }catch(e){
+      toast('Could not save: ' + ((e && e.message) || e), true);
+    }
   });
 
-  document.getElementById('spinBtn').addEventListener('click', (e)=>{
-    spin = !spin; e.target.classList.toggle('on', spin);
+  function setSpin(on){
+    spin = !!on;
+    document.getElementById('spinBtn').classList.toggle('on', spin);
+  }
+  document.getElementById('spinBtn').addEventListener('click', ()=>{ setSpin(!spin); closeMenu(); });
+  document.getElementById('straightBtn').addEventListener('click', ()=>{
+    closeMenu();
+    if(!model || !home) return;
+    turnPending.x = 0; turnPending.y = 0;
+    model.position.copy(home.position); model.quaternion.copy(home.quaternion);
+    frame();
   });
   document.getElementById('wireBtn').addEventListener('click', (e)=>{
-    wire = !wire; e.target.classList.toggle('on', wire);
+    wire = !wire; e.target.classList.toggle('on', wire); closeMenu();
     if(model) model.traverse(o => { if(o.isMesh && o.material) o.material.wireframe = wire; });
   });
+  document.getElementById('fitBtn').addEventListener('click', ()=>{ frame(); closeMenu(); });
   document.getElementById('bgBtn').addEventListener('click', (e)=>{
-    dark = !dark; e.target.classList.toggle('on', !dark);
-    scene.background = new THREE.Color(dark ? 0x05070d : 0xe9eef3);
+    backdrop = !backdrop; closeMenu();
+    e.target.classList.toggle('on', backdrop);
+    document.body.classList.toggle('backdrop', backdrop);
+    if(floorGrid) floorGrid.visible = backdrop;
+    try{ localStorage.setItem(BG_KEY, backdrop ? 'on' : 'off'); }catch(err){}
   });
-  document.getElementById('fitBtn').addEventListener('click', frame);
+
+  /* GESTURE ZOOM, directly. The camera window tracks his two pinches and,
+     when this viewer is the window in front, sends the zoom here as a
+     factor instead of as wheel notches: the camera moves along its line to
+     the model's centre (the orbit target), eased so each step glides, and
+     stays between a close-up and eight times the framing distance. The
+     window itself never changes size. */
+  function zoomBy(factor){
+    if(!model || !fitDist || !(factor > 0)) return;
+    const now = camera.position.distanceTo(controls.target);
+    const from = wantDist || now;
+    wantDist = Math.min(controls.maxDistance, Math.max(controls.minDistance, from / factor));
+  }
+  /* PRECISE CONTROL (2.12.0). One pinched hand turns the model: dx degrees
+     to the right, dy up, as the camera window measures them. A trackball,
+     not an orbit: the turn is about an axis in the plane of the screen,
+     square to the way the hand moved, through the model's centre (the
+     orbit target), so any direction works and nothing stops at the top or
+     the bottom — every angle, all the way round, from wherever the camera
+     is looking. His hand takes it, so the spin stops. */
+  function turnBy(dx, dy){
+    if(!model) return;
+    dx = Number(dx) || 0; dy = Number(dy) || 0;
+    if(!dx && !dy) return;
+    if(spin) setSpin(false);
+    turnPending.x += dx; turnPending.y += dy;
+  }
+  const _axis = new THREE.Vector3(), _right = new THREE.Vector3(), _up = new THREE.Vector3(), _q = new THREE.Quaternion();
+  function applyTurn(dxDeg, dyDeg){
+    const ang = Math.hypot(dxDeg, dyDeg) * Math.PI / 180;
+    if(!model || !ang) return;
+    _right.set(1, 0, 0).applyQuaternion(camera.quaternion);
+    _up.set(0, 1, 0).applyQuaternion(camera.quaternion);
+    _axis.copy(_up).multiplyScalar(dxDeg).addScaledVector(_right, -dyDeg).normalize();
+    _q.setFromAxisAngle(_axis, ang);
+    turnAbout(_q);
+  }
+  /* About the model's centre, in the world: its place swings round the
+     centre and its orientation turns by the same amount. */
+  function turnAbout(q){
+    const pivot = controls.target;
+    model.position.sub(pivot).applyQuaternion(q).add(pivot);
+    model.quaternion.premultiply(q);
+  }
+
+  /* The arrow keys turn it a step at a time (15 degrees). */
+  document.addEventListener('keydown', (e) => {
+    if(e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    const step = 15;
+    if(e.key === 'ArrowLeft'){ e.preventDefault(); turnBy(-step, 0); }
+    else if(e.key === 'ArrowRight'){ e.preventDefault(); turnBy(step, 0); }
+    else if(e.key === 'ArrowUp'){ e.preventDefault(); turnBy(0, -step); }
+    else if(e.key === 'ArrowDown'){ e.preventDefault(); turnBy(0, step); }
+  });
+
+  (function listenForGestures(){
+    const ev = window.__TAURI__ && window.__TAURI__.event;
+    if(!ev || !ev.listen) return;
+    ev.listen('jarvis://model-zoom', (e) => {
+      const p = (e && e.payload) || {};
+      if(p.end){ return; }
+      zoomBy(Number(p.factor));
+    }).catch(() => {});
+    ev.listen('jarvis://model-rotate', (e) => {
+      const p = (e && e.payload) || {};
+      if(p.phase === 'move') turnBy(p.dx, p.dy);
+    }).catch(() => {});
+    /* "Is there a model to turn?" — asked by the camera window every two
+       seconds; answered only once a model is actually on screen. */
+    ev.listen('jarvis://model-ping', () => { announce(); }).catch(() => {});
+  })();
+  function announce(){
+    const ev = window.__TAURI__ && window.__TAURI__.event;
+    if(!ev || !ev.emit || !model) return;
+    try{ const p = ev.emit('jarvis://model-pong', { loaded: true }); if(p && p.catch) p.catch(() => {}); }catch(e){}
+  }
+  addEventListener('pagehide', () => {
+    const ev = window.__TAURI__ && window.__TAURI__.event;
+    try{ if(ev && ev.emit) ev.emit('jarvis://model-gone', {}); }catch(e){}
+  });
+  window.__jarvisModelZoom = zoomBy;   // the same entry point, for tests
+  window.__jarvisModelTurn = turnBy;   // and for precise control
+  window.__jarvisModelPose = () => model ? { q: model.quaternion.toArray(), p: model.position.toArray(), spin } : null;
 
   resize();
   (function tick(){
     requestAnimationFrame(tick);
-    if(spin && model) model.rotation.y += 0.004;
+    if(wantDist){
+      const off = camera.position.clone().sub(controls.target);
+      const len = off.length();
+      const next = len + (wantDist - len) * 0.25;
+      off.setLength(next);
+      camera.position.copy(controls.target).add(off);
+      camera.near = Math.max(0.001, next / 1000);
+      camera.updateProjectionMatrix();
+      if(Math.abs(wantDist - next) < wantDist * 0.002) wantDist = 0;
+    }
+    /* Precise control's turn, eased in: a third of what is left, each frame. */
+    if(model && (Math.abs(turnPending.x) > 0.01 || Math.abs(turnPending.y) > 0.01)){
+      const tx = turnPending.x * 0.35, ty = turnPending.y * 0.35;
+      turnPending.x -= tx; turnPending.y -= ty;
+      applyTurn(tx, ty);
+    }
+    /* The spin turns about the model's centre and the world's up, so it
+       stays a clean turntable after his hand has tilted the model. */
+    if(spin && model){ _q.setFromAxisAngle(_up.set(0, 1, 0), 0.004); turnAbout(_q); }
     controls.update();
     renderer.render(scene, camera);
   })();

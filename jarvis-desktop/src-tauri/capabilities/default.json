@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The panel, plus opening a URL in the default browser. Still no filesystem and no shell. open-url is the narrowest useful capability there is: it hands a link to the browser and can do nothing else, and the page restricts it to http and https before it is ever called.",
+  "description": "The panel, plus opening a URL in the default browser. Still no filesystem and no shell. open-url is the narrowest useful capability there is: it hands a link to the browser and can do nothing else, and the page restricts it to http and https before it is ever called. Two more schemes, each one exact: ms-settings: and microsoft.windows.camera: (the fixed list of Windows targets in open_url, which the default scope - http, https, mailto, tel - refused). Music opens YouTube, which is https.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -15,7 +15,13 @@
     "core:window:allow-center",
     "core:window:allow-start-dragging",
     "opener:default",
-    "opener:allow-open-url",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "ms-settings:*" },
+        { "url": "microsoft.windows.camera:*" }
+      ]
+    },
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
     "global-shortcut:allow-is-registered"
