@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "site-model",
+  "description": "The same permissions as the 'model' capability, for the same window, when its page is loaded from the Cloudflare site instead of from inside the app. Tauri refuses every call from a remote page unless a capability names that address, so without this the page on the site could not show, move or invoke anything. This one site only.",
+  "windows": [
+    "model"
+  ],
+  "remote": {
+    "urls": [
+      "https://jarvis-main-version.daganmatan1998.workers.dev/*"
+    ]
+  },
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging",
+    "core:window:allow-set-focus",
+    "core:event:allow-emit",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen"
+  ]
+}

@@ -20,6 +20,39 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 mod glide;
 
+/* WHERE THE PAGES COME FROM. The orb, camera and 3D viewer load from this
+   Cloudflare site, so a deploy there is the update - nothing to rebuild.
+   dist/boot.html probes it at every start and every Refresh; if it does not
+   answer, the copy bundled in the app is used instead, and the camera and
+   viewer windows follow whichever one the orb is on (page_url below).
+   Change it here and SITE in dist/boot.html together, and the address in
+   capabilities/site-*.json, which is what lets that one site call the app. */
+const SITE_URL: &str = "https://jarvis-main-version.daganmatan1998.workers.dev/";
+
+/* The address boot.html is served from inside the app. Windows' WebView2
+   serves app files from http://tauri.localhost; macOS and Linux from tauri://. */
+#[cfg(target_os = "windows")]
+const BOOT_URL: &str = "http://tauri.localhost/boot.html";
+#[cfg(not(target_os = "windows"))]
+const BOOT_URL: &str = "tauri://localhost/boot.html";
+
+/* A page for a new window (camera.html, model.html?...): from the site when
+   the orb is running from the site, from the app otherwise. Mixing them would
+   pair today's orb with an old camera page, or the reverse. */
+fn page_url(app: &tauri::AppHandle, page: &str) -> WebviewUrl {
+    let on_site = app
+        .get_webview_window("main")
+        .and_then(|w| w.url().ok())
+        .map(|u| u.as_str().starts_with(SITE_URL))
+        .unwrap_or(false);
+    if on_site {
+        if let Ok(full) = tauri::Url::parse(SITE_URL).and_then(|base| base.join(page)) {
+            return WebviewUrl::External(full);
+        }
+    }
+    WebviewUrl::App(page.into())
+}
+
 /* The hotkey. A bare Ctrl cannot be registered on its own — every OS treats a
    lone modifier as part of another combination, never as a shortcut in itself,
    so nothing would ever fire. This is the nearest thing that actually works
@@ -1587,7 +1620,7 @@ async fn open_model_window(app: tauri::AppHandle, url: String, name: Option<Stri
         return Ok("reused".into());
     }
 
-    let builder = WebviewWindowBuilder::new(&app, "model", WebviewUrl::App(page.into()))
+    let builder = WebviewWindowBuilder::new(&app, "model", page_url(&app, &page))
         .title("JARVIS — 3D")
         .inner_size(620.0, 620.0)
         .min_inner_size(240.0, 240.0)
@@ -1832,7 +1865,7 @@ async fn open_camera_window(app: tauri::AppHandle) -> Result<String, String> {
         return Ok("reused".into());
     }
 
-    let win = WebviewWindowBuilder::new(&app, "camera", WebviewUrl::App("camera.html".into()))
+    let win = WebviewWindowBuilder::new(&app, "camera", page_url(&app, "camera.html"))
         .title("JARVIS \u{2014} camera")
         .inner_size(360.0, 300.0)
         .min_inner_size(200.0, 170.0)
@@ -1896,7 +1929,13 @@ fn refresh_orb_now(app: &tauri::AppHandle) {
             }
         }
         let _ = main.show();
-        if main.reload().is_err() {
+        /* Back through boot.html rather than a plain reload: that is what
+           picks up a new deploy, and what gets him back onto the site if
+           the app had fallen back to its bundled copy while offline. */
+        let boot = tauri::Url::parse(BOOT_URL).map_err(|e| e.to_string());
+        if boot.and_then(|u| main.navigate(u).map_err(|e| e.to_string())).is_err()
+            && main.reload().is_err()
+        {
             let _ = main.eval("location.reload()");
         }
     }

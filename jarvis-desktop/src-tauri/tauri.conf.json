@@ -11,6 +11,7 @@
     "windows": [
       {
         "label": "main",
+        "url": "boot.html",
         "title": "JARVIS",
         "width": 180,
         "height": 180,
