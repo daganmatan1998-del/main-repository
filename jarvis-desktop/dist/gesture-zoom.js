@@ -57,7 +57,8 @@
     scrollSpeed: 1,     // one pinched hand scrolling anything else: 1 = a quarter of the picture is 4 wheel notches
     pointerEnabled: true, // in the Agent Atlas: one finger is the mouse, folding it clicks
     trackWidth: 960,    // on the CPU path the picture is read at this width (0 = as the camera gives it): same hand, ~30% faster
-    oneHandPointing: true // while the finger is the mouse only that hand is tracked: the second-hand search costs about half the time
+    oneHandPointing: true, // while the finger is the mouse only that hand is tracked: the second-hand search costs about half the time
+    bumpEnabled: true     // two fists brought together until they touch minimise the window he is in
   });
   const LIMITS = {
     sensitivity: [0.25, 3], threshold: [0, 30], smoothing: [0, 1],
@@ -72,6 +73,7 @@
       if(typeof s.turnEnabled === 'boolean') out.turnEnabled = s.turnEnabled;
       if(typeof s.pointerEnabled === 'boolean') out.pointerEnabled = s.pointerEnabled;
       if(typeof s.oneHandPointing === 'boolean') out.oneHandPointing = s.oneHandPointing;
+      if(typeof s.bumpEnabled === 'boolean') out.bumpEnabled = s.bumpEnabled;
       if(isFinite(Number(s.trackWidth))) out.trackWidth = Number(s.trackWidth) <= 0 ? 0 : clamp(Number(s.trackWidth), 320, 1920);
       for(const k of Object.keys(LIMITS)){
         const v = Number(s[k]);
@@ -727,6 +729,89 @@
     }
   }
 
+  /* ------------------------------------------------------------------
+     THE FIST BUMP (2.31.0) — minimise.
+
+     Both hands closed into fists and held APART, then brought together
+     until the knuckles touch: the window he is working in is minimised,
+     as its own minimise button would (Rust's minimize_window). It goes to
+     the taskbar and stays open.
+
+     A fist: at least three of the four fingers folded (straightness under
+     FINGER_FOLDED, or bent past BUMP_BEND_DEG). Distances are between the
+     palm centres, in palm lengths, so how far he sits from the camera does
+     not matter. APART is more than BUMP_APART palms (about 23 cm) for a few
+     frames; TOUCHING is under BUMP_TOUCH (about 14 cm: two fists side by
+     side are about one fist apart, centre to centre), reached within
+     BUMP_WINDOW_MS of last being apart, so two fists that drift together
+     slowly, or are simply held close, do nothing. Fists pressed together
+     often merge into one hand for the tracker: losing one of them while
+     they were already within BUMP_NEAR of each other, the other still a
+     fist, counts as the touch too.
+
+     Once it fires it is spent until the hands are apart again or stop
+     being fists, and never twice within BUMP_COOL_MS, so one bump is one
+     window put away.
+  ------------------------------------------------------------------ */
+  const BUMP_APART = 2.5, BUMP_TOUCH = 1.5, BUMP_NEAR = 1.9, BUMP_WINDOW_MS = 1500,
+        BUMP_APART_FRAMES = 3, BUMP_BEND_DEG = 100, BUMP_LOST_MS = 400, BUMP_COOL_MS = 1500;
+  const isFist = (m) => {
+    if(!m || !m.fingers) return false;
+    let folded = 0;
+    for(const f of ['index', 'middle', 'ring', 'pinky']){
+      if(m.fingers[f] < FINGER_FOLDED || (m.bends && m.bends[f] > BUMP_BEND_DEG)) folded++;
+    }
+    return folded >= 3;
+  };
+
+  class FistBump {
+    constructor(){ this.reset(); this.firedAt = -1e9; }
+    reset(){ this.state = 'idle'; this.apartRun = 0; this.apartAt = -1e9; this.lastTwoAt = -1e9; this.lastD = null; }
+    /* ms: this frame's handMetrics. Returns { type: 'bump', distance } on the
+       frame it fires, otherwise { type: 'none', state, distance }. */
+    update(t, ms){
+      const hands = (ms || []).filter(Boolean);
+      const fists = hands.filter(isFist);
+      const none = (extra) => Object.assign({ type: 'none', state: this.state, distance: this.lastD }, extra || {});
+      if(hands.length >= 2 && fists.length >= 2){
+        const a = fists[0], b = fists[1];
+        const D = dist(a.center, b.center) / ((a.scale + b.scale) / 2);
+        this.lastTwoAt = t; this.lastD = D;
+        if(this.state === 'spent'){
+          if(D > BUMP_APART) { this.state = 'idle'; this.apartRun = 0; }
+          return none();
+        }
+        if(D > BUMP_APART){
+          this.apartRun++;
+          if(this.apartRun >= BUMP_APART_FRAMES){ this.state = 'apart'; this.apartAt = t; }
+          return none();
+        }
+        this.apartRun = 0;
+        if(this.state === 'apart'){
+          if(t - this.apartAt > BUMP_WINDOW_MS){ this.state = 'idle'; return none(); }
+          if(D < BUMP_TOUCH) return this.fire(t, D);
+        }
+        return none();
+      }
+      /* One fist left, right after two were closing in: they merged. */
+      if(this.state === 'apart' && hands.length === 1 && fists.length === 1 && this.lastD !== null &&
+         this.lastD < BUMP_NEAR && t - this.lastTwoAt < BUMP_LOST_MS && t - this.apartAt <= BUMP_WINDOW_MS){
+        return this.fire(t, this.lastD);
+      }
+      if(t - this.lastTwoAt > BUMP_LOST_MS){
+        if(this.state !== 'idle') this.reset();
+        this.apartRun = 0;
+      }
+      return none();
+    }
+    fire(t, D){
+      if(t - this.firedAt < BUMP_COOL_MS){ this.state = 'spent'; return { type: 'none', state: 'spent', distance: D }; }
+      this.firedAt = t;
+      this.state = 'spent'; this.apartRun = 0;
+      return { type: 'bump', state: 'spent', distance: D };
+    }
+  }
+
   /* From the turn to the model window: only when a 3D model is open. The
      viewer answers jarvis://model-ping with jarvis://model-pong (and says
      so by itself when a model loads, and model-gone when it closes); a
@@ -1371,6 +1456,23 @@
     const now = () => (root.performance && root.performance.now ? root.performance.now() : Date.now());
     let settings = normaliseSettings(o.settings);
     const gesture = new HandGestures(settings);
+    const bump = new FistBump();
+    let bumpLabel = '', bumpLabelUntil = 0;
+    /* The bump's one job: the window he is in, minimised by Rust. */
+    function minimiseNow(t){
+      bumpLabel = 'MINIMISE'; bumpLabelUntil = t + 1200;
+      if(!o.invoke) return;
+      Promise.resolve().then(() => o.invoke('minimize_window')).then(r => {
+        if(r && r.ok){ bumpLabel = 'MINIMISED' + (r.title ? ' · ' + r.title : ''); bumpLabelUntil = now() + 1500; }
+        else { bumpLabel = 'NOTHING TO MINIMISE'; bumpLabelUntil = now() + 1500; }
+        if(o.onStatus) o.onStatus({ kind: 'minimize', ok: !!(r && r.ok), title: r && r.title, own: r && r.own });
+      }).catch(err => {
+        const msg = String((err && err.message) || err);
+        bumpLabel = /not found|unknown command|not allowed/i.test(msg) ? 'MINIMISE NEEDS THE REBUILT APP' : 'MINIMISE FAILED';
+        bumpLabelUntil = now() + 2500;
+        if(o.onStatus) o.onStatus({ kind: 'minimize', ok: false, reason: msg });
+      });
+    }
     let label = '', turnLabel = '';
     const status = (s) => {
       if(s.kind === 'target') label = 'ZOOM · ' + (s.name || '');
@@ -1578,6 +1680,13 @@
           }
           const ev = gesture.update({ t: t2, hands, width: video.videoWidth, height: video.videoHeight });
           lastEv = ev;
+          /* Two fists: nothing else uses them (a fist is never a pinch or a
+             pointing finger), so the bump is read alongside, and only while
+             no zoom, turn or finger mouse is under way. */
+          if(settings.bumpEnabled && !ev.active){
+            ev.bump = bump.update(t2, gesture.zoom.lastMetrics);
+            if(ev.bump.type === 'bump') minimiseNow(t2);
+          } else if(bump.state !== 'idle') bump.reset();
           /* ONE HAND WHILE THE FINGER IS THE MOUSE (2.21.0): the second-hand
              search is half of a read, and he cannot start a zoom with the
              other hand while pointing anyway (one gesture at a time). Back to
@@ -1599,7 +1708,8 @@
             ev.pointerBend = ev.pointer.bend || 0;
           }
           if(rec) recordFrame(t2, t, meta, hands, ev);
-          drawOverlay(overlay, video, ev, (rec ? 'REC ' + Math.max(0, Math.ceil((rec.until - t2) / 1000)) + ' s' : '') || label || (ev.state === 'armed' ? 'ZOOM · READY' : '') || pointerLabel || turnLabel);
+          drawOverlay(overlay, video, ev, (rec ? 'REC ' + Math.max(0, Math.ceil((rec.until - t2) / 1000)) + ' s' : '') ||
+                      (t2 < bumpLabelUntil ? bumpLabel : '') || label || (ev.state === 'armed' ? 'ZOOM · READY' : '') || pointerLabel || turnLabel);
         }
       }catch(e){ if(o.onStatus) o.onStatus({ kind: 'error', reason: String((e && e.message) || e) }); }
     }
@@ -1646,7 +1756,7 @@
     }
 
     const api = {
-      gesture, manager, relay, pointer,
+      gesture, manager, relay, pointer, bump,
       /* Record `seconds` of tracking; resolves with { text, frames, summary }. */
       record(seconds){
         return new Promise((resolve) => {
@@ -1707,12 +1817,13 @@
 
   root.JarvisGestureZoom = {
     DEFAULTS, LIMITS, STORE_KEY, normaliseSettings, OneEuro, handMetrics, PinchState, TwoHandZoom,
-    HandGestures, TurnRelay, PointerTracker, PointerRelay, BONES,
+    HandGestures, TurnRelay, PointerTracker, PointerRelay, BONES, FistBump, isFist,
     ADAPTERS, selectAdapter, ZoomManager, createTracker, drawOverlay, startGestureZoom,
     constants: { PINCH_ON, PINCH_OFF, FIST_GUARD, PALM_CM, PALM_RAY, ARM_MS, STEP_3D,
                  TURN_ARM_MS, TURN_DEAD_MM, TURN_JUMP, TURN_MAX_FRAME, TURN_PRESENT_MS, TURN_KEEP_MS, SCROLL_UNITS_PER_DEG,
                  FINGER_STRAIGHT, FINGER_FOLDED, OTHERS_OPEN, POINT_ARM_DEG, STRAIGHT_DEG, CLICK_DEG,
                  POINT_ARM_MS, FOLD_FRAMES, CLICK_REARM, LEAVE_FRAMES, POINT_LOST_MS, POINTER_BOX, POINTER_FILTER, TURN_GRACE_MS,
-                 POINTER_VEL_ALPHA, JUMP_GATE, JUMP_SPEED, JUMP_ACCEPT, JUMP_SAME, POSE_GRACE_FRAMES, STUCK_DEG, STUCK_REARM_MS }
+                 POINTER_VEL_ALPHA, JUMP_GATE, JUMP_SPEED, JUMP_ACCEPT, JUMP_SAME, POSE_GRACE_FRAMES, STUCK_DEG, STUCK_REARM_MS,
+                 BUMP_APART, BUMP_TOUCH, BUMP_NEAR, BUMP_WINDOW_MS, BUMP_APART_FRAMES, BUMP_BEND_DEG, BUMP_LOST_MS, BUMP_COOL_MS }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

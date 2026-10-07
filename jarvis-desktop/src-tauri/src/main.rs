@@ -510,6 +510,106 @@ fn close_browser(_which: Option<String>) -> Result<serde_json::Value, String> {
     Err("only available on Windows".into())
 }
 
+/* CLOSING A WHOLE PROGRAM BY NAME (page 2.31.0).
+
+   "Close the Spotify app", "close WhatsApp", "תסגור את האקסל": every
+   window of that program, the way clicking each X would (WM_CLOSE, so
+   unsaved work still prompts). The page says what to look for in the same
+   form bring_window_here takes: file names and title words, from its own
+   table of names (BRING_TARGETS) or as he said it. The windows that answer
+   best (bring_score) are the ones closed: a file-name match closes every
+   window of that program, a title match only the windows whose title says
+   it. JARVIS's own windows are never candidates; the page closes those
+   itself. Nothing found is {ok:false, code:"not_found", open:[what is]}. */
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn close_app(app: tauri::AppHandle, exe: Vec<String>, title: Vec<String>) -> Result<serde_json::Value, String> {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+    if exe.iter().chain(title.iter()).all(|s| s.trim().len() < 2) {
+        return Err("no program name given".into());
+    }
+    let apps = bring_app_windows(&zoom_own_windows(&app));
+    let best = apps.iter().map(|c| bring_score(c, &exe, &title)).max().unwrap_or(0);
+    if best == 0 {
+        let mut open: Vec<String> = Vec::new();
+        for c in apps.iter() {
+            let line = if c.title.is_empty() { c.exe.clone() } else { format!("{} ({})", c.title, c.exe) };
+            if !open.contains(&line) && open.len() < 15 {
+                open.push(line);
+            }
+        }
+        return Ok(serde_json::json!({ "ok": false, "code": "not_found", "open": open }));
+    }
+    let mut closed: Vec<String> = Vec::new();
+    let mut exe_name = String::new();
+    for c in apps.iter().filter(|c| bring_score(c, &exe, &title) == best) {
+        if unsafe { PostMessageW(c.hwnd as HWND, WM_CLOSE, 0, 0) } != 0 {
+            closed.push(c.title.clone());
+            exe_name = c.exe.clone();
+        }
+    }
+    if closed.is_empty() {
+        return Ok(serde_json::json!({ "ok": false, "code": "refused" }));
+    }
+    Ok(serde_json::json!({ "ok": true, "exe": exe_name, "windows": closed.len(), "titles": closed }))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn close_app(_exe: Vec<String>, _title: Vec<String>) -> Result<serde_json::Value, String> {
+    Err("only available on Windows".into())
+}
+
+/* MINIMISE, BY THE FIST BUMP (camera 2.31.0).
+
+   Two fists brought together until the knuckles touch (gesture-zoom.js
+   decides that) puts away the window he is working in, exactly like its
+   minimise button: it goes down to the taskbar and stays open. Which
+   window is zoom_target's answer: the one in front, or, when that is the
+   orb or the camera (he just clicked them), the program he was last in.
+   One of JARVIS's own windows (the 3D viewer, a workspace pane, the
+   music) is minimised the same way; the orb and the camera never are. */
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn minimize_window(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, IsIconic, IsWindow, ShowWindow, SW_MINIMIZE};
+    let own = zoom_own_windows(&app);
+    let label_of = |h: isize| own.iter().find(|(_, x)| *x == h).map(|(l, _)| l.clone());
+    unsafe {
+        let fg = GetForegroundWindow() as isize;
+        let fg_is_control = label_of(fg).map(|l| zoom_is_control(&l)).unwrap_or(false);
+        let target = if fg != 0 && !fg_is_control {
+            ZOOM_LAST_EXTERNAL.store(fg, Ordering::SeqCst);
+            fg
+        } else {
+            ZOOM_LAST_EXTERNAL.load(Ordering::SeqCst)
+        };
+        if target == 0 || IsWindow(target as HWND) == 0 || IsIconic(target as HWND) != 0 {
+            return Ok(serde_json::json!({ "ok": false, "code": "no_window" }));
+        }
+        if let Some(label) = label_of(target) {
+            if zoom_is_control(&label) {
+                return Ok(serde_json::json!({ "ok": false, "code": "no_window" }));
+            }
+            if let Some(w) = app.get_webview_window(&label) {
+                let _ = w.minimize();
+                return Ok(serde_json::json!({ "ok": true, "own": label }));
+            }
+        }
+        let title = zoom_title_of(target as HWND);
+        ShowWindow(target as HWND, SW_MINIMIZE);
+        Ok(serde_json::json!({ "ok": true, "title": title, "exe": zoom_exe_of_window(target as HWND) }))
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn minimize_window() -> Result<serde_json::Value, String> {
+    Err("only available on Windows".into())
+}
+
 /* ------------------------------------------------------------------
    GESTURE ZOOM — the operating-system half.
 
@@ -2393,6 +2493,31 @@ fn open_in_chrome(url: String) -> Result<serde_json::Value, String> {
     #[cfg(not(target_os = "windows"))]
     {
         let _ = parsed;
+        Ok(serde_json::json!({ "opened": false, "reason": "not_windows" }))
+    }
+}
+
+/* "OPEN YOUR BASE APP" (page 2.31.0): the site, in Chrome, as a window of
+   its own - the same thing the desktop shortcut JARVIS-INSTALL-APP.bat
+   makes. Always SITE_URL and nothing else: the page cannot steer it to
+   another address. */
+#[tauri::command]
+fn open_base_app() -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let arg = format!("--app={}", SITE_URL);
+        for exe in chrome_candidates() {
+            if exe.is_file() && shell_open_with(exe.as_os_str(), &arg) {
+                return Ok(serde_json::json!({ "opened": true, "via": "chrome" }));
+            }
+        }
+        if shell_open_with(std::ffi::OsStr::new("chrome.exe"), &arg) {
+            return Ok(serde_json::json!({ "opened": true, "via": "chrome" }));
+        }
+        Ok(serde_json::json!({ "opened": false, "reason": "no_chrome" }))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
         Ok(serde_json::json!({ "opened": false, "reason": "not_windows" }))
     }
 }
@@ -4462,7 +4587,10 @@ fn main() {
             adjust_window,
             type_text,
             shutdown_app,
-            open_in_chrome
+            open_in_chrome,
+            close_app,
+            minimize_window,
+            open_base_app
         ])
         .setup(|app| {
             let window = app

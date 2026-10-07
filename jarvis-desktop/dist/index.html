@@ -13238,6 +13238,37 @@ const CLOSE_BROWSER_NAMES = new Set(['browser', 'web browser', 'internet', 'chro
   'all the tabs', 'every tab', 'דפדפן', 'הדפדפן', 'כרום', 'הכרום', 'גוגל כרום', 'כל הכרום', 'כל הטאבים', 'כל הלשוניות', 'אדג', 'פיירפוקס']);
 const CLOSE_STOP = /(?:^| )(?:camera|webcam|cam|music|song|songs|playlist|full ?screen|workspace|model|models|3d|three|viewer|web shooters?|computer|pc|laptop|jarvis|orb|hud|it|this|that|them|everything|all|app|program|door|eyes|mic|microphone|מצלמה|המצלמה|מוזיקה|המוזיקה|מוסיקה|המוסיקה|השיר|הפלייליסט|מסך|המסך|סביבת|מודל|המודל|תלת|מחשב|המחשב|זה|אותו|אותה|הכל|הכול|המיקרופון)(?: |$)/;
 
+const CLOSE_WORKSPACE_NAMES = new Set(['workspace', 'work space', 'the workspace', 'my workspace', 'workspace windows', 'dashboards', 'my dashboards',
+  'סביבת העבודה', 'סביבת עבודה', 'הוורקספייס', 'וורקספייס']);
+const BASE_APP_NAMES = /^(?:your |the |my )?(?:base|main|home|web|jarvis) (?:app|application|version|site|website)$|^(?:jarvis'?s? )?(?:base|web) app$|^ה?אפליקציי?ת? ה?(?:בסיס|ראשית|הראשית)$|^ה?אפליקציה (?:שלך|של גרוויס)$|^ה?אתר שלך$/;
+
+/* What closeRequestOf hands over when the thing is a program: { kind:'app'
+   | 'workspace' | 'base' | 'browser', name, label }. Null when the words
+   do not say "app" / "program" (or the workspace), or name one of
+   JARVIS's own windows, which have their own commands. */
+function closeAppRequestOf(obj, heb){
+  if(CLOSE_WORKSPACE_NAMES.has(obj) || /^(?:the |my )?work ?space(?: app| windows?)?$/.test(obj)) return { kind: 'workspace' };
+  if(BASE_APP_NAMES.test(obj)) return { kind: 'base' };
+  let name = null;
+  if(heb){
+    const h = /^(?:את )?ה?(?:אפליקציה|אפליקציית|תוכנה|תוכנת|תכנה|תכנת)(?: של)? (.+)$/.exec(obj) || /^(.+?) ה?(?:אפליקציה|תוכנה)$/.exec(obj);
+    if(h) name = h[1];
+  } else {
+    const e = /^(.+?) (?:app|apps|application|program|programme|software)$/.exec(obj) || /^(?:app|application|program) (?:called |named )?(.+)$/.exec(obj);
+    if(e) name = e[1];
+  }
+  if(!name) return null;
+  name = name.replace(/^(?:the|my|that|this) /, '').trim();
+  if(!name || name.split(' ').length > 4) return null;
+  if(CLOSE_BROWSER_NAMES.has(name)){
+    return { kind: 'browser', which: /chrome|כרום/.test(name) ? 'chrome' : /edge|אדג/.test(name) ? 'edge' : /firefox|פיירפוקס/.test(name) ? 'firefox' : null };
+  }
+  const target = bringTargetFor(name);
+  /* The camera, the 3D model, the orb: JARVIS's own, not a program. */
+  if(target.own && !/^ws-/.test(target.own)) return null;
+  return { kind: 'app', name, target, label: heb ? target.he : target.en };
+}
+
 function closeRequestOf(text){
   let words = normaliseHeard(text).split(' ').filter(Boolean);
   if(!words.length || words.length > 12) return null;
@@ -13251,6 +13282,12 @@ function closeRequestOf(text){
   if(!m) return null;
   let obj = m[1].trim();
   const heb = !en;
+  /* "Close the Spotify app", "close the workspace", "תסגור את אפליקציית
+     האקסל" (2.31.0): a whole PROGRAM, every window of it, never a tab.
+     Decided before the stop list below, which holds "app" and "workspace"
+     so that the tab rule never reads them as a site's name. */
+  const appReq = closeAppRequestOf(obj, heb);
+  if(appReq) return appReq;
   /* "this tab", "the tab", "הטאב הזה": the tab in front. */
   if(/^(?:this |the |current |that )?(?:tab|page)$|^ה?(?:טאב|לשונית|כרטיסייה)(?: ה(?:זה|זאת|זו|נוכחי|נוכחית))?$/.test(obj)) return { kind: 'tab', name: '', label: '' };
   if(CLOSE_BROWSER_NAMES.has(obj) || CLOSE_BROWSER_NAMES.has(obj.replace(/ (?:window|windows|browser)$/, ''))){
@@ -13375,6 +13412,9 @@ const FLOW_RULES = [
   /* "Make the music bigger", "move the 3D model to the left" (2.28.0): the
      whole sentence is the window, a size or a place and nothing else. */
   { flow: 'adjust_window', strong: [ { test: (s) => !!windowAdjustOf(s) } ], bare: [] },
+
+  /* "Open your base app" (2.31.0): the Cloudflare site in its own Chrome window. */
+  { flow: 'base_app', strong: [ { test: (s) => isBaseAppOpen(s) } ], bare: [] },
 
   /* "Close the browser" / "close the YouTube window" (2.29.0). */
   { flow: 'close_thing', strong: [ { test: (s) => !!closeRequestOf(s) } ], bare: [] },
@@ -13662,7 +13702,8 @@ function splitRequests(text){
 const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'fullscreen', 'fullscreen_exit',
                                       'live_full', 'live_full_exit', 'workspace', 'open_site', 'bring_window',
                                       'workspace3d', 'workspace3d_project', 'agent_atlas', 'music_on', 'music_off',
-                                      'webshooter_on', 'webshooter_off', 'adjust_window', 'close_thing', 'browser_write']);
+                                      'webshooter_on', 'webshooter_off', 'adjust_window', 'close_thing', 'browser_write',
+                                      'base_app']);
 
 /* { steps: [{flow, part}], rest: [parts for the model] }, or null when the
    sentence is one request (or none) and the ordinary path should have it. */
@@ -14631,6 +14672,23 @@ async function runWorkflowCommand(flow, text){
     return true;
   }
 
+  /* "Open your base app" (2.31.0): the site, in Chrome, as its own window. */
+  if(flow === 'base_app'){
+    if(!IS_DESKTOP){ say(he ? 'אני כבר פתוח כאן.' : 'I am already open right here.'); return true; }
+    const entry = logActionStart('open_base_app', {}, 'local');
+    const res = await callOpenBaseAppTool();
+    logActionEnd(entry, res);
+    if(res && res.ok) say(he ? 'פתחתי את אפליקציית הבסיס.' : 'Opened the base app.');
+    else {
+      const line = he ? 'לא הצלחתי לפתוח את אפליקציית הבסיס.' : 'I could not open the base app.';
+      addMessage('assistant', line);
+      chatHistory.push({ role:'assistant', content: line });
+      persistCurrentSession();
+      if(IS_DESKTOP && typeof speak === 'function') speak(line);
+    }
+    return true;
+  }
+
   /* "Close the browser" / "close the YouTube window" (2.29.0). */
   if(flow === 'close_thing'){
     if(!IS_DESKTOP) return false;
@@ -14642,6 +14700,32 @@ async function runWorkflowCommand(flow, text){
       persistCurrentSession();
       if(IS_DESKTOP && typeof speak === 'function') speak(line);
     };
+    if(req.kind === 'workspace'){
+      const entry = logActionStart('close_workspace', {}, 'local');
+      const res = await callCloseWorkspace();
+      logActionEnd(entry, res);
+      if(res && res.ok) say(he ? 'סגרתי את סביבת העבודה.' : 'Closed the workspace.');
+      else plain(he ? 'סביבת העבודה לא פתוחה.' : 'The workspace is not open.');
+      return true;
+    }
+    if(req.kind === 'base'){
+      const entry = logActionStart('close_app', { window: 'base app' }, 'local');
+      const res = await callCloseAppTool({ target: BASE_APP_TARGET, name: 'base app' });
+      logActionEnd(entry, res);
+      if(res && res.ok) say(he ? 'סגרתי את אפליקציית הבסיס.' : 'Closed the base app.');
+      else plain(he ? 'אפליקציית הבסיס לא פתוחה.' : 'The base app is not open.');
+      return true;
+    }
+    if(req.kind === 'app'){
+      const entry = logActionStart('close_app', { window: req.name }, 'local');
+      const res = await callCloseAppTool({ target: req.target, name: req.name });
+      logActionEnd(entry, res);
+      if(res && res.ok){ say(he ? 'סגרתי את ' + req.label + '.' : 'Closed ' + req.label + '.'); return true; }
+      if(res && res.code === 'old_app'){ plain(he ? 'כדי לסגור תוכנה שלמה צריך לבנות מחדש את האפליקציה.' : 'Closing a whole program needs the rebuilt desktop app.'); return true; }
+      if(res && res.open && res.open.length) addMessage('system', '\u25B8 open: ' + res.open.slice(0, 8).join(' | '));
+      plain(he ? 'לא מצאתי תוכנה פתוחה בשם ' + req.label + '.' : 'I could not find ' + req.label + ' open.');
+      return true;
+    }
     if(req.kind === 'browser'){
       const entry = logActionStart('close_browser', { which: req.which }, 'local');
       const res = await callCloseBrowserTool({ which: req.which });
@@ -14661,8 +14745,14 @@ async function runWorkflowCommand(flow, text){
     }
     /* No tab by that name: a program window by that name (Spotify, Excel). */
     if(req.name && res && (res.code === 'not_found' || res.code === 'no_browser')){
+      /* The whole program by that name (2.31.0); on an app built before
+         close_app, the first window whose title has it, as before. */
+      const e1 = logActionStart('close_app', { window: req.name }, 'local');
+      const r1 = await callCloseAppTool({ name: req.name });
+      logActionEnd(e1, r1);
+      if(r1 && r1.ok){ say(he ? 'סגרתי את ' + req.label + '.' : 'Closed ' + req.label + '.'); return true; }
       const e2 = logActionStart('close_window_named', { name: req.name }, 'local');
-      const r2 = await callCloseNamedTool({ name: req.name });
+      const r2 = r1 && r1.code === 'old_app' ? await callCloseNamedTool({ name: req.name }) : { ok: false };
       logActionEnd(e2, r2);
       if(r2 && r2.ok){ say(he ? 'סגרתי את ' + req.label + '.' : 'Closed ' + req.label + '.'); return true; }
       const tabs = (res.tabs || []).slice(0, 6);
@@ -14916,7 +15006,7 @@ const SCREENSHOT_TOOL = {
 
 const CLOSE_NAMED_TOOL = {
   name: 'close_window_named',
-  description: "Close an open window found by its title. Desktop only, Windows only. Use when he names a PROGRAM to close — \"close Spotify\", \"close that spreadsheet\". Never for a website or tab inside a browser (\"close the YouTube window\", \"close the Shopify tab\": close_browser_tab) and never for the whole browser (close_browser). Match on a distinctive word from the title: a Chrome window's title ends in the page name, so \"chrome\" alone may not match while the page's name will. This closes an entire WINDOW, not a single tab — say so if he asked for a tab. It sends the same close request as clicking the X, so unsaved work still prompts him, and it refuses to close your own panel. If nothing matches, say what you searched for rather than guessing again.",
+  description: "Close ONE open window found by its title. Desktop only, Windows only. For a PROGRAM he names (\"close Spotify\", \"close the WhatsApp app\") use close_app, which closes the whole program; this is for one window by its title (\"close that spreadsheet\"). Never for a website or tab inside a browser (\"close the YouTube window\", \"close the Shopify tab\": close_browser_tab) and never for the whole browser (close_browser). Match on a distinctive word from the title: a Chrome window's title ends in the page name, so \"chrome\" alone may not match while the page's name will. This closes an entire WINDOW, not a single tab — say so if he asked for a tab. It sends the same close request as clicking the X, so unsaved work still prompts him, and it refuses to close your own panel. If nothing matches, say what you searched for rather than guessing again.",
   input_schema: {
     type: 'object',
     properties: { name: { type:'string', description:'Distinctive text from the window title.' } },
@@ -15210,6 +15300,96 @@ async function callWatchScreenTool(input){
              { type:'image', source:{ type:'base64', media_type: got.frame.media_type || 'image/png', data: got.frame.data } },
              { type:'text', text:'[His screen, captured just now for watch_screen.]' }
            ] };
+}
+
+/* THE BASE APP (2.31.0): the Cloudflare site, opened by Rust's
+   open_base_app in Chrome with --app, the same window the desktop shortcut
+   opens. Rust holds the address; nothing here can point it elsewhere. */
+const BASE_APP_URL = 'https://jarvis-main-version.daganmatan1998.workers.dev/';
+const BASE_APP_TARGET = { en: 'the base app', he: 'אפליקציית הבסיס', exe: [], title: ['j.a.r.v.i.s.'] };
+
+function isBaseAppOpen(text){
+  let words = normaliseHeard(text).split(' ').filter(Boolean);
+  if(!words.length || words.length > 12) return false;
+  while(words.length > 1 && (wordIsName(words[0]) || WAKE_FILLER.indexOf(words[0]) >= 0)) words = words.slice(1);
+  const s = words.join(' ');
+  const en = /^(?:please )?(?:(?:can|could|would|will) you )?(?:open|launch|start|run|load|bring up|fire up|pull up)(?: up)? (.+?)(?: (?:please|now|for me))*$/.exec(s);
+  const he = /^(?:בבקשה )?(?:תפתח|פתח|לפתוח|תפתחי|תפעיל|הפעל|תעלה)(?: לי)?(?: את)? (.+?)(?: (?:בבקשה|עכשיו))*$/.exec(s);
+  const m = en || he;
+  if(!m) return false;
+  const obj = m[1].trim();
+  return BASE_APP_NAMES.test(obj) || /^(?:your|the) (?:app|application)$/.test(obj) || /^yourself in chrome$/.test(obj);
+}
+
+const OPEN_BASE_APP_TOOL = {
+  name: 'open_base_app',
+  description: "Open JARVIS's base app: his web version (the Cloudflare site) in Chrome, as a window of its own with no address bar, the same window the JARVIS icon on his desktop opens. Desktop only. Use it for \"open your base app\", \"open the JARVIS app\", \"open your web app\", \"תפתח את אפליקציית הבסיס\", \"תפתח את האפליקציה שלך\". Takes nothing: the address is fixed. Say in a few words that it is open.",
+  input_schema: { type: 'object', properties: {}, required: [] }
+};
+
+async function callOpenBaseAppTool(){
+  if(!IS_DESKTOP) return { ok: false, error: 'this is already the base app' };
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!invoke) return { ok: false, error: 'the desktop bridge is unavailable' };
+  try{
+    const r = await invoke('open_base_app');
+    if(r && r.opened){ addMessage('system', '\u25B8 opened the base app'); return { ok: true, via: r.via }; }
+  }catch(err){
+    const msg = String((err && err.message) || err);
+    if(!/not found|unknown command|not allowed|open_base_app/i.test(msg)) return { ok: false, error: msg };
+  }
+  /* An app built before open_base_app, or no Chrome: the site as an ordinary page. */
+  const r2 = await callOpenUrlTool({ url: BASE_APP_URL });
+  return r2 && r2.ok ? { ok: true, via: 'browser tab' } : { ok: false, error: (r2 && r2.error) || 'could not open it' };
+}
+
+const CLOSE_APP_TOOL = {
+  name: 'close_app',
+  description: "Close a whole PROGRAM by name: every window of it, as if each X were clicked (unsaved work still prompts him). Desktop only, Windows only. Use it whenever he names an app or program to close — \"close the Spotify app\", \"close WhatsApp\", \"close Excel\", \"close the workspace\", \"close your base app\", \"תסגור את אפליקציית הוואטסאפ\", \"תסגור את האקסל\" — anything open on his taskbar. name: the program as he said it (\"spotify\", \"word\", \"vs code\", \"workspace\", \"base app\"). For the whole browser use close_browser; for one site or tab inside the browser (\"close the YouTube tab\") use close_browser_tab. If it answers not_found, the result lists what is open: say which of those he might mean rather than guessing.",
+  input_schema: {
+    type: 'object',
+    properties: { name: { type: 'string', description: 'The program, in his words.' } },
+    required: ['name']
+  }
+};
+
+async function callCloseWorkspace(){
+  if(!IS_DESKTOP) return { ok: false, error: 'only available in the desktop app' };
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!invoke) return { ok: false, error: 'the desktop bridge is unavailable' };
+  try{
+    const closed = await invoke('close_workspace');
+    if(closed && closed.length){ addMessage('system', '\u25B8 closed the workspace'); return { ok: true, closed }; }
+    return { ok: false, code: 'not_open' };
+  }catch(err){ return { ok: false, error: String((err && err.message) || err) }; }
+}
+
+/* input: { name } in his words, or { target } already resolved. */
+async function callCloseAppTool(input){
+  if(!IS_DESKTOP) return { ok: false, error: 'only available in the desktop app' };
+  const name = String((input && input.name) || '').trim();
+  const n = normaliseHeard(name).replace(/^(?:the|my) /, '');
+  if(!input.target){
+    if(CLOSE_WORKSPACE_NAMES.has(n) || /^work ?space/.test(n)) return callCloseWorkspace();
+    if(BASE_APP_NAMES.test(n) || n === 'base app') return callCloseAppTool({ target: BASE_APP_TARGET, name });
+    if(CLOSE_BROWSER_NAMES.has(n)) return callCloseBrowserTool({ which: /chrome|כרום/.test(n) ? 'chrome' : /edge|אדג/.test(n) ? 'edge' : /firefox|פיירפוקס/.test(n) ? 'firefox' : null });
+  }
+  const target = input.target || bringTargetFor(name);
+  if(target.own && !/^ws-/.test(target.own)) return { ok: false, error: 'that is one of JARVIS\'s own windows', tell_the_user: 'Say that one is part of JARVIS and has its own command (close the camera, stop the music...).' };
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!invoke) return { ok: false, error: 'the desktop bridge is unavailable' };
+  let r;
+  try{ r = await invoke('close_app', { exe: target.exe || [], title: target.title || [] }); }
+  catch(err){
+    const msg = String((err && err.message) || err);
+    if(/not found|unknown command|not allowed|close_app/i.test(msg)) return { ok: false, code: 'old_app', error: 'old app', tell_the_user: 'Closing a whole program needs the rebuilt desktop app (2.31.0).' };
+    return { ok: false, error: msg };
+  }
+  if(r && r.ok){
+    addMessage('system', '\u25B8 closed ' + (r.exe || name) + (r.windows > 1 ? ' (' + r.windows + ' windows)' : ''));
+    return { ok: true, closed: r.exe || name, windows: r.windows, note: 'Say in a few words which program you closed.' };
+  }
+  return { ok: false, code: (r && r.code) || 'not_found', open: (r && r.open) || [] };
 }
 
 async function callCloseNamedTool(input){
@@ -16667,7 +16847,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     requestBody.tools = fullCapability()
       ? [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL, MAKE_ZIP_TOOL, BUILD3D_TOOL]
       : [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL];
-    if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
+    if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                           TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                           WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
                                           NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL, WEB_SHOOTER_TOOL,
@@ -16688,7 +16868,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     /* Desktop only, and not gated behind ULTRON: opening a link is an everyday
        errand, not heavy work. In the browser the capability does not exist at
        all, so offering it there would only invite a promise it cannot keep. */
-    if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
+    if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                       TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                       WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
                                       NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL, WEB_SHOOTER_TOOL,
@@ -17386,6 +17566,10 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callCloseTabTool(tu.input);
           } else if(tu.name === 'close_window_named'){
             payload = await callCloseNamedTool(tu.input);
+          } else if(tu.name === 'close_app'){
+            payload = await callCloseAppTool(tu.input || {});
+          } else if(tu.name === 'open_base_app'){
+            payload = await callOpenBaseAppTool();
           } else if(tu.name === 'close_this_window'){
             payload = await callCloseWindowTool();
           } else if(tu.name === 'search_web' || tu.name === 'web_search'){
