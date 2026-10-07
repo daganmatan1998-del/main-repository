@@ -5,6 +5,7 @@ import { esc, txt, money } from '../utils/html.js';
 import { ICONS } from '../components/icons.js';
 import { picture, resolve, isReal, imageUrl } from '../components/picture.js';
 import { layout, breadcrumbs, breadcrumbSchema } from '../components/layout.js';
+import { explodedView } from '../components/exploded-view.js';
 
 const cur = MARKETS.defaultCurrency;
 const fmt = (n) => money(n, cur, MARKETS.currencies[cur].locale);
@@ -216,8 +217,8 @@ export function productPage() {
     path: PATH,
     ogType: 'product',
     ogImage: imageUrl('product', 1080),
-    body: `<div class="wrap"><div class="pdp">${gallery()}${info()}</div></div>${story()}${reviewsBlock()}${productFaq()}${stickyBar()}`,
+    body: `<div class="wrap"><div class="pdp">${gallery()}${info()}</div></div>${story()}${explodedView()}${reviewsBlock()}${productFaq()}${stickyBar()}`,
     schema: [productSchema(), breadcrumbSchema(CRUMBS)],
-    scripts: ['product'],
+    scripts: ['product', 'vendor/gsap.min', 'vendor/ScrollTrigger.min', 'exploded'],
   });
 }

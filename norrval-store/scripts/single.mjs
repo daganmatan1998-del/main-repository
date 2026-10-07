@@ -57,8 +57,10 @@ const favicon = 'data:image/svg+xml,' + encodeURIComponent(fs.readFileSync(path.
 // Head: drop external stylesheet, JSON-LD and the absolute canonical/OG URLs
 // (they describe the deployed site, not a local file).
 let head = home.before
-  .replace(/<link rel="stylesheet" href="\/assets\/main.css">/, `<style>${css}</style>`)
-  .replace(/<link rel="icon"[^>]*>/, `<link rel="icon" href="${favicon}" type="image/svg+xml">`)
+  // Function replacers: css/favicon are dynamic content that could contain a
+  // literal $-pattern a string replacement would misinterpret (see below).
+  .replace(/<link rel="stylesheet" href="\/assets\/main.css">/, () => `<style>${css}</style>`)
+  .replace(/<link rel="icon"[^>]*>/, () => `<link rel="icon" href="${favicon}" type="image/svg+xml">`)
   .replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, '')
   .replace(/<link rel="canonical"[^>]*>/, '')
   .replace(/<meta property="og:(url|image)"[^>]*>|<meta name="twitter:image"[^>]*>/g, '')
@@ -99,10 +101,26 @@ const body = pages
   )
   .join('');
 
-const scripts = ['app.js', 'home.js', 'product.js', 'forms.js', 'checkout.js']
-  .map((f) => `<script>${js(f)}</script>`)
+// Vendor files are read raw (no rehref/checkout rewriting — that's for our
+// own page scripts, not third-party minified code) and must stay ordered
+// before exploded.js, which calls into them at script-run time.
+const raw = (f) => read('assets/' + f);
+const scripts = [
+  js('app.js'),
+  js('home.js'),
+  js('product.js'),
+  raw('vendor/gsap.min.js'),
+  raw('vendor/ScrollTrigger.min.js'),
+  js('exploded.js'),
+  js('forms.js'),
+  js('checkout.js'),
+]
+  .map((code) => `<script>${code}</script>`)
   .join('');
 
-const out = `${head}${MAIN_OPEN}${body}</main>${tail.replace('</body>', `${scripts}<script>${router}</script></body>`)}`;
+// A function replacer, not a string one: the vendor bundles contain literal
+// `$&`/`$1` sequences that `String.replace(search, string)` would otherwise
+// reinterpret as backreference patterns and silently corrupt.
+const out = `${head}${MAIN_OPEN}${body}</main>${tail.replace('</body>', () => `${scripts}<script>${router}</script></body>`)}`;
 fs.writeFileSync(path.join(DIST, 'norrval-store.html'), out);
 console.log(`Wrote dist/norrval-store.html (${(out.length / 1024).toFixed(0)} KB, ${pages.length} pages)`);
