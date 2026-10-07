@@ -5,6 +5,7 @@ import { esc, txt, money } from '../utils/html.js';
 import { ICONS } from '../components/icons.js';
 import { picture, resolve, isReal, srcset, preloadFormat } from '../components/picture.js';
 import { layout, orgSchema } from '../components/layout.js';
+import { explodedView } from '../components/exploded-view.js';
 import { productSchema } from './product.js';
 
 const cur = MARKETS.defaultCurrency;
@@ -284,13 +285,13 @@ export function homePage() {
     title: `${STORE.brand} — The Nocturne all-black mesh watch`,
     description: `Meet Nocturne by ${STORE.brand}: a matte black watch with a black dial, teal-accented hands and a black mesh bracelet. Gift-boxed. ${fmt(PRODUCT.price[cur])}.`,
     path: '/',
-    body: hero() + trust() + intro() + features() + cinematic() + lifestyle() + owners() + offer() + gifting() + finalCta(),
+    body: hero() + trust() + intro() + features() + cinematic() + explodedView() + lifestyle() + owners() + offer() + gifting() + finalCta(),
     schema: [
       orgSchema(),
       { '@context': 'https://schema.org', '@type': 'WebSite', name: STORE.brand, url: STORE.siteUrl },
       productSchema(),
     ],
-    scripts: ['home'],
+    scripts: ['home', 'vendor/gsap.min', 'vendor/ScrollTrigger.min', 'exploded'],
     preload: heroPreload,
   });
 }

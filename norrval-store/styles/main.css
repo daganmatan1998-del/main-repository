@@ -2506,6 +2506,21 @@ textarea.input {
   opacity: var(--op, 1);
   will-change: transform, opacity;
 }
+.xp__label {
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  fill: var(--muted);
+  opacity: var(--labelOp, 0);
+  transition: opacity 0.4s var(--ease);
+}
+.xp__leader {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  opacity: var(--labelOp, 0);
+  transition: opacity 0.4s var(--ease);
+}
 .xp__text {
   position: absolute;
   left: 50%;

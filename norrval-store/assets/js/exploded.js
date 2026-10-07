@@ -42,7 +42,13 @@
       else if (name === 'caseback') part.style.setProperty('--sc', (1 - e * 0.06).toFixed(3));
       if (name === 'springbars' || name === 'screws') part.style.setProperty('--op', (0.35 + e * 0.65).toFixed(2));
     }
-    if (stage) stage.style.transform = `rotate(${(-1.5 * e).toFixed(2)}deg) scale(${(1 + e * 0.03).toFixed(3)})`;
+    if (stage) {
+      stage.style.transform = `rotate(${(-1.5 * e).toFixed(2)}deg) scale(${(1 + e * 0.03).toFixed(3)})`;
+      // Labels only mean anything once a part has visibly separated — fade
+      // them in over the back half of the explosion, not from frame one.
+      const labelOp = Math.max(0, Math.min(1, (e - 0.3) / 0.3));
+      stage.style.setProperty('--labelOp', labelOp.toFixed(3));
+    }
     if (bar) bar.parentElement.style.setProperty('--p', e.toFixed(3));
 
     const stepFor = (i) => (i === 0 ? p < 0.22 : i === 1 ? p >= 0.32 && p < 0.68 : p >= 0.78);
