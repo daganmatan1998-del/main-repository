@@ -1458,6 +1458,20 @@
   #entBtn{ font-weight:bold; letter-spacing:1px; }
   #convBtn.active{ background:rgba(0,255,140,0.18); border-color:#4dffb0; color:#7dffc4; box-shadow:0 0 10px rgba(80,255,170,0.4); }
   #muteBtn.active{ background:rgba(255,205,60,0.20); border-color:#ffd23c; color:#ffdd80; box-shadow:0 0 10px rgba(255,210,80,0.4); }
+  /* The talk button (2.33.0): round, bright, never dimmed with the rest of
+     the bar - press it, hear the tone, talk. Red and pulsing while he listens. */
+  #commBar #talkBtn{
+    flex:0 0 auto; width:44px; min-width:44px; border-radius:50%; padding:0;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(var(--cyan-rgb), 0.22); border:1px solid rgba(var(--cyan-rgb), 0.85); color:#e9fbff;
+    box-shadow:0 0 10px rgba(var(--cyan-rgb), 0.45); opacity:1;
+  }
+  #commBar #talkBtn:hover{ background:rgba(var(--cyan-rgb), 0.36); }
+  #commBar #talkBtn.listening{
+    background:rgba(255,70,70,0.35); border-color:#ff6464; color:#fff;
+    animation:micPulse 1s infinite;
+  }
+  html.tauri #commBar #talkBtn{ display:none; }
   #micBtn.listening{
     background:rgba(255,70,70,0.28); border-color:#ff6464; color:#ff9a9a;
     animation:micPulse 1s infinite;
@@ -1777,6 +1791,7 @@
     <input id="docFileInput" type="file" accept=".pdf,.txt,.md,.csv,.json,.log,application/pdf,text/*,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,.mp4,.mov,.avi,.mkv,.webm,.glb,.gltf,.obj,.stl" multiple style="display:none;">
   </div>
   <div id="commBar">
+    <button id="talkBtn" title="Talk to J.A.R.V.I.S." aria-label="Talk"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg></button>
     <button id="micBtn" title="Talk to J.A.R.V.I.S.">MIC</button>
     <button id="convBtn" title="Continuous conversation">LOOP</button>
     <button id="muteBtn" title="Mute J.A.R.V.I.S. — replies in text only">MUTE</button>
@@ -3016,6 +3031,34 @@ const camera = new THREE.PerspectiveCamera(55, window.innerWidth/window.innerHei
 const CAMERA_RADIUS = IS_DESKTOP ? 9.5 : 16.5;
 camera.position.set(0, 1.4, CAMERA_RADIUS);
 
+/* THE ORB IS A MODEL HE CAN HANDLE (2.33.0, the site). Drag to turn it any
+   way, scroll (or pinch on a phone) to bring it closer or further. It can
+   never be moved off-centre: there is no pan, and the camera always looks
+   at the middle of the reactor. Left alone for ORB_IDLE_RESUME_MS it goes
+   back to its slow cinematic turn, from wherever he left it. The desktop
+   orb is a small window that is dragged by its edges, so it keeps its own
+   camera. */
+const ORB_IDLE_RESUME_MS = 8000;
+let orbControls = null, orbTouchedAt = 0;
+if(!IS_DESKTOP && THREE.OrbitControls){
+  try{
+    orbControls = new THREE.OrbitControls(camera, renderer.domElement);
+    orbControls.target.set(0, 0, 0);
+    orbControls.enablePan = false;
+    orbControls.enableDamping = true;
+    orbControls.dampingFactor = 0.08;
+    orbControls.rotateSpeed = 0.6;
+    orbControls.zoomSpeed = 0.8;
+    orbControls.minDistance = CAMERA_RADIUS * 0.4;
+    orbControls.maxDistance = CAMERA_RADIUS * 2.2;
+    orbControls.autoRotate = true;
+    orbControls.autoRotateSpeed = 0.43;              // the old cinematic turn, 0.045 rad/s
+    orbControls.addEventListener('start', ()=>{ orbControls.autoRotate = false; orbTouchedAt = Date.now(); });
+    orbControls.addEventListener('end', ()=>{ orbTouchedAt = Date.now(); });
+    orbControls.update();
+  }catch(err){ orbControls = null; }
+}
+
 /* ---------------------------------------------------------------------
    LIGHTS
 --------------------------------------------------------------------- */
@@ -4067,6 +4110,13 @@ function animate(){
   mouseX += (targetMouseX - mouseX) * 0.04;
   mouseY += (targetMouseY - mouseY) * 0.04;
 
+  if(orbControls){
+    /* His hands on it (the site): the turn he gave it, back to the slow
+       cinematic turn once he has let it be for a while. */
+    if(!orbControls.autoRotate && Date.now() - orbTouchedAt > ORB_IDLE_RESUME_MS) orbControls.autoRotate = MOTION_SCALE > 0;
+    orbControls.autoRotateSpeed = 0.43 * MOTION_SCALE;
+    orbControls.update();
+  } else {
   // cinematic slow camera orbit + mouse parallax
   camAngle += dt * 0.045 * MOTION_SCALE;
   const parallaxX = mouseX * 1.6;
@@ -4075,6 +4125,7 @@ function animate(){
   camera.position.z = Math.cos(camAngle) * CAMERA_RADIUS;
   camera.position.y = 1.2 + Math.sin(t*0.18)*0.4 + parallaxY;
   camera.lookAt(0,0,0);
+  }
 
   // voice level — real amplitude when Cartesia is speaking, a lively
   // synthetic pulse when the browser-fallback voice is speaking instead
@@ -5273,10 +5324,25 @@ if(SpeechRecognitionImpl){
   micBtn.disabled = true;
   micBtn.title = 'Speech recognition not supported in this browser';
 }
-micBtn.addEventListener('click', ()=>{
-  if(!recognition) return;
-  startListening();
-});
+/* PRESS TO TALK (2.33.0): the tone first, so he knows the microphone is
+   his, then listening - awake, no "hey Jarvis" needed. The browser's own
+   recogniser is no longer required (the worker's transcription works
+   without it); startListening chooses. The MIC button does the same. */
+function talkNow(){
+  try{ pttChirp(); }catch(err){}
+  noteActivity();
+  try{ startListening(); }catch(err){}
+}
+micBtn.addEventListener('click', talkNow);
+(function wireTalkButton(){
+  const btn = document.getElementById('talkBtn');
+  if(!btn) return;
+  btn.addEventListener('click', talkNow);
+  /* Red while listening: the same state the MIC button already shows. */
+  const sync = () => btn.classList.toggle('listening', micBtn.classList.contains('listening'));
+  try{ new MutationObserver(sync).observe(micBtn, { attributes: true, attributeFilter: ['class'] }); }catch(err){}
+  sync();
+})();
 
 /* ---------------------------------------------------------------------
    WHISPER CAPTURE

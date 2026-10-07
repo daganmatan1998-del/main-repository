@@ -628,7 +628,7 @@
 
     update(frame){
       const ev = this.zoom.update(frame);
-      ev.hands = (this.zoom.lastMetrics || []).map(m => ({ pts: m.pts, center: m.center, slot: m.slot }));
+      ev.hands = (this.zoom.lastMetrics || []).map(m => ({ pts: m.pts, center: m.center, slot: m.slot, fist: isFistish(m) }));
       const e = ev.engaged || [false, false];
       /* Only two hands really in view make a zoom (2.16.0): one hand that
          changed slot keeps its old slot's pinch for a moment, and that
@@ -763,8 +763,14 @@
      being fists, and never twice within BUMP_COOL_MS, so one bump is one
      window put away.
   ------------------------------------------------------------------ */
-  const BUMP_APART = 2.5, BUMP_TOUCH = 1.5, BUMP_NEAR = 1.9, BUMP_WINDOW_MS = 1500,
-        BUMP_APART_FRAMES = 3, BUMP_BEND_DEG = 100, BUMP_LOST_MS = 400, BUMP_COOL_MS = 1500;
+  /* 2.33.0, more forgiving (he turns his fists, and brings them together
+     slowly or fast): touching is under 1.7 palms (was 1.5), the approach may
+     take 3 s (was 1.5), two frames apart are enough to arm (was 3), and the
+     fists merging into one hand for the tracker counts within 700 ms from as
+     far as 2.3 palms (was 400 ms, 1.9) - a fast clap blurs both hands away
+     for a few frames before the tracker finds the one merged fist. */
+  const BUMP_APART = 2.5, BUMP_TOUCH = 1.7, BUMP_NEAR = 2.3, BUMP_WINDOW_MS = 3000,
+        BUMP_APART_FRAMES = 2, BUMP_BEND_DEG = 100, BUMP_LOST_MS = 700, BUMP_COOL_MS = 1500;
   const isFist = (m) => {
     if(!m || !m.fingers) return false;
     let folded = 0;
@@ -772,6 +778,29 @@
       if(m.fingers[f] < FINGER_FOLDED || (m.bends && m.bends[f] > BUMP_BEND_DEG)) folded++;
     }
     return folded >= 3;
+  };
+  /* CLEARLY OPEN (2.33.0): at least two fingers straight AND hardly bent.
+     The release test for the hold, and what rules a hand out of the bump.
+     "Not a fist" was the old release test, and a fist turned a little reads
+     as not a fist (the folded fingers foreshortened, one of them read as
+     straightish) - so turning the hand let go of the file. A fist turned any
+     way never reads as two straight, unbent fingers; an opened hand always does. */
+  const isClearlyOpen = (m) => {
+    if(!m || !m.fingers) return false;
+    let straight = 0;
+    for(const f of ['index', 'middle', 'ring', 'pinky']){
+      if(m.fingers[f] > FINGER_STRAIGHT && (!m.bends || m.bends[f] < 60)) straight++;
+    }
+    return straight >= 2;
+  };
+  /* Fist enough, once the gesture has begun: two fingers folded and not open. */
+  const isFistish = (m) => {
+    if(!m || !m.fingers || isClearlyOpen(m)) return false;
+    let folded = 0;
+    for(const f of ['index', 'middle', 'ring', 'pinky']){
+      if(m.fingers[f] < FINGER_FOLDED || (m.bends && m.bends[f] > BUMP_BEND_DEG)) folded++;
+    }
+    return folded >= 2;
   };
 
   class FistBump {
@@ -781,7 +810,9 @@
        frame it fires, otherwise { type: 'none', state, distance }. */
     update(t, ms){
       const hands = (ms || []).filter(Boolean);
-      const fists = hands.filter(isFist);
+      /* Two clear fists to arm; once armed, fists turned or blurred by the
+         approach still count (isFistish). */
+      const fists = hands.filter(this.state === 'apart' ? isFistish : isFist);
       const none = (extra) => Object.assign({ type: 'none', state: this.state, distance: this.lastD }, extra || {});
       if(hands.length >= 2 && fists.length >= 2){
         const a = fists[0], b = fists[1];
@@ -860,7 +891,12 @@
      of doubt does not drop a file), the hand lost for HOLD_LOST_MS, a pinch
      or the zoom starting, the gestures stopping for any reason.
   ------------------------------------------------------------------ */
-  const HOLD_PRIME_MS = 1500, HOLD_OPEN_FRAMES = 3, HOLD_LOST_MS = 250, THUMB_FOLDED = 0.75,
+  /* 2.33.0: lets go only when the hand is CLEARLY open for 4 frames (not
+     merely "not a fist" for 3 - a fist turned a little is not a fist to the
+     tracker, and turning his hand dropped the file), waits 450 ms for a hand
+     the tracker loses while it turns (was 250), and takes a thumb a little
+     further out as folded (0.85, was 0.75): a turned fist shows it so. */
+  const HOLD_PRIME_MS = 1500, HOLD_OPEN_FRAMES = 4, HOLD_LOST_MS = 450, THUMB_FOLDED = 0.85,
         HOLD_MAX_JUMP = 2.5, HOLD_MAX_Y = 0.7;
   /* All five fingers closed: the four folded (straightness under
      FINGER_FOLDED or bent past BUMP_BEND_DEG) and the thumb in over them
@@ -932,13 +968,14 @@
           return out('drag', { waiting: true, vx: 0, vy: 0 });
         }
         this.lostAt = null;
-        if(isFist(m)){ this.openRun = 0; this.follow(m, t, width, height); return out('drag'); }
+        this.follow(m, t, width, height);                       // the cursor follows the hand, however it reads
+        if(!isClearlyOpen(m)){ this.openRun = 0; return out('drag'); }
         if(++this.openRun >= HOLD_OPEN_FRAMES){
           this.reset();
           this.prime = { t, c: m.center, scale: m.scale };          // open again: ready for the next grab
           return out('release', { reason: 'open' });
         }
-        return out('drag', { vx: 0, vy: 0 });
+        return out('drag');
       }
       if(!this.s.holdEnabled || gate.blocked){
         const was = this.state; this.reset();
@@ -951,7 +988,7 @@
       }
       if(this.state === 'arming'){
         const m = this.nearest(ms);
-        if(!m || !isFist(m)){ this.reset(); return out('cancel'); }
+        if(!m || isClearlyOpen(m) || !isFistish(m)){ this.reset(); return out('cancel'); }
         this.follow(m, t, width, height);
         if(t - this.since < this.s.holdArmMs) return out('none');
         this.state = 'holding'; this.openRun = 0; this.lostAt = null; this.vel = { x: 0, y: 0 };
@@ -1592,6 +1629,8 @@
                  [9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
   const TURN_COL = '#ffc94d';
   const POINTER_COL = '#ff7bd5';
+  /* 2.33.0: the fist holding the left button, and the two fists of the bump. */
+  const HOLD_COL = '#ff5a36', BUMP_COL = '#a66bff';
   function drawOverlay(canvas, video, ev, label){
     if(!canvas || !video) return;
     const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -1611,13 +1650,25 @@
     const col = zooming ? '#4dffb0' : ready ? '#00e5ff' : 'rgba(190,220,235,0.55)';
     const turn = ev.turn || {};
     const turningSlot = (turn.state === 'armed' || turn.state === 'turning') ? turn.slot : -1;
+    /* The fist holding the button (2.33.0): orange, the nearest hand to the
+       hold. The two fists of the bump: magenta, solid once they meet. */
+    const hv = ev.holdView || {}, bv = ev.bumpView || {};
+    let holdHand = null;
+    if((hv.state === 'holding' || hv.state === 'arming') && hv.at){
+      let bd = Infinity;
+      (ev.hands || []).forEach(h => { if(h && h.center){ const d = dist(h.center, hv.at); if(d < bd){ bd = d; holdHand = h; } } });
+    }
+    const bumping = bv.flash || bv.state === 'apart' || bv.state === 'spent';
     /* The whole hand, every hand in view. */
     (ev.hands || []).forEach(h => {
       if(!h || !h.pts || h.pts.length < 21) return;
       const P = h.pts.map(map);
       const engaged = ev.engaged && h.slot != null && ev.engaged[h.slot];
-      const hc = h.slot === turningSlot ? TURN_COL : engaged ? col : 'rgba(150,215,240,0.6)';
-      g.strokeStyle = hc; g.lineWidth = 1.5; g.globalAlpha = engaged || h.slot === turningSlot ? 0.9 : 0.6;
+      const holdingThis = h === holdHand;
+      const bumpThis = !holdingThis && bumping && h.fist;
+      const hc = holdingThis ? HOLD_COL : bumpThis ? BUMP_COL : h.slot === turningSlot ? TURN_COL : engaged ? col : 'rgba(150,215,240,0.6)';
+      const strong = holdingThis || bumpThis || engaged || h.slot === turningSlot;
+      g.strokeStyle = hc; g.lineWidth = holdingThis || bumpThis ? 2.5 : 1.5; g.globalAlpha = strong ? (holdingThis && hv.state === 'arming' ? 0.6 : 0.95) : 0.6;
       g.beginPath();
       BONES.forEach(([a, b]) => { g.moveTo(P[a].x, P[a].y); g.lineTo(P[b].x, P[b].y); });
       g.stroke();
@@ -1625,6 +1676,26 @@
       P.forEach(p => { g.beginPath(); g.arc(p.x, p.y, 2.2, 0, Math.PI * 2); g.fill(); });
       g.globalAlpha = 1;
     });
+    /* The hold: a solid orange disc in the palm while the button is down,
+       a ring while it is closing in on it. */
+    if(holdHand && holdHand.center){
+      const c = map(holdHand.center);
+      g.strokeStyle = HOLD_COL; g.fillStyle = HOLD_COL; g.lineWidth = 2.5;
+      g.beginPath(); g.arc(c.x, c.y, 14, 0, Math.PI * 2); g.stroke();
+      if(hv.state === 'holding'){ g.globalAlpha = 0.55; g.beginPath(); g.arc(c.x, c.y, 10, 0, Math.PI * 2); g.fill(); g.globalAlpha = 1; }
+    }
+    /* The bump: a magenta line between the two fists, solid at the touch. */
+    if(bumping){
+      const fs = (ev.hands || []).filter(h => h && h.fist && h !== holdHand && h.center).slice(0, 2).map(h => map(h.center));
+      if(fs.length === 2){
+        g.strokeStyle = BUMP_COL; g.lineWidth = bv.flash ? 4 : 2; g.setLineDash(bv.flash ? [] : [7, 6]);
+        g.beginPath(); g.moveTo(fs[0].x, fs[0].y); g.lineTo(fs[1].x, fs[1].y); g.stroke(); g.setLineDash([]);
+      }
+      if(bv.flash && fs.length){
+        const c = fs.length === 2 ? { x: (fs[0].x + fs[1].x) / 2, y: (fs[0].y + fs[1].y) / 2 } : fs[0];
+        g.fillStyle = BUMP_COL; g.globalAlpha = 0.5; g.beginPath(); g.arc(c.x, c.y, 22, 0, Math.PI * 2); g.fill(); g.globalAlpha = 1;
+      }
+    }
     /* The finger that is the mouse (2.16.0): a ring at its tip, filling
        as it folds into a click. */
     if(ev.pointerTip){
@@ -1699,7 +1770,7 @@
       else if(s.kind === 'hold-failed') holdLabel = 'HOLD FAILED · ' + (s.reason || '');
       if(o.onStatus) o.onStatus(s);
     } });
-    let bumpLabel = '', bumpLabelUntil = 0;
+    let bumpLabel = '', bumpLabelUntil = 0, bumpFlashUntil = 0;
     /* The bump's one job: the window he is in, minimised by Rust. */
     function minimiseNow(t){
       bumpLabel = 'MINIMISE'; bumpLabelUntil = t + 1200;
@@ -1929,9 +2000,13 @@
              no zoom, turn or finger mouse is under way. */
           if(settings.bumpEnabled && !ev.active && !hold.holding){
             ev.bump = bump.update(t2, gesture.zoom.lastMetrics);
-            if(ev.bump.type === 'bump') minimiseNow(t2);
+            if(ev.bump.type === 'bump'){ minimiseNow(t2); bumpFlashUntil = t2 + 700; }
           } else if(bump.state !== 'idle') bump.reset();
           hold.handle(ev.hold, t2);
+          /* For the overlay (2.33.0): the hold's hand in its colour, the
+             bump's fists in theirs. */
+          ev.holdView = { state: gesture.hold.state, at: gesture.hold.at };
+          ev.bumpView = { state: bump.state, flash: t2 < bumpFlashUntil };
           /* ONE HAND WHILE THE FINGER IS THE MOUSE (2.21.0): the second-hand
              search is half of a read, and he cannot start a zoom with the
              other hand while pointing anyway (one gesture at a time). Back to
@@ -2074,7 +2149,7 @@
 
   root.JarvisGestureZoom = {
     DEFAULTS, LIMITS, STORE_KEY, normaliseSettings, OneEuro, handMetrics, PinchState, TwoHandZoom,
-    HandGestures, TurnRelay, PointerTracker, PointerRelay, BONES, FistBump, isFist, FistHold, HoldRelay, isFullFist, isOpenHand,
+    HandGestures, TurnRelay, PointerTracker, PointerRelay, BONES, FistBump, isFist, FistHold, HoldRelay, isFullFist, isOpenHand, isClearlyOpen, isFistish,
     ADAPTERS, selectAdapter, ZoomManager, createTracker, drawOverlay, startGestureZoom,
     constants: { PINCH_ON, PINCH_OFF, FIST_GUARD, PALM_CM, PALM_RAY, ARM_MS, STEP_3D,
                  TURN_ARM_MS, TURN_DEAD_MM, TURN_JUMP, TURN_MAX_FRAME, TURN_PRESENT_MS, TURN_KEEP_MS, SCROLL_UNITS_PER_DEG,
