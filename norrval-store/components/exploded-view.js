@@ -9,8 +9,10 @@
  * reproduce any supplied reference image. Deliberately carries no brand text
  * (illegible at this scale, and keeps the component brand-neutral).
  *
- * Markup only. Motion lives in assets/js/exploded.js; look there to retune a
- * part's explode direction/distance (the EXPLODE_PATHS table).
+ * Sits inline in the homepage intro's image frame (next to "Built to stand
+ * out."), not as its own full-screen section — so it has no headline/caption
+ * of its own, and it scrubs as the frame scrolls through view rather than
+ * pinning the page. Markup only; motion lives in assets/js/exploded.js.
  */
 
 // A thin radial gradient "glass" look reused by the crystal and case rings.
@@ -61,7 +63,9 @@ const leader = (ax, ay, r, text) => {
 const crownLabel = `<line x1="160" y1="20" x2="178" y2="32" class="xp__leader"/><text x="183" y="36" text-anchor="start" class="xp__label">CROWN</text>`;
 
 export function explodedViewSVG() {
-  return `<svg class="xp__svg" viewBox="-320 -320 640 640" role="img" aria-label="Exploded diagram of the Nocturne watch, showing the crystal, dial, movement, case and mesh bracelet separated along the watch's axis">
+  return `<svg class="xp__svg" viewBox="-320 -320 640 640" aria-hidden="true">
+<!-- decorative: the wrapping element (components/exploded-view.js) carries the real label -->
+
 ${defs}
 <g class="xp__part" data-part="strapTop" style="--ax:0;--ay:-1">
   <rect x="-46" y="-230" width="92" height="110" rx="10" fill="#0c0e11" stroke="#262c33"/>
@@ -80,8 +84,8 @@ ${defs}
 <g class="xp__part" data-part="caseback" style="--ax:1;--ay:0.15">
   <circle r="108" fill="#101317" stroke="#2b323b" stroke-width="2"/>
   <circle r="90" fill="none" stroke="#1d232a" stroke-width="1"/>
-  <text y="42" text-anchor="middle" font-family="Manrope, sans-serif" font-size="10" letter-spacing="2" fill="#565f69">STAINLESS STEEL</text>
-  <text y="56" text-anchor="middle" font-family="Manrope, sans-serif" font-size="10" letter-spacing="2" fill="#565f69">5 ATM</text>
+  <text y="42" text-anchor="middle" font-family="Manrope, sans-serif" font-size="13" letter-spacing="2" fill="#565f69">STAINLESS STEEL</text>
+  <text y="56" text-anchor="middle" font-family="Manrope, sans-serif" font-size="13" letter-spacing="2" fill="#565f69">5 ATM</text>
   ${[[-70, -70], [70, -70], [-70, 70], [70, 70]].map(([x, y]) => screw(x, y)).join('')}
   ${leader(1, 0.15, 108, 'CASE BACK')}
 </g>
@@ -110,7 +114,7 @@ ${defs}
 </g>
 <g class="xp__part" data-part="dateWheel" style="--ax:0.05;--ay:0.98">
   <circle r="58" fill="#0a0c0f" stroke="#262c33"/>
-  <text y="30" text-anchor="middle" font-family="Manrope, sans-serif" font-size="13" fill="#3fb8c9">8</text>
+  <text y="30" text-anchor="middle" font-family="Manrope, sans-serif" font-size="17" fill="#3fb8c9">8</text>
   ${leader(0.05, 0.98, 58, 'DATE WHEEL')}
 </g>
 <g class="xp__part" data-part="subdial" style="--ax:-0.45;--ay:0.55">
@@ -141,19 +145,13 @@ ${defs}
 </svg>`;
 }
 
-export function explodedView() {
-  return `
-<section class="xp" aria-label="Nocturne, exploded — every component" data-xp>
-  <div class="xp__pin">
-    <div class="xp__stage" data-xp-stage>${explodedViewSVG()}</div>
-    <div class="xp__text" aria-hidden="true">
-      <p class="xp__line is-on" data-xp-line="0">Engineered to perform</p>
-      <p class="xp__line" data-xp-line="1">Every component matters</p>
-      <p class="xp__line" data-xp-line="2">Precision in every detail</p>
-    </div>
-    <div class="xp__progress" aria-hidden="true"><i data-xp-bar></i></div>
-  </div>
-  <p class="sr-only">A scroll-controlled diagram separates the watch into its parts — sapphire crystal, dial, hands, sub-dial, movement, case, crown, case back, spring bars and the mesh bracelet — then reassembles it as you scroll back up. Decorative; the specifications table above lists the confirmed details.</p>
-</section>
-<noscript><style>.xp{display:none}</style></noscript>`;
+/**
+ * Compact version: fills whatever frame it's dropped into (sized by the
+ * caller's CSS — here, the homepage intro's `.frame.frame--45`). As that
+ * frame scrolls through the viewport, the watch separates into its parts;
+ * scrolling back up reassembles it. No pinning, no headline of its own —
+ * it sits next to "Built to stand out.", which already carries that copy.
+ */
+export function explodedDiagram() {
+  return `<div class="xp-inline" data-xp-inline role="img" aria-label="Animated exploded diagram of the Nocturne watch, separating into the crystal, dial, hands, sub-dial, movement, case, crown, case back, spring bars and mesh bracelet as the page scrolls">${explodedViewSVG()}</div>`;
 }

@@ -5,7 +5,7 @@ import { esc, txt, money } from '../utils/html.js';
 import { ICONS } from '../components/icons.js';
 import { picture, resolve, isReal, srcset, preloadFormat } from '../components/picture.js';
 import { layout, orgSchema } from '../components/layout.js';
-import { explodedView } from '../components/exploded-view.js';
+import { explodedDiagram } from '../components/exploded-view.js';
 import { productSchema } from './product.js';
 
 const cur = MARKETS.defaultCurrency;
@@ -55,7 +55,7 @@ function intro() {
 <section class="section" aria-labelledby="intro-title">
   <div class="wrap grid-2">
     <div class="frame frame--45" data-reveal="mask">
-      ${picture({ slot: 'closeup', sizes: '(min-width: 900px) 50vw, 100vw' })}
+      <div class="mask-inner">${explodedDiagram()}</div>
     </div>
     <div>
       <p class="eyebrow" data-reveal>The Nocturne</p>
@@ -248,7 +248,7 @@ function gifting() {
       <a class="btn" href="${PDP}" data-reveal data-magnetic>Shop now ${ICONS.arrow}</a>
     </div>
     <div class="frame frame--45" data-reveal="mask">
-      ${picture({ slot: 'gift', sizes: '(min-width: 900px) 50vw, 100vw' })}
+      <div class="mask-inner">${picture({ slot: 'gift', sizes: '(min-width: 900px) 50vw, 100vw' })}</div>
     </div>
   </div>
 </section>`;
@@ -285,7 +285,7 @@ export function homePage() {
     title: `${STORE.brand} — The Nocturne all-black mesh watch`,
     description: `Meet Nocturne by ${STORE.brand}: a matte black watch with a black dial, teal-accented hands and a black mesh bracelet. Gift-boxed. ${fmt(PRODUCT.price[cur])}.`,
     path: '/',
-    body: hero() + trust() + intro() + features() + cinematic() + explodedView() + lifestyle() + owners() + offer() + gifting() + finalCta(),
+    body: hero() + trust() + intro() + features() + cinematic() + lifestyle() + owners() + offer() + gifting() + finalCta(),
     schema: [
       orgSchema(),
       { '@context': 'https://schema.org', '@type': 'WebSite', name: STORE.brand, url: STORE.siteUrl },

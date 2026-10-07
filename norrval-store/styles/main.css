@@ -743,6 +743,16 @@ h3 {
 .js [data-reveal='mask'] {
   opacity: 1;
   transform: none;
+}
+/* The clip lives on a child, not on the observed element itself: an element
+   clipped to nothing is, by spec, intersecting nothing, so IntersectionObserver
+   would never fire and `.is-in` would never arrive to lift the clip — a
+   permanent deadlock. The wrapper stays unclipped and observable; only
+   `.mask-inner` (added by every data-reveal="mask" caller) animates. */
+.js [data-reveal='mask'] .mask-inner {
+  display: block;
+  width: 100%;
+  height: 100%;
   clip-path: inset(100% 0 0 0);
   transition: clip-path 1.3s var(--ease);
 }
@@ -755,7 +765,7 @@ h3 {
   transform: none;
   filter: none;
 }
-.js [data-reveal='mask'].is-in {
+.js [data-reveal='mask'].is-in .mask-inner {
   clip-path: inset(0 0 0 0);
 }
 .js [data-reveal='mask'].is-in img {
@@ -2436,6 +2446,8 @@ textarea.input {
     opacity: 1;
     transform: none;
     filter: none;
+  }
+  .js [data-reveal='mask'] .mask-inner {
     clip-path: none;
   }
   .js [data-reveal='mask'] img {
@@ -2472,30 +2484,19 @@ textarea.input {
 }
 
 /* ==========================================================================
-   Exploded-view diagram (product page) — see components/exploded-view.js
-   and assets/js/exploded.js. Self-contained; touches nothing else.
+   Exploded-view diagram — inline in the homepage intro's image frame.
+   See components/exploded-view.js and assets/js/exploded.js.
    ========================================================================== */
-.xp {
-  position: relative;
-  height: 340vh;
-  background: linear-gradient(180deg, #05070a, #070a10 45%, #05070a);
-}
-.xp__pin {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  height: 100svh;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-}
-.xp__stage {
-  width: min(84vw, 640px);
-  aspect-ratio: 1;
-}
-.xp__svg {
+.xp-inline {
   width: 100%;
   height: 100%;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(60% 55% at 50% 38%, rgba(63, 184, 201, 0.07), transparent 70%), var(--graphite);
+}
+.xp-inline svg {
+  width: 88%;
+  height: 88%;
   overflow: visible;
 }
 .xp__part {
@@ -2508,9 +2509,9 @@ textarea.input {
 }
 .xp__label {
   font-family: var(--font);
-  font-size: 10px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.04em;
   fill: var(--muted);
   opacity: var(--labelOp, 0);
   transition: opacity 0.4s var(--ease);
@@ -2520,85 +2521,4 @@ textarea.input {
   stroke-width: 1;
   opacity: var(--labelOp, 0);
   transition: opacity 0.4s var(--ease);
-}
-.xp__text {
-  position: absolute;
-  left: 50%;
-  bottom: clamp(48px, 10vh, 120px);
-  translate: -50% 0;
-  width: min(92vw, 560px);
-  text-align: center;
-  pointer-events: none;
-}
-.xp__line {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.32em;
-  text-transform: uppercase;
-  color: var(--muted);
-  opacity: 0;
-  transform: translateY(10px);
-  transition:
-    opacity 0.6s var(--ease),
-    transform 0.6s var(--ease);
-}
-.xp__line.is-on {
-  opacity: 1;
-  transform: none;
-}
-.xp__progress {
-  position: absolute;
-  right: clamp(16px, 4vw, 48px);
-  top: 50%;
-  translate: 0 -50%;
-  width: 1px;
-  height: clamp(80px, 18vh, 160px);
-  background: var(--line);
-}
-.xp__progress i {
-  display: block;
-  width: 100%;
-  background: var(--accent);
-  transform-origin: top;
-  transform: scaleY(var(--p, 0));
-  height: 100%;
-}
-@media (max-width: 640px) {
-  .xp {
-    height: 300vh;
-  }
-  .xp__stage {
-    width: 92vw;
-  }
-}
-/* No JS, or reduced motion: one still frame, mid-explosion, revealed like
-   the rest of the page's [data-reveal] sections — no pinning, no scrub. */
-html:not(.js) .xp,
-.js .xp.is-static {
-  height: auto;
-  padding: var(--section) 0;
-}
-html:not(.js) .xp__pin,
-.js .xp.is-static .xp__pin {
-  position: relative;
-  height: auto;
-}
-html:not(.js) .xp__progress,
-.js .xp.is-static .xp__progress {
-  display: none;
-}
-html:not(.js) .xp__line,
-.js .xp.is-static .xp__line {
-  display: none;
-}
-html:not(.js) .xp__line[data-xp-line='1'],
-.js .xp.is-static .xp__line[data-xp-line='1'] {
-  display: block;
-  position: static;
-  opacity: 1;
-  transform: none;
-  margin-top: 28px;
 }

@@ -190,7 +190,7 @@ function story() {
   return `
 <section class="section pdp-story" aria-labelledby="pstory-title">
   <div class="wrap grid-2">
-    <div class="frame frame--45" data-reveal="mask">${picture({ slot, sizes: '(min-width: 900px) 50vw, 100vw' })}</div>
+    <div class="frame frame--45" data-reveal="mask"><div class="mask-inner">${picture({ slot, sizes: '(min-width: 900px) 50vw, 100vw' })}</div></div>
     <div>
       <p class="eyebrow" data-reveal>On the wrist</p>
       <h2 class="h2" id="pstory-title" data-reveal>Dark by design.</h2>

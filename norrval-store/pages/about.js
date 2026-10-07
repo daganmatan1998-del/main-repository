@@ -26,7 +26,7 @@ ${pageHead({ crumbs: CRUMBS, eyebrow: 'Our story', title: 'A quieter kind of sta
         <p data-reveal><mark class="ph">[OPTIONAL: FOUNDER STORY — WHO STARTED ${STORE.brand}, WHERE, AND WHY. REPLACE OR DELETE THIS PARAGRAPH.]</mark></p>
       </div>
     </div>
-    ${isReal('lifestyle') ? `<div class="frame frame--45" data-reveal="mask">${picture({ slot: 'lifestyle', sizes: '(min-width: 900px) 50vw, 100vw' })}</div>` : ''}
+    ${isReal('lifestyle') ? `<div class="frame frame--45" data-reveal="mask"><div class="mask-inner">${picture({ slot: 'lifestyle', sizes: '(min-width: 900px) 50vw, 100vw' })}</div></div>` : ''}
   </div>
 </section>
 <section class="section" style="padding-top:0">
