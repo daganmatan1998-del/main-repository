@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-launch-3d-workspace"
+description = "Enables the launch_3d_workspace command without any pre-configured scope."
+commands.allow = ["launch_3d_workspace"]
+
+[[permission]]
+identifier = "deny-launch-3d-workspace"
+description = "Denies the launch_3d_workspace command without any pre-configured scope."
+commands.deny = ["launch_3d_workspace"]

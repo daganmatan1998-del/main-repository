@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bring-window-here"
+description = "Enables the bring_window_here command without any pre-configured scope."
+commands.allow = ["bring_window_here"]
+
+[[permission]]
+identifier = "deny-bring-window-here"
+description = "Denies the bring_window_here command without any pre-configured scope."
+commands.deny = ["bring_window_here"]

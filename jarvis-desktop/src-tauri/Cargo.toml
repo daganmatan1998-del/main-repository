@@ -11,6 +11,11 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
+# "Go full screen" from the web app (2.31.0): the site hands over to this app
+# with a jarvis:// link, and the copy already running takes it instead of a
+# second JARVIS starting.
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 # Only the two Win32 pieces needed to close the foreground window. The full
 # windows crate is enormous; windows-sys with these features is small and

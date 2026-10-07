@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-model-file"
+description = "Enables the save_model_file command without any pre-configured scope."
+commands.allow = ["save_model_file"]
+
+[[permission]]
+identifier = "deny-save-model-file"
+description = "Denies the save_model_file command without any pre-configured scope."
+commands.deny = ["save_model_file"]

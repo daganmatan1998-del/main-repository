@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-scroll-send"
+description = "Enables the scroll_send command without any pre-configured scope."
+commands.allow = ["scroll_send"]
+
+[[permission]]
+identifier = "deny-scroll-send"
+description = "Denies the scroll_send command without any pre-configured scope."
+commands.deny = ["scroll_send"]

@@ -13416,6 +13416,9 @@ const FLOW_RULES = [
   /* "Open your base app" (2.31.0): the Cloudflare site in its own Chrome window. */
   { flow: 'base_app', strong: [ { test: (s) => isBaseAppOpen(s) } ], bare: [] },
 
+  /* "Open Discord app" (2.31.0): the installed program, never the website. */
+  { flow: 'open_app', strong: [ { test: (s) => !!openAppRequestOf(s) } ], bare: [] },
+
   /* "Close the browser" / "close the YouTube window" (2.29.0). */
   { flow: 'close_thing', strong: [ { test: (s) => !!closeRequestOf(s) } ], bare: [] },
 
@@ -13703,7 +13706,7 @@ const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'fullscreen', '
                                       'live_full', 'live_full_exit', 'workspace', 'open_site', 'bring_window',
                                       'workspace3d', 'workspace3d_project', 'agent_atlas', 'music_on', 'music_off',
                                       'webshooter_on', 'webshooter_off', 'adjust_window', 'close_thing', 'browser_write',
-                                      'base_app']);
+                                      'base_app', 'open_app']);
 
 /* { steps: [{flow, part}], rest: [parts for the model] }, or null when the
    sentence is one request (or none) and the ordinary path should have it. */
@@ -14672,6 +14675,33 @@ async function runWorkflowCommand(flow, text){
     return true;
   }
 
+  /* "Open Discord app" (2.31.0). */
+  if(flow === 'open_app'){
+    const req = openAppRequestOf(text);
+    if(!req) return false;
+    const plain = (line) => {
+      addMessage('assistant', line);
+      chatHistory.push({ role:'assistant', content: line });
+      persistCurrentSession();
+      if(IS_DESKTOP && typeof speak === 'function') speak(line);
+    };
+    const entry = logActionStart('open_installed_app', { name: req.name }, 'local');
+    const res = await callOpenAppTool({ request: req });
+    logActionEnd(entry, res);
+    if(res && res.ok && res.handed_to_desktop){ say(he ? 'ביקשתי מאפליקציית ג׳רוויס במחשב לפתוח את ' + req.label + '.' : 'Asked the desktop app to open ' + req.label + '.'); return true; }
+    if(res && res.ok){ say(he ? 'פותח את ' + req.label + '.' : 'Opening ' + req.label + '.'); return true; }
+    if(res && res.code === 'no_desktop'){
+      offerDesktopButton(res.url, he);
+      plain(he ? 'כדי לפתוח תוכנה במחשב צריך את אפליקציית ג׳רוויס למחשב, ו-Chrome לא העביר אליה.' : 'Opening a program needs the JARVIS desktop app, and Chrome did not hand it over.');
+      return true;
+    }
+    if(res && res.code === 'old_app'){ plain(he ? 'כדי לפתוח תוכנות מותקנות צריך לבנות מחדש את האפליקציה.' : 'Opening installed programs needs the rebuilt desktop app.'); return true; }
+    const sug = (res && res.suggestions || []).slice(0, 3);
+    plain(he ? 'לא מצאתי במחשב תוכנה מותקנת בשם ' + req.label + '.' + (sug.length ? ' אולי ' + sug.join(', ') + '?' : '')
+             : 'I could not find an installed ' + req.label + ' app on this computer.' + (sug.length ? ' Did you mean ' + sug.join(', ') + '?' : ''));
+    return true;
+  }
+
   /* "Open your base app" (2.31.0): the site, in Chrome, as its own window. */
   if(flow === 'base_app'){
     if(!IS_DESKTOP){ say(he ? 'אני כבר פתוח כאן.' : 'I am already open right here.'); return true; }
@@ -14811,8 +14841,32 @@ async function runWorkflowCommand(flow, text){
     return true;
   }
 
-  if(flow === 'fullscreen' || flow === 'fullscreen_exit'){
-    const on = flow === 'fullscreen';
+  /* "GO FULL SCREEN" IS THE DESKTOP APP NOW (2.31.0). From the web app: the
+     JARVIS desktop app is started (or the one running is told) with
+     jarvis://sleep, and it goes straight to sleep - the same sleep as
+     "go down": hidden, listening only for its name or the hotkey - with
+     the camera window minimised (still running). In the desktop app itself,
+     which is that app: the same sleep, the camera down with it. Music, 3D
+     models and everything else stay as they are. "Exit full screen" and
+     double-clicking the orb still work the old way. */
+  if(flow === 'fullscreen'){
+    if(IS_DESKTOP){
+      say(he ? 'נכנס למצב שינה.' : 'Going down, sir.');
+      setTimeout(() => { enterDesktopSleep(); }, 900);
+      return true;
+    }
+    const r = await openDesktopLink('sleep');
+    if(r.handed){ say(he ? 'פותח את אפליקציית ג׳רוויס במחשב, במצב שינה.' : 'Opening the desktop app, asleep.'); return true; }
+    offerDesktopButton(r.url, he);
+    const line = he ? 'Chrome לא פתח את אפליקציית ג׳רוויס למחשב. לחץ על הכפתור, או ודא שהיא מותקנת.' : 'Chrome did not open the JARVIS desktop app. Press the button, or check that it is installed.';
+    addMessage('assistant', line);
+    chatHistory.push({ role:'assistant', content: line });
+    persistCurrentSession();
+    return true;
+  }
+
+  if(flow === 'fullscreen_exit'){
+    const on = false;
     const res = on ? await setFullScreen(true) : await exitFullScreenLayer();
     if(res.ok && res.left === 'camera'){
       say(he ? '\u05d4\u05d7\u05d6\u05e8\u05ea\u05d9 \u05d0\u05d5\u05ea\u05da. \u05e2\u05d3\u05d9\u05d9\u05df \u05d1\u05de\u05e1\u05da \u05de\u05dc\u05d0.' : 'Camera back. Still full screen.');
@@ -15319,6 +15373,113 @@ function isBaseAppOpen(text){
   if(!m) return false;
   const obj = m[1].trim();
   return BASE_APP_NAMES.test(obj) || /^(?:your|the) (?:app|application)$/.test(obj) || /^yourself in chrome$/.test(obj);
+}
+
+/* "OPEN ... APP" (2.31.0): the program INSTALLED on his computer, never its
+   website. "Open Chrome" is still the browser / the site, as it always was;
+   "open Chrome app", "open the Discord app", "תפתח את אפליקציית ספוטיפיי"
+   is Rust's launch_installed_app, which looks the name up among the
+   programs Windows has installed (its Start menu and registered programs,
+   not a list kept here) and starts it. Not found is said plainly, and
+   nothing else is opened in its place - least of all the website.
+
+   The name goes as he said it, plus what BRING_TARGETS knows it by, plus
+   APP_ALIASES for the short forms people say ("vs code"). In the web app
+   there is nothing on this computer to start from a page, so the same
+   request is handed to the desktop app with a jarvis:// link. */
+const APP_ALIASES = {
+  'vs code': 'Visual Studio Code', 'vscode': 'Visual Studio Code', 'code': 'Visual Studio Code',
+  'explorer': 'File Explorer', 'files': 'File Explorer', 'my files': 'File Explorer', 'file manager': 'File Explorer',
+  'cmd': 'Command Prompt', 'command line': 'Command Prompt', 'ps': 'Photoshop', 'premiere': 'Adobe Premiere Pro',
+  'obs': 'OBS Studio', 'teams': 'Microsoft Teams', 'edge': 'Microsoft Edge', 'store': 'Microsoft Store',
+  'calc': 'Calculator', 'the calculator': 'Calculator', 'control panel': 'Control Panel', 'ppt': 'PowerPoint'
+};
+
+function openAppRequestOf(text){
+  let words = normaliseHeard(text).split(' ').filter(Boolean);
+  if(!words.length || words.length > 12) return null;
+  while(words.length > 1 && (wordIsName(words[0]) || WAKE_FILLER.indexOf(words[0]) >= 0)) words = words.slice(1);
+  const s = words.join(' ');
+  let name = null, heb = false;
+  const en = /^(?:please )?(?:(?:can|could|would|will) you )?(?:open|launch|start|run|load|fire up|boot up|bring up)(?: up)? (?:the |my |a )?(.+?) (?:desktop )?(?:app|apps|application|program|programme)(?: (?:please|now|for me))*$/.exec(s)
+          || /^(?:please )?(?:open|launch|start|run) (?:the |my )?(?:app|application|program) (?:called |named )?(.+?)(?: (?:please|now|for me))*$/.exec(s);
+  if(en) name = en[1];
+  else {
+    const he = /^(?:בבקשה )?(?:תפתח|פתח|לפתוח|תפתחי|תפעיל|הפעל|תריץ|הרץ)(?: לי)?(?: את)? ה?(?:אפליקציה|אפליקציית|תוכנה|תוכנת|תכנה|תכנת)(?: של)? (.+?)(?: (?:בבקשה|עכשיו))*$/.exec(s)
+            || /^(?:בבקשה )?(?:תפתח|פתח|לפתוח|תפתחי|תפעיל|הפעל|תריץ|הרץ)(?: לי)?(?: את)? (.+?) ה?(?:אפליקציה|תוכנה)(?: (?:בבקשה|עכשיו))*$/.exec(s);
+    if(he){ name = he[1]; heb = true; }
+  }
+  if(!name) return null;
+  name = name.replace(/^(?:the|my|that|this) /, '').replace(/^ה(?=\S{3,})/, '').trim();
+  if(!name || name.split(' ').length > 5) return null;
+  /* JARVIS himself is the base app (its own rule); his windows are not programs. */
+  if(BASE_APP_NAMES.test(name + ' app') || /^(?:your|jarvis|yourself|גרוויס|שלך)$/.test(name)) return null;
+  const t = bringTargetFor(name);
+  if(t.own && !/^ws-/.test(t.own)) return null;
+  const names = [name];
+  if(!t.generic && t.en) names.push(String(t.en).replace(/^the /i, ''));
+  const alias = APP_ALIASES[normaliseHeard(name)];
+  if(alias) names.push(alias);
+  return { name, names: Array.from(new Set(names)), label: t.generic ? name : (heb ? t.he : String(t.en).replace(/^the /i, '')), heb };
+}
+
+/* The desktop app, from the web app: a jarvis:// link. Windows hands it to
+   JARVIS (started if need be). Chrome asks once whether to open JARVIS;
+   without a click to the page it may decline to ask at all, which a page
+   cannot see - but it can see Chrome losing focus to the dialog or to the
+   app. If neither happens, the answer says so and a button does it with a
+   click. Resolves { handed: true|false }. */
+function openDesktopLink(path, params){
+  const url = 'jarvis://' + path + (params ? '?' + new URLSearchParams(params).toString() : '');
+  return new Promise(resolve => {
+    let done = false;
+    const finish = (v) => { if(done) return; done = true; window.removeEventListener('blur', onBlur); resolve({ handed: v, url }); };
+    const onBlur = () => finish(true);
+    window.addEventListener('blur', onBlur);
+    try{ window.location.href = url; }catch(err){ finish(false); return; }
+    setTimeout(() => finish(document.hasFocus() === false), 2500);
+  });
+}
+
+function offerDesktopButton(url, he){
+  const div = addMessage('system', he ? '▸ Chrome לא פתח את אפליקציית ג׳רוויס. לחיצה אחת:' : '▸ Chrome did not open the JARVIS desktop app. One click does it:');
+  const a = document.createElement('a');
+  a.href = url; a.textContent = he ? 'פתח את ג׳רוויס למחשב' : 'Open JARVIS desktop';
+  a.style.cssText = 'display:inline-block;margin-left:8px;padding:2px 10px;border:1px solid currentColor;border-radius:10px;color:inherit;text-decoration:none';
+  div.appendChild(a);
+}
+
+const OPEN_APP_TOOL = {
+  name: 'open_installed_app',
+  description: "Start a PROGRAM installed on his computer: the real desktop application, never its website. Use it ONLY when he says \"app\" / \"application\" / \"program\" with the name (\"open the Discord app\", \"open Spotify app\", \"launch the Steam app\", \"open File Explorer app\", \"open Chrome app\", \"תפתח את אפליקציית ספוטיפיי\"). Without that word (\"open Chrome\", \"open YouTube\") keep doing what you always do (open_url). name: the program as he said it. It searches everything installed (Start menu and registered programs), so any program works, not just well-known ones. If it answers not_found, say plainly that the installed program could not be found on his computer, name the suggestions if there are any, and do NOT open the website instead.",
+  input_schema: { type: 'object', properties: { name: { type: 'string', description: 'The program, in his words.' } }, required: ['name'] }
+};
+
+/* input: { name } in his words, or { request } from openAppRequestOf. */
+async function callOpenAppTool(input){
+  const req = (input && input.request) || openAppRequestOf('open ' + String((input && input.name) || '').trim() + ' app') ||
+              { name: String((input && input.name) || '').trim(), names: [String((input && input.name) || '').trim()], label: String((input && input.name) || '').trim() };
+  if(!req.name) return { ok: false, error: 'no program was named' };
+  if(!IS_DESKTOP){
+    const r = await openDesktopLink('open-app', { name: req.names[1] || req.name });
+    return r.handed ? { ok: true, handed_to_desktop: true, name: req.label, note: 'Handed to the desktop app, which starts it. Say so in a few words; you cannot see from here whether it is installed.' }
+                    : { ok: false, code: 'no_desktop', url: r.url, name: req.label };
+  }
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!invoke) return { ok: false, error: 'the desktop bridge is unavailable' };
+  let r;
+  try{ r = await invoke('launch_installed_app', { names: req.names }); }
+  catch(err){
+    const msg = String((err && err.message) || err);
+    if(/not found|unknown command|not allowed|launch_installed_app/i.test(msg)) return { ok: false, code: 'old_app', error: 'old app', tell_the_user: 'Opening installed programs needs the rebuilt desktop app (2.31.0).' };
+    return { ok: false, error: msg };
+  }
+  if(r && r.ok){
+    addMessage('system', '\u25B8 opened ' + r.name);
+    return { ok: true, opened: r.name, note: 'Say in a few words that it is opening.' };
+  }
+  return { ok: false, code: (r && r.code) || 'not_found', name: req.label, suggestions: (r && r.suggestions) || [],
+           tell_the_user: 'Say plainly that the installed ' + req.label + ' program could not be found on his computer. Do not open the website instead.' };
 }
 
 const OPEN_BASE_APP_TOOL = {
@@ -16847,7 +17008,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     requestBody.tools = fullCapability()
       ? [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL, MAKE_ZIP_TOOL, BUILD3D_TOOL]
       : [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL];
-    if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
+    if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, OPEN_APP_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                           TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                           WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
                                           NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL, WEB_SHOOTER_TOOL,
@@ -16868,7 +17029,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     /* Desktop only, and not gated behind ULTRON: opening a link is an everyday
        errand, not heavy work. In the browser the capability does not exist at
        all, so offering it there would only invite a promise it cannot keep. */
-    if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
+    if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, OPEN_APP_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                       TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                       WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
                                       NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL, WEB_SHOOTER_TOOL,
@@ -17570,6 +17731,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callCloseAppTool(tu.input || {});
           } else if(tu.name === 'open_base_app'){
             payload = await callOpenBaseAppTool();
+          } else if(tu.name === 'open_installed_app'){
+            payload = await callOpenAppTool(tu.input || {});
           } else if(tu.name === 'close_this_window'){
             payload = await callCloseWindowTool();
           } else if(tu.name === 'search_web' || tu.name === 'web_search'){
@@ -20011,6 +20174,51 @@ adjustLayout();
     if(!orbMuted) beginListening();
     if(!quiet) speak('Online.');
   };
+
+  /* ASLEEP WITH THE CAMERA DOWN (2.31.0): "go full screen". The orb's own
+     sleep, exactly as "go down" and the hotkey know it, and the camera
+     window minimised with it - minimised, not closed, so the camera and
+     everything listening to it carry on. */
+  window.enterDesktopSleep = async function(){
+    try{ if(window.__orbSleep && !asleep) await window.__orbSleep(); }catch(err){}
+    try{
+      const inv = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+      if(inv) await inv('minimize_camera_window');
+    }catch(err){}
+  };
+
+  /* What the web app handed over (2.31.0): Rust queues each jarvis:// link
+     and pings; asked once at start too, because on a cold start the link
+     arrives before this page has loaded. */
+  (function wireLaunchActions(){
+    const ev = window.__TAURI__ && window.__TAURI__.event;
+    const inv = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+    if(!inv) return;
+    let taking = false;
+    const take = async () => {
+      if(taking) return;
+      taking = true;
+      let list = [];
+      try{ list = await inv('take_launch_actions') || []; }catch(err){ list = []; }
+      taking = false;
+      for(const a of list){
+        if(!a || !a.action) continue;
+        if(a.action === 'sleep'){ await window.enterDesktopSleep(); continue; }
+        if(a.action === 'open-app' && a.name){
+          const res = await callOpenAppTool({ name: String(a.name) });
+          if(res && res.ok) continue;            // the program opening is the answer
+          /* Not found must be heard, even asleep: he asked from the web app. */
+          if(asleep && window.__orbWake) await window.__orbWake(true);
+          const line = 'I could not find an installed ' + String(a.name) + ' app on this computer.' +
+                       (res && res.suggestions && res.suggestions.length ? ' Did you mean ' + res.suggestions.slice(0, 3).join(', ') + '?' : '');
+          addMessage('assistant', line);
+          speak(line);
+        }
+      }
+    };
+    if(ev && ev.listen) ev.listen('jarvis://launch-action', () => { take(); }).catch(() => {});
+    setTimeout(take, 1500);
+  })();
 
   /* The native stop. Ctrl+Shift+X and the tray item both emit this, and it
      arrives whether or not the window is focused, visible, or being talked

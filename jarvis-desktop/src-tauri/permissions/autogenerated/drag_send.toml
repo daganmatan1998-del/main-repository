@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-drag-send"
+description = "Enables the drag_send command without any pre-configured scope."
+commands.allow = ["drag_send"]
+
+[[permission]]
+identifier = "deny-drag-send"
+description = "Denies the drag_send command without any pre-configured scope."
+commands.deny = ["drag_send"]

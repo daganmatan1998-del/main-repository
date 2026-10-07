@@ -58,11 +58,14 @@
     pointerEnabled: true, // in the Agent Atlas: one finger is the mouse, folding it clicks
     trackWidth: 960,    // on the CPU path the picture is read at this width (0 = as the camera gives it): same hand, ~30% faster
     oneHandPointing: true, // while the finger is the mouse only that hand is tracked: the second-hand search costs about half the time
-    bumpEnabled: true     // two fists brought together until they touch minimise the window he is in
+    bumpEnabled: true,    // two fists brought together until they touch minimise the window he is in
+    holdEnabled: true,    // one hand closing into a fist holds the left mouse button until it opens
+    holdArmMs: 300        // how long the fist must stay closed before the button goes down
   });
   const LIMITS = {
     sensitivity: [0.25, 3], threshold: [0, 30], smoothing: [0, 1],
-    maxSpeed: [1, 15], maxZoom: [1.2, 20], minZoom: [0.05, 0.9], turnScreen: [0.25, 1.5], scrollSpeed: [0.25, 4]
+    maxSpeed: [1, 15], maxZoom: [1.2, 20], minZoom: [0.05, 0.9], turnScreen: [0.25, 1.5], scrollSpeed: [0.25, 4],
+    holdArmMs: [120, 1500]
   };
   const STORE_KEY = 'jarvis_store:gesture_zoom';
 
@@ -74,6 +77,7 @@
       if(typeof s.pointerEnabled === 'boolean') out.pointerEnabled = s.pointerEnabled;
       if(typeof s.oneHandPointing === 'boolean') out.oneHandPointing = s.oneHandPointing;
       if(typeof s.bumpEnabled === 'boolean') out.bumpEnabled = s.bumpEnabled;
+      if(typeof s.holdEnabled === 'boolean') out.holdEnabled = s.holdEnabled;
       if(isFinite(Number(s.trackWidth))) out.trackWidth = Number(s.trackWidth) <= 0 ? 0 : clamp(Number(s.trackWidth), 320, 1920);
       for(const k of Object.keys(LIMITS)){
         const v = Number(s[k]);
@@ -598,6 +602,7 @@
     constructor(settings){
       this.zoom = new TwoHandZoom(settings);
       this.pointer = new PointerTracker();
+      this.hold = new FistHold(settings);
       this.latch = false;
       this.configure(settings);
       this.resetTurn();
@@ -605,6 +610,7 @@
     configure(settings){
       this.s = normaliseSettings(settings);
       this.zoom.configure(settings);
+      if(this.hold) this.hold.configure(settings);
       const mc = lerp(2.5, 0.6, this.s.smoothing);
       this.fx = new OneEuro(mc, 1.2, 1.0);
       this.fy = new OneEuro(mc, 1.2, 1.0);
@@ -613,7 +619,7 @@
     get state(){ return this.zoom.state; }
     get pins(){ return this.zoom.pins; }
     setLimits(){}
-    resetGesture(){ this.zoom.resetGesture(); this.resetTurn(); this.pointer.reset(); this.latch = false; }
+    resetGesture(){ this.zoom.resetGesture(); this.resetTurn(); this.pointer.reset(); this.hold.reset(); this.latch = false; }
     resetTurn(){
       this.turn = { state: 'idle', slot: -1, armStart: 0, scale: 0, origin: null, last: null,
                     prevRaw: null, originPx: null, openAt: null, total: { x: 0, y: 0 } };
@@ -637,11 +643,15 @@
          go. Before, the pointing hand's own pinch was taken for its click
          and ignored, so it scrolled with the mouse still held. */
       const turning = ev.turn.state === 'armed' || ev.turn.state === 'turning';
-      const gate = { blocked: !!(e[0] || e[1]), takeover: this.zoom.state !== 'idle' || turning };
+      /* The fist hold (2.31.0): after the pinches, before the pointer. */
+      ev.hold = this.hold.update(frame.t, this.zoom.lastMetrics, frame.width, frame.height,
+                                 { blocked: !!(e[0] || e[1]) || this.zoom.state !== 'idle' });
+      const holding = this.hold.state === 'holding';
+      const gate = { blocked: !!(e[0] || e[1]), takeover: this.zoom.state !== 'idle' || turning || holding };
       if(this.s.pointerEnabled) ev.pointer = this.pointer.update(frame.t, this.zoom.lastMetrics, e, frame.width, frame.height, gate);
       else if(this.pointer.state !== 'idle'){ this.pointer.reset(); ev.pointer = { type: 'end', state: 'idle' }; }   // switched off mid-point
       else ev.pointer = { type: 'none', state: 'idle' };
-      ev.active = this.zoom.state !== 'idle' ? 'zoom' : turning ? 'turn' : this.pointer.state !== 'idle' ? 'pointer' : null;
+      ev.active = this.zoom.state !== 'idle' ? 'zoom' : turning ? 'turn' : holding ? 'hold' : this.pointer.state !== 'idle' ? 'pointer' : null;
       ev.latched = this.latch;
       return ev;
     }
@@ -809,6 +819,231 @@
       this.firedAt = t;
       this.state = 'spent'; this.apartRun = 0;
       return { type: 'bump', state: 'spent', distance: D };
+    }
+  }
+
+  /* ------------------------------------------------------------------
+     THE FIST HOLDS THE LEFT BUTTON (2.31.0).
+
+     An OPEN hand (or the pointing finger) closing into a fist — all five
+     fingers — and staying closed for holdArmMs: the left mouse button goes
+     DOWN where the pointer is, and stays down while the fist stays closed.
+     The fist moves the pointer (its palm centre, mapped like the pointing
+     finger and smoothed the same way, offset so the cursor does not jump
+     when the button goes down): a file under it is dragged, an empty
+     stretch of a folder becomes a selection rectangle, a window's title bar
+     moves the window — Windows and the program do what a held button does,
+     nothing here imitates it. The fist opening lets go.
+
+     Why it needs the open hand (or the pointing finger) first: measured on
+     his own camera, a hand resting in his lap reads as a full fist, and so
+     do both hands raised for the fist bump. Only a hand seen OPEN or
+     POINTING within HOLD_PRIME_MS, at about the same place, can close into
+     a hold — a fist that was never open is never a click. And only a
+     RAISED hand: a hold starts with the fist in the upper HOLD_MAX_Y of the
+     picture (the pointing finger's own area ends at 72%). Measured on his
+     video, hands raised to gesture sit at 31-41% of the height, a hand
+     dropped into his lap after waving at 74-95% — it read as open, then a
+     full fist, exactly the sequence that grabs. Once holding, the fist may
+     go anywhere.
+
+     GESTURE PRIORITY. Two pinches (the zoom) and one pinch (turn / scroll)
+     come first: a pinch on either hand and nothing here starts. TWO fists
+     are the bump (minimise), never two holds: while two fists are in view a
+     hold does not start, and the open hand that primed it is forgotten
+     (raising both hands as fists for the bump must not hold the button).
+     Once a hold has begun it owns the hand: the pointer and the bump stand
+     aside until it lets go.
+
+     Lets go (never leaves the button down): the fist opening for
+     HOLD_OPEN_FRAMES (a looser test than closing — hysteresis, so a frame
+     of doubt does not drop a file), the hand lost for HOLD_LOST_MS, a pinch
+     or the zoom starting, the gestures stopping for any reason.
+  ------------------------------------------------------------------ */
+  const HOLD_PRIME_MS = 1500, HOLD_OPEN_FRAMES = 3, HOLD_LOST_MS = 250, THUMB_FOLDED = 0.75,
+        HOLD_MAX_JUMP = 2.5, HOLD_MAX_Y = 0.7;
+  /* All five fingers closed: the four folded (straightness under
+     FINGER_FOLDED or bent past BUMP_BEND_DEG) and the thumb in over them
+     (its tip within THUMB_FOLDED palm lengths of the index knuckle; open
+     it reads 0.9 and more, measured). */
+  const isFullFist = (m) => {
+    if(!m || !m.fingers || !(m.thumbReach < THUMB_FOLDED)) return false;
+    for(const f of ['index', 'middle', 'ring', 'pinky']){
+      if(!(m.fingers[f] < FINGER_FOLDED || (m.bends && m.bends[f] > BUMP_BEND_DEG))) return false;
+    }
+    return true;
+  };
+  /* Open: at least three of the four fingers straight. */
+  const isOpenHand = (m) => {
+    if(!m || !m.fingers) return false;
+    let straight = 0;
+    for(const f of ['index', 'middle', 'ring', 'pinky']){
+      if(m.fingers[f] > FINGER_STRAIGHT || (m.bends && m.bends[f] < POINT_ARM_DEG)) straight++;
+    }
+    return straight >= 3;
+  };
+
+  class FistHold {
+    constructor(settings){ this.fx = new OneEuro(...POINTER_FILTER); this.fy = new OneEuro(...POINTER_FILTER); this.configure(settings); this.reset(); this.prime = null; }
+    configure(settings){ this.s = normaliseSettings(settings); }
+    reset(){
+      this.state = 'idle'; this.at = null; this.scale = 0; this.since = 0; this.openRun = 0; this.lostAt = null;
+      this.pos = null; this.vel = { x: 0, y: 0 }; this.lastT = null; this.fx.reset(); this.fy.reset();
+    }
+    /* The hand that is ours: nearest where it was, within HOLD_MAX_JUMP palms. */
+    nearest(ms){
+      let best = null, bd = Infinity;
+      for(const m of ms){ const d = dist(m.center, this.at) / (m.scale || 1); if(d < bd){ bd = d; best = m; } }
+      return bd <= HOLD_MAX_JUMP ? best : null;
+    }
+    follow(m, t, width, height){
+      /* The pointer's mapping WITHOUT its clamp: the hold moves the cursor
+         by how far the fist moves (the relay adds the offset to where the
+         cursor was), so a fist near the edge of the picture must still move. */
+      const mx = 1 - m.center.x / width, my = m.center.y / height;
+      const raw = { x: (mx - POINTER_BOX.x0) / POINTER_BOX.w, y: (my - POINTER_BOX.y0) / POINTER_BOX.h };
+      const prev = this.pos;
+      this.pos = { x: this.fx.filter(raw.x, t), y: this.fy.filter(raw.y, t) };
+      if(prev && this.lastT !== null && t - this.lastT > 1){
+        const dt = (t - this.lastT) / 1000;
+        this.vel = { x: this.vel.x + ((this.pos.x - prev.x) / dt - this.vel.x) * POINTER_VEL_ALPHA,
+                     y: this.vel.y + ((this.pos.y - prev.y) / dt - this.vel.y) * POINTER_VEL_ALPHA };
+      }
+      this.lastT = t; this.at = m.center; this.scale = m.scale;
+    }
+    /* gate: { blocked: a pinch is on or the zoom is under way }. Returns
+       { type: 'none'|'arm'|'cancel'|'press'|'drag'|'release', state, x, y, vx, vy, reason }. */
+    update(t, ms, width, height, gate){
+      ms = (ms || []).filter(Boolean);
+      gate = gate || {};
+      const out = (type, extra) => Object.assign({ type, state: this.state,
+        x: this.pos ? this.pos.x : null, y: this.pos ? this.pos.y : null, vx: this.vel.x, vy: this.vel.y }, extra || {});
+      const fists = ms.filter(isFist).length;
+      /* An open or pointing hand primes a hold (not while holding: it is ours). */
+      if(this.state !== 'holding'){
+        for(const m of ms){ if(isOpenHand(m) || isPointing(m)) this.prime = { t, c: m.center, scale: m.scale }; }
+      }
+      if(this.state === 'holding'){
+        if(gate.blocked){ this.reset(); return out('release', { reason: 'pinch' }); }
+        const m = this.nearest(ms);
+        if(!m){
+          if(this.lostAt === null) this.lostAt = t;
+          if(t - this.lostAt > HOLD_LOST_MS){ this.reset(); return out('release', { reason: 'lost' }); }
+          return out('drag', { waiting: true, vx: 0, vy: 0 });
+        }
+        this.lostAt = null;
+        if(isFist(m)){ this.openRun = 0; this.follow(m, t, width, height); return out('drag'); }
+        if(++this.openRun >= HOLD_OPEN_FRAMES){
+          this.reset();
+          this.prime = { t, c: m.center, scale: m.scale };          // open again: ready for the next grab
+          return out('release', { reason: 'open' });
+        }
+        return out('drag', { vx: 0, vy: 0 });
+      }
+      if(!this.s.holdEnabled || gate.blocked){
+        const was = this.state; this.reset();
+        return out(was === 'arming' ? 'cancel' : 'none');
+      }
+      /* Two fists: the bump's, not a hold. The priming is spent. */
+      if(fists >= 2){
+        const was = this.state; this.reset(); this.prime = null;
+        return out(was === 'arming' ? 'cancel' : 'none', { reason: 'two_fists' });
+      }
+      if(this.state === 'arming'){
+        const m = this.nearest(ms);
+        if(!m || !isFist(m)){ this.reset(); return out('cancel'); }
+        this.follow(m, t, width, height);
+        if(t - this.since < this.s.holdArmMs) return out('none');
+        this.state = 'holding'; this.openRun = 0; this.lostAt = null; this.vel = { x: 0, y: 0 };
+        this.prime = null;                                             // spent by the press, not before
+        return out('press');
+      }
+      /* idle: a full fist where an open hand just was. */
+      const pr = this.prime;
+      if(!pr || t - pr.t > HOLD_PRIME_MS) return out('none');
+      const m = ms.find(x => isFullFist(x) && dist(x.center, pr.c) / (x.scale || 1) < HOLD_MAX_JUMP &&
+                             x.center.y / (height || 1) < HOLD_MAX_Y);
+      if(!m) return out('none');
+      /* The priming stays until the press: a closing hand passes through a
+         pinch for a frame or two, and that must not cost him the grab. */
+      this.state = 'arming'; this.since = t; this.at = m.center;
+      this.fx.reset(); this.fy.reset(); this.pos = null; this.lastT = null;
+      this.follow(m, t, width, height);
+      return out('arm');
+    }
+  }
+
+  /* From the hold to Rust's pointer_send: press, then the fist's place (the
+     latest only, one call at a time), then release. The button goes down
+     where the cursor already is, and the fist moves it from there: the
+     offset between the two is taken at the press. A keep-alive every
+     HOLD_KEEP_MS while the fist is still, or Rust's watchdog lets go. The
+     press waits DBLCLICK_GUARD_MS after the pointing finger's last click, or
+     Windows would read click + press as a double-click and OPEN the file
+     he meant to drag. release() is the fail-safe: safe to call at any time,
+     any number of times. */
+  const HOLD_KEEP_MS = 300, DBLCLICK_GUARD_MS = 650;
+  class HoldRelay {
+    constructor(o){
+      o = o || {};
+      this.invoke = o.invoke || null;
+      this.onStatus = o.onStatus || (() => {});
+      this.lastClickAt = o.lastClickAt || (() => -1e9);
+      this.state = 'idle'; this.offset = null; this.latest = null; this.busy = false; this.sentAt = 0; this.pressTimer = null;
+    }
+    get holding(){ return this.state === 'down' || this.state === 'pressing'; }
+    handle(h, now){
+      if(!h || !this.invoke) return;
+      if(h.type === 'press') this.press(h);
+      else if(h.type === 'drag' && this.state !== 'idle'){
+        if(h.x != null) this.latest = h;
+        this.pump(now);
+      }
+      else if(h.type === 'release') this.release(h.reason || 'open');
+    }
+    press(h){
+      if(this.state !== 'idle') return;
+      this.state = 'pressing'; this.latest = h;
+      const wait = Math.max(0, this.lastClickAt() + DBLCLICK_GUARD_MS - Date.now());
+      const go = () => {
+        this.pressTimer = null;
+        if(this.state !== 'pressing') return;
+        Promise.resolve().then(() => this.invoke('pointer_send', { phase: 'press' })).then(r => {
+          if(this.state !== 'pressing'){                     // let go while the press was on its way
+            Promise.resolve().then(() => this.invoke('pointer_send', { phase: 'release' })).catch(() => {});
+            return;
+          }
+          const at = this.latest || h;
+          this.offset = (r && typeof r.x === 'number' && at.x != null) ? { x: r.x - at.x, y: r.y - at.y } : { x: 0, y: 0 };
+          this.state = 'down'; this.sentAt = Date.now();
+          this.onStatus({ kind: 'hold', held: true });
+        }, err => {
+          this.state = 'idle';
+          this.onStatus({ kind: 'hold-failed', reason: String((err && err.message) || err) });
+        });
+      };
+      if(wait > 0) this.pressTimer = setTimeout(go, wait); else go();
+    }
+    pump(now){
+      if(this.state !== 'down' || this.busy || !this.latest || this.latest.x == null) return;
+      const h = this.latest;
+      if(h.waiting && Date.now() - this.sentAt < HOLD_KEEP_MS) return;
+      const job = { phase: 'drag', x: clamp(h.x + this.offset.x, 0, 1), y: clamp(h.y + this.offset.y, 0, 1),
+                    vx: h.waiting ? 0 : (h.vx || 0), vy: h.waiting ? 0 : (h.vy || 0) };
+      this.busy = true; this.sentAt = Date.now();
+      Promise.resolve().then(() => this.invoke('pointer_send', job)).then(() => {}, () => {
+        /* Rust has let go already (watchdog, blocked input): so do we. */
+        this.release('error');
+      }).then(() => { this.busy = false; });
+    }
+    /* The fail-safe. Always sends the release when anything might be down. */
+    release(reason){
+      if(this.pressTimer){ clearTimeout(this.pressTimer); this.pressTimer = null; }
+      const was = this.state;
+      this.state = 'idle'; this.latest = null; this.offset = null;
+      if(was === 'idle' && reason !== 'force') return;
+      if(this.invoke) Promise.resolve().then(() => this.invoke('pointer_send', { phase: 'release' })).catch(() => {});
+      if(was !== 'idle') this.onStatus({ kind: 'hold', held: false, reason });
     }
   }
 
@@ -1005,6 +1240,7 @@
       }
       if(!this.active || this.failed) return;
       if(p.type === 'click'){
+        this.lastClickAt = Date.now();
         this.move = null; this.queue.push({ phase: 'click', x: p.x, y: p.y });
         this.onStatus({ kind: 'pointer-click' });
       } else if(p.x != null && (p.type === 'start' || p.type === 'move' || p.type === 'freeze')){
@@ -1457,6 +1693,12 @@
     let settings = normaliseSettings(o.settings);
     const gesture = new HandGestures(settings);
     const bump = new FistBump();
+    let holdLabel = '';
+    const hold = new HoldRelay({ invoke: o.invoke, lastClickAt: () => (pointer && pointer.lastClickAt) || -1e9, onStatus: (s) => {
+      if(s.kind === 'hold') holdLabel = s.held ? 'HOLD' : '';
+      else if(s.kind === 'hold-failed') holdLabel = 'HOLD FAILED · ' + (s.reason || '');
+      if(o.onStatus) o.onStatus(s);
+    } });
     let bumpLabel = '', bumpLabelUntil = 0;
     /* The bump's one job: the window he is in, minimised by Rust. */
     function minimiseNow(t){
@@ -1522,6 +1764,7 @@
        hand control switched off in the settings. */
     let filterFn = null;
     function endGestures(){
+      hold.release('stopped');
       relay.handle({ type: 'end', state: 'idle' });
       pointer.handle({ type: 'end' });
       if(gesture.state !== 'idle') manager.handle({ type: 'end' });
@@ -1672,6 +1915,7 @@
             return;
           }
           if(filterFn){
+            hold.release('filter');
             if(tracker.hands !== 2 && t2 - lastHandsSwitch > 1500 && tracker.setHands(2)) lastHandsSwitch = t2;
             try{ filterFn({ t: t2, hands, width: video.videoWidth, height: video.videoHeight }); }
             catch(e){ if(o.onStatus) o.onStatus({ kind: 'error', reason: 'filter: ' + String((e && e.message) || e) }); }
@@ -1683,10 +1927,11 @@
           /* Two fists: nothing else uses them (a fist is never a pinch or a
              pointing finger), so the bump is read alongside, and only while
              no zoom, turn or finger mouse is under way. */
-          if(settings.bumpEnabled && !ev.active){
+          if(settings.bumpEnabled && !ev.active && !hold.holding){
             ev.bump = bump.update(t2, gesture.zoom.lastMetrics);
             if(ev.bump.type === 'bump') minimiseNow(t2);
           } else if(bump.state !== 'idle') bump.reset();
+          hold.handle(ev.hold, t2);
           /* ONE HAND WHILE THE FINGER IS THE MOUSE (2.21.0): the second-hand
              search is half of a read, and he cannot start a zoom with the
              other hand while pointing anyway (one gesture at a time). Back to
@@ -1709,9 +1954,20 @@
           }
           if(rec) recordFrame(t2, t, meta, hands, ev);
           drawOverlay(overlay, video, ev, (rec ? 'REC ' + Math.max(0, Math.ceil((rec.until - t2) / 1000)) + ' s' : '') ||
-                      (t2 < bumpLabelUntil ? bumpLabel : '') || label || (ev.state === 'armed' ? 'ZOOM · READY' : '') || pointerLabel || turnLabel);
+                      (t2 < bumpLabelUntil ? bumpLabel : '') || holdLabel || label || (ev.state === 'armed' ? 'ZOOM · READY' : '') || pointerLabel || turnLabel);
         }
-      }catch(e){ if(o.onStatus) o.onStatus({ kind: 'error', reason: String((e && e.message) || e) }); }
+      }catch(e){
+        hold.release('error');                    // never a button left down behind an error
+        if(o.onStatus) o.onStatus({ kind: 'error', reason: String((e && e.message) || e) });
+      }
+    }
+    /* The window going away (closed, reloaded): let go first. Rust also lets
+       go when the camera window is destroyed, and on its watchdog. */
+    if(root.addEventListener){
+      try{
+        root.addEventListener('pagehide', () => hold.release('force'));
+        root.addEventListener('beforeunload', () => hold.release('force'));
+      }catch(e){}
     }
     /* THE RECORDER (2.20.0): half a minute of what the tracker saw, for
        studying on his own camera and hands. Per frame: when it was read, how
@@ -1756,7 +2012,7 @@
     }
 
     const api = {
-      gesture, manager, relay, pointer, bump,
+      gesture, manager, relay, pointer, bump, hold,
       /* Record `seconds` of tracking; resolves with { text, frames, summary }. */
       record(seconds){
         return new Promise((resolve) => {
@@ -1793,6 +2049,7 @@
       },
       stop(){
         running = false;
+        hold.release('stopped');
         if(rec) finishRecording();
         unschedule();
         if(pingTimer){ clearInterval(pingTimer); pingTimer = null; }
@@ -1817,13 +2074,14 @@
 
   root.JarvisGestureZoom = {
     DEFAULTS, LIMITS, STORE_KEY, normaliseSettings, OneEuro, handMetrics, PinchState, TwoHandZoom,
-    HandGestures, TurnRelay, PointerTracker, PointerRelay, BONES, FistBump, isFist,
+    HandGestures, TurnRelay, PointerTracker, PointerRelay, BONES, FistBump, isFist, FistHold, HoldRelay, isFullFist, isOpenHand,
     ADAPTERS, selectAdapter, ZoomManager, createTracker, drawOverlay, startGestureZoom,
     constants: { PINCH_ON, PINCH_OFF, FIST_GUARD, PALM_CM, PALM_RAY, ARM_MS, STEP_3D,
                  TURN_ARM_MS, TURN_DEAD_MM, TURN_JUMP, TURN_MAX_FRAME, TURN_PRESENT_MS, TURN_KEEP_MS, SCROLL_UNITS_PER_DEG,
                  FINGER_STRAIGHT, FINGER_FOLDED, OTHERS_OPEN, POINT_ARM_DEG, STRAIGHT_DEG, CLICK_DEG,
                  POINT_ARM_MS, FOLD_FRAMES, CLICK_REARM, LEAVE_FRAMES, POINT_LOST_MS, POINTER_BOX, POINTER_FILTER, TURN_GRACE_MS,
                  POINTER_VEL_ALPHA, JUMP_GATE, JUMP_SPEED, JUMP_ACCEPT, JUMP_SAME, POSE_GRACE_FRAMES, STUCK_DEG, STUCK_REARM_MS,
-                 BUMP_APART, BUMP_TOUCH, BUMP_NEAR, BUMP_WINDOW_MS, BUMP_APART_FRAMES, BUMP_BEND_DEG, BUMP_LOST_MS, BUMP_COOL_MS }
+                 BUMP_APART, BUMP_TOUCH, BUMP_NEAR, BUMP_WINDOW_MS, BUMP_APART_FRAMES, BUMP_BEND_DEG, BUMP_LOST_MS, BUMP_COOL_MS,
+                 HOLD_PRIME_MS, HOLD_OPEN_FRAMES, HOLD_LOST_MS, THUMB_FOLDED, HOLD_MAX_JUMP, HOLD_MAX_Y, HOLD_KEEP_MS, DBLCLICK_GUARD_MS }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

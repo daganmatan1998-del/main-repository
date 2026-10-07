@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-shutdown-app"
+description = "Enables the shutdown_app command without any pre-configured scope."
+commands.allow = ["shutdown_app"]
+
+[[permission]]
+identifier = "deny-shutdown-app"
+description = "Denies the shutdown_app command without any pre-configured scope."
+commands.deny = ["shutdown_app"]

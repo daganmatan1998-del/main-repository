@@ -2497,6 +2497,397 @@ fn open_in_chrome(url: String) -> Result<serde_json::Value, String> {
     }
 }
 
+/* "OPEN ... APP" — THE INSTALLED PROGRAM, NEVER ITS WEBSITE (page 2.31.0).
+
+   "Open Discord app", "open the Spotify app", "open File Explorer app":
+   the program installed on this computer, found the way Windows itself
+   lists programs, never from a list kept here:
+     - the Start menu's apps (Get-StartApps): every installed desktop
+       program with a Start menu entry AND every Store app (Spotify and
+       WhatsApp from the Store, Calculator, Settings, File Explorer), each
+       with the id Windows launches it by;
+     - App Paths in the registry: programs registered by their file name
+       (chrome.exe, winword.exe) whether or not they have a menu entry;
+     - and, if PowerShell cannot answer, the Start menu's shortcut files.
+   The list is read once in the background at start, kept INSTALLED_TTL_S,
+   and read again when a name is not in it (something installed since).
+
+   The page sends the name as he said it plus what its own table knows it
+   by ("vs code" -> "Visual Studio Code"); each is matched against every
+   installed name: exact, a whole-word prefix, all its words, or close
+   enough in spelling (a transcription mistake) - and never an uninstaller,
+   a readme or a help file. Nothing close enough is {ok:false, code:
+   "not_found", suggestions}: the page says it plainly and opens nothing,
+   least of all the website. Launching is Windows' own: the Start menu
+   entry by its id (shell:AppsFolder), a registered file name by name.
+   Nothing here takes arguments or paths from the page. */
+#[derive(Clone, Debug)]
+struct InstalledApp {
+    name: String,
+    id: String,
+    kind: &'static str,
+}
+
+static INSTALLED: std::sync::Mutex<Option<(std::time::Instant, Vec<InstalledApp>)>> = std::sync::Mutex::new(None);
+const INSTALLED_TTL_S: u64 = 600;
+
+#[cfg(target_os = "windows")]
+fn installed_apps_read() -> Vec<InstalledApp> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let script = r#"[Console]::OutputEncoding=[Text.Encoding]::UTF8
+$a=@()
+try { Get-StartApps | ForEach-Object { $a += [pscustomobject]@{n=$_.Name;id=$_.AppID;k='start'} } } catch {}
+foreach($r in 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths','HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths'){
+  Get-ChildItem $r -ErrorAction SilentlyContinue | ForEach-Object { $a += [pscustomobject]@{n=($_.PSChildName -replace '\.exe$','');id=$_.PSChildName;k='path'} }
+}
+ConvertTo-Json -InputObject $a -Compress"#;
+    let mut out: Vec<InstalledApp> = Vec::new();
+    if let Ok(o) = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        let text = String::from_utf8_lossy(&o.stdout);
+        if let Ok(serde_json::Value::Array(items)) = serde_json::from_str::<serde_json::Value>(text.trim().trim_start_matches('\u{feff}')) {
+            for it in items {
+                let n = it.get("n").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+                let id = it.get("id").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+                let kind = if it.get("k").and_then(|v| v.as_str()) == Some("path") { "path" } else { "start" };
+                if !n.is_empty() && !id.is_empty() {
+                    out.push(InstalledApp { name: n, id, kind });
+                }
+            }
+        }
+    }
+    /* No PowerShell answer: the Start menu's own shortcut files. */
+    if !out.iter().any(|a| a.kind == "start") {
+        let mut roots: Vec<std::path::PathBuf> = Vec::new();
+        for k in ["ProgramData", "APPDATA"] {
+            if let Some(p) = std::env::var_os(k) {
+                roots.push(std::path::PathBuf::from(p).join("Microsoft").join("Windows").join("Start Menu").join("Programs"));
+            }
+        }
+        let mut stack = roots;
+        let mut seen = 0;
+        while let Some(dir) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+            for e in rd.flatten() {
+                seen += 1;
+                if seen > 5000 {
+                    break;
+                }
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if let Some(ext) = p.extension().and_then(|x| x.to_str()) {
+                    if ["lnk", "url", "appref-ms"].contains(&ext.to_lowercase().as_str()) {
+                        if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                            out.push(InstalledApp { name: stem.to_string(), id: p.display().to_string(), kind: "lnk" });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+#[cfg(not(target_os = "windows"))]
+fn installed_apps_read() -> Vec<InstalledApp> {
+    Vec::new()
+}
+
+fn installed_apps(fresh: bool) -> Vec<InstalledApp> {
+    if !fresh {
+        if let Ok(g) = INSTALLED.lock() {
+            if let Some((at, list)) = g.as_ref() {
+                if at.elapsed().as_secs() < INSTALLED_TTL_S && !list.is_empty() {
+                    return list.clone();
+                }
+            }
+        }
+    }
+    let list = installed_apps_read();
+    if let Ok(mut g) = INSTALLED.lock() {
+        *g = Some((std::time::Instant::now(), list.clone()));
+    }
+    list
+}
+
+/* Lower case, words only: "Visual Studio Code (User)" -> "visual studio code user". */
+fn app_words(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        if ch.is_alphanumeric() {
+            out.extend(ch.to_lowercase());
+        } else {
+            out.push(' ');
+        }
+    }
+    out.split_whitespace()
+        .filter(|w| !matches!(*w, "the" | "my" | "app" | "application" | "program" | "desktop" | "microsoft"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn app_edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for i in 1..=a.len() {
+        let mut cur = vec![i; b.len() + 1];
+        for j in 1..=b.len() {
+            let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
+            cur[j] = (prev[j] + 1).min(cur[j - 1] + 1).min(prev[j - 1] + cost);
+        }
+        prev = cur;
+    }
+    prev[b.len()]
+}
+
+/* How well an installed name answers to what he said, 0..100. */
+fn app_match_score(query: &str, name: &str) -> i32 {
+    let q = app_words(query);
+    let n = app_words(name);
+    if q.is_empty() || n.is_empty() {
+        return 0;
+    }
+    let junk = ["uninstall", "readme", "read me", "help", "manual", "documentation", "release notes", "license", "changelog", "website", "support", "what s new", "faq"];
+    if junk.iter().any(|j| n.contains(j)) && !junk.iter().any(|j| q.contains(j)) {
+        return 0;
+    }
+    if q == n {
+        return 100;
+    }
+    let (qc, nc): (String, String) = (q.replace(' ', ""), n.replace(' ', ""));
+    if qc == nc {
+        return 96;
+    }
+    let nw: Vec<&str> = n.split(' ').collect();
+    let qw: Vec<&str> = q.split(' ').collect();
+    /* "steam" -> "Steam", "chrome" -> "Google Chrome": every word he said is a word of the name. */
+    if qw.iter().all(|w| nw.contains(w)) {
+        /* A version number is not an extra word: "Visual Studio" is
+           "Visual Studio 2022" more than it is "Visual Studio Code". */
+        let extra = nw.iter().filter(|w| !qw.contains(w) && !w.chars().all(|c| c.is_ascii_digit())).count() as i32;
+        return (88 - extra * 4).max(72);
+    }
+    /* "vs code" -> "Visual Studio Code": the initials. */
+    let initials: String = nw.iter().filter_map(|w| w.chars().next()).collect();
+    let lead: String = nw[..nw.len().saturating_sub(1)].iter().filter_map(|w| w.chars().next()).collect();
+    if qc.len() >= 2
+        && (initials == qc || (qw.len() == 2 && nw.len() >= 3 && lead == qw[0] && nw.last() == qw.last()))
+    {
+        return 80;
+    }
+    /* A word that is the start of the name's first word: "photo" -> "Photoshop". */
+    if qw.len() == 1 && qc.len() >= 4 && nw[0].starts_with(&qc) {
+        return 74;
+    }
+    /* Spelled close enough - a transcription slip: one letter off in a
+       name of four to six letters, two in a longer one. Against the whole
+       name, or (one word said) against each of its words. */
+    let allowed = |len: usize| if len >= 7 { 2 } else if len >= 4 { 1 } else { 0 };
+    let mut best: Option<usize> = None;
+    let mut consider = |a: &str, b: &str| {
+        let len = a.chars().count().min(b.chars().count());
+        let d = app_edit_distance(a, b);
+        if d <= allowed(len) {
+            best = Some(best.map_or(d, |x: usize| x.min(d)));
+        }
+    };
+    consider(&qc, &nc);
+    if qw.len() == 1 {
+        for w in &nw {
+            consider(&qc, w);
+        }
+    }
+    match best {
+        Some(d) => 76 - 2 * d as i32,
+        None => 0,
+    }
+}
+
+fn find_installed_app(names: &[String], apps: &[InstalledApp]) -> (Option<InstalledApp>, Vec<String>) {
+    let mut best: Option<(i32, usize, &InstalledApp)> = None;
+    let mut near: Vec<(i32, String)> = Vec::new();
+    for a in apps {
+        let s = names.iter().map(|q| app_match_score(q, &a.name)).max().unwrap_or(0);
+        if s <= 0 {
+            continue;
+        }
+        let kind_rank = match a.kind { "start" => 0, "lnk" => 1, _ => 2 };
+        let better = match best {
+            None => true,
+            Some((bs, bk, ba)) => s > bs || (s == bs && (kind_rank < bk || (kind_rank == bk && a.name.len() < ba.name.len()))),
+        };
+        if better {
+            best = Some((s, kind_rank, a));
+        }
+        if !near.iter().any(|(_, n)| n == &a.name) {
+            near.push((s, a.name.clone()));
+        }
+    }
+    near.sort_by(|a, b| b.0.cmp(&a.0));
+    let suggestions: Vec<String> = near.into_iter().take(4).map(|(_, n)| n).collect();
+    match best {
+        Some((s, _, a)) if s >= 72 => (Some(a.clone()), suggestions),
+        _ => (None, suggestions),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn shell_run(file: &str, params: Option<&str>) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE};
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let wide = |s: &str| -> Vec<u16> { std::ffi::OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect() };
+    let verb = wide("open");
+    let f = wide(file);
+    let p = params.map(wide);
+    let code = unsafe {
+        CoInitializeEx(std::ptr::null(), (COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) as u32);
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            f.as_ptr(),
+            p.as_ref().map(|v| v.as_ptr()).unwrap_or(std::ptr::null()),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    } as isize;
+    code > 32
+}
+
+#[tauri::command]
+async fn launch_installed_app(names: Vec<String>) -> Result<serde_json::Value, String> {
+    let names: Vec<String> = names.into_iter().map(|n| n.trim().to_string()).filter(|n| n.chars().count() >= 2).take(8).collect();
+    if names.is_empty() {
+        return Err("no program name given".into());
+    }
+    if cfg!(not(target_os = "windows")) {
+        return Ok(serde_json::json!({ "ok": false, "code": "not_windows" }));
+    }
+    let lookup = names.clone();
+    let (mut found, mut suggestions) = tauri::async_runtime::spawn_blocking(move || {
+        let apps = installed_apps(false);
+        find_installed_app(&lookup, &apps)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    if found.is_none() {
+        /* Installed since the list was read? Read it again, once. */
+        let lookup = names.clone();
+        let again = tauri::async_runtime::spawn_blocking(move || {
+            let apps = installed_apps(true);
+            find_installed_app(&lookup, &apps)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        found = again.0;
+        suggestions = again.1;
+    }
+    let Some(app) = found else {
+        return Ok(serde_json::json!({ "ok": false, "code": "not_found", "suggestions": suggestions }));
+    };
+    #[cfg(target_os = "windows")]
+    {
+        let launched = match app.kind {
+            "start" => shell_run("explorer.exe", Some(&format!("shell:AppsFolder\\{}", app.id))),
+            _ => shell_run(&app.id, None),
+        };
+        if !launched {
+            return Ok(serde_json::json!({ "ok": false, "code": "launch_failed", "name": app.name }));
+        }
+    }
+    Ok(serde_json::json!({ "ok": true, "name": app.name, "kind": app.kind }))
+}
+
+/* Read the list once in the background, so the first "open ... app" does
+   not wait for PowerShell. */
+fn installed_apps_warm() {
+    std::thread::spawn(|| {
+        let _ = installed_apps(false);
+    });
+}
+
+/* "GO FULL SCREEN" FROM THE WEB APP (2.31.0): a jarvis:// link.
+
+   The web app (the Cloudflare site in Chrome) cannot start a program, so
+   "go full screen" there opens jarvis://sleep, which Windows hands to this
+   app: started if it is not running, and if it is, the copy already
+   running gets the link (single-instance) instead of a second JARVIS
+   starting. "Open X app" said to the web app arrives the same way, as
+   jarvis://open-app?name=X - only ever a name, matched against what is
+   installed by launch_installed_app above.
+
+   Each link becomes an action queued here, the orb's page is pinged
+   (jarvis://launch-action), and it takes the queue with take_launch_actions
+   when it is ready - on a cold start the link arrives before the page has
+   loaded, so a ping alone could be missed; the page also asks once when it
+   starts. "sleep" also puts the camera window down here, at once. */
+static LAUNCH_ACTIONS: std::sync::Mutex<Vec<serde_json::Value>> = std::sync::Mutex::new(Vec::new());
+
+fn launch_action_of(url: &str) -> Option<serde_json::Value> {
+    let u = tauri::Url::parse(url.trim()).ok()?;
+    if u.scheme() != "jarvis" {
+        return None;
+    }
+    let what = format!("{}{}", u.host_str().unwrap_or(""), u.path()).trim_matches('/').to_lowercase();
+    match what.as_str() {
+        "sleep" | "fullscreen" | "full-screen" => Some(serde_json::json!({ "action": "sleep" })),
+        "open-app" => {
+            let name = u.query_pairs().find(|(k, _)| k == "name").map(|(_, v)| v.trim().chars().take(60).collect::<String>())?;
+            if name.chars().count() < 2 || name.contains(['\\', '/', ':', '"', '<', '>', '|']) {
+                return None;
+            }
+            Some(serde_json::json!({ "action": "open-app", "name": name }))
+        }
+        _ => None,
+    }
+}
+
+fn handle_launch_urls(app: &tauri::AppHandle, urls: Vec<String>) {
+    let mut any = false;
+    for url in urls {
+        if let Some(a) = launch_action_of(&url) {
+            if a["action"] == "sleep" {
+                minimize_camera(app);
+            }
+            if let Ok(mut q) = LAUNCH_ACTIONS.lock() {
+                q.push(a);
+                any = true;
+            }
+        }
+    }
+    if any {
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.emit("jarvis://launch-action", ());
+        }
+    }
+}
+
+#[tauri::command]
+fn take_launch_actions() -> Vec<serde_json::Value> {
+    LAUNCH_ACTIONS.lock().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default()
+}
+
+/* The camera window, down to the taskbar with the orb asleep. It keeps
+   running (minimised, not closed), so the camera is not lost. */
+fn minimize_camera(app: &tauri::AppHandle) -> bool {
+    match app.get_webview_window("camera") {
+        Some(w) => w.minimize().is_ok(),
+        None => false,
+    }
+}
+
+#[tauri::command]
+fn minimize_camera_window(app: tauri::AppHandle) -> bool {
+    minimize_camera(&app)
+}
+
 /* "OPEN YOUR BASE APP" (page 2.31.0): the site, in Chrome, as a window of
    its own - the same thing the desktop shortcut JARVIS-INSTALL-APP.bat
    makes. Always SITE_URL and nothing else: the page cannot steer it to
@@ -4075,11 +4466,68 @@ struct PointerState {
     sent: (i64, i64),
     failed: Option<String>,
     period: bool,
+    /* The left button, held by a closed fist (2.31.0): whether it is down,
+       and when the page last said the fist was still closed. */
+    held: bool,
+    held_last: f64,
 }
 
 #[cfg(target_os = "windows")]
-static POINTER: std::sync::Mutex<PointerState> =
-    std::sync::Mutex::new(PointerState { monitor: None, glide: None, sent: (i64::MIN, i64::MIN), failed: None, period: false });
+static POINTER: std::sync::Mutex<PointerState> = std::sync::Mutex::new(PointerState {
+    monitor: None,
+    glide: None,
+    sent: (i64::MIN, i64::MIN),
+    failed: None,
+    period: false,
+    held: false,
+    held_last: 0.0,
+});
+
+/* THE FIST HOLDS THE LEFT BUTTON (2.31.0).
+
+   A closed fist is the left button pressed and HELD where the pointer is;
+   the cursor then follows the fist (the same glide as the pointing finger),
+   so whatever Windows does with a held button happens for real: a file is
+   dragged, a rubber band selects several, a window is moved. Opening the
+   hand lets go. Phases of pointer_send: "press", "drag" (as "move", while
+   held), "release".
+
+   A button must never be left down. The page lets go whenever the fist
+   opens, the hand is lost, the camera stops or anything goes wrong; and
+   here, independently: the glide thread lets go if HOLD_WATCHDOG_MS pass
+   with no word from the page (the camera window frozen, closed, crashed),
+   the camera window closing lets go (pointer_force_release), and so does
+   JARVIS quitting. */
+#[cfg(target_os = "windows")]
+const HOLD_WATCHDOG_MS: f64 = 1200.0;
+
+/* Let go of a held button, where the cursor is. */
+#[cfg(target_os = "windows")]
+fn pointer_let_go(st: &mut PointerState) -> bool {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::MOUSEEVENTF_LEFTUP;
+    if !st.held {
+        return false;
+    }
+    st.held = false;
+    unsafe {
+        let (x, y) = cursor_position();
+        drag_inputs(&mut [drag_input(x, y, MOUSEEVENTF_LEFTUP)]);
+    }
+    true
+}
+
+/* From anywhere: the camera window closing, JARVIS quitting. */
+#[cfg(target_os = "windows")]
+fn pointer_force_release() {
+    if let Ok(mut st) = POINTER.lock() {
+        if pointer_let_go(&mut st) {
+            pointer_release(&mut st);
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn pointer_force_release() {}
 #[cfg(target_os = "windows")]
 static POINTER_THREAD: std::sync::Once = std::sync::Once::new();
 
@@ -4119,9 +4567,11 @@ unsafe fn cursor_position() -> (f64, f64) {
     }
 }
 
-/* The pointer is let go: no more moving, the timer back to normal. */
+/* The pointer is let go: no more moving, the timer back to normal. A
+   button still held is let go first: the pointer never stops with it down. */
 #[cfg(target_os = "windows")]
 fn pointer_release(st: &mut PointerState) {
+    pointer_let_go(st);
     st.glide = None;
     st.monitor = None;
     st.sent = (i64::MIN, i64::MIN);
@@ -4140,6 +4590,10 @@ fn pointer_glide_loop() {
         let mut wait = 25u64;
         if let Ok(mut st) = POINTER.lock() {
             let now = pointer_clock_ms();
+            /* The watchdog: a held button with no word from the page. */
+            if st.held && now - st.held_last > HOLD_WATCHDOG_MS {
+                pointer_release(&mut st);
+            }
             if let Some(p) = st.glide.as_mut().map(|g| g.step(now)) {
                 wait = 4;
                 let to = (p.0.round() as i64, p.1.round() as i64);
@@ -4198,10 +4652,48 @@ fn pointer_send(
                 Ok(serde_json::json!({ "phase": "start", "monitor": [m.0, m.1, m.2, m.3] }))
             }
             "end" => {
-                pointer_release(&mut st);
-                Ok(serde_json::json!({ "phase": "end" }))
+                /* The pointing finger is done; a fist holding the button
+                   owns the glide now and lets go with "release". */
+                if !st.held {
+                    pointer_release(&mut st);
+                }
+                Ok(serde_json::json!({ "phase": "end", "held": st.held }))
             }
-            "move" | "click" => {
+            "press" => {
+                use windows_sys::Win32::UI::Input::KeyboardAndMouse::MOUSEEVENTF_LEFTDOWN;
+                let from = cursor_position();
+                if st.glide.is_none() {
+                    let m = monitor_under_pointer();
+                    pointer_begin(&mut st, m, from);
+                }
+                if let Some(g) = st.glide.as_mut() {
+                    g.snap(from.0, from.1, pointer_clock_ms());
+                }
+                if !st.held {
+                    if !drag_inputs(&mut [drag_input(from.0, from.1, MOUSEEVENTF_LEFTDOWN)]) {
+                        return Err("Windows blocked the input (an elevated program, or a secure screen)".into());
+                    }
+                    st.held = true;
+                }
+                st.held_last = pointer_clock_ms();
+                let (l, t, w, h) = st.monitor.unwrap_or_else(|| monitor_under_pointer());
+                Ok(serde_json::json!({ "phase": "press", "x": (from.0 - l) / (w - 1.0).max(1.0), "y": (from.1 - t) / (h - 1.0).max(1.0) }))
+            }
+            "release" => {
+                let was = pointer_let_go(&mut st);
+                pointer_release(&mut st);
+                Ok(serde_json::json!({ "phase": "release", "was_held": was }))
+            }
+            "move" | "click" | "drag" => {
+                if phase == "drag" && !st.held {
+                    return Err("no button is held".into());
+                }
+                if phase == "click" && st.held {
+                    return Err("the button is already held".into());
+                }
+                if st.held {
+                    st.held_last = pointer_clock_ms();
+                }
                 let (x, y) = match (x, y) {
                     (Some(x), Some(y)) if x.is_finite() && y.is_finite() => (x.clamp(0.0, 1.0), y.clamp(0.0, 1.0)),
                     _ => return Err("no place to point at".into()),
@@ -4217,12 +4709,12 @@ fn pointer_send(
                 };
                 let (px, py) = (l + x * (w - 1.0), t + y * (h - 1.0));
                 let now = pointer_clock_ms();
-                if phase == "move" {
+                if phase == "move" || phase == "drag" {
                     let (vx, vy) = (vx.filter(|v| v.is_finite()).unwrap_or(0.0), vy.filter(|v| v.is_finite()).unwrap_or(0.0));
                     if let Some(g) = st.glide.as_mut() {
                         g.set(px, py, vx * (w - 1.0), vy * (h - 1.0), now, late);
                     }
-                    Ok(serde_json::json!({ "phase": "move", "x": px, "y": py }))
+                    Ok(serde_json::json!({ "phase": phase, "x": px, "y": py }))
                 } else {
                     /* The click goes exactly where he pointed, at rest. */
                     if let Some(g) = st.glide.as_mut() {
@@ -4543,6 +5035,12 @@ fn main() {
         );
     }
     tauri::Builder::default()
+        /* First, so a second JARVIS started by a jarvis:// link hands the
+           link to this one and exits before anything else starts. */
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            handle_launch_urls(app, argv.into_iter().filter(|a| a.starts_with("jarvis:")).collect());
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             close_foreground_window,
@@ -4590,7 +5088,10 @@ fn main() {
             open_in_chrome,
             close_app,
             minimize_window,
-            open_base_app
+            open_base_app,
+            launch_installed_app,
+            take_launch_actions,
+            minimize_camera_window
         ])
         .setup(|app| {
             let window = app
@@ -4598,8 +5099,33 @@ fn main() {
                 .expect("the main window is missing from tauri.conf.json");
 
             park_on_right_edge(&window);
-            let _ = window.show();
-            let _ = window.set_focus();
+
+            /* jarvis:// links (2.31.0): registered for this copy of the app,
+               the one it was started with read, later ones handed over. */
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                #[cfg(target_os = "windows")]
+                let _ = app.deep_link().register_all();
+                let handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    handle_launch_urls(&handle, event.urls().iter().map(|u| u.to_string()).collect());
+                });
+                let first: Vec<String> = app
+                    .deep_link()
+                    .get_current()
+                    .ok()
+                    .flatten()
+                    .map(|v| v.iter().map(|u| u.to_string()).collect())
+                    .unwrap_or_default();
+                let started_asleep = first.iter().any(|u| launch_action_of(u).map(|a| a["action"] == "sleep").unwrap_or(false));
+                handle_launch_urls(app.handle(), first);
+                /* Started by "go full screen": straight to sleep, never shown. */
+                if !started_asleep {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            installed_apps_warm();
 
             /* Registered through the native plugin, not a keydown listener in
                the page. A listener in the webview only fires while the window
@@ -4699,7 +5225,10 @@ fn main() {
                     "hide" => {
                         let _ = tray_window.hide();
                     }
-                    "quit" => app.exit(0),
+                    "quit" => {
+                        pointer_force_release();
+                        app.exit(0)
+                    }
                     _ => {}
                 })
                 .build(app)?;
@@ -4721,6 +5250,8 @@ fn main() {
                filming. Told directly, before the early return below. */
             if window.label() == "camera" {
                 if let tauri::WindowEvent::Destroyed = event {
+                    /* The fist's button is never left down behind it. */
+                    pointer_force_release();
                     if let Some(main) = window.app_handle().get_webview_window("main") {
                         let _ = main.emit("jarvis://camera-closed", true);
                     }
