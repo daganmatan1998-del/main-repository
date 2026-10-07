@@ -2838,6 +2838,7 @@ fn launch_action_of(url: &str) -> Option<serde_json::Value> {
     let what = format!("{}{}", u.host_str().unwrap_or(""), u.path()).trim_matches('/').to_lowercase();
     match what.as_str() {
         "sleep" | "fullscreen" | "full-screen" => Some(serde_json::json!({ "action": "sleep" })),
+        "open-folder" => Some(serde_json::json!({ "action": "open-folder" })),
         "open-app" => {
             let name = u.query_pairs().find(|(k, _)| k == "name").map(|(_, v)| v.trim().chars().take(60).collect::<String>())?;
             if name.chars().count() < 2 || name.contains(['\\', '/', ':', '"', '<', '>', '|']) {
@@ -2855,6 +2856,11 @@ fn handle_launch_urls(app: &tauri::AppHandle, urls: Vec<String>) {
         if let Some(a) = launch_action_of(&url) {
             if a["action"] == "sleep" {
                 minimize_camera(app);
+            }
+            /* Nothing for the page to do: the folder just opens. */
+            if a["action"] == "open-folder" {
+                let _ = open_jarvis_folder();
+                continue;
             }
             if let Ok(mut q) = LAUNCH_ACTIONS.lock() {
                 q.push(a);
@@ -2892,25 +2898,130 @@ fn minimize_camera_window(app: tauri::AppHandle) -> bool {
    its own - the same thing the desktop shortcut JARVIS-INSTALL-APP.bat
    makes. Always SITE_URL and nothing else: the page cannot steer it to
    another address. */
+/* maximize (2.32.0, "go full screen"): once its window appears - the page's
+   title is J.A.R.V.I.S. - it is maximised and brought to the front. Looked
+   for for up to BASE_APP_WAIT_MS, in the background. */
+#[cfg(target_os = "windows")]
+const BASE_APP_WAIT_MS: u64 = 10000;
+
+#[cfg(target_os = "windows")]
+fn base_app_maximize_when_up() {
+    std::thread::spawn(|| {
+        use windows_sys::Win32::Foundation::HWND;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow, SW_MAXIMIZE};
+        let started = std::time::Instant::now();
+        while started.elapsed().as_millis() < BASE_APP_WAIT_MS as u128 {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            let found = bring_app_windows(&[])
+                .into_iter()
+                .find(|c| (c.exe == "chrome" || c.exe == "msedge") && c.title.to_lowercase().contains("j.a.r.v.i.s"));
+            if let Some(c) = found {
+                unsafe {
+                    ShowWindow(c.hwnd as HWND, SW_MAXIMIZE);
+                    SetForegroundWindow(c.hwnd as HWND);
+                }
+                return;
+            }
+        }
+    });
+}
+
 #[tauri::command]
-fn open_base_app() -> Result<serde_json::Value, String> {
+fn open_base_app(maximize: Option<bool>) -> Result<serde_json::Value, String> {
     #[cfg(target_os = "windows")]
     {
         let arg = format!("--app={}", SITE_URL);
+        let mut opened = false;
         for exe in chrome_candidates() {
             if exe.is_file() && shell_open_with(exe.as_os_str(), &arg) {
-                return Ok(serde_json::json!({ "opened": true, "via": "chrome" }));
+                opened = true;
+                break;
             }
         }
-        if shell_open_with(std::ffi::OsStr::new("chrome.exe"), &arg) {
-            return Ok(serde_json::json!({ "opened": true, "via": "chrome" }));
+        if !opened {
+            opened = shell_open_with(std::ffi::OsStr::new("chrome.exe"), &arg);
         }
-        Ok(serde_json::json!({ "opened": false, "reason": "no_chrome" }))
+        if !opened {
+            return Ok(serde_json::json!({ "opened": false, "reason": "no_chrome" }));
+        }
+        if maximize.unwrap_or(false) {
+            base_app_maximize_when_up();
+        }
+        Ok(serde_json::json!({ "opened": true, "via": "chrome" }))
     }
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = maximize;
         Ok(serde_json::json!({ "opened": false, "reason": "not_windows" }))
     }
+}
+
+/* "OPEN THE JARVIS FOLDER" (2.32.0): the folder on his desktop called
+   "ג'רוויס קבצים" (JARVIS files), opened in File Explorer. Looked for on
+   every desktop Windows may be using - his own (wherever it is redirected,
+   OneDrive's included, under its English or Hebrew name) and the public one
+   - by its name with or without the apostrophe (' or ׳), in Hebrew or
+   English; then any folder there whose name says both JARVIS and files.
+   Never created here: a folder that is not there is said to be not there. */
+fn jarvis_files_folder() -> Option<std::path::PathBuf> {
+    let squeeze = |s: &str| -> String {
+        s.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect()
+    };
+    let exact = ["גרוויסקבצים", "קבציגרוויס", "קבצגרוויס", "jarvisfiles", "jarvisקבצים", "גרוויסfiles"];
+    let mut desks: Vec<std::path::PathBuf> = Vec::new();
+    if let Some(d) = dirs_next::desktop_dir() {
+        desks.push(d);
+    }
+    if let Some(h) = dirs_next::home_dir() {
+        for sub in ["Desktop", "שולחן העבודה"] {
+            desks.push(h.join(sub));
+            desks.push(h.join("OneDrive").join(sub));
+        }
+    }
+    for k in ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"] {
+        if let Some(p) = std::env::var_os(k) {
+            desks.push(std::path::PathBuf::from(&p).join("Desktop"));
+            desks.push(std::path::PathBuf::from(&p).join("שולחן העבודה"));
+        }
+    }
+    if let Some(p) = std::env::var_os("PUBLIC") {
+        desks.push(std::path::PathBuf::from(p).join("Desktop"));
+    }
+    let mut loose: Option<std::path::PathBuf> = None;
+    for d in desks {
+        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            if !p.is_dir() {
+                continue;
+            }
+            let name = squeeze(&e.file_name().to_string_lossy());
+            if exact.contains(&name.as_str()) {
+                return Some(p);
+            }
+            let says_jarvis = name.contains("jarvis") || name.contains("רוויס");
+            let says_files = name.contains("files") || name.contains("קבצ");
+            if says_jarvis && says_files && loose.is_none() {
+                loose = Some(p);
+            }
+        }
+    }
+    loose
+}
+
+#[tauri::command]
+fn open_jarvis_folder() -> Result<serde_json::Value, String> {
+    let Some(dir) = jarvis_files_folder() else {
+        return Ok(serde_json::json!({ "ok": false, "code": "not_found" }));
+    };
+    #[cfg(target_os = "windows")]
+    {
+        if !shell_run("explorer.exe", Some(&format!("\"{}\"", dir.display()))) {
+            return Ok(serde_json::json!({ "ok": false, "code": "open_failed", "path": dir.display().to_string() }));
+        }
+    }
+    Ok(serde_json::json!({ "ok": true, "path": dir.display().to_string(),
+                           "name": dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default() }))
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -5091,7 +5202,8 @@ fn main() {
             open_base_app,
             launch_installed_app,
             take_launch_actions,
-            minimize_camera_window
+            minimize_camera_window,
+            open_jarvis_folder
         ])
         .setup(|app| {
             let window = app

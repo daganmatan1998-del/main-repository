@@ -344,6 +344,21 @@
      to trust that he is not listening. */
   html.tauri.orb-muted  #scene-canvas{ opacity:0.26; filter:saturate(0.25); }
   html.tauri.orb-asleep #scene-canvas{ opacity:0.14; filter:saturate(0.12); }
+  /* A 3D file of his own (2.32.0): the large viewer, and the frame shown while a file is dragged over. */
+  #model3dOverlay{ position:fixed; inset:4vh 4vw; z-index:9000; display:flex; flex-direction:column;
+    background:rgba(0,10,22,0.94); border:1px solid rgba(80,200,255,0.45); border-radius:14px;
+    box-shadow:0 0 40px rgba(40,170,255,0.25); overflow:hidden; }
+  #model3dOverlay .m3dBar{ display:flex; align-items:center; gap:14px; padding:8px 12px; color:#bfe9ff;
+    font:13px/1.3 system-ui, sans-serif; border-bottom:1px solid rgba(80,200,255,0.25); }
+  #model3dOverlay .m3dName{ font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:40%; }
+  #model3dOverlay .m3dHint{ flex:1; opacity:0.7; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #model3dOverlay .m3dClose{ background:none; border:1px solid rgba(80,200,255,0.5); color:#bfe9ff; border-radius:8px;
+    width:30px; height:28px; cursor:pointer; font-size:14px; }
+  #model3dOverlay .m3dStage{ flex:1; min-height:0; position:relative; }
+  #model3dOverlay .m3dStage canvas{ display:block; width:100% !important; height:100% !important; }
+  html.drop-armed body::after{ content:'Drop a 3D file (.glb .gltf .obj .stl)'; position:fixed; inset:12px; z-index:9100;
+    display:flex; align-items:center; justify-content:center; border:2px dashed rgba(80,200,255,0.8); border-radius:16px;
+    background:rgba(0,12,26,0.55); color:#bfe9ff; font:600 20px system-ui, sans-serif; pointer-events:none; }
   /* Dozing: still there, still listening for his name, visibly resting. */
   html.tauri.orb-dozing #scene-canvas{ opacity:0.55; filter:saturate(0.55); }
   /* Push to talk, key up: resting, the microphone shut. Holding the key
@@ -1759,7 +1774,7 @@
     </div>
     <input id="cameraFileInput" type="file" accept="image/*" capture="environment" style="display:none;">
     <input id="galleryFileInput" type="file" accept="image/*" multiple style="display:none;">
-    <input id="docFileInput" type="file" accept=".pdf,.txt,.md,.csv,.json,.log,application/pdf,text/*,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,.mp4,.mov,.avi,.mkv,.webm" multiple style="display:none;">
+    <input id="docFileInput" type="file" accept=".pdf,.txt,.md,.csv,.json,.log,application/pdf,text/*,video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,.mp4,.mov,.avi,.mkv,.webm,.glb,.gltf,.obj,.stl" multiple style="display:none;">
   </div>
   <div id="commBar">
     <button id="micBtn" title="Talk to J.A.R.V.I.S.">MIC</button>
@@ -1799,6 +1814,10 @@
 <script>__three('build/three.min.js','THREE')</script>
 <script src="./vendor/three/examples/js/loaders/GLTFLoader.js"></script>
 <script>__three('examples/js/loaders/GLTFLoader.js','GLTFLoader')</script>
+<script src="./vendor/three/examples/js/loaders/OBJLoader.js"></script>
+<script>__three('examples/js/loaders/OBJLoader.js','OBJLoader')</script>
+<script src="./vendor/three/examples/js/loaders/STLLoader.js"></script>
+<script>__three('examples/js/loaders/STLLoader.js','STLLoader')</script>
 <script src="./vendor/three/examples/js/controls/OrbitControls.js"></script>
 <script>__three('examples/js/controls/OrbitControls.js','OrbitControls')</script>
 <script src="./vendor/three/examples/js/postprocessing/Pass.js"></script>
@@ -11165,9 +11184,12 @@ function disposeViewers(){
    is identical either way, so a procedural model handles exactly like a
    generated one. */
 function mountModelViewer(container, source, onReady){
-  const glbUrl = typeof source === 'string' ? source : (source && source.glb);
+  const glbUrl = typeof source === 'string' ? source : (source && (source.glb || source.file));
   const builder = source && source.build;
-  if(typeof THREE === 'undefined' || (glbUrl && !THREE.GLTFLoader)){
+  /* A file of his own (2.32.0): .glb / .gltf as before, or .obj / .stl. */
+  const kind = (source && source.kind) || 'glb';
+  if(typeof THREE === 'undefined' || (glbUrl && !THREE.GLTFLoader) ||
+     (kind === 'obj' && !THREE.OBJLoader) || (kind === 'stl' && !THREE.STLLoader)){
     container.textContent = 'The 3D viewer could not load.';
     return;
   }
@@ -11331,6 +11353,29 @@ function mountModelViewer(container, source, onReady){
       container.textContent = 'Could not build that model: ' + (err.message || err);
       return;
     }
+  } else if(kind === 'obj'){
+    new THREE.OBJLoader().load(glbUrl, (obj)=>{
+      /* Only the .obj arrives, never its .mtl, so every mesh gets a plain lit
+         material - a shape, not a flat silhouette. An .obj with no normals
+         gets them computed, faceted, as such models are meant to look. */
+      obj.traverse((o)=>{
+        if(!o.isMesh) return;
+        const noNormals = !o.geometry.attributes.normal;
+        if(noNormals) o.geometry.computeVertexNormals();
+        o.material = new THREE.MeshStandardMaterial({ color: 0xb8c7d6, roughness: 0.45, metalness: 0.15,
+                                                      flatShading: noNormals, side: THREE.DoubleSide });
+      });
+      frameAndAdd(obj);
+    }, undefined, ()=>{ container.textContent = 'The model could not be loaded.'; });
+  } else if(kind === 'stl'){
+    new THREE.STLLoader().load(glbUrl, (geo)=>{
+      geo.computeVertexNormals();
+      const mat = geo.hasColors ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.1 })
+                                : new THREE.MeshStandardMaterial({ color: 0xb8c7d6, roughness: 0.45, metalness: 0.15 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = -Math.PI / 2;          // STL is Z-up; the stage is Y-up
+      frameAndAdd(mesh);
+    }, undefined, ()=>{ container.textContent = 'The model could not be loaded.'; });
   } else {
     new THREE.GLTFLoader().load(glbUrl, (gltf)=> frameAndAdd(gltf.scene), undefined, ()=>{
       container.textContent = 'The model could not be loaded.';
@@ -13413,6 +13458,9 @@ const FLOW_RULES = [
      whole sentence is the window, a size or a place and nothing else. */
   { flow: 'adjust_window', strong: [ { test: (s) => !!windowAdjustOf(s) } ], bare: [] },
 
+  /* "Open the jarvis folder" (2.32.0): "ג'רוויס קבצים" on his desktop. */
+  { flow: 'jarvis_folder', strong: [ { test: (s) => isJarvisFolderOpen(s) } ], bare: [] },
+
   /* "Open your base app" (2.31.0): the Cloudflare site in its own Chrome window. */
   { flow: 'base_app', strong: [ { test: (s) => isBaseAppOpen(s) } ], bare: [] },
 
@@ -13706,7 +13754,7 @@ const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'fullscreen', '
                                       'live_full', 'live_full_exit', 'workspace', 'open_site', 'bring_window',
                                       'workspace3d', 'workspace3d_project', 'agent_atlas', 'music_on', 'music_off',
                                       'webshooter_on', 'webshooter_off', 'adjust_window', 'close_thing', 'browser_write',
-                                      'base_app', 'open_app']);
+                                      'base_app', 'open_app', 'jarvis_folder']);
 
 /* { steps: [{flow, part}], rest: [parts for the model] }, or null when the
    sentence is one request (or none) and the ordinary path should have it. */
@@ -14675,6 +14723,24 @@ async function runWorkflowCommand(flow, text){
     return true;
   }
 
+  /* "Open the jarvis folder" (2.32.0). */
+  if(flow === 'jarvis_folder'){
+    const entry = logActionStart('open_jarvis_folder', {}, 'local');
+    const res = await callOpenJarvisFolderTool();
+    logActionEnd(entry, res);
+    if(res && res.ok){ say(res.handed_to_desktop ? (he ? 'ביקשתי מאפליקציית ג׳רוויס במחשב לפתוח את התיקייה.' : 'Asked the desktop app to open the folder.')
+                                                 : (he ? 'פתחתי את ג׳רוויס קבצים.' : 'Opened your JARVIS folder.')); return true; }
+    let line;
+    if(res && res.code === 'no_desktop'){ offerDesktopButton(res.url, he); line = he ? 'Chrome לא העביר את זה לאפליקציית ג׳רוויס למחשב.' : 'Chrome did not hand that to the JARVIS desktop app.'; }
+    else if(res && res.code === 'old_app') line = he ? 'כדי לפתוח את התיקייה צריך לבנות מחדש את האפליקציה.' : 'Opening the folder needs the rebuilt desktop app.';
+    else line = he ? 'לא מצאתי על שולחן העבודה תיקייה בשם ג׳רוויס קבצים.' : 'There is no folder called ג׳רוויס קבצים on your desktop.';
+    addMessage('assistant', line);
+    chatHistory.push({ role:'assistant', content: line });
+    persistCurrentSession();
+    if(IS_DESKTOP && typeof speak === 'function') speak(line);
+    return true;
+  }
+
   /* "Open Discord app" (2.31.0). */
   if(flow === 'open_app'){
     const req = openAppRequestOf(text);
@@ -14841,32 +14907,29 @@ async function runWorkflowCommand(flow, text){
     return true;
   }
 
-  /* "GO FULL SCREEN" IS THE DESKTOP APP NOW (2.31.0). From the web app: the
-     JARVIS desktop app is started (or the one running is told) with
-     jarvis://sleep, and it goes straight to sleep - the same sleep as
-     "go down": hidden, listening only for its name or the hotkey - with
-     the camera window minimised (still running). In the desktop app itself,
-     which is that app: the same sleep, the camera down with it. Music, 3D
-     models and everything else stay as they are. "Exit full screen" and
-     double-clicking the orb still work the old way. */
-  if(flow === 'fullscreen'){
-    if(IS_DESKTOP){
-      say(he ? 'נכנס למצב שינה.' : 'Going down, sir.');
-      setTimeout(() => { enterDesktopSleep(); }, 900);
+  /* "GO FULL SCREEN" OPENS HIS JARVIS APP (2.32.0). In the desktop orb the
+     big full-screen picture of JARVIS is gone from this command: it opens the
+     JARVIS app on his desktop - the Cloudflare site in its own Chrome window,
+     maximised - and then the orb leaves the screen and the camera window is
+     minimised. The orb also stops LISTENING (handOffToBaseApp): with two
+     JARVISes hearing "hey Jarvis", both would answer. Only the 3D models and
+     the music window stay where they are. Ctrl+Shift+Space brings the orb
+     back, listening again. In the web app itself (already that app) it is
+     the page's own full screen, as before. Double-clicking the orb and "exit
+     full screen" still do what they always did. */
+  if(flow === 'fullscreen' && IS_DESKTOP){
+    const res = await callOpenBaseAppTool({ maximize: true });
+    if(!res || !res.ok){
+      say(he ? 'לא הצלחתי לפתוח את אפליקציית ג׳רוויס.' : 'I could not open the JARVIS app.');
       return true;
     }
-    const r = await openDesktopLink('sleep');
-    if(r.handed){ say(he ? 'פותח את אפליקציית ג׳רוויס במחשב, במצב שינה.' : 'Opening the desktop app, asleep.'); return true; }
-    offerDesktopButton(r.url, he);
-    const line = he ? 'Chrome לא פתח את אפליקציית ג׳רוויס למחשב. לחץ על הכפתור, או ודא שהיא מותקנת.' : 'Chrome did not open the JARVIS desktop app. Press the button, or check that it is installed.';
-    addMessage('assistant', line);
-    chatHistory.push({ role:'assistant', content: line });
-    persistCurrentSession();
+    say(he ? 'פותח את אפליקציית ג׳רוויס.' : 'Opening the JARVIS app, sir.');
+    setTimeout(() => { window.handOffToBaseApp && window.handOffToBaseApp(); }, 1200);
     return true;
   }
 
-  if(flow === 'fullscreen_exit'){
-    const on = false;
+  if(flow === 'fullscreen' || flow === 'fullscreen_exit'){
+    const on = flow === 'fullscreen';
     const res = on ? await setFullScreen(true) : await exitFullScreenLayer();
     if(res.ok && res.left === 'camera'){
       say(he ? '\u05d4\u05d7\u05d6\u05e8\u05ea\u05d9 \u05d0\u05d5\u05ea\u05da. \u05e2\u05d3\u05d9\u05d9\u05df \u05d1\u05de\u05e1\u05da \u05de\u05dc\u05d0.' : 'Camera back. Still full screen.');
@@ -15482,18 +15545,59 @@ async function callOpenAppTool(input){
            tell_the_user: 'Say plainly that the installed ' + req.label + ' program could not be found on his computer. Do not open the website instead.' };
 }
 
+/* "OPEN THE JARVIS FOLDER" (2.32.0): the folder "ג'רוויס קבצים" on his
+   desktop, in File Explorer (Rust's open_jarvis_folder finds it). From the
+   web app, handed to the desktop app as jarvis://open-folder. */
+function isJarvisFolderOpen(text){
+  let words = normaliseHeard(text).split(' ').filter(Boolean);
+  if(!words.length || words.length > 12) return false;
+  while(words.length > 1 && WAKE_FILLER.indexOf(words[0]) >= 0) words = words.slice(1);
+  if(words.length > 2 && wordIsName(words[0]) && !/folder|files|תיקי|קבצ/.test(words[1])) words = words.slice(1);
+  const s = words.join(' ');
+  const J = '(?:jarvis|javis|jervis|jarvi|גרוויס|גארוויס|גרויס)';
+  return new RegExp('^(?:please )?(?:(?:can|could|would|will) you )?(?:open|show|bring up|pull up)(?: up)? (?:me )?(?:the |my |your )?' + J +
+                    "(?: s)? (?:files? )?(?:folder|directory|files)(?: (?:please|now|for me))*$").test(s)
+      || new RegExp('^(?:please )?(?:open|show)(?: me)? (?:the |my )?(?:folder|files) (?:of |called |named )?' + J + '(?: files)?$').test(s)
+      || new RegExp('^(?:בבקשה )?(?:תפתח|פתח|לפתוח|תפתחי|תראה|תציג)(?: לי)?(?: את)? (?:ה?תיקי(?:י)?ה(?: של)? )?ה?' + J + '(?: קבצים)?(?: (?:בבקשה|עכשיו))*$').test(s)
+      || new RegExp('^(?:בבקשה )?(?:תפתח|פתח|לפתוח|תפתחי|תראה)(?: לי)?(?: את)? (?:ה?קבצים|ה?תיקי(?:י)?ה) של ' + J + '(?: (?:בבקשה|עכשיו))*$').test(s);
+}
+
+const OPEN_JARVIS_FOLDER_TOOL = {
+  name: 'open_jarvis_folder',
+  description: "Open the folder on his desktop called \"ג'רוויס קבצים\" (his JARVIS files) in File Explorer. Use it for \"open the jarvis folder\", \"open my jarvis files\", \"תפתח את התיקייה של ג'רוויס\", \"תפתח את ג'רוויס קבצים\". Takes nothing. If it answers not_found, say there is no folder by that name on his desktop.",
+  input_schema: { type: 'object', properties: {}, required: [] }
+};
+
+async function callOpenJarvisFolderTool(){
+  if(!IS_DESKTOP){
+    const r = await openDesktopLink('open-folder');
+    return r.handed ? { ok: true, handed_to_desktop: true } : { ok: false, code: 'no_desktop', url: r.url };
+  }
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!invoke) return { ok: false, error: 'the desktop bridge is unavailable' };
+  try{
+    const r = await invoke('open_jarvis_folder');
+    if(r && r.ok){ addMessage('system', '\u25B8 opened ' + (r.path || r.name)); return { ok: true, folder: r.name }; }
+    return { ok: false, code: (r && r.code) || 'not_found' };
+  }catch(err){
+    const msg = String((err && err.message) || err);
+    if(/not found|unknown command|not allowed|open_jarvis_folder/i.test(msg)) return { ok: false, code: 'old_app' };
+    return { ok: false, error: msg };
+  }
+}
+
 const OPEN_BASE_APP_TOOL = {
   name: 'open_base_app',
   description: "Open JARVIS's base app: his web version (the Cloudflare site) in Chrome, as a window of its own with no address bar, the same window the JARVIS icon on his desktop opens. Desktop only. Use it for \"open your base app\", \"open the JARVIS app\", \"open your web app\", \"תפתח את אפליקציית הבסיס\", \"תפתח את האפליקציה שלך\". Takes nothing: the address is fixed. Say in a few words that it is open.",
   input_schema: { type: 'object', properties: {}, required: [] }
 };
 
-async function callOpenBaseAppTool(){
+async function callOpenBaseAppTool(opts){
   if(!IS_DESKTOP) return { ok: false, error: 'this is already the base app' };
   const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
   if(!invoke) return { ok: false, error: 'the desktop bridge is unavailable' };
   try{
-    const r = await invoke('open_base_app');
+    const r = await invoke('open_base_app', { maximize: !!(opts && opts.maximize) });
     if(r && r.opened){ addMessage('system', '\u25B8 opened the base app'); return { ok: true, via: r.via }; }
   }catch(err){
     const msg = String((err && err.message) || err);
@@ -17008,7 +17112,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     requestBody.tools = fullCapability()
       ? [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL, MAKE_ZIP_TOOL, BUILD3D_TOOL]
       : [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL];
-    if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, OPEN_APP_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
+    if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, OPEN_APP_TOOL, OPEN_JARVIS_FOLDER_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                           TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                           WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
                                           NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL, WEB_SHOOTER_TOOL,
@@ -17029,7 +17133,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     /* Desktop only, and not gated behind ULTRON: opening a link is an everyday
        errand, not heavy work. In the browser the capability does not exist at
        all, so offering it there would only invite a promise it cannot keep. */
-    if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, OPEN_APP_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
+    if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, OPEN_APP_TOOL, OPEN_JARVIS_FOLDER_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                       TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                       WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
                                       NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL, WEB_SHOOTER_TOOL,
@@ -17733,6 +17837,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callOpenBaseAppTool();
           } else if(tu.name === 'open_installed_app'){
             payload = await callOpenAppTool(tu.input || {});
+          } else if(tu.name === 'open_jarvis_folder'){
+            payload = await callOpenJarvisFolderTool();
           } else if(tu.name === 'close_this_window'){
             payload = await callCloseWindowTool();
           } else if(tu.name === 'search_web' || tu.name === 'web_search'){
@@ -18858,9 +18964,69 @@ function renderImgPreviews(){
   });
 }
 
+/* A 3D FILE OF HIS OWN (2.32.0). Dropped anywhere on the page, or picked
+   with the files button: .glb, .gltf, .obj or .stl opens in a large viewer
+   on the page itself - drag to turn it, scroll to zoom, right-drag to move
+   it, Escape or the X to close. Nothing is uploaded: the file is read here,
+   in the browser. A .gltf that points at separate .bin / texture files
+   cannot find them (only the one file arrives); a .glb carries everything. */
+const MODEL_FILE_EXT = /\.(glb|gltf|obj|stl)$/i;
+let model3dOverlay = null;
+function close3DFile(){
+  if(!model3dOverlay) return;
+  const o = model3dOverlay; model3dOverlay = null;
+  try{
+    const i = liveViewers.indexOf(o.viewer);
+    if(i >= 0) liveViewers.splice(i, 1);
+    if(o.viewer){ cancelAnimationFrame(o.viewer.raf); o.viewer.controls && o.viewer.controls.dispose(); o.viewer.renderer.dispose(); }
+  }catch(err){}
+  try{ URL.revokeObjectURL(o.url); }catch(err){}
+  o.el.remove();
+}
+function open3DFile(file){
+  close3DFile();
+  const ext = (file.name.match(MODEL_FILE_EXT) || [, 'glb'])[1].toLowerCase();
+  const url = URL.createObjectURL(file);
+  const el = document.createElement('div');
+  el.id = 'model3dOverlay';
+  el.innerHTML = '<div class="m3dBar"><span class="m3dName"></span><span class="m3dHint"></span><button class="m3dClose" title="Close">\u2715</button></div><div class="m3dStage"></div>';
+  el.querySelector('.m3dName').textContent = file.name;
+  el.querySelector('.m3dHint').textContent = (typeof currentLang !== 'undefined' && currentLang === 'he')
+    ? 'גרירה מסובבת · גלגלת מקרבת · גרירה ימנית מזיזה · Esc סוגר'
+    : 'drag to turn · scroll to zoom · right-drag to move · Esc closes';
+  el.querySelector('.m3dClose').addEventListener('click', close3DFile);
+  document.body.appendChild(el);
+  const stage = el.querySelector('.m3dStage');
+  const before = liveViewers.length;
+  mountModelViewer(stage, { file: url, kind: ext === 'gltf' ? 'glb' : ext });
+  model3dOverlay = { el, url, viewer: liveViewers.length > before ? liveViewers[liveViewers.length - 1] : null };
+  addMessage('system', '\u25B8 3D: ' + file.name);
+}
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && model3dOverlay) close3DFile(); });
+(function wireModelDrop(){
+  let depth = 0;
+  const hasFiles = (e) => !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0);
+  const shade = (on) => document.documentElement.classList.toggle('drop-armed', !!on);
+  window.addEventListener('dragenter', (e)=>{ if(!hasFiles(e)) return; e.preventDefault(); depth++; shade(true); });
+  window.addEventListener('dragover', (e)=>{ if(!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  window.addEventListener('dragleave', (e)=>{ if(!hasFiles(e)) return; depth = Math.max(0, depth - 1); if(!depth) shade(false); });
+  window.addEventListener('drop', (e)=>{
+    if(!hasFiles(e)) return;
+    e.preventDefault(); depth = 0; shade(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    const models = files.filter(f => MODEL_FILE_EXT.test(f.name));
+    const rest = files.filter(f => !MODEL_FILE_EXT.test(f.name));
+    if(models.length) open3DFile(models[models.length - 1]);
+    if(rest.length) handlePickedFiles({ files: rest, value: '' });
+  });
+})();
+
 async function handlePickedFiles(input){
-  const files = Array.from(input.files || []);
+  const all = Array.from(input.files || []);
   input.value = ''; // let the same file be picked again later
+  const models = all.filter(f => MODEL_FILE_EXT.test(f.name));
+  if(models.length) open3DFile(models[models.length - 1]);
+  const files = all.filter(f => !MODEL_FILE_EXT.test(f.name));
   for(const file of files){
     if(pendingImages.length >= MAX_ATTACHMENTS){
       addMessage('system', t('imgTooMany'));
@@ -20163,10 +20329,43 @@ adjustLayout();
   window.__orbMuted = () => orbMuted;
   /* quiet: woken by a request ("hey Jarvis, open the camera"), which
      answers for itself — "Online." on top of it is noise. */
+  /* HANDED OFF TO THE BASE APP (2.32.0, "go full screen"). Asleep and
+     hidden like "go down", but deaf too - not even listening for his name,
+     since the base app is now the JARVIS listening, and a second one
+     answering "hey Jarvis" would talk over it. Not the mute he sets himself:
+     nothing is saved, so a restart is never left deaf. The camera window
+     goes down to the taskbar (minimised, still running). The hotkey brings
+     him back, hearing again (__orbWake). */
+  let handedOff = false;
+  window.handOffToBaseApp = async function(){
+    handedOff = true;
+    asleep = true;
+    root.classList.add('orb-asleep');
+    orbMuted = true;
+    try{ paintMute(); }catch(err){}
+    try{ endListening(); }catch(err){}
+    try{ if(typeof stopWhisperStream === 'function') stopWhisperStream(); }catch(err){}
+    try{ if(typeof closeConversation === 'function') closeConversation(); }catch(err){}
+    try{ speechQueue = []; }catch(err){}
+    const w = tauriWindow();
+    if(w){ try{ await w.hide(); }catch(err){} }
+    try{
+      const inv = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+      if(inv) await inv('minimize_camera_window');
+    }catch(err){}
+  };
   window.__orbWake = async function(quiet){
     if(!asleep) return;
     asleep = false;
     root.classList.remove('orb-asleep');
+    if(handedOff){
+      /* Back from the base app: hearing again, unless he had muted him himself. */
+      handedOff = false;
+      let saved = null;
+      try{ const r = await Store.get(ORB_MUTE_KEY); saved = r && r.value; }catch(err){}
+      orbMuted = saved === '1';
+      try{ paintMute(); }catch(err){}
+    }
     /* Come back visible and already listening — waking him only to have to
        press something would be a strange way to answer "wake up". */
     const w = tauriWindow();

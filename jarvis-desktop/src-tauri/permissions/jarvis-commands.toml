@@ -52,5 +52,6 @@ permissions = [
   "allow-open-base-app",
   "allow-launch-installed-app",
   "allow-take-launch-actions",
-  "allow-minimize-camera-window"
+  "allow-minimize-camera-window",
+  "allow-open-jarvis-folder"
 ]
