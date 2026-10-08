@@ -67,9 +67,29 @@ let head = home.before
   .replace(/<link rel="preload"[^>]*>/g, '');
 head = rehref(head);
 
-let tail = rehref(home.after)
-  .replace(/<script src="\/assets\/[^"]+" defer><\/script>/g, '')
-  .replace(/"url":"\/products\/nocturne\/"/, '"url":"#/products/nocturne/"');
+const MIME = { avif: 'image/avif', webp: 'image/webp', jpg: 'image/jpeg' };
+const dataUriCache = new Map();
+// Any slot with a self-hosted file (currently just the fixed product photo —
+// everything else still falls back to the remote Higgsfield copy, which is
+// already an absolute https:// URL and needs no rewriting here) is linked
+// as "/assets/img/...": a path that only resolves on a real server. Opened
+// straight from disk via file://, it 404s — exactly the broken image the
+// bundle shipped last time. Inline every one as a data URI instead, so the
+// single file really has no external or server-relative dependencies.
+const inlineLocalImages = (html) =>
+  html.replace(/\/assets\/img\/([\w-]+\.(avif|webp|jpg))/g, (match, file, ext) => {
+    if (!dataUriCache.has(file)) {
+      const bytes = fs.readFileSync(path.join(DIST, 'assets/img', file));
+      dataUriCache.set(file, `data:${MIME[ext]};base64,${bytes.toString('base64')}`);
+    }
+    return dataUriCache.get(file);
+  });
+
+let tail = inlineLocalImages(
+  rehref(home.after)
+    .replace(/<script src="\/assets\/[^"]+" defer><\/script>/g, '')
+    .replace(/"url":"\/products\/nocturne\/"/, '"url":"#/products/nocturne/"'),
+);
 
 const js = (f) =>
   rehref(read('assets/' + f)).replace(/(['"`])\/checkout\/\1/g, '$1#/checkout/$1');
@@ -94,12 +114,14 @@ function show(){
 addEventListener('hashchange',show);show();
 })();`;
 
-const body = pages
-  .map(
-    (p) =>
-      `<div class="spa-page" data-route="${p.route}" data-title="${p.title.replace(/"/g, '&quot;')}"${p.route === '/' ? '' : ' hidden'}>${rehref(p.inner)}</div>`,
-  )
-  .join('');
+const body = inlineLocalImages(
+  pages
+    .map(
+      (p) =>
+        `<div class="spa-page" data-route="${p.route}" data-title="${p.title.replace(/"/g, '&quot;')}"${p.route === '/' ? '' : ' hidden'}>${rehref(p.inner)}</div>`,
+    )
+    .join(''),
+);
 
 // Vendor files are read raw (no rehref/checkout rewriting — that's for our
 // own page scripts, not third-party minified code) and must stay ordered
