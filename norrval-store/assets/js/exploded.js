@@ -1,16 +1,17 @@
-/* NORRVAL — exploded-view diagram, inline in the homepage intro frame.
+/* NORRVAL — exploded-view diagram, pinned in the homepage intro.
  *
- * No pinning: the frame scrolls normally, and GSAP ScrollTrigger just
- * reports how far it has travelled through the viewport (0 as it enters,
- * 1 as it leaves) via `scrub`. That single progress value drives every
- * part's position the same way the old full-screen version did — see
- * components/exploded-view.js for what each <g data-part> is and its own
- * --ax/--ay explode direction.
+ * `.intro-pin` freezes via plain CSS `position: sticky` (see main.css) —
+ * GSAP ScrollTrigger here only reports how far the user has scrolled
+ * through that pinned section's extra height (0 at the top, 1 at the
+ * bottom) via `scrub`, and that single progress value drives every part's
+ * position. See components/exploded-view.js for what each <g data-part>
+ * is and its own --ax/--ay explode direction.
  */
 (() => {
   'use strict';
+  const section = document.querySelector('[data-xp-pin]');
   const el = document.querySelector('[data-xp-inline]');
-  if (!el) return;
+  if (!section || !el) return;
 
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const parts = [...el.querySelectorAll('[data-part]')];
@@ -38,8 +39,10 @@
   }
 
   if (reduce || !window.gsap || !window.ScrollTrigger) {
-    // Reduced motion, or the vendor scripts didn't load: one still,
-    // part-way-exploded frame — no scroll-jacking, no scrub.
+    // Reduced motion, or the vendor scripts didn't load: no pin, no scrub —
+    // the section behaves like any other, with one still, part-way-exploded
+    // frame (the CSS fallback above un-sticks it).
+    section.classList.add('is-static');
     paint(0.5);
     return;
   }
@@ -47,10 +50,10 @@
   gsap.registerPlugin(ScrollTrigger);
   paint(0);
   ScrollTrigger.create({
-    trigger: el,
-    start: 'top 85%',
-    end: 'bottom 25%',
-    scrub: 0.3,
+    trigger: section,
+    start: 'top top',
+    end: 'bottom bottom',
+    scrub: 0.4,
     onUpdate: (self) => paint(self.progress),
   });
 })();

@@ -2484,9 +2484,45 @@ textarea.input {
 }
 
 /* ==========================================================================
-   Exploded-view diagram — inline in the homepage intro's image frame.
-   See components/exploded-view.js and assets/js/exploded.js.
+   Intro section — pinned while the exploded-view diagram plays. The whole
+   section (headline + diagram) freezes via plain CSS sticky; scrolling
+   through the extra height below drives the animation instead of moving
+   the page, then hands off to normal flow once it's spent. See
+   components/exploded-view.js and assets/js/exploded.js.
    ========================================================================== */
+.intro-pin {
+  position: relative;
+  height: 230vh;
+}
+.intro-pin__sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+@media (max-width: 900px) {
+  .intro-pin {
+    height: 190vh;
+  }
+}
+/* No JS, or reduced motion: behaves like any other section — no pin, no
+   scrub, normal document flow. The diagram itself still falls back to one
+   still frame (assets/js/exploded.js). */
+html:not(.js) .intro-pin,
+.js .intro-pin.is-static {
+  height: auto;
+  padding: var(--section) 0;
+}
+html:not(.js) .intro-pin__sticky,
+.js .intro-pin.is-static .intro-pin__sticky {
+  position: relative;
+  height: auto;
+  overflow: visible;
+}
+
 .xp-inline {
   width: 100%;
   height: 100%;
