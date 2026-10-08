@@ -80,11 +80,7 @@ export const IMAGES = {
     ratio: [1, 1],
     alt: 'NORRVAL Nocturne front view: black dial, teal hands, black mesh bracelet',
     position: '50% 50%',
-    // No fallback on purpose: the last two generations were wrong (first had
-    // mismatched lugs, the regenerated one just duplicated the hero photo).
-    // Falling back to hero-mobile/hero-desktop would show that same duplicate
-    // again, so this renders an empty placeholder until a real shot replaces it.
-    fallback: null,
+    fallback: 'hero-mobile',
     higgsfieldJob: 'a469b238-4336-4ef9-8c5e-691a477d151d',
     prompt: `Clean e-commerce product photograph, square 1:1. ${WATCH}, front-facing, centred, standing upright with the mesh bracelet forming a closed loop behind the case. Watch occupies about 65 percent of the frame height with even margins. Smooth dark charcoal gradient background, soft even studio lighting, subtle blue reflection on the crystal, soft contact shadow. Photorealistic catalogue image. No text, no watermark, no box.`,
   },
