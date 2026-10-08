@@ -52,21 +52,23 @@ function trust() {
 function intro() {
   const facts = PRODUCT.specifications.filter(([, v]) => v).slice(0, 4);
   return `
-<section class="intro-pin" aria-labelledby="intro-title" data-xp-pin>
-  <div class="intro-pin__sticky">
-    <div class="wrap grid-2">
-      <div class="frame frame--45" data-reveal="mask">
-        <div class="mask-inner">${explodedDiagram()}</div>
+<section class="intro-section" aria-labelledby="intro-title">
+  <div class="wrap grid-2">
+    <div class="intro-pin" data-xp-pin>
+      <div class="intro-pin__sticky">
+        <div class="frame frame--45" data-reveal="mask">
+          <div class="mask-inner">${explodedDiagram()}</div>
+        </div>
       </div>
-      <div>
-        <p class="eyebrow" data-reveal>The Nocturne</p>
-        <h2 class="h2" id="intro-title" data-reveal>Built to<br><span class="serif">stand out.</span></h2>
-        <p class="lead" style="margin-top:28px" data-reveal>${esc(PRODUCT.description[0])}</p>
-        <ul class="facts" data-reveal>
-          ${facts.map(([k, v]) => `<li><span>${esc(k)}</span><span>${esc(v)}</span></li>`).join('')}
-        </ul>
-        <a class="link-arrow" href="${PDP}" data-reveal>View details ${ICONS.arrow}</a>
-      </div>
+    </div>
+    <div class="intro-pin__text">
+      <p class="eyebrow" data-reveal>The Nocturne</p>
+      <h2 class="h2" id="intro-title" data-reveal>Built to<br><span class="serif">stand out.</span></h2>
+      <p class="lead" style="margin-top:28px" data-reveal>${esc(PRODUCT.description[0])}</p>
+      <ul class="facts" data-reveal>
+        ${facts.map(([k, v]) => `<li><span>${esc(k)}</span><span>${esc(v)}</span></li>`).join('')}
+      </ul>
+      <a class="link-arrow" href="${PDP}" data-reveal>View details ${ICONS.arrow}</a>
     </div>
   </div>
 </section>`;

@@ -2497,11 +2497,21 @@ textarea.input {
 }
 
 /* ==========================================================================
-   Intro section — pinned while the exploded-view diagram plays. The whole
-   section (headline + diagram) freezes via plain CSS sticky; scrolling
-   through the extra height below drives the animation instead of moving
-   the page, then hands off to normal flow once it's spent. See
-   components/exploded-view.js and assets/js/exploded.js.
+   Intro section — pinned while the exploded-view diagram plays. .intro-pin
+   itself freezes via plain CSS sticky; scrolling through its extra height
+   drives the animation instead of moving the page, then hands off to
+   normal flow once it's spent. See components/exploded-view.js and
+   assets/js/exploded.js.
+
+   .intro-pin and .intro-pin__text are SIBLING grid-2 items (pages/home.js),
+   not one nested inside the other. That matters below 900px: grid-2 stacks
+   them into two separate rows, each sized to its own content, so the text
+   row simply starts once .intro-pin's row ends — it can never overlap or
+   get clipped by the pin, whatever height either one ends up being. The
+   earlier version nested the text inside the sticky box so they had to
+   share one fixed-height, overflow:hidden box; on a single mobile column
+   that box was never tall enough for both, and the diagram got cropped
+   mid-explosion.
    ========================================================================== */
 .intro-pin {
   position: relative;
@@ -2516,6 +2526,29 @@ textarea.input {
   display: flex;
   align-items: center;
   overflow: hidden;
+}
+.intro-pin__text {
+  padding: 48px 0;
+}
+@media (min-width: 900px) {
+  /* .intro-pin and .intro-pin__text are separate grid-2 columns now, each
+     the height of the taller one (.intro-pin's 230vh scroll track) —
+     without this, grid-2's align-items:center centers .intro-pin__text's
+     own short box within that whole 230vh row instead of the 100vh window
+     the frame is actually visible in. Sticking the text alongside the
+     frame for the same scroll range keeps them paired on screen exactly
+     like before, when text lived inside the sticky box itself. */
+  .intro-pin__text {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0;
+  }
 }
 @media (max-width: 900px) {
   .intro-pin {
@@ -2535,6 +2568,13 @@ html:not(.js) .intro-pin__sticky,
   position: relative;
   height: auto;
   overflow: visible;
+}
+/* .intro-pin__text is .intro-pin's sibling, not its descendant, so its own
+   desktop-only sticky (above) needs its own fallback reset here. */
+html:not(.js) .intro-pin + .intro-pin__text,
+.js .intro-pin.is-static + .intro-pin__text {
+  position: static;
+  height: auto;
 }
 
 .xp-inline {
