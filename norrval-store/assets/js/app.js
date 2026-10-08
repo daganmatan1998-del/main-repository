@@ -239,14 +239,14 @@
   // ---------- header state + scroll progress ----------
   const header = $('.header');
   const bar = $('.progress');
-  let lastY = scrollY;
   let ticking = false;
   function onScroll() {
     const y = scrollY;
     header.classList.toggle('is-scrolled', y > 8);
-    if (!trapRoot) header.classList.toggle('is-hidden', y > 480 && y > lastY + 4);
-    if (y < lastY - 4) header.classList.remove('is-hidden');
-    lastY = y;
+    // Header only shows at the very top of the page — scrolling back up does
+    // not bring it back, only returning to y<=8 does. Intentional, not the
+    // usual "hide on scroll down, show on scroll up" pattern.
+    if (!trapRoot) header.classList.toggle('is-hidden', y > 8);
     const h = document.documentElement.scrollHeight - innerHeight;
     bar.style.setProperty('--p', h > 0 ? (y / h).toFixed(4) : 0);
     ticking = false;

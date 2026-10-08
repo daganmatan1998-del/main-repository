@@ -909,6 +909,7 @@ h3 {
   top: 0;
   height: 100vh;
   height: 100svh;
+  height: 100dvh;
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -1051,6 +1052,7 @@ h3 {
   top: 0;
   height: 100vh;
   height: 100svh;
+  height: 100dvh;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -1217,6 +1219,8 @@ h3 {
 .final {
   position: relative;
   min-height: 90vh;
+  min-height: 90svh;
+  min-height: 90dvh;
   display: grid;
   place-items: center;
   text-align: center;
@@ -1439,6 +1443,11 @@ textarea.input {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   font-size: 16px;
+  /* Belt-and-suspenders alongside html's scroll-padding-top: when the mobile
+     keyboard opens and the browser scrolls the focused field into view, this
+     keeps it clear of the sticky header without relying on scroll-padding
+     support on the scrolling container actually in play on every browser. */
+  scroll-margin-top: calc(var(--header-h) + 16px);
   transition:
     border-color 0.2s,
     background 0.2s;
@@ -2359,6 +2368,8 @@ textarea.input {
 /* ---------- 404 ---------- */
 .nf {
   min-height: 70vh;
+  min-height: 70svh;
+  min-height: 70dvh;
   display: grid;
   place-items: center;
   text-align: center;
@@ -2460,6 +2471,8 @@ textarea.input {
     position: relative;
     height: auto;
     min-height: 100vh;
+    min-height: 100svh;
+    min-height: 100dvh;
     padding: var(--section) 0;
   }
   .cine__step {
@@ -2499,6 +2512,7 @@ textarea.input {
   top: 0;
   height: 100vh;
   height: 100svh;
+  height: 100dvh;
   display: flex;
   align-items: center;
   overflow: hidden;

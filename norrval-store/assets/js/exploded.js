@@ -14,6 +14,14 @@
   if (!section || !el) return;
 
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Below 900px the intro's grid-2 stacks the diagram frame and the text
+  // column into one, so both have to share the pinned 100vh/100svh box —
+  // together they don't fit, and the sticky container's `overflow: hidden`
+  // crops whichever part doesn't. Pinning only works once they're side by
+  // side (see the matching @media (min-width: 900px) in main.css), so mobile
+  // gets the same static fallback as reduced-motion instead of a half-cut
+  // animation.
+  const narrow = matchMedia('(max-width: 900px)').matches;
   const parts = [...el.querySelectorAll('[data-part]')];
 
   // Extra pull for parts that should travel further than their neighbours.
@@ -38,10 +46,11 @@
     el.style.setProperty('--labelOp', Math.max(0, Math.min(1, (e - 0.35) / 0.3)).toFixed(3));
   }
 
-  if (reduce || !window.gsap || !window.ScrollTrigger) {
-    // Reduced motion, or the vendor scripts didn't load: no pin, no scrub —
-    // the section behaves like any other, with one still, part-way-exploded
-    // frame (the CSS fallback above un-sticks it).
+  if (reduce || narrow || !window.gsap || !window.ScrollTrigger) {
+    // Reduced motion, a narrow (mobile/tablet) viewport, or the vendor
+    // scripts didn't load: no pin, no scrub — the section behaves like any
+    // other, with one still, part-way-exploded frame (the CSS fallback above
+    // un-sticks it).
     section.classList.add('is-static');
     paint(0.5);
     return;
