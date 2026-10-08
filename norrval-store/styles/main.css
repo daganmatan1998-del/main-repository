@@ -127,10 +127,10 @@ button {
   top: 12px;
 }
 mark.ph {
-  background: rgba(255, 196, 0, 0.16);
-  color: #ffd76a;
-  padding: 0 3px;
-  border-radius: 2px;
+  background: none;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
   font: inherit;
 }
 
