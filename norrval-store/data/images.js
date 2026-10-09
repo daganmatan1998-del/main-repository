@@ -30,7 +30,7 @@ const WATCH =
 export const IMAGES = {
   'hero-desktop': {
     ratio: [16, 9],
-    alt: 'NORRVAL Nocturne black watch on dark stone, lit with a cool blue rim light',
+    alt: 'The Nocturne black mesh watch resting on a brown leather cushion in its presentation box',
     position: '70% 50%',
     fallback: null,
     higgsfieldJob: '96b90dd5-7c98-4744-93b5-a5d80ae20da8',
@@ -38,7 +38,7 @@ export const IMAGES = {
   },
   'hero-mobile': {
     ratio: [4, 5],
-    alt: 'NORRVAL Nocturne black watch, three-quarter view on a dark studio surface',
+    alt: 'The Nocturne black mesh watch in its presentation box, three-quarter view',
     position: '50% 30%',
     fallback: 'hero-desktop',
     higgsfieldJob: 'fc81b902-a25a-4391-a968-a9e97d75d568',
@@ -54,7 +54,7 @@ export const IMAGES = {
   },
   lifestyle: {
     ratio: [4, 5],
-    alt: 'Man in a charcoal overshirt adjusting his cuff on a city street at dusk, wearing the Nocturne',
+    alt: 'The Nocturne on a wrist below a white shirt cuff and grey suit sleeve',
     position: '50% 60%',
     fallback: null,
     higgsfieldJob: '5f53cbdc-ac51-469e-a34d-0cd5b7c5b477',
@@ -70,7 +70,7 @@ export const IMAGES = {
   },
   gift: {
     ratio: [4, 5],
-    alt: 'The Nocturne and a black beaded bracelet in an open black presentation box on a walnut table',
+    alt: 'The Nocturne on the leather cushion of its open presentation box',
     position: '50% 50%',
     fallback: null,
     higgsfieldJob: 'b1d4ac43-90b6-43d9-8ecd-5511293b4884',
@@ -78,7 +78,7 @@ export const IMAGES = {
   },
   product: {
     ratio: [1, 1],
-    alt: 'NORRVAL Nocturne front view: black dial, teal hands, black mesh bracelet',
+    alt: 'The Nocturne: black sunray dial, teal hands, small sub-dial and black mesh bracelet',
     position: '50% 50%',
     fallback: 'hero-mobile',
     higgsfieldJob: 'a469b238-4336-4ef9-8c5e-691a477d151d',

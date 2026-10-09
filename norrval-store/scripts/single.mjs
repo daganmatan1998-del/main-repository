@@ -69,13 +69,10 @@ head = rehref(head);
 
 const MIME = { avif: 'image/avif', webp: 'image/webp', jpg: 'image/jpeg' };
 const dataUriCache = new Map();
-// Any slot with a self-hosted file (currently just the fixed product photo —
-// everything else still falls back to the remote Higgsfield copy, which is
-// already an absolute https:// URL and needs no rewriting here) is linked
-// as "/assets/img/...": a path that only resolves on a real server. Opened
-// straight from disk via file://, it 404s — exactly the broken image the
-// bundle shipped last time. Inline every one as a data URI instead, so the
-// single file really has no external or server-relative dependencies.
+// Self-hosted slots are linked as "/assets/img/...": a path that only
+// resolves on a real server. Opened straight from disk via file://, it 404s.
+// Inline every one as a data URI instead, so the single file really has no
+// external or server-relative dependencies.
 const inlineLocalImages = (html) =>
   html.replace(/\/assets\/img\/([\w-]+\.(avif|webp|jpg))/g, (match, file, ext) => {
     if (!dataUriCache.has(file)) {
@@ -84,6 +81,28 @@ const inlineLocalImages = (html) =>
     }
     return dataUriCache.get(file);
   });
+
+// Inlining every responsive variant (5 widths × AVIF/WebP/JPEG, at every
+// place a slot appears) made the bundle ~21 MB. A single file has no use for
+// the responsive set — nothing is fetched lazily — so collapse each <picture>
+// to one WebP (every current browser decodes it): 1440px for the full-bleed
+// heroes, 1080px elsewhere. The art-directed mobile hero <source> is kept.
+const imgFiles = fs.readdirSync(path.join(DIST, 'assets/img'));
+const pick = (slot) => {
+  const want = slot.startsWith('hero-') ? 1440 : 1080;
+  const widths = imgFiles
+    .filter((f) => f.startsWith(slot + '-') && f.endsWith('.webp'))
+    .map((f) => +f.slice(slot.length + 1, -5))
+    .filter((n) => n > 0)
+    .sort((a, b) => a - b);
+  return `/assets/img/${slot}-${widths.filter((n) => n <= want).pop() ?? widths[0]}.webp`;
+};
+const simplifyPictures = (html) =>
+  html
+    .replace(/<source[^>]*type="image\/(avif|jpeg)"[^>]*>/g, '')
+    .replace(/<source type="image\/webp"[^>]*>/g, '')
+    .replace(/srcset="\/assets\/img\/([\w-]+?)-\d+\.webp[^"]*"/g, (m, slot) => `srcset="${pick(slot)}"`)
+    .replace(/<img src="\/assets\/img\/([\w-]+?)-\d+\.jpg" srcset="[^"]*" sizes="[^"]*"/g, (m, slot) => `<img src="${pick(slot)}"`);
 
 let tail = inlineLocalImages(
   rehref(home.after)
@@ -115,12 +134,14 @@ addEventListener('hashchange',show);show();
 })();`;
 
 const body = inlineLocalImages(
-  pages
-    .map(
-      (p) =>
-        `<div class="spa-page" data-route="${p.route}" data-title="${p.title.replace(/"/g, '&quot;')}"${p.route === '/' ? '' : ' hidden'}>${rehref(p.inner)}</div>`,
-    )
-    .join(''),
+  simplifyPictures(
+    pages
+      .map(
+        (p) =>
+          `<div class="spa-page" data-route="${p.route}" data-title="${p.title.replace(/"/g, '&quot;')}"${p.route === '/' ? '' : ' hidden'}>${rehref(p.inner)}</div>`,
+      )
+      .join(''),
+  ),
 );
 
 // Vendor files are read raw (no rehref/checkout rewriting — that's for our
