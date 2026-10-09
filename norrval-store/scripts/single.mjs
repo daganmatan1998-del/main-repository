@@ -144,16 +144,10 @@ const body = inlineLocalImages(
   ),
 );
 
-// Vendor files are read raw (no rehref/checkout rewriting — that's for our
-// own page scripts, not third-party minified code) and must stay ordered
-// before exploded.js, which calls into them at script-run time.
-const raw = (f) => read('assets/' + f);
 const scripts = [
   js('app.js'),
   js('home.js'),
   js('product.js'),
-  raw('vendor/gsap.min.js'),
-  raw('vendor/ScrollTrigger.min.js'),
   js('exploded.js'),
   js('forms.js'),
   js('checkout.js'),
@@ -161,9 +155,9 @@ const scripts = [
   .map((code) => `<script>${code}</script>`)
   .join('');
 
-// A function replacer, not a string one: the vendor bundles contain literal
-// `$&`/`$1` sequences that `String.replace(search, string)` would otherwise
-// reinterpret as backreference patterns and silently corrupt.
+// A function replacer, not a string one: script/style content can contain
+// literal `$&`/`$1` sequences that `String.replace(search, string)` would
+// otherwise reinterpret as backreference patterns and silently corrupt.
 const out = `${head}${MAIN_OPEN}${body}</main>${tail.replace('</body>', () => `${scripts}<script>${router}</script></body>`)}`;
 fs.writeFileSync(path.join(DIST, 'norrval-store.html'), out);
 console.log(`Wrote dist/norrval-store.html (${(out.length / 1024).toFixed(0)} KB, ${pages.length} pages)`);

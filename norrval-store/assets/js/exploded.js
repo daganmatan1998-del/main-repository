@@ -1,23 +1,28 @@
 /* NORRVAL — exploded-view diagram, pinned in the homepage intro.
  *
- * `.intro-pin` freezes via plain CSS `position: sticky` (see main.css) —
- * GSAP ScrollTrigger here only reports how far the user has scrolled
- * through that pinned section's extra height (0 at the top, 1 at the
- * bottom) via `scrub`, and that single progress value drives every part's
- * position. See components/exploded-view.js for what each <g data-part>
- * is and its own --ax/--ay explode direction.
+ * `.intro-pin` freezes via plain CSS `position: sticky` (see main.css); this
+ * script only turns "how far through that pin are we" into part positions.
+ * See components/exploded-view.js for what each <g data-part> is and its own
+ * --ax/--ay explode direction.
+ *
+ * Progress is read from the live layout on every frame instead of from
+ * offsets cached at load. Cached offsets (what GSAP ScrollTrigger did here)
+ * go stale whenever anything above the section changes height after load —
+ * the Google Fonts swap reflowing the hero text on a real phone is enough —
+ * and then the explosion started before the screen froze.
  */
 (() => {
   'use strict';
   const section = document.querySelector('[data-xp-pin]');
   const el = document.querySelector('[data-xp-inline]');
   if (!section || !el) return;
+  const sticky = section.querySelector('.intro-pin__sticky');
 
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const parts = [...el.querySelectorAll('[data-part]')];
 
   // Extra pull for parts that should travel further than their neighbours.
-  const DIST = { crystal: 150, strapTop: 165, strapBottom: 130, crown: 120, caseback: 135 };
+  const DIST = { crystal: 112, strapTop: 165, strapBottom: 130, crown: 100, caseback: 135 };
   const defaultDist = 100;
 
   function paint(p) {
@@ -38,22 +43,36 @@
     el.style.setProperty('--labelOp', Math.max(0, Math.min(1, (e - 0.35) / 0.3)).toFixed(3));
   }
 
-  if (reduce || !window.gsap || !window.ScrollTrigger) {
-    // Reduced motion, or the vendor scripts didn't load: no pin, no scrub —
-    // the section behaves like any other, with one still, part-way-exploded
-    // frame (the CSS fallback above un-sticks it).
+  if (reduce) {
+    // No pin, no scrub — the section behaves like any other, with one still,
+    // part-way-exploded frame (the CSS fallback un-sticks it).
     section.classList.add('is-static');
     paint(0.5);
     return;
   }
 
-  gsap.registerPlugin(ScrollTrigger);
-  paint(0);
-  ScrollTrigger.create({
-    trigger: section,
-    start: 'top top',
-    end: 'bottom bottom',
-    scrub: 0.4,
-    onUpdate: (self) => paint(self.progress),
-  });
+  // 0 the moment the sticky box pins (section top reaches the viewport top),
+  // 1 the moment it un-pins (sticky box bottom meets the section bottom) —
+  // exactly the span the screen is frozen for.
+  function target() {
+    const range = section.offsetHeight - sticky.offsetHeight;
+    if (range <= 0) return 0;
+    return Math.min(1, Math.max(0, -section.getBoundingClientRect().top / range));
+  }
+
+  let current = target();
+  let raf = 0;
+  function tick() {
+    const t = target();
+    current += (t - current) * 0.2; // same feel as the old `scrub: 0.4` lag
+    if (Math.abs(t - current) < 0.001) current = t;
+    paint(current);
+    raf = current === t ? 0 : requestAnimationFrame(tick);
+  }
+  const kick = () => {
+    if (!raf) raf = requestAnimationFrame(tick);
+  };
+  paint(current);
+  addEventListener('scroll', kick, { passive: true });
+  addEventListener('resize', kick);
 })();

@@ -295,7 +295,7 @@ export function homePage() {
       { '@context': 'https://schema.org', '@type': 'WebSite', name: STORE.brand, url: STORE.siteUrl },
       productSchema(),
     ],
-    scripts: ['home', 'vendor/gsap.min', 'vendor/ScrollTrigger.min', 'exploded'],
+    scripts: ['home', 'exploded'],
     preload: heroPreload,
   });
 }

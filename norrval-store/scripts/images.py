@@ -32,9 +32,9 @@ for src in sorted(SRC.glob("*.png")) + sorted(SRC.glob("*.jpg")) + sorted(SRC.gl
     for tw in widths:
         th = round(h * tw / w)
         r = im.resize((tw, th), Image.LANCZOS) if tw != w else im
-        r.save(OUT / f"{slot}-{tw}.avif", quality=52, speed=6)
-        r.save(OUT / f"{slot}-{tw}.webp", quality=78, method=6)
-        r.save(OUT / f"{slot}-{tw}.jpg", quality=80, optimize=True, progressive=True)
+        r.save(OUT / f"{slot}-{tw}.avif", quality=72, speed=6)
+        r.save(OUT / f"{slot}-{tw}.webp", quality=90, method=6)
+        r.save(OUT / f"{slot}-{tw}.jpg", quality=90, optimize=True, progressive=True)
     manifest[slot] = {"w": w, "h": h, "widths": widths}
     print(f"{slot}: {w}x{h} -> {widths}")
 

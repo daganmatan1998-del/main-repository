@@ -70,16 +70,12 @@ fs.writeFileSync(
   esbuild ? (await esbuild.transform(css, { loader: 'css', minify: true })).code : css,
 );
 for (const f of fs.readdirSync(path.join(ROOT, 'assets/js'), { withFileTypes: true })) {
-  if (f.isDirectory()) continue; // vendor/ is handled below — copied as-is, already minified
+  if (f.isDirectory()) continue;
   const src = fs.readFileSync(path.join(ROOT, 'assets/js', f.name), 'utf8');
   fs.writeFileSync(
     path.join(out, f.name),
     esbuild ? (await esbuild.transform(src, { loader: 'js', minify: true, target: 'es2020' })).code : src,
   );
-}
-const vendorDir = path.join(ROOT, 'assets/js/vendor');
-if (fs.existsSync(vendorDir)) {
-  fs.cpSync(vendorDir, path.join(out, 'vendor'), { recursive: true });
 }
 if (fs.existsSync(path.join(ROOT, 'assets/img'))) {
   fs.cpSync(path.join(ROOT, 'assets/img'), path.join(out, 'img'), {

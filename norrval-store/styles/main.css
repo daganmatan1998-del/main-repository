@@ -2527,6 +2527,15 @@ textarea.input {
   align-items: center;
   overflow: hidden;
 }
+/* The frame is a flex item of the sticky box, and a flex item sizes to its
+   content — the frame has nothing with an intrinsic width, so without this
+   it collapsed to ~230px. Fill the column, capped so its 4:5 height still
+   fits inside the 100vh pinned box. */
+.intro-pin__sticky > .frame {
+  width: min(100%, 70vh);
+  width: min(100%, 70svh);
+  margin-inline: auto;
+}
 .intro-pin__text {
   padding: 48px 0;
 }

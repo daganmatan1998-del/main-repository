@@ -63,7 +63,7 @@ const leader = (ax, ay, r, text) => {
 const crownLabel = `<line x1="160" y1="20" x2="178" y2="32" class="xp__leader"/><text x="183" y="36" text-anchor="start" class="xp__label">CROWN</text>`;
 
 export function explodedViewSVG() {
-  return `<svg class="xp__svg" viewBox="-320 -320 640 640" aria-hidden="true">
+  return `<svg class="xp__svg" viewBox="-380 -380 760 760" aria-hidden="true">
 <!-- decorative: the wrapping element (components/exploded-view.js) carries the real label -->
 
 ${defs}
@@ -140,7 +140,7 @@ ${defs}
   <circle r="122" fill="url(#xpGlass)"/>
   <circle r="122" fill="none" stroke="#bdeef5" stroke-opacity=".22" stroke-width="1"/>
   <path d="M -80 -80 A 150 150 0 0 1 20 -118" fill="none" stroke="#eaf9fb" stroke-opacity=".65" stroke-width="2.5" stroke-linecap="round" filter="url(#xpGlow)"/>
-  ${leader(-1.5, -0.85, 122, 'SAPPHIRE CRYSTAL')}
+  ${leader(-1.5, -0.85, 122, 'CRYSTAL')}
 </g>
 </svg>`;
 }
