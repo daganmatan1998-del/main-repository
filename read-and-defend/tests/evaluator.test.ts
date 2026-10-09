@@ -68,6 +68,18 @@ describe('Hebrew evaluation', () => {
     expect(evaluate(item(he, 'he:word:גּוּר'), say('גיר')).outcome).toBe('incorrect');
     expect(evaluate(item(he, 'he:word:סוּס'), say('דג')).outcome).toBe('incorrect');
   });
+  it('does not accept a different word just because its letters overlap', () => {
+    const w = (d: string) => item(he, 'he:word:' + d.normalize('NFC'));
+    expect(evaluate(w('מָה'), say('אמא')).outcome).toBe('incorrect');
+    expect(evaluate(w('בָּא'), say('אבא')).outcome).toBe('incorrect');
+    expect(evaluate(w('שִׁיר'), say('שר')).outcome).toBe('incorrect');
+    expect(evaluate(w('יוֹם'), say('ים')).outcome).toBe('incorrect');
+    expect(evaluate(w('חָלָב'), say('כלב')).outcome).toBe('incorrect');
+    expect(evaluate(item(he, 'he:syl:' + 'בּוֹ'.normalize('NFC')), say('בא')).outcome).toBe('incorrect');
+  });
+  it('accepts true homophones, which a recogniser cannot tell apart', () => {
+    expect(evaluate(item(he, 'he:word:' + 'עוֹף'.normalize('NFC')), say('אף')).outcome).toBe('correct'); // א/ע are both silent
+  });
   it('is strict about the vowel in CV syllables', () => {
     const ba = item(he, 'he:syl:' + 'בָּ'.normalize('NFC'));
     expect(evaluate(ba, say('בא')).outcome).toBe('correct');
@@ -88,5 +100,26 @@ describe('Hebrew evaluation', () => {
     const s = he.items.find((x) => x.kind === 'sentence' && x.display.startsWith('הַכֶּלֶב'))!;
     expect(evaluate(s, say('הכלב רץ')).outcome).toBe('correct');
     expect(evaluate(s, say('הכלב')).outcome).toBe('incorrect');
+  });
+});
+
+describe('self-consistency over the whole bank', () => {
+  it('every item is accepted when read exactly as displayed', () => {
+    for (const pack of [en, he]) {
+      const bad = pack.items.filter((it) => evaluate(it, say(it.display)).outcome !== 'correct');
+      expect(bad.map((b) => b.id)).toEqual([]);
+    }
+  });
+  it('every Hebrew word is accepted in the plain spelling a recogniser returns', () => {
+    const bad = he.items.filter((it) => it.kind === 'word' && evaluate(it, say(it.accepted[it.accepted.length - 1])).outcome !== 'correct');
+    expect(bad.map((b) => b.id)).toEqual([]);
+  });
+  it('no two different English words of the bank accept each other', () => {
+    const words = en.items.filter((i) => i.kind === 'word');
+    const clashes: string[] = [];
+    for (const a of words) for (const b of words) {
+      if (a !== b && evaluate(a, say(b.display)).outcome === 'correct') clashes.push(`${a.display}<-${b.display}`);
+    }
+    expect(clashes).toEqual([]);
   });
 });

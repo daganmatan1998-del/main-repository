@@ -65,6 +65,10 @@ function hebrewWordMatches(target: string, extraSpellings: string[], heardWord: 
 }
 
 function hebrewSingleMatch(item: LearningItem, transcript: string): boolean {
+  // A pointed transcript identical to the target is unambiguous (a few
+  // engines return niqqud; the simulator does too).
+  const pointed = transcript.normalize('NFC').replace(/[^\u0591-\u05F4 ]/g, '').trim();
+  if (/[\u05B0-\u05BC\u05C1\u05C2]/.test(pointed) && pointed === item.display.normalize('NFC').replace(/[^\u0591-\u05F4 ]/g, '').trim()) return true;
   const norm = normalizeHebrew(transcript);
   if (!norm) return false;
   if (item.kind === 'letter') {

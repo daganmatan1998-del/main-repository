@@ -57,27 +57,36 @@ const CONS: Record<string, string> = {
   'ל': 'l', 'מ': 'm', 'נ': 'n', 'ס': 's', 'פ': '(?:p|f)', 'צ': '(?:ts|tsh|ch)', 'ק': 'k', 'ר': 'r',
   'ש': '(?:sh|s)', 'ת': 't',
 };
-const V = '[aeiou]?';
+const HARD: Record<string, string> = { 'ב': 'b', 'כ': 'k', 'פ': 'p' };
 
 /**
- * A regular expression matching every phonetic reading of an unpointed
- * Hebrew word. Unpointed text is genuinely ambiguous (ספר is sefer, sapar,
- * sfar…), so a recogniser's spelling is checked by asking "could this
- * spelling be read as the target's pronunciation?" — never by stripping
- * letters until two strings happen to look alike.
+ * A regular expression matching every plausible reading of an unpointed
+ * Hebrew word, as a modern recogniser spells it. Unpointed text is genuinely
+ * ambiguous (ספר is sefer, sapar…), so a recogniser's spelling is checked by
+ * asking "could this spelling be read as the target's pronunciation?" —
+ * never by stripping letters until two strings happen to look alike.
+ *
+ * Modern (plene) spelling writes o and u with vav and most i with yod, so a
+ * vowel with no letter is taken to be a or e — except in the first syllable
+ * of longer words (מכתב, מספר), where a bare i is normal. A word-initial
+ * alef or ayin always carries a vowel.
  */
 export function hebrewReadingRegex(word: string): RegExp {
   const letters = [...normalizeHebrew(word).replace(/ /g, '')];
+  const firstV = letters.length >= 3 ? '[aeiou]?' : '[ae]?';
   let re = '';
   letters.forEach((ch, i) => {
     const last = i === letters.length - 1;
     const first = i === 0;
+    const V = first ? firstV : '[ae]?';
     switch (ch) {
-      case 'א': case 'ע': re += last ? (ch === 'א' ? '(?:a|e|o)' : '(?:a|e)?') : V; break;
+      case 'א': case 'ע': re += first ? '[aeiou]' : last ? (ch === 'א' ? 'a' : '(?:a|e)?') : V; break;
       case 'ה': re += last ? '(?:a|e|h)' : `h${V}`; break;
       case 'ו': re += first ? `(?:v${V}|u)` : last ? '(?:v|o|u)' : `(?:v${V}|o|u)`; break;
-      case 'י': re += first ? `y${V}` : last ? '(?:i|y|e|ey|ay)' : `(?:y${V}|i|e|ey|ay)`; break;
-      default: re += (CONS[ch] ?? '') + (last ? '' : V);
+      case 'י': re += first ? `y${V}` : last ? '(?:i|y|ey|ay)' : `(?:y${V}|i|e|ey|ay)`; break;
+      default:
+        // בּ כּ פּ at the start of a word take dagesh: always b, k, p.
+        re += (first && HARD[ch] ? HARD[ch] : CONS[ch] ?? '') + (last ? '' : V);
     }
   });
   return new RegExp(`^${re}$`);
