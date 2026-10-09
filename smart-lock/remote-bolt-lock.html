@@ -1,0 +1,989 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מנעול בריח בשלט</title>
+<style>
+:root{
+  --bg:#f4f5f7; --panel:#ffffff; --ink:#1b1f24; --muted:#5d6670; --line:#dde1e6;
+  --accent:#e0661b; --accent-2:#1f6feb; --ok:#1a7f37; --bad:#c62828; --code:#0f1419; --code-ink:#e6e1cf;
+  --viewer:#e9ecf0;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1216; --panel:#171b21; --ink:#e7eaee; --muted:#9aa4af; --line:#2a3038;
+    --accent:#ff8a3d; --accent-2:#58a6ff; --ok:#3fb950; --bad:#f85149; --code:#0b0e12; --code-ink:#e6e1cf;
+    --viewer:#12161b;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1216; --panel:#171b21; --ink:#e7eaee; --muted:#9aa4af; --line:#2a3038;
+  --accent:#ff8a3d; --accent-2:#58a6ff; --ok:#3fb950; --bad:#f85149; --code:#0b0e12; --code-ink:#e6e1cf;
+  --viewer:#12161b;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;line-height:1.55}
+header{padding:18px 16px 8px;max-width:1300px;margin:auto}
+h1{margin:0 0 4px;font-size:1.6rem}
+header p{margin:0;color:var(--muted)}
+main{max-width:1300px;margin:auto;padding:8px 16px 40px;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px}
+@media (max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+#viewerWrap{position:relative;height:560px;background:var(--viewer)}
+@media (max-width:900px){#viewerWrap{height:420px}}
+#viewer{width:100%;height:100%;display:block;touch-action:none}
+#loadMsg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);padding:20px;text-align:center}
+.hud{position:absolute;top:10px;left:10px;right:10px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
+.hud button{pointer-events:auto}
+.tag{position:absolute;bottom:10px;right:10px;left:10px;background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:.92rem;display:none}
+.controls{padding:12px 14px;border-top:1px solid var(--line);display:grid;gap:10px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.row label{font-weight:600;min-width:120px}
+input[type=range]{flex:1;min-width:160px;accent-color:var(--accent)}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 12px;border-radius:8px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.on{background:var(--accent-2);border-color:var(--accent-2);color:#fff}
+#state{font-weight:700}
+#info{padding:14px 16px}
+#info h2{margin:0 0 6px;font-size:1.2rem}
+#info .ali{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0}
+#info code,.mono{font-family:ui-monospace,Consolas,monospace;background:color-mix(in srgb,var(--accent) 12%,transparent);padding:2px 6px;border-radius:6px;direction:ltr;unicode-bidi:embed}
+.muted{color:var(--muted)}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;padding:10px 10px 0;border-bottom:1px solid var(--line)}
+.tabs button{border-radius:8px 8px 0 0;border-bottom:none}
+.tabs button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tab{display:none;padding:14px 16px}
+.tab.active{display:block}
+section.full{grid-column:1/-1}
+table{width:100%;border-collapse:collapse;font-size:.93rem}
+th,td{border-bottom:1px solid var(--line);padding:7px 6px;text-align:right;vertical-align:top}
+th{color:var(--muted);font-weight:600}
+tr.part{cursor:pointer}
+tr.part:hover,tr.part.sel{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.swatch{display:inline-block;width:12px;height:12px;border-radius:3px;margin-inline-end:6px;vertical-align:middle;border:1px solid #0003}
+pre{background:var(--code);color:var(--code-ink);padding:14px;border-radius:10px;overflow:auto;direction:ltr;text-align:left;font-size:.85rem;line-height:1.45;max-height:620px}
+ol.steps>li{margin-bottom:12px}
+.warn{border-inline-start:4px solid var(--bad);background:color-mix(in srgb,var(--bad) 9%,transparent);padding:8px 12px;border-radius:6px;margin:10px 0}
+.tip{border-inline-start:4px solid var(--ok);background:color-mix(in srgb,var(--ok) 9%,transparent);padding:8px 12px;border-radius:6px;margin:10px 0}
+.copied{color:var(--ok);font-size:.85rem}
+svg text{font-family:system-ui,Arial,sans-serif}
+.checklist label{display:block;padding:4px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>🔒 מנעול בריח פלדה נשלף — מופעל בשלט רחוק</h1>
+  <p>דגם תלת־ממדי אינטראקטיבי · מבט מפורק · רשימת חלקים עם שמות חיפוש באליאקספרס · חיווט · קוד Arduino · הוראות הרכבה</p>
+</header>
+
+<main>
+  <!-- 3D VIEWER -->
+  <div class="card">
+    <div id="viewerWrap">
+      <canvas id="viewer"></canvas>
+      <div id="loadMsg">טוען את הדגם התלת־ממדי… (נדרש חיבור לאינטרנט בפעם הראשונה כדי לטעון את Three.js)</div>
+      <div class="hud">
+        <button id="btnCover">👁 מכסה: מוצג</button>
+        <button id="btnDoor">🚪 דלת: מוצגת</button>
+        <button id="btnLabels">🏷 תוויות: כבויות</button>
+        <button id="btnReset">↺ מצלמה</button>
+      </div>
+      <div class="tag" id="hoverTag"></div>
+    </div>
+    <div class="controls">
+      <div class="row">
+        <label for="explode">פירוק (מבט מפוצץ)</label>
+        <input id="explode" type="range" min="0" max="100" value="0">
+        <span id="explodeVal" class="mono">0%</span>
+      </div>
+      <div class="row">
+        <label>סימולציית שלט</label>
+        <button class="primary" id="btnLock">A · נעל 🔒</button>
+        <button class="primary" id="btnUnlock">B · פתח 🔓</button>
+        <span>מצב: <span id="state">פתוח</span></span>
+      </div>
+      <div class="muted" style="font-size:.88rem">גרור כדי לסובב · גלגלת/צביטה לזום · לחיצה ימנית/שתי אצבעות להזזה · לחיצה על חלק מציגה את פרטיו</div>
+    </div>
+  </div>
+
+  <!-- PART INFO -->
+  <div class="card" id="info">
+    <h2>בחר חלק</h2>
+    <p class="muted">לחץ על חלק בדגם או ברשימת החלקים כדי לראות את השם המדויק לחיפוש באליאקספרס, כמות, מחיר משוער, תפקיד ולאן הוא מתחבר.</p>
+    <div class="tip">טיפ: משוך את סרגל <b>הפירוק</b> ימינה — כל חלק יתרחק מהמקום שלו ותראה בדיוק איפה הוא יושב ובאיזה סדר מרכיבים.</div>
+  </div>
+
+  <!-- TABS -->
+  <section class="card full">
+    <div class="tabs" id="tabs">
+      <button data-tab="parts" class="active">📦 רשימת חלקים</button>
+      <button data-tab="how">⚙️ איך זה עובד</button>
+      <button data-tab="wiring">🔌 חיווט</button>
+      <button data-tab="assembly">🛠 הוראות הרכבה</button>
+      <button data-tab="code">💻 קוד</button>
+      <button data-tab="remotes">📡 שלטים</button>
+      <button data-tab="use">🧭 שימוש יומיומי</button>
+      <button data-tab="trouble">🩺 תקלות</button>
+      <button data-tab="safety">⚠️ בטיחות ואבטחה</button>
+    </div>
+
+    <div class="tab active" id="tab-parts">
+      <div class="row" style="margin-bottom:8px">
+        <button id="copyAll">📋 העתק את כל רשימת הקניות</button>
+        <span id="copyAllMsg" class="copied"></span>
+        <span class="muted">סה״כ משוער: <b id="total"></b></span>
+      </div>
+      <div style="overflow-x:auto">
+      <table id="partsTable">
+        <thead><tr><th>#</th><th>חלק</th><th>חיפוש באליאקספרס (העתק כמו שהוא)</th><th>כמות</th><th>מחיר משוער</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      </div>
+      <p class="muted" style="font-size:.88rem">מחירים משוערים בש״ח כולל משלוח, משתנים לפי מוכר ומבצעים. חפש באנגלית בדיוק כפי שכתוב, ומיין לפי „Orders” כדי לקבל מוכרים מוכחים.</p>
+    </div>
+
+    <div class="tab" id="tab-how">
+      <h3>העיקרון</h3>
+      <p>על הצד הפנימי של הדלת מותקן <b>בריח הזזה מפלדת אל־חלד</b> רגיל (כמו בריח ידני), אבל במקום יד — <b>מפעיל ליניארי 12V</b> (מנוע עם בורג שדוחף ומושך מוט) מזיז אותו. כשהבריח נדחף קדימה הוא נכנס ל<b>תפס</b> שמוברג על משקוף הדלת — והדלת נעולה.</p>
+      <p><b>Arduino Nano</b> מאזין ל<b>מקלט רדיו 433MHz</b>. כשאתה לוחץ על כפתור בשלט, המקלט מעביר את הקוד ל־Arduino, שבודק שזה שלט מוכר ואז מפעיל <b>שני ממסרים</b> שהופכים את כיוון הזרם למפעיל: ממסר 1 = דחיפה (נעילה), ממסר 2 = משיכה (פתיחה).</p>
+      <p><b>חיישן מגנטי (Reed)</b> יודע אם הדלת סגורה — המערכת לא תנעל כשהדלת פתוחה (אחרת הבריח יבלוט ויפגע במשקוף), ויכולה לנעול אוטומטית אחרי שהדלת נסגרה. <b>זמזם ונורות LED</b> נותנים חיווי.</p>
+      <svg viewBox="0 0 900 170" width="100%" role="img" aria-label="תרשים זרימה">
+        <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10z" fill="currentColor"/></marker></defs>
+        <g fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--muted)">
+          <rect x="10" y="50" width="120" height="60" rx="10"/><rect x="180" y="50" width="130" height="60" rx="10"/>
+          <rect x="360" y="50" width="130" height="60" rx="10"/><rect x="540" y="50" width="140" height="60" rx="10"/>
+          <rect x="730" y="50" width="160" height="60" rx="10"/>
+          <path d="M130 80H178M310 80H358M490 80H538M680 80H728" marker-end="url(#ar)"/>
+        </g>
+        <g text-anchor="middle" font-size="15" fill="currentColor" style="color:var(--ink)">
+          <text x="70" y="77">שלט 433MHz</text><text x="70" y="97" font-size="12">EV1527</text>
+          <text x="245" y="77">מקלט RXB6</text><text x="245" y="97" font-size="12">DATA→D2</text>
+          <text x="425" y="77">Arduino Nano</text><text x="425" y="97" font-size="12">בדיקת קוד</text>
+          <text x="610" y="77">2 ממסרים</text><text x="610" y="97" font-size="12">היפוך קוטביות</text>
+          <text x="810" y="77">מפעיל ליניארי</text><text x="810" y="97" font-size="12">→ בריח פלדה</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="tab" id="tab-wiring">
+      <h3>טבלת חיבורים</h3>
+      <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>מאיפה</th><th>לאן</th><th>הערה</th></tr></thead>
+        <tbody>
+          <tr><td>ספק 12V (+)</td><td>שקע DC ← כניסת IN+ של ממיר LM2596 · ‏NO של ממסר 1 · ‏NO של ממסר 2</td><td>חוט 0.75 מ״מ² לפחות</td></tr>
+          <tr><td>ספק 12V (−)</td><td>IN− של הממיר · ‏NC של ממסר 1 · ‏NC של ממסר 2</td><td>אדמה משותפת</td></tr>
+          <tr><td>ממיר OUT+ (מכוון ל־5.0V!)</td><td>Nano ‏5V · VCC של מקלט · VCC של מודול הממסרים · זמזם +</td><td><b>לכוון עם מודד לפני חיבור ה־Nano</b></td></tr>
+          <tr><td>ממיר OUT−</td><td>Nano GND · GND של כל המודולים</td><td></td></tr>
+          <tr><td>מקלט RXB6 ‏DATA</td><td>Nano ‏D2</td><td>אחת משתי רגלי ה־DATA (הן מחוברות)</td></tr>
+          <tr><td>מקלט ANT</td><td>אנטנת קפיץ 433MHz או חוט 17.3 ס״מ</td><td>ישר, הרחק ממתכת</td></tr>
+          <tr><td>ממסרים IN1 / IN2</td><td>Nano ‏D4 / D5</td><td>מודול „Active LOW” (הרוב)</td></tr>
+          <tr><td>ממסר 1 ‏COM</td><td>מפעיל — חוט אדום</td><td rowspan="2">אם המפעיל זז הפוך — החלף בין שני חוטי המפעיל</td></tr>
+          <tr><td>ממסר 2 ‏COM</td><td>מפעיל — חוט שחור</td></tr>
+          <tr><td>חיישן מגנטי (2 חוטים)</td><td>Nano ‏D6 ו־GND</td><td>INPUT_PULLUP: ‏LOW = דלת סגורה</td></tr>
+          <tr><td>כפתור למידה</td><td>Nano ‏D3 ו־GND</td><td></td></tr>
+          <tr><td>זמזם −/I/O</td><td>Nano ‏D7</td><td>זמזם אקטיבי</td></tr>
+          <tr><td>LED ירוק / אדום (דרך נגד 220Ω)</td><td>Nano ‏D8 / D9 ← הרגל הארוכה; הקצרה ל־GND</td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <h3>איך שני הממסרים הופכים כיוון</h3>
+      <svg viewBox="0 0 760 230" width="100%" role="img" aria-label="H-bridge בממסרים">
+        <g fill="none" stroke="currentColor" stroke-width="1.6" style="color:var(--muted)">
+          <rect x="40" y="40" width="190" height="150" rx="8"/><rect x="530" y="40" width="190" height="150" rx="8"/>
+          <rect x="310" y="85" width="140" height="60" rx="8"/>
+          <path d="M230 115H310M450 115H530"/>
+          <path d="M60 70H20V20H740V70H720" style="color:var(--bad)" stroke="currentColor"/>
+          <path d="M60 165H20V215H740V165H720" />
+        </g>
+        <g font-size="14" fill="currentColor" style="color:var(--ink)" text-anchor="middle">
+          <text x="135" y="65">ממסר 1 (D4)</text><text x="80" y="95" font-size="12">NO ← +12V</text><text x="80" y="170" font-size="12">NC ← GND</text><text x="200" y="110" font-size="12">COM</text>
+          <text x="625" y="65">ממסר 2 (D5)</text><text x="680" y="95" font-size="12">+12V → NO</text><text x="680" y="170" font-size="12">GND → NC</text><text x="560" y="110" font-size="12">COM</text>
+          <text x="380" y="112">מפעיל</text><text x="380" y="132" font-size="12">אדום ⟷ שחור</text>
+          <text x="380" y="14" font-size="12" style="fill:var(--bad)">+12V</text><text x="380" y="228" font-size="12">GND</text>
+        </g>
+      </svg>
+      <p>מנוחה: שני הממסרים כבויים ← שני חוטי המפעיל על GND ← המנוע עומד (ואף בולם). רק ממסר 1 דולק ← אדום=+12V, שחור=GND ← דחיפה. רק ממסר 2 דולק ← הפוך ← משיכה. <b>אסור ששניהם ידלקו יחד</b> — זה קצר! הקוד חוסם את זה.</p>
+    </div>
+
+    <div class="tab" id="tab-assembly">
+      <h3>הוראות הרכבה — לפי סדר</h3>
+      <p class="muted">תוך כדי קריאה, הזז את סרגל הפירוק בדגם — הסדר בהוראות תואם את הסדר שבו החלקים „חוזרים” למקומם.</p>
+      <ol class="steps">
+        <li><b>בדיקה על השולחן לפני הכל.</b> חבר את כל האלקטרוניקה על השולחן (בלי הדלת), צרוב את הקוד, למד את השלט ובדוק שהמפעיל נדחף ונמשך. לא מתקינים על דלת משהו שלא עבד על השולחן.</li>
+        <li><b>כיוון הממיר.</b> חבר 12V לממיר LM2596 בלבד, ובעזרת מודד סובב את הבורג בפוטנציומטר הכחול עד 5.0V ביציאה. רק אז חבר את ה־Nano. (12V ישירות לפין 5V ישרפו אותו.)</li>
+        <li><b>סימון מיקום הבריח.</b> סגור את הדלת. בחר גובה נוח (בדרך כלל 10–20 ס״מ מעל הידית או במקום הבריח הישן). סמן קו אופקי שעובר גם על הדלת וגם על המשקוף — הבריח והתפס חייבים להיות באותו גובה בדיוק.</li>
+        <li><b>התקנת התפס על המשקוף.</b> הברג את התפס (מגיע עם הבריח) על המשקוף עם ברגי עץ 4×30 לפחות. במשקוף מתכת — קדח וברגי פח, או ניטים. <i>זה החלק שמחזיק את כל הכוח — אל תחסוך בברגים.</i></li>
+        <li><b>פלטת הבסיס.</b> הברג את פלטת הבסיס (פלטת אלומיניום 3 מ״מ או לוח עץ קשה / הדפסה בתלת־ממד) לדלת, כך שהקצה שלה במרחק ~5 מ״מ מקצה הדלת. כל שאר החלקים נתלים עליה.</li>
+        <li><b>מובילי הבריח.</b> הברג את גוף הבריח (המובילים) לפלטה, מיושר לתפס. סגור את הדלת והזז את הבריח ביד: הוא צריך להיכנס לתפס בחלקות, בלי לשפשף. אם הוא נתקע — זה בדיוק מה שיתקע גם את המנוע. תקן עכשיו.</li>
+        <li><b>הסרת הידית של הבריח.</b> ברוב הבריחים הזזים יש ידית קטנה מוברגת או מרותכת. הסר אותה (או קצר במסור) — במקומה יתחבר המצמד של המפעיל.</li>
+        <li><b>המפעיל והתושבת.</b> הרכב את המפעיל בתושבות (מגיעות איתו לרוב). קבע את התושבת האחורית לפלטה כך שכאשר המפעיל <u>מכווץ לגמרי</u> — הבריח משוך לגמרי מחוץ לתפס, וכאשר הוא <u>פתוח לגמרי</u> — הבריח בתוך התפס לפחות 15 מ״מ. אם המהלך של המפעיל ארוך מדי, הזז את התושבת או קנה מהלך קצר יותר.</li>
+        <li><b>המצמד.</b> חבר את קצה מוט המפעיל לבריח עם המצמד: הכי פשוט — זווית מתכת קטנה עם חור, ובורג M4 עם אום נעילה (Nyloc) דרך החור בקצה המוט. השאר מעט „משחק” — חיבור קשיח לגמרי גורם להיתקעות.</li>
+        <li><b>חיישן הדלת.</b> הדבק/הברג את חלק החיישן עם החוטים על הדלת ליד הקצה, ואת המגנט על המשקוף מולו (מרווח של עד 10 מ״מ כשהדלת סגורה).</li>
+        <li><b>קופסת האלקטרוניקה.</b> הרכב בקופסה: ממיר, Nano, מקלט, ממסרים. הוצא החוצה: אנטנה (למעלה, ישרה), כפתור למידה, 2 נוריות, זמזם, שקע DC. השתמש בספייסרים / דבק חם — שום כרטיס לא נוגע בכרטיס אחר.</li>
+        <li><b>חיווט סופי.</b> לפי טבלת החיווט. העבר את חוטי המפעיל והחיישן בתעלה דביקה. אם יש שקע חשמל ליד הדלת — ספק הכוח מתחבר אליו; אחרת העבר כבל DC עד לשקע.</li>
+        <li><b>כיול זמן.</b> מדוד כמה זמן לוקח למפעיל לעבור מקצה לקצה (בדרך כלל 2–4 שניות), ועדכן את <span class="mono">MOVE_MS</span> בקוד ל־זמן הזה + חצי שנייה.</li>
+        <li><b>מכסה.</b> הרכב את המכסה מעל הפלטה (שומר על המנגנון מאבק ומאצבעות). ודא שיש פתח לבריח לצאת.</li>
+        <li><b>בדיקה סופית.</b> 20 נעילות ופתיחות ברצף, עם הדלת סגורה. בדוק שהבריח לא נתקע גם כשמישהו לוחץ/מושך את הדלת. נסה מבחוץ, מהמרחק שבו תשתמש בשלט.</li>
+      </ol>
+      <h3>כלים נדרשים</h3>
+      <p>מברגה + מקדחים (3, 4, 6 מ״מ) · מברג פיליפס · מודד (מולטימטר) · מלחם ובדיל (מומלץ, לא חובה עם מחברי Dupont) · מכווץ חום · סרט מדידה · עפרון · מפלס קטן · דבק חם.</p>
+    </div>
+
+    <div class="tab" id="tab-code">
+      <div class="row" style="margin-bottom:8px">
+        <button id="copyCode">📋 העתק קוד</button><span id="copyCodeMsg" class="copied"></span>
+      </div>
+      <h3>התקנה</h3>
+      <ol>
+        <li>התקן את <b>Arduino IDE</b> (arduino.cc).</li>
+        <li>Tools → Manage Libraries → חפש <span class="mono">rc-switch</span> (של sui77) → Install.</li>
+        <li>Tools → Board: <span class="mono">Arduino Nano</span>. Processor: <span class="mono">ATmega328P (Old Bootloader)</span> לרוב הנאנו הסיניים. אם ההעלאה נכשלת — נסה בלי „Old”.</li>
+        <li>אם המחשב לא מזהה את הכרטיס — התקן דרייבר <span class="mono">CH340</span>.</li>
+        <li>העתק את הקוד, Upload, ופתח Serial Monitor במהירות <span class="mono">9600</span> — תראה כל קוד שהמקלט קולט.</li>
+      </ol>
+      <pre id="codeBlock"></pre>
+    </div>
+
+    <div class="tab" id="tab-remotes">
+      <h3>איזה שלט צריך?</h3>
+      <table>
+        <thead><tr><th></th><th>מה לחפש</th><th>הערה</th></tr></thead>
+        <tbody>
+          <tr><td>✅ <b>מתאים</b></td><td><span class="mono">433MHz EV1527 learning code remote 4 key</span></td><td>הבחירה המומלצת. ABCD. עובד מצוין עם rc-switch. לעיתים כתוב גם „1527”.</td></tr>
+          <tr><td>✅ מתאים</td><td><span class="mono">433MHz PT2262 fixed code remote</span></td><td>עובד, אבל לחלק יש מתגי DIP שצריך לכוון. EV1527 נוח יותר.</td></tr>
+          <tr><td>✅ מתאים</td><td><span class="mono">433MHz copy remote / cloning remote</span></td><td>שלטים „משכפלים” — גם הם שולחים קוד קבוע.</td></tr>
+          <tr><td>❌ <b>לא מתאים</b></td><td>„Rolling code”, ‏HCS301, ‏KeeLoq</td><td>קוד מתחלף — rc-switch לא יכול לפענח.</td></tr>
+          <tr><td>❌ לא מתאים</td><td>315MHz</td><td>תדר אחר. המקלט שלך הוא 433.92MHz — השלט חייב להיות באותו תדר.</td></tr>
+          <tr><td>❌ לא מתאים</td><td>שלטי IR (אינפרא־אדום) של טלוויזיה</td><td>צריך קו ראייה, לא עובר דרך הדלת.</td></tr>
+        </tbody>
+      </table>
+      <h3>כמה שלטים?</h3>
+      <p>הקוד שומר עד <b>8 שלטים</b> (שלט אחד לכל בן בית + 1 רזרבי). קנה חבילה של 2–5 — זה זול יותר.</p>
+      <h3>מיפוי הכפתורים (ברירת מחדל)</h3>
+      <table>
+        <tbody>
+          <tr><td><b>A</b> (הכפתור הראשון שלומדים)</td><td>🔒 נעל</td></tr>
+          <tr><td><b>B</b> (הכפתור השני שלומדים)</td><td>🔓 פתח</td></tr>
+          <tr><td>C, D</td><td>לא בשימוש — אפשר להוסיף בקוד (למשל „פתח ונעל אוטומטית אחרי 10 שניות”).</td></tr>
+        </tbody>
+      </table>
+      <h3>למידת שלט חדש</h3>
+      <ol>
+        <li>לחץ קצר על <b>כפתור הלמידה</b> בקופסה → צפצוף אחד, נורה אדומה מהבהבת.</li>
+        <li>לחץ בשלט על הכפתור שירצה <b>לנעול</b> (A) → 2 צפצופים.</li>
+        <li>לחץ על הכפתור שירצה <b>לפתוח</b> (B) → 3 צפצופים + ירוק = נשמר.</li>
+        <li>אם לא לוחצים 10 שניות — יציאה ללא שינוי.</li>
+      </ol>
+      <h3>מחיקת כל השלטים (שלט אבד/נגנב)</h3>
+      <p>החזק את כפתור הלמידה <b>8 שניות</b> → צפצוף ארוך → כל השלטים נמחקו. למד מחדש את השלטים שנשארו.</p>
+      <h3>סוללה</h3>
+      <p>רוב השלטים האלה עובדים עם סוללת <span class="mono">27A 12V</span> (או 23A — בדוק בשלט). קנה כמה רזרביות: <span class="mono">27A 12V battery</span>.</p>
+    </div>
+
+    <div class="tab" id="tab-use">
+      <h3>חיוויים</h3>
+      <table><tbody>
+        <tr><td>🟢 ירוק דולק</td><td>פתוח</td></tr>
+        <tr><td>🔴 אדום דולק</td><td>נעול</td></tr>
+        <tr><td>🔴 אדום מהבהב</td><td>מצב למידה</td></tr>
+        <tr><td>צפצוף קצר אחד</td><td>הפקודה התקבלה</td></tr>
+        <tr><td>3 צפצופים מהירים</td><td>שגיאה: ניסית לנעול כשהדלת פתוחה</td></tr>
+        <tr><td>צפצוף כל 30 שניות</td><td>הדלת נשארה פתוחה יותר מ־2 דקות (ניתן לכבות בקוד)</td></tr>
+      </tbody></table>
+      <h3>נעילה אוטומטית</h3>
+      <p>בקוד, <span class="mono">AUTO_LOCK_MS</span> קובע כמה זמן אחרי שהדלת נסגרה (והיא לא נעולה) היא תינעל לבד. ברירת המחדל <b>0 = כבוי</b>. לדוגמה <span class="mono">60000</span> = דקה. מומלץ להפעיל רק אחרי שבוע שהכל עובד טוב.</p>
+      <h3>הפסקת חשמל</h3>
+      <p>המפעיל נשאר במקום שבו הוא היה — אם הדלת הייתה נעולה, היא תישאר נעולה. לכן:</p>
+      <ul>
+        <li>מומלץ מאוד להוסיף <b>UPS קטן ל־12V</b> (ברשימת החלקים, אופציונלי) — מחזיק שעות.</li>
+        <li>תמיד צריכה להיות <b>דרך כניסה נוספת</b> (דלת אחרת / מנעול מפתח רגיל בדלת הזו) — המערכת הזו היא בריח נוסף, לא המנעול היחיד.</li>
+      </ul>
+      <h3>תחזוקה</h3>
+      <ul>
+        <li>כל 3 חודשים: טיפת שמן סיליקון/גרפיט על הבריח (לא WD-40 — מושך אבק).</li>
+        <li>החלפת סוללה בשלט כשהטווח קטן.</li>
+        <li>בדיקת הידוק ברגי התפס פעם בחצי שנה.</li>
+      </ul>
+      <h3>✅ צ׳קליסט לפני שימוש</h3>
+      <div class="checklist" id="checklist"></div>
+    </div>
+
+    <div class="tab" id="tab-trouble">
+      <table>
+        <thead><tr><th>תקלה</th><th>סיבה סבירה</th><th>פתרון</th></tr></thead>
+        <tbody>
+          <tr><td>כלום לא קורה כשלוחצים בשלט</td><td>שלט לא נלמד / תדר שגוי / אין אנטנה</td><td>פתח Serial Monitor — אם רואים „Received …” השלט נקלט אבל לא נלמד. אם לא רואים כלום: בדוק D2, אנטנה, 433MHz.</td></tr>
+          <tr><td>טווח קצר (פחות מ־5 מ׳)</td><td>אנטנה / סוללה / מקלט זול</td><td>חוט ישר 17.3 ס״מ כאנטנה, סוללה חדשה, ודא שזה RXB6 (סופר־הטרודין) ולא XY-MK-5V.</td></tr>
+          <tr><td>המפעיל זז הפוך</td><td>קוטביות</td><td>החלף בין שני חוטי המפעיל.</td></tr>
+          <tr><td>הממסרים „מקליקים” אבל המפעיל לא זז</td><td>אין 12V על NO / חיווט NO-NC הפוך</td><td>מדוד מתח בין חוטי המפעיל בזמן פעולה.</td></tr>
+          <tr><td>ה־Nano מתאפס כשהמנוע מתחיל</td><td>נפילת מתח</td><td>ספק 2A לפחות, קבל 1000µF/25V על כניסת 12V, חוטים עבים יותר.</td></tr>
+          <tr><td>הבריח נעצר באמצע</td><td>חיכוך / יישור / כוח חלש</td><td>הזז ביד — אם קשה, יישר את התפס. אם קל: הגדל MOVE_MS, או מפעיל חזק יותר (100N+).</td></tr>
+          <tr><td>נועל לבד באקראי</td><td>שלט של שכן עם אותו קוד (נדיר) / רעש</td><td>מחק ולמד מחדש. הקוד דורש 2 קליטות זהות ברצף כהגנה נוספת.</td></tr>
+          <tr><td>ההעלאה ל־Nano נכשלת</td><td>Bootloader / דרייבר</td><td>החלף Processor ל־„Old Bootloader” וחזרה, התקן CH340, כבל USB שמעביר נתונים.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tab" id="tab-safety">
+      <div class="warn"><b>אבטחה — חשוב לדעת:</b> שלטי 433MHz עם קוד קבוע (EV1527) <u>ניתנים להעתקה</u> על ידי מי שמחזיק מכשיר הקלטה (כמו Flipper Zero) ועומד לידך כשאתה לוחץ. זו אותה רמת אבטחה של שער חנייה זול. לכן: השתמש בזה כ<b>בריח פנימי נוסף</b> (למשל לנעילה מהמיטה בלילה, לדלת פנימית, למחסן) ולא כמנעול היחיד של הדלת הראשית. לאבטחה גבוהה יותר — גרסת ESP32 עם Bluetooth/Wi-Fi מוצפן.</div>
+      <div class="warn"><b>בטיחות אש:</b> ודא שתמיד אפשר לצאת מבפנים ללא שלט! הוסף כפתור „פתח” פנימי ליד הדלת (מחובר במקביל לכפתור — ראה הערה בקוד), או השאר את ידית הבריח הידנית נגישה כמנוף חירום. בדירות שכורות/משותפות — בדוק תקנות.</div>
+      <div class="warn"><b>חשמל:</b> כל המערכת עובדת על 12V DC מספק סגור ומאושר — אל תחבר שום דבר ישירות ל־230V. ספק כוח עם תו תקן.</div>
+      <div class="tip"><b>שדרוג עתידי:</b> החלף Nano ב־ESP32 (אותם חיבורים בערך) והוסף פתיחה מהטלפון, התראות, ויומן כניסות. מבנה הקוד כאן כבר מחולק לפונקציות lock()/unlock() כדי שיהיה קל להעביר.</div>
+    </div>
+  </section>
+</main>
+
+<script id="arduinoCode" type="text/plain">/*
+ * Remote-controlled steel bolt lock
+ * Arduino Nano + RXB6 433MHz receiver + EV1527 remotes
+ * 2-relay H-bridge driving a 12V linear actuator
+ *
+ * Library: rc-switch (by sui77)  ->  Library Manager: "rc-switch"
+ */
+#include <RCSwitch.h>
+#include <EEPROM.h>
+
+// ---------- Pins ----------
+const uint8_t PIN_RF       = 2;   // RXB6 DATA (interrupt 0)
+const uint8_t PIN_LEARN    = 3;   // learn button to GND
+const uint8_t PIN_RELAY1   = 4;   // extend  = LOCK
+const uint8_t PIN_RELAY2   = 5;   // retract = UNLOCK
+const uint8_t PIN_DOOR     = 6;   // reed switch to GND (LOW = door closed)
+const uint8_t PIN_BUZZER   = 7;
+const uint8_t PIN_LED_GRN  = 8;
+const uint8_t PIN_LED_RED  = 9;
+// Optional: an indoor "open" button wired from A0 to GND
+const uint8_t PIN_INSIDE   = A0;
+
+// ---------- Settings ----------
+const bool          RELAY_ACTIVE_LOW = true;    // most cheap relay boards
+const unsigned long MOVE_MS          = 3500;    // full stroke time + margin
+const unsigned long AUTO_LOCK_MS     = 0;       // 0 = off, e.g. 60000 = 1 min
+const unsigned long DOOR_OPEN_WARN   = 120000;  // beep if door open > 2 min (0 = off)
+const unsigned long REPEAT_IGNORE_MS = 1200;    // remotes repeat while held
+const uint8_t       MAX_REMOTES      = 8;
+
+// ---------- EEPROM layout ----------
+// [0]     magic byte
+// [1..]   MAX_REMOTES * (lockCode:4 bytes, unlockCode:4 bytes)
+// [last]  saved lock state
+const uint8_t  EE_MAGIC = 0xB7;
+const int      EE_SLOTS = 1;
+const int      EE_STATE = EE_SLOTS + MAX_REMOTES * 8;
+
+RCSwitch rf;
+
+bool locked = false;
+unsigned long lastCode = 0, lastCodeAt = 0;
+unsigned long doorClosedSince = 0, doorOpenSince = 0, lastWarnAt = 0;
+unsigned long pendingCode = 0; uint8_t pendingHits = 0;
+
+// ---------- helpers ----------
+void relay(uint8_t pin, bool on) {
+  digitalWrite(pin, (on ^ RELAY_ACTIVE_LOW) ? HIGH : LOW);
+}
+void motorStop() { relay(PIN_RELAY1, false); relay(PIN_RELAY2, false); }
+
+void beep(uint8_t n, unsigned int ms = 80) {
+  for (uint8_t i = 0; i < n; i++) {
+    digitalWrite(PIN_BUZZER, HIGH); delay(ms);
+    digitalWrite(PIN_BUZZER, LOW);  delay(ms);
+  }
+}
+void showState() {
+  digitalWrite(PIN_LED_RED, locked ? HIGH : LOW);
+  digitalWrite(PIN_LED_GRN, locked ? LOW : HIGH);
+}
+bool doorClosed() { return digitalRead(PIN_DOOR) == LOW; }
+
+unsigned long eeRead(int addr)  { unsigned long v; EEPROM.get(addr, v); return v; }
+void eeWrite(int addr, unsigned long v) { EEPROM.put(addr, v); }
+
+void eraseAll() {
+  EEPROM.update(0, EE_MAGIC);
+  for (uint8_t i = 0; i < MAX_REMOTES; i++) {
+    eeWrite(EE_SLOTS + i * 8, 0);
+    eeWrite(EE_SLOTS + i * 8 + 4, 0);
+  }
+}
+
+// returns 1 = lock, 2 = unlock, 0 = unknown
+uint8_t lookup(unsigned long code) {
+  for (uint8_t i = 0; i < MAX_REMOTES; i++) {
+    if (code == eeRead(EE_SLOTS + i * 8))     return 1;
+    if (code == eeRead(EE_SLOTS + i * 8 + 4)) return 2;
+  }
+  return 0;
+}
+
+// ---------- actions ----------
+void moveBolt(bool toLock) {
+  motorStop(); delay(50);                       // never both relays on
+  relay(toLock ? PIN_RELAY1 : PIN_RELAY2, true);
+  unsigned long t = millis();
+  while (millis() - t < MOVE_MS) {
+    digitalWrite(PIN_LED_RED, (millis() / 120) % 2);   // blink while moving
+  }
+  motorStop();
+  locked = toLock;
+  EEPROM.update(EE_STATE, locked ? 1 : 0);
+  showState();
+}
+
+void lock() {
+  if (!doorClosed()) {                          // bolt would hit the frame
+    Serial.println(F("Refused: door is open"));
+    beep(3, 60);
+    return;
+  }
+  Serial.println(F("LOCK"));
+  beep(1);
+  moveBolt(true);
+}
+
+void unlock() {
+  Serial.println(F("UNLOCK"));
+  beep(1);
+  moveBolt(false);
+  doorClosedSince = millis();                   // restart auto-lock timer
+}
+
+// ---------- learn mode ----------
+unsigned long waitForCode(unsigned long ignore) {
+  unsigned long t = millis();
+  while (millis() - t < 10000) {
+    digitalWrite(PIN_LED_RED, (millis() / 250) % 2);
+    if (rf.available()) {
+      unsigned long c = rf.getReceivedValue();
+      rf.resetAvailable();
+      if (c != 0 && c != ignore) return c;
+    }
+  }
+  return 0;
+}
+
+void learn() {
+  Serial.println(F("LEARN: press LOCK button on remote"));
+  beep(1);
+  delay(300); rf.resetAvailable();
+  unsigned long a = waitForCode(0);
+  if (!a) { beep(1, 400); showState(); return; }
+  beep(2);
+  Serial.print(F("  lock code = ")); Serial.println(a);
+
+  Serial.println(F("LEARN: press UNLOCK button on remote"));
+  delay(600); rf.resetAvailable();
+  unsigned long b = waitForCode(a);
+  if (!b) { beep(1, 400); showState(); return; }
+  Serial.print(F("  unlock code = ")); Serial.println(b);
+
+  // free slot, or overwrite the oldest (slot 0) when full
+  uint8_t slot = 0;
+  for (uint8_t i = 0; i < MAX_REMOTES; i++) {
+    if (eeRead(EE_SLOTS + i * 8) == 0) { slot = i; break; }
+  }
+  eeWrite(EE_SLOTS + slot * 8, a);
+  eeWrite(EE_SLOTS + slot * 8 + 4, b);
+  Serial.print(F("Saved in slot ")); Serial.println(slot);
+  beep(3);
+  showState();
+}
+
+void handleLearnButton() {
+  if (digitalRead(PIN_LEARN) != LOW) return;
+  unsigned long t = millis();
+  while (digitalRead(PIN_LEARN) == LOW) {
+    if (millis() - t > 8000) {                  // long press: erase all
+      eraseAll();
+      Serial.println(F("All remotes erased"));
+      beep(1, 1000);
+      while (digitalRead(PIN_LEARN) == LOW) {}
+      return;
+    }
+  }
+  if (millis() - t > 50) learn();               // short press: learn
+}
+
+// ---------- setup / loop ----------
+void setup() {
+  Serial.begin(9600);
+  pinMode(PIN_RELAY1, OUTPUT); pinMode(PIN_RELAY2, OUTPUT);
+  motorStop();
+  pinMode(PIN_LEARN, INPUT_PULLUP);
+  pinMode(PIN_DOOR, INPUT_PULLUP);
+  pinMode(PIN_INSIDE, INPUT_PULLUP);
+  pinMode(PIN_BUZZER, OUTPUT);
+  pinMode(PIN_LED_GRN, OUTPUT); pinMode(PIN_LED_RED, OUTPUT);
+
+  if (EEPROM.read(0) != EE_MAGIC) eraseAll();   // first boot
+  locked = EEPROM.read(EE_STATE) == 1;
+  showState();
+
+  rf.enableReceive(digitalPinToInterrupt(PIN_RF));
+  Serial.println(F("Bolt lock ready"));
+  beep(2, 40);
+}
+
+void loop() {
+  handleLearnButton();
+
+  // indoor emergency/open button
+  if (digitalRead(PIN_INSIDE) == LOW) {
+    delay(30);
+    if (digitalRead(PIN_INSIDE) == LOW) {
+      locked ? unlock() : lock();
+      while (digitalRead(PIN_INSIDE) == LOW) {}
+    }
+  }
+
+  if (rf.available()) {
+    unsigned long code = rf.getReceivedValue();
+    Serial.print(F("Received ")); Serial.print(code);
+    Serial.print(F(" / ")); Serial.print(rf.getReceivedBitlength());
+    Serial.println(F(" bit"));
+    rf.resetAvailable();
+
+    // require two identical frames in a row (filters noise)
+    if (code == pendingCode) pendingHits++; else { pendingCode = code; pendingHits = 1; }
+
+    bool repeat = (code == lastCode) && (millis() - lastCodeAt < REPEAT_IGNORE_MS);
+    if (code != 0 && pendingHits >= 2 && !repeat) {
+      uint8_t cmd = lookup(code);
+      if (cmd) { lastCode = code; lastCodeAt = millis(); }
+      if (cmd == 1) lock();
+      else if (cmd == 2) unlock();
+    }
+    if (code == lastCode) lastCodeAt = millis();   // still held: extend window
+  }
+
+  // door timers
+  unsigned long now = millis();
+  if (doorClosed()) {
+    doorOpenSince = 0;
+    if (!doorClosedSince) doorClosedSince = now;
+    if (AUTO_LOCK_MS && !locked && now - doorClosedSince > AUTO_LOCK_MS) lock();
+  } else {
+    doorClosedSince = 0;
+    if (!doorOpenSince) doorOpenSince = now;
+    if (DOOR_OPEN_WARN && now - doorOpenSince > DOOR_OPEN_WARN && now - lastWarnAt > 30000) {
+      beep(1, 150); lastWarnAt = now;
+    }
+  }
+}
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ===================== PART DATA ===================== */
+const PARTS = [
+  {id:"bolt", name:"בריח הזזה מנירוסטה (בריח + מובילים + תפס)", ali:"stainless steel barrel bolt door latch 6 inch heavy duty", qty:1, price:25, color:0xb8c0c8,
+   role:"הבריח עצמו — מוט פלדה שנכנס לתפס. קונים בריח ידני רגיל ומשתמשים בכל חלקיו: המוט, המובילים שמוברגים לדלת והתפס למשקוף.",
+   where:"המובילים מוברגים לפלטת הבסיס, המוט מחובר למפעיל דרך המצמד.", tip:"עדיף 6 אינץ׳ (15 ס״מ) ועבה (קוטר מוט 10 מ״מ+). בדוק שהמוט זז בחופשיות."},
+  {id:"keeper", name:"תפס / לשונית משקוף", ali:"(מגיע עם הבריח) — או: stainless steel bolt keeper strike plate", qty:1, price:0, color:0x9aa3ad,
+   role:"החלק שעל המשקוף שהבריח נכנס אליו. הוא מחזיק את כל הכוח כשמנסים לפרוץ.", where:"מוברג למשקוף, בגובה מדויק מול הבריח.", tip:"ברגי עץ ארוכים (4×40) שנכנסים עמוק לקורה, לא רק לפרופיל."},
+  {id:"actuator", name:"מפעיל ליניארי 12V, מהלך 30 מ״מ", ali:"DC 12V micro linear actuator 30mm stroke 100N", qty:1, price:75, color:0x30363d,
+   role:"המנוע: מוט שנדחף ונמשך. כולל מפסקי גבול פנימיים שעוצרים אותו בקצוות.", where:"תושבת אחורית לפלטה, קצה המוט למצמד של הבריח. 2 חוטים ל־COM של הממסרים.",
+   tip:"מהלך 30 מ״מ מספיק לבריח רגיל. כוח 60–150N. מהירות 10–15 מ״מ/שנייה. ודא שהמהלך ≥ כמה שהבריח צריך לזוז."},
+  {id:"mount", name:"תושבות למפעיל", ali:"linear actuator mounting bracket", qty:1, price:10, color:0x6e7781,
+   role:"מחזיקות את המפעיל ומאפשרות לו להסתובב מעט (מונע היתקעות).", where:"אחורית — לפלטה. קדמית — דרך המצמד לבריח.", tip:"לפעמים כלולות עם המפעיל — בדוק בדף המוצר."},
+  {id:"coupler", name:"מצמד (זווית מתכת + בורג M4 + אום נעילה)", ali:"M4 nylon lock nut screw set stainless + small L bracket", qty:1, price:12, color:0xd29922,
+   role:"מחבר את מוט המפעיל לבריח, במקום הידית הידנית.", where:"בין קצה מוט המפעיל לגוף הבריח.", tip:"השאר מעט חופש תנועה — חיבור קשיח מדי = היתקעות."},
+  {id:"base", name:"פלטת בסיס", ali:"aluminum plate 3mm 200x100mm", qty:1, price:15, color:0x8c959f,
+   role:"הבסיס שעליו מורכב כל המנגנון — שומר על יישור מדויק בין המפעיל לבריח.", where:"מוברגת לדלת.", tip:"אפשר גם לוח עץ קשה 12 מ״מ או הדפסה בתלת־ממד (PETG, 40% מילוי)."},
+  {id:"cover", name:"מכסה למנגנון", ali:"ABS plastic project box 200x60x40mm", qty:1, price:15, color:0x58a6ff,
+   role:"מגן על המנגנון מאבק ומאצבעות.", where:"מעל הפלטה, עם פתח לבריח.", tip:"בדגם אפשר להסתיר אותו בכפתור „מכסה”."},
+  {id:"nano", name:"Arduino Nano V3", ali:"Arduino Nano V3.0 ATmega328P CH340 Type-C", qty:1, price:18, color:0x1f6feb,
+   role:"המוח: מקבל את הקוד מהמקלט, בודק שהשלט מוכר ומפעיל את הממסרים.", where:"בקופסת האלקטרוניקה. ראה טבלת חיווט.", tip:"קנה גרסה עם פינים מולחמים (with pin header soldered)."},
+  {id:"rx", name:"מקלט 433MHz סופר־הטרודין RXB6", ali:"RXB6 433MHz superheterodyne wireless receiver module", qty:1, price:10, color:0x2da44e,
+   role:"קולט את האות מהשלט ומעביר את הקוד ל־Arduino.", where:"VCC‏=5V, GND, DATA←D2, ANT←אנטנה.", tip:"הימנע מ־XY-MK-5V (הירוק הזול) — טווח גרוע. ה־RXB6 נותן 30–50 מ׳."},
+  {id:"ant", name:"אנטנת קפיץ 433MHz", ali:"433MHz spring antenna helical", qty:1, price:5, color:0xffd33d,
+   role:"משפרת מאוד את טווח הקליטה.", where:"מולחמת לפין ANT של המקלט, בולטת מחוץ לקופסה.", tip:"חלופה חינמית: חוט נחושת ישר באורך 17.3 ס״מ."},
+  {id:"relay", name:"מודול 2 ממסרים 5V", ali:"5V 2 channel relay module with optocoupler", qty:1, price:10, color:0x0969da,
+   role:"מתגים חשמליים שהופכים את כיוון הזרם למפעיל (גשר H).", where:"IN1←D4, IN2←D5, VCC=5V. מגעים: NO=+12V, NC=GND, COM=מפעיל.", tip:"מומלץ עם אופטוקפלר (optocoupler)."},
+  {id:"buck", name:"ממיר מתח LM2596 (12V→5V)", ali:"LM2596 DC-DC step down buck converter module", qty:1, price:6, color:0x1b7c83,
+   role:"מוריד 12V ל־5V עבור ה־Arduino, המקלט והממסרים.", where:"IN מהשקע DC, OUT לכל קווי ה־5V.", tip:"חובה לכוון ל־5.0V עם מודד לפני חיבור!"},
+  {id:"psu", name:"ספק כוח 12V 2A", ali:"12V 2A power adapter DC 5.5x2.1mm EU plug", qty:1, price:20, color:0x24292f,
+   role:"מספק חשמל לכל המערכת.", where:"לשקע הקיר, תקע DC לשקע בקופסה.", tip:"בחר תקע EU או IL לפי השקע בבית. 2A לפחות."},
+  {id:"jack", name:"שקע DC לקופסה", ali:"DC 5.5x2.1mm female panel mount jack", qty:1, price:5, color:0x57606a,
+   role:"נקודת כניסת החשמל לקופסה.", where:"בדופן הקופסה.", tip:""},
+  {id:"reed", name:"חיישן דלת מגנטי (Reed)", ali:"MC-38 wired door window sensor magnetic switch", qty:1, price:6, color:0xf6f8fa,
+   role:"יודע אם הדלת סגורה. מונע נעילה כשהדלת פתוחה ומאפשר נעילה אוטומטית.", where:"החלק עם החוטים — על הדלת. המגנט — על המשקוף. חוטים ל־D6 ו־GND.", tip:"מרווח מקסימלי ~15 מ״מ כשסגור."},
+  {id:"buzzer", name:"זמזם אקטיבי 5V", ali:"5V active buzzer module", qty:1, price:4, color:0x111111,
+   role:"צפצופי אישור, שגיאה ולמידה.", where:"D7.", tip:"אקטיבי (active), לא פסיבי."},
+  {id:"leds", name:"נוריות LED + נגדים 220Ω", ali:"5mm LED red green with holder + 220 ohm resistor kit", qty:1, price:6, color:0xcf222e,
+   role:"חיווי מצב: ירוק=פתוח, אדום=נעול.", where:"D8 (ירוק), D9 (אדום) דרך נגד.", tip:"כדאי עם תושבת (LED holder) לדופן הקופסה."},
+  {id:"btn", name:"כפתור למידה 12 מ״מ", ali:"12mm momentary push button waterproof", qty:1, price:4, color:0xbf3989,
+   role:"כניסה למצב למידת שלט / מחיקת שלטים.", where:"D3 ו־GND.", tip:"אפשר לקנות 2 — אחד נוסף ככפתור „פתח” פנימי על A0."},
+  {id:"ebox", name:"קופסת אלקטרוניקה", ali:"ABS plastic project box 100x60x25mm", qty:1, price:8, color:0xd0d7de,
+   role:"מארז לכל האלקטרוניקה.", where:"מעל או ליד המנגנון, על הדלת או על הקיר.", tip:""},
+  {id:"remote", name:"שלט 433MHz EV1527 בעל 4 כפתורים", ali:"433MHz EV1527 learning code remote control 4 key", qty:3, price:8, color:0x6e40c9,
+   role:"השלט! A=נעל, B=פתח.", where:"בכיס 😉 — ראה לשונית „שלטים”.", tip:"לא Rolling code! לא 315MHz!"},
+  {id:"wires", name:"חוטים, Dupont, מכווץ, תעלה דביקה, ברגים", ali:"dupont jumper wire kit + 22AWG silicone wire + heat shrink tube kit", qty:1, price:20, color:0xe16f24,
+   role:"כל החיבורים.", where:"", tip:"חוטי המנוע: 20–22AWG."},
+  {id:"cap", name:"קבל 1000µF 25V", ali:"1000uF 25V electrolytic capacitor", qty:1, price:3, color:0x0a3069,
+   role:"מייצב מתח כשהמנוע מתניע — מונע איפוס של ה־Arduino.", where:"על כניסת 12V (פלוס לפלוס!).", tip:""},
+  {id:"ups", name:"UPS קטן 12V (אופציונלי)", ali:"12V mini UPS DC uninterruptible power supply 18650", qty:1, price:60, color:0x3fb950, optional:true,
+   role:"ממשיך לעבוד בהפסקת חשמל.", where:"בין הספק לשקע DC.", tip:"מומלץ מאוד."}
+];
+
+/* ===================== TABS / TABLE / CODE ===================== */
+const $ = s => document.querySelector(s);
+document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("active", x === b));
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.id === "tab-" + b.dataset.tab));
+}));
+
+const code = document.getElementById("arduinoCode").textContent.replace(/^\n/, "");
+$("#codeBlock").textContent = code;
+
+function copy(text, msgEl){
+  const done = () => { msgEl.textContent = "הועתק ✓"; setTimeout(()=>msgEl.textContent="", 1800); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => fallback());
+  else fallback();
+  function fallback(){ const t=document.createElement("textarea"); t.value=text; document.body.appendChild(t); t.select(); try{document.execCommand("copy");done();}catch(e){} t.remove(); }
+}
+$("#copyCode").onclick = () => copy(code, $("#copyCodeMsg"));
+
+const hex = c => "#" + c.toString(16).padStart(6, "0");
+const tbody = $("#partsTable tbody");
+let total = 0;
+PARTS.forEach((p, i) => {
+  if (!p.optional) total += p.price * p.qty;
+  const tr = document.createElement("tr");
+  tr.className = "part"; tr.dataset.id = p.id;
+  tr.innerHTML = `<td>${i+1}</td><td><span class="swatch" style="background:${hex(p.color)}"></span>${p.name}${p.optional?' <span class="muted">(אופציונלי)</span>':''}</td>
+    <td><span class="mono">${p.ali}</span></td><td>${p.qty}</td><td>${p.price?("~₪"+p.price*p.qty):"כלול"}</td>`;
+  tr.onclick = () => selectPart(p.id, true);
+  tbody.appendChild(tr);
+});
+$("#total").textContent = "~₪" + total + " (בלי UPS)";
+$("#copyAll").onclick = () => copy(PARTS.map((p,i)=>`${i+1}. ${p.name} ×${p.qty}\n   AliExpress: ${p.ali}`).join("\n"), $("#copyAllMsg"));
+
+const checks = ["הממיר מכוון ל־5.0V","השלטים נלמדו ונבדקו","המפעיל זז בכיוון הנכון","הבריח נכנס לתפס בחלקות (גם בדחיפת הדלת)","הנעילה נחסמת כשהדלת פתוחה","MOVE_MS כויל","יש דרך יציאה מבפנים בלי שלט","יש דרך כניסה חלופית בהפסקת חשמל","20 מחזורי בדיקה עברו"];
+const cl = $("#checklist");
+let saved = {}; try { saved = JSON.parse(localStorage.getItem("boltlock-checks")||"{}"); } catch(e){}
+checks.forEach((c,i)=>{ const l=document.createElement("label"); l.innerHTML=`<input type="checkbox" ${saved[i]?"checked":""}> ${c}`;
+  l.querySelector("input").onchange=e=>{saved[i]=e.target.checked; try{localStorage.setItem("boltlock-checks",JSON.stringify(saved));}catch(err){}}; cl.appendChild(l); });
+
+function showInfo(p){
+  const el = $("#info");
+  el.innerHTML = `<h2><span class="swatch" style="background:${hex(p.color)}"></span>${p.name}</h2>
+    <div class="muted">כמות: ${p.qty} · מחיר משוער: ${p.price?("~₪"+p.price*p.qty):"כלול עם הבריח"}${p.optional?" · אופציונלי":""}</div>
+    <div class="ali"><b>חיפוש באליאקספרס:</b> <code>${p.ali}</code>
+      <button id="copyAli">📋 העתק</button>
+      <a href="https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(p.ali.replace(/^\(.*?\)\s*—\s*או:\s*/,""))}" target="_blank" rel="noopener">🔎 חפש</a>
+      <span id="copyAliMsg" class="copied"></span></div>
+    <p><b>תפקיד:</b> ${p.role}</p>
+    ${p.where?`<p><b>איפה מתחבר:</b> ${p.where}</p>`:""}
+    ${p.tip?`<div class="tip">💡 ${p.tip}</div>`:""}`;
+  $("#copyAli").onclick = () => copy(p.ali, $("#copyAliMsg"));
+}
+
+/* ===================== 3D ===================== */
+let selectPart = (id, fromTable) => {
+  const p = PARTS.find(x=>x.id===id); if (p) showInfo(p);
+  document.querySelectorAll("tr.part").forEach(r=>r.classList.toggle("sel", r.dataset.id===id));
+};
+
+if (typeof THREE === "undefined") {
+  $("#loadMsg").textContent = "לא ניתן לטעון את Three.js — בדוק חיבור לאינטרנט. כל שאר הלשוניות (חלקים, קוד, הוראות) עובדות.";
+  return;
+}
+$("#loadMsg").style.display = "none";
+
+const canvas = $("#viewer");
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 1000);
+const HOME = new THREE.Vector3(12, 16, 62);
+camera.position.copy(HOME);
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.target.set(-12, 2, 0); controls.enableDamping = true; controls.update();
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 0.85));
+const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+sun.position.set(10, 25, 30); sun.castShadow = true; sun.shadow.mapSize.set(1024,1024);
+Object.assign(sun.shadow.camera, {left:-40,right:40,top:40,bottom:-40});
+scene.add(sun);
+
+const mat = (c, o={}) => new THREE.MeshStandardMaterial(Object.assign({color:c, metalness:.35, roughness:.55}, o));
+const box = (w,h,d,m) => { const g=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), m); g.castShadow=g.receiveShadow=true; return g; };
+const cyl = (r,l,m,axis="x",seg=24) => { const g=new THREE.Mesh(new THREE.CylinderGeometry(r,r,l,seg), m);
+  if(axis==="x") g.rotation.z=Math.PI/2; if(axis==="z") g.rotation.x=Math.PI/2; g.castShadow=true; return g; };
+
+/* Scene coordinates (cm): door inner face is z=0, door spans x<0, frame at x 0..6.
+   The bolt slides along +x into the keeper on the frame. */
+const env = new THREE.Group(); scene.add(env);
+const door = box(44, 70, 4, mat(0x9c6b3f,{metalness:0,roughness:.8})); door.position.set(-22.3, 0, -2); env.add(door);
+const frame = box(7, 76, 8, mat(0xd9cbb4,{metalness:0,roughness:.85})); frame.position.set(3.7, 0, -2); env.add(frame);
+const wall = box(30, 76, 8, mat(0xeeeeee,{metalness:0,roughness:.95})); wall.position.set(22.2, 0, -2); env.add(wall);
+const handle = cyl(0.6, 10, mat(0xc0c0c0,{metalness:.8}), "x"); handle.position.set(-8, -16, 2.5); env.add(handle);
+const hb = cyl(1.2, 2.5, mat(0xc0c0c0,{metalness:.8}), "z"); hb.position.set(-4, -16, 1.2); env.add(hb);
+
+const parts = {};   // id -> {group, home, dir}
+function addPart(id, group, home, dir){
+  group.position.copy(home);
+  group.traverse(o => { if (o.isMesh) { o.userData.partId = id; o.material = o.material.clone(); } });
+  scene.add(group);
+  parts[id] = {group, home: home.clone(), dir: dir.clone()};
+  return group;
+}
+const P = id => PARTS.find(p=>p.id===id).color;
+const steel = mat(P("bolt"), {metalness:.9, roughness:.25});
+
+// Base plate
+{ const g=new THREE.Group(); g.add(box(33, 9, 0.4, mat(P("base"),{metalness:.7,roughness:.4})));
+  for (const [x,y] of [[-15.5,-3.8],[15.5,-3.8],[-15.5,3.8],[15.5,3.8]]) { const s=cyl(.35,.3,mat(0x333333),"z"); s.position.set(x,y,.3); g.add(s); }
+  addPart("base", g, new THREE.Vector3(-16.8, 0, 0.2), new THREE.Vector3(0,0,1)); }
+
+// Bolt guides (fixed body of the barrel bolt) + bolt rod (moving)
+{ const g=new THREE.Group();
+  const gm = mat(P("bolt"),{metalness:.85,roughness:.3});
+  for (const x of [-4.6, -1.2]) { const b=box(2.2, 3.4, 2.4, gm); b.position.set(x,0,0); g.add(b);
+  }
+  const strap = box(6, 4.4, .25, gm); strap.position.set(-2.9,0,-1.1); g.add(strap);
+  addPart("bolt", g, new THREE.Vector3(0, 0, 1.6), new THREE.Vector3(2,-3,5)); }
+const rod = new THREE.Group();
+{ const r=cyl(.6, 12, steel, "x"); rod.add(r); const tip=new THREE.Mesh(new THREE.SphereGeometry(.6,16,12), steel); tip.position.x=6; rod.add(tip);
+  rod.traverse(o=>{if(o.isMesh){o.userData.partId="bolt";o.material=o.material.clone();}}); }
+scene.add(rod);
+const COUPLER_DIR = new THREE.Vector3(-2,-6,8);
+const ROD_UNLOCKED = -7.5, ROD_LOCKED = -2.5; // rod centre x; locked: tip at x=3.5 inside keeper
+
+// Keeper on frame
+{ const g=new THREE.Group(); const km=mat(P("keeper"),{metalness:.85,roughness:.3});
+  const plate=box(4.4,5,.3,km); plate.position.z=-.9; g.add(plate);
+  const loop=box(2.4,3.4,2.4,km); g.add(loop);
+  const hole=cyl(.7,2.6,mat(0x111111),"x"); g.add(hole);
+  addPart("keeper", g, new THREE.Vector3(3.6, 0, 1.6), new THREE.Vector3(6,0,4)); }
+
+// Actuator (body fixed, inner rod moves)
+const actRod = cyl(.35, 9, mat(0xd0d0d0,{metalness:.9,roughness:.2}), "x"); actRod.userData.partId="actuator"; scene.add(actRod);
+{ const g=new THREE.Group(); const am=mat(P("actuator"));
+  const body=box(9,2.4,2.6,am); g.add(body);
+  const motor=cyl(1.4,4.5,mat(0x484f58),"x"); motor.position.set(-6.5,0,0); g.add(motor);
+  const tube=cyl(.6,3,mat(0x6e7781),"x"); tube.position.set(6,0,0); g.add(tube);
+  const wireM=mat(0xcf222e,{metalness:0}); const w1=cyl(.12,6,wireM,"y"); w1.position.set(-6.5,3.4,0); g.add(w1);
+  const w2=cyl(.12,6,mat(0x111111,{metalness:0}),"y"); w2.position.set(-6.1,3.4,0); g.add(w2);
+  addPart("actuator", g, new THREE.Vector3(-24, 0, 1.9), new THREE.Vector3(-4,-5,7)); }
+
+// Mounting brackets
+{ const g=new THREE.Group(); const mm=mat(P("mount"),{metalness:.7});
+  const a=box(1.2,3.4,2.2,mm); a.position.set(0,0,0); g.add(a);
+  const p=cyl(.3,3.6,mat(0xaaaaaa,{metalness:.9}),"z"); p.position.set(0,0,0); g.add(p);
+  addPart("mount", g, new THREE.Vector3(-28.3, 0, 1.6), new THREE.Vector3(-9,-4,4)); }
+
+// Coupler (moves with rod)
+const coupler = new THREE.Group();
+{ const cm=mat(P("coupler"),{metalness:.7}); const l=box(1,2.4,1.6,cm); coupler.add(l);
+  const b=cyl(.25,3,mat(0x888888,{metalness:.9}),"y"); coupler.add(b);
+  coupler.traverse(o=>{if(o.isMesh){o.userData.partId="coupler";o.material=o.material.clone();}}); }
+scene.add(coupler);
+
+// Cover (transparent)
+{ const g=new THREE.Group(); const cm=mat(P("cover"),{transparent:true,opacity:.18,metalness:0,roughness:.2,depthWrite:false});
+  const shell=new THREE.Mesh(new THREE.BoxGeometry(33,8,4.4), cm); g.add(shell);
+  const edges=new THREE.LineSegments(new THREE.EdgesGeometry(shell.geometry), new THREE.LineBasicMaterial({color:P("cover")}));
+  g.add(edges);
+  addPart("cover", g, new THREE.Vector3(-16.8, 0, 2.6), new THREE.Vector3(0,-14,10)); }
+
+// Electronics box + boards (above the mechanism)
+const EB = new THREE.Vector3(-13.5, 12.5, 1.6);
+{ const g=new THREE.Group(); const em=mat(P("ebox"),{transparent:true,opacity:.3,metalness:0,depthWrite:false});
+  const s=new THREE.Mesh(new THREE.BoxGeometry(18,9,3), em); g.add(s);
+  g.add(new THREE.LineSegments(new THREE.EdgesGeometry(s.geometry), new THREE.LineBasicMaterial({color:0x8c959f})));
+  addPart("ebox", g, EB.clone(), new THREE.Vector3(0,12,10)); }
+function board(id, w, h, color, at, dir, extra){
+  const g=new THREE.Group(); const b=box(w,h,.16,mat(color,{metalness:.1,roughness:.7})); g.add(b);
+  if (extra) extra(g);
+  return addPart(id, g, EB.clone().add(at), dir);
+}
+board("nano", 4.3, 1.8, P("nano"), new THREE.Vector3(-4,1.8,-.9), new THREE.Vector3(-4,6,6), g=>{
+  const chip=box(1,1,.15,mat(0x111111)); chip.position.z=.15; chip.rotation.z=Math.PI/4; g.add(chip);
+  const usb=box(.9,.8,.4,mat(0xcccccc,{metalness:.9})); usb.position.set(-2.2,0,.25); g.add(usb); });
+board("rx", 3, 1.4, P("rx"), new THREE.Vector3(3.5,2.5,-.9), new THREE.Vector3(3,7,6), g=>{
+  const c=box(.8,.6,.3,mat(0xdddddd,{metalness:.8})); c.position.set(.6,0,.2); g.add(c); });
+board("relay", 5, 3.8, P("relay"), new THREE.Vector3(3.6,-1.8,-.9), new THREE.Vector3(6,2,6), g=>{
+  for (const x of [-1.2,1.2]) { const r=box(1.6,1.9,1.5,mat(0x1f6feb,{metalness:.1})); r.position.set(x,.5,.8); g.add(r); }
+  const t=box(4.6,.8,.8,mat(0x2da44e,{metalness:0})); t.position.set(0,-1.4,.4); g.add(t); });
+board("buck", 4.3, 2.1, P("buck"), new THREE.Vector3(-4.2,-2,-.9), new THREE.Vector3(-6,0,6), g=>{
+  const i=cyl(.7,.8,mat(0x333333),"z"); i.position.set(-1,0,.5); g.add(i);
+  const pot=box(.6,.9,.6,mat(0x1f6feb)); pot.position.set(1.4,.4,.35); g.add(pot); });
+board("cap", .1, .1, P("cap"), new THREE.Vector3(-.5,-2.6,-.4), new THREE.Vector3(-2,-1,7), g=>{
+  const c=cyl(.5,1.4,mat(P("cap"),{metalness:.3}),"z"); c.position.z=.6; g.add(c); });
+// Antenna (spring)
+{ const g=new THREE.Group(); const am=mat(P("ant"),{metalness:.9,roughness:.3});
+  const pts=[]; for(let i=0;i<=120;i++){const a=i/120*Math.PI*2*14; pts.push(new THREE.Vector3(Math.cos(a)*.3,i/120*4.5,Math.sin(a)*.3));}
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),300,.06,6,false), am));
+  addPart("ant", g, EB.clone().add(new THREE.Vector3(5,4.5,0)), new THREE.Vector3(2,8,4)); }
+// Panel items on box front
+{ const g=new THREE.Group(); const r=cyl(.32,.6,mat(0xff3b30,{emissive:0x000000}),"z"); r.position.x=-.9; g.add(r);
+  const gr=cyl(.32,.6,mat(0x34c759,{emissive:0x000000}),"z"); gr.position.x=.9; g.add(gr);
+  addPart("leds", g, EB.clone().add(new THREE.Vector3(-6.5,2.6,1.7)), new THREE.Vector3(-3,3,9)); }
+{ const g=new THREE.Group(); const b=cyl(.7,.9,mat(P("btn"),{metalness:.2}),"z"); g.add(b);
+  addPart("btn", g, EB.clone().add(new THREE.Vector3(-6.5,-.6,1.7)), new THREE.Vector3(-5,0,9)); }
+{ const g=new THREE.Group(); const b=cyl(.9,.9,mat(P("buzzer"),{metalness:.1}),"z"); g.add(b);
+  addPart("buzzer", g, EB.clone().add(new THREE.Vector3(-6.5,-3,1.7)), new THREE.Vector3(-5,-3,9)); }
+{ const g=new THREE.Group(); const b=cyl(.7,1.4,mat(P("jack"),{metalness:.8}),"y"); g.add(b);
+  addPart("jack", g, EB.clone().add(new THREE.Vector3(7.5,-4.8,0)), new THREE.Vector3(4,-3,3)); }
+// PSU cable + adapter on the wall
+{ const g=new THREE.Group(); const brick=box(4,5.5,3,mat(P("psu"),{metalness:.1,roughness:.7})); g.add(brick);
+  const pts=[new THREE.Vector3(0,2.7,0),new THREE.Vector3(-2,8,1),new THREE.Vector3(-11,9,2),new THREE.Vector3(-23,8.5,1.5)];
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),40,.18,6,false), mat(0x111111,{metalness:0})));
+  addPart("psu", g, new THREE.Vector3(16, -2, 2), new THREE.Vector3(8,-4,4)); }
+// Reed switch: body on door, magnet on frame
+{ const g=new THREE.Group(); const rm=mat(P("reed"),{metalness:0,roughness:.6});
+  const a=box(3.2,1.2,1.1,rm); a.position.set(-1.9,0,0); g.add(a);
+  const m=box(3.2,1.2,1.1,rm); m.position.set(2.2,0,0); g.add(m);
+  addPart("reed", g, new THREE.Vector3(1, -8, 0.6), new THREE.Vector3(3,-6,6)); }
+// Wires bundle (decorative, selectable)
+{ const g=new THREE.Group(); const wm=mat(P("wires"),{metalness:0});
+  const pts=[new THREE.Vector3(-30.3,4.6,2.6),new THREE.Vector3(-28,7,2.2),new THREE.Vector3(-21,9,1.6)];
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),20,.16,6,false), wm));
+  const pts2=[new THREE.Vector3(-1,-7.4,.8),new THREE.Vector3(-3,-5,.6),new THREE.Vector3(-4,4,.5),new THREE.Vector3(-6,8.4,1.2)];
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts2),30,.12,6,false), mat(0xffffff,{metalness:0})));
+  addPart("wires", g, new THREE.Vector3(0,0,0), new THREE.Vector3(-3,0,10)); }
+// Remote (floating in front)
+{ const g=new THREE.Group(); const rm=mat(P("remote"),{metalness:.1,roughness:.5});
+  const body=box(3.4,6,1,rm); g.add(body);
+  const labels=["A","B","C","D"]; labels.forEach((l,i)=>{ const b=cyl(.42,.3,mat(i<2?0xffffff:0x999999,{metalness:.1}),"z"); b.position.set(i%2?.75:-.75, i<2?1.2:-.6, .55); g.add(b); });
+  const led=cyl(.18,.2,mat(0xff3b30,{emissive:0x330000}),"z"); led.position.set(0,2.6,.55); g.add(led);
+  g.rotation.set(-.35,.5,.12);
+  addPart("remote", g, new THREE.Vector3(-2, -14, 14), new THREE.Vector3(4,-4,8)); }
+
+/* ---------- Labels (projected HTML) ---------- */
+const labelLayer = document.createElement("div");
+labelLayer.style.cssText = "position:absolute;inset:0;pointer-events:none;overflow:hidden;display:none";
+$("#viewerWrap").appendChild(labelLayer);
+const labelEls = {};
+Object.keys(parts).forEach(id=>{
+  const d=document.createElement("div"); const p=PARTS.find(x=>x.id===id);
+  d.textContent = p.name.split(" (")[0].split(",")[0];
+  d.style.cssText="position:absolute;transform:translate(50%,-50%);font-size:11px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:1px 6px;white-space:nowrap;opacity:.92";
+  labelLayer.appendChild(d); labelEls[id]=d;
+});
+
+/* ---------- State ---------- */
+let explode = 0, boltT = 0, boltTarget = 0, showCover = true, showDoor = true, showLabels = false;
+let selected = null;
+const highlight = new THREE.Color(0xff8a3d);
+
+function applyLayout(){
+  const e = explode * 1.0;
+  for (const id in parts) { const pt=parts[id]; pt.group.position.copy(pt.home).addScaledVector(pt.dir, e); }
+  // moving bits follow their parents
+  const rx = ROD_UNLOCKED + (ROD_LOCKED - ROD_UNLOCKED) * boltT;
+  rod.position.set(rx, 0, 1.6).addScaledVector(parts.bolt.dir, e).add(new THREE.Vector3(0,-e*3,e*2));
+  const rodLeft = rx - 6;                                     // left end of bolt rod
+  coupler.position.set(rodLeft - .3, 0, 1.6).addScaledVector(COUPLER_DIR, e);
+  const actFront = -24 + 7.5;                                 // front of actuator tube
+  const actEnd = rodLeft - .8;
+  actRod.scale.set(1, Math.max(.05,(actEnd - actFront + 3) / 9), 1);
+  actRod.position.set((actFront - 3 + actEnd)/2, 0, 1.9).addScaledVector(parts.actuator.dir, e);
+  parts.cover.group.visible = showCover;
+  env.visible = showDoor;
+}
+
+/* ---------- Picking ---------- */
+const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+function pick(ev){
+  const r = canvas.getBoundingClientRect();
+  mouse.set(((ev.clientX-r.left)/r.width)*2-1, -((ev.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(mouse, camera);
+  const hits = ray.intersectObjects(scene.children, true).filter(h => h.object.userData.partId && h.object.visible && (h.object.userData.partId!=="cover" || showCover));
+  // let clicks pass through the translucent cover/box to what's inside
+  const solid = hits.find(h => !["cover","ebox"].includes(h.object.userData.partId));
+  return (solid || hits[0] || {}).object;
+}
+function setEmissive(id, on){
+  const g = id==="bolt" ? [parts.bolt.group, rod] : id==="coupler" ? [coupler] : id==="actuator" ? [parts.actuator.group, actRod] : parts[id] ? [parts[id].group] : [];
+  g.forEach(gr => gr.traverse(o => { if (o.isMesh && o.material.emissive) {
+    if (!o.userData.baseEm) o.userData.baseEm = o.material.emissive.clone();
+    if (on) { o.material.emissive.copy(highlight).multiplyScalar(.45); }
+    else o.material.emissive.copy(o.userData.baseEm);
+  }}));
+}
+const baseSelect = selectPart;
+selectPart = (id, fromTable) => {
+  if (selected) setEmissive(selected, false);
+  selected = id; setEmissive(id, true);
+  baseSelect(id);
+  if (fromTable) $("#viewerWrap").scrollIntoView({behavior:"smooth", block:"center"});
+};
+let downAt = null;
+canvas.addEventListener("pointerdown", e => downAt = [e.clientX, e.clientY]);
+canvas.addEventListener("pointerup", e => {
+  if (!downAt || Math.hypot(e.clientX-downAt[0], e.clientY-downAt[1]) > 5) return;
+  const o = pick(e); if (o) selectPart(o.userData.partId);
+});
+const tag = $("#hoverTag");
+canvas.addEventListener("pointermove", e => {
+  const o = pick(e);
+  if (o) { const p = PARTS.find(x=>x.id===o.userData.partId); tag.style.display="block"; tag.innerHTML = `<b>${p.name}</b> · <span class="mono">${p.ali}</span>`; canvas.style.cursor="pointer"; }
+  else { tag.style.display="none"; canvas.style.cursor="grab"; }
+});
+canvas.addEventListener("pointerleave", () => tag.style.display="none");
+
+/* ---------- UI ---------- */
+$("#explode").addEventListener("input", e => { explode = e.target.value/100; $("#explodeVal").textContent = e.target.value + "%"; });
+$("#btnLock").onclick = () => { boltTarget = 1; };
+$("#btnUnlock").onclick = () => { boltTarget = 0; };
+$("#btnCover").onclick = e => { showCover=!showCover; e.target.textContent = "👁 מכסה: " + (showCover?"מוצג":"מוסתר"); };
+$("#btnDoor").onclick = e => { showDoor=!showDoor; e.target.textContent = "🚪 דלת: " + (showDoor?"מוצגת":"מוסתרת"); };
+$("#btnLabels").onclick = e => { showLabels=!showLabels; labelLayer.style.display = showLabels?"block":"none"; e.target.textContent="🏷 תוויות: "+(showLabels?"דולקות":"כבויות"); e.target.classList.toggle("on",showLabels); };
+$("#btnReset").onclick = () => { camera.position.copy(HOME); controls.target.set(-12,2,0); controls.update(); };
+
+const ledRed = parts.leds.group.children[0].material, ledGrn = parts.leds.group.children[1].material;
+
+function resize(){
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== Math.floor(w*renderer.getPixelRatio()) || canvas.height !== Math.floor(h*renderer.getPixelRatio())) {
+    renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix();
+  }
+}
+const tmp = new THREE.Vector3();
+let last = performance.now();
+function tick(now){
+  const dt = Math.min(.05, (now-last)/1000); last = now;
+  if (boltT !== boltTarget) {
+    const step = dt / 1.6;                     // ~1.6 s full stroke in the demo
+    boltT = boltTarget > boltT ? Math.min(boltTarget, boltT+step) : Math.max(boltTarget, boltT-step);
+    $("#state").textContent = boltT===1 ? "נעול 🔒" : boltT===0 ? "פתוח 🔓" : (boltTarget ? "נועל…" : "פותח…");
+    $("#state").style.color = boltT===1 ? "var(--bad)" : boltT===0 ? "var(--ok)" : "var(--muted)";
+  }
+  const moving = boltT !== boltTarget, blink = (now/150|0)%2;
+  ledRed.emissive.setHex(boltT===1 || (moving && blink) ? 0xff2200 : 0x000000);
+  ledGrn.emissive.setHex(boltT===0 && !moving ? 0x22cc44 : 0x000000);
+  applyLayout();
+  resize();
+  controls.update();
+  renderer.render(scene, camera);
+  if (showLabels) {
+    const r = canvas.getBoundingClientRect();
+    for (const id in labelEls) {
+      const g = id==="bolt" ? rod : parts[id].group;
+      g.getWorldPosition(tmp); tmp.project(camera);
+      const el = labelEls[id];
+      if (tmp.z > 1 || (id==="cover" && !showCover)) { el.style.display="none"; continue; }
+      el.style.display="block";
+      el.style.right = ((1-(tmp.x*.5+.5))*r.width) + "px";
+      el.style.top = ((-tmp.y*.5+.5)*r.height) + "px";
+    }
+  }
+  requestAnimationFrame(tick);
+}
+$("#state").style.color = "var(--ok)";
+requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
