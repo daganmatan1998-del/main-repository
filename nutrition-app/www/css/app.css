@@ -579,3 +579,26 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .bf-result .kv { text-align: start; margin: 8px 0 0; }
 .bf-link { margin-top: -6px; }
 .diet-note[hidden] { display: none; }
+
+/* ============ recipes ============ */
+.overlay.recipes { background: var(--bg); color: var(--text); overflow-y: auto; }
+.overlay.recipes .icon-btn { color: var(--text); }
+.rc-body { max-width: 640px; margin: 0 auto; width: 100%; padding: calc(var(--safe-top) + 8px) 16px calc(var(--safe-bottom) + 24px); display: grid; gap: 10px; }
+.rc-top { position: sticky; top: 0; z-index: 2; background: var(--bg); padding-bottom: 8px; display: grid; gap: 6px; }
+.rc-items { gap: 6px; }
+.rc-items .pill { font-size: .78rem; padding: 4px 10px; }
+.rc-search-row input { flex: 1; min-width: 0; }
+.rc-search-row .btn { flex-shrink: 0; min-height: 50px; }
+.rc-panel h3 { margin: 14px 0 8px; font-size: .95rem; }
+.rc-panel h3:first-child { margin-top: 0; }
+.rc-mini { margin: 6px 0; }
+.rc-card { padding: 0; overflow: hidden; }
+.rc-head { display: grid; gap: 4px; width: 100%; text-align: start; padding: 14px 16px; border: 0; background: transparent; color: var(--text); min-height: 64px; }
+.rc-title { font-weight: 500; font-size: 1rem; line-height: 1.35; }
+.rc-swap { color: var(--carb); font-weight: 500; }
+.rc-card.open .rc-head { background: var(--surface-2); }
+.rc-details { padding: 4px 16px 16px; }
+.rc-details h4 { margin: 12px 0 6px; font-size: .92rem; }
+.rc-ingr, .rc-steps { margin: 0; padding-inline-start: 20px; display: grid; gap: 6px; font-size: .92rem; }
+.rc-steps li::marker { color: var(--primary); font-weight: 700; }
+.rc-open { margin: 8px 0 6px; min-height: 44px; background: var(--primary-weak); border-color: transparent; color: var(--primary); }

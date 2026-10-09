@@ -330,6 +330,57 @@ try {
   await page.click('a[aria-label="חזרה לתפריט"]');
   await page.waitForSelector('.page-plan');
 
+  // =============== recipes ===============
+  await page.locator('.meal').first().locator('.rc-open').click();
+  await page.waitForSelector('.overlay.recipes .rc-card');
+  const countOf = async () => Number((await page.locator('#rc-count').innerText()).replace(/[^\d]/g, ''));
+  const totalRecipes = await countOf();
+  check(`meal has a large recipe collection (${totalRecipes})`, totalRecipes >= 40);
+  await page.locator('.rc-card .rc-head').first().click();
+  const firstSteps = await page.locator('.rc-card').first().locator('.rc-steps li').count();
+  const firstIngr = await page.locator('.rc-card').first().locator('.rc-ingr').innerText();
+  check('a recipe shows ingredients with exact grams and step-by-step instructions', firstSteps >= 3 && /\d+ ג׳/.test(firstIngr));
+  await wait(400);
+  await shot('27-recipes', { fullPage: false });
+  await page.click('#rc-filter-btn');
+  await page.waitForSelector('#rc-panel');
+  await page.locator('#rc-panel').getByRole('button', { name: 'תנור', exact: true }).click();
+  await wait(200);
+  const ovenCount = await countOf();
+  const metas = await page.locator('.rc-card .rc-meta').allInnerTexts();
+  check(`tool filter: oven only (${ovenCount})`, ovenCount > 0 && ovenCount < totalRecipes && metas.every((m) => m.includes('תנור')));
+  await page.locator('#rc-panel').getByRole('button', { name: 'תנור', exact: true }).click();
+  await page.locator('#rc-panel').getByRole('button', { name: 'נקה' }).click();
+  for (const item of ['שום', 'לימון', 'זעתר', 'פטרוזיליה', 'שמיר']) await page.locator('#rc-panel .chips').first().getByRole('button', { name: item, exact: true }).click();
+  await page.check('#rc-pantry-only');
+  await wait(200);
+  const pantryCount = await countOf();
+  check(`"what I have at home" filter (${pantryCount} recipes with just garlic, lemon, za'atar, parsley, dill)`, pantryCount > 0 && pantryCount < totalRecipes);
+  await shot('28-recipe-filters', { fullPage: false });
+  await page.uncheck('#rc-pantry-only');
+  await page.check('#rc-no-spicy');
+  await page.locator('.overlay.recipes .icon-btn[aria-label="סגירה"]').click();
+  await page.locator('.meal').first().locator('.rc-open').click();
+  await page.waitForSelector('.overlay.recipes .rc-card');
+  await page.click('#rc-filter-btn');
+  check('recipe filters are remembered', await page.isChecked('#rc-no-spicy'));
+  await page.uncheck('#rc-no-spicy');
+  await page.locator('.rc-card .rc-head').nth(2).click();
+  const favTitle = await page.locator('.rc-card').nth(2).locator('.rc-title').innerText();
+  await page.locator('.rc-card').nth(2).getByRole('button', { name: /שמירה/ }).click();
+  await page.check('#rc-favs');
+  await wait(200);
+  check('favourite recipes', (await countOf()) === 1 && (await page.locator('.rc-title').first().innerText()) === favTitle);
+  await page.uncheck('#rc-favs');
+  await page.click('#rc-more');
+  check('"more recipes" pages through the collection', (await page.locator('.rc-card').count()) === 24);
+  await page.click('#rc-ai');
+  await page.waitForSelector('.page-assistant .msg.assistant:not(.typing)');
+  await wait(300);
+  check('"new idea from the assistant" sends the meal ingredients', upstream.at(-1).body.system[1].text.includes('recipeRequest') && (await page.locator('.msg.user').last().innerText()).includes('מתכון'));
+  await page.click('a[href="#/plan"]');
+  await page.waitForSelector('.page-plan');
+
   // =============== Assistant ===============
   await page.locator('.meal').first().getByRole('button', { name: /החלף חלבון/ }).first().click();
   await page.waitForSelector('.sheet .alt, .sheet .empty');
@@ -343,9 +394,10 @@ try {
   check('no name or photo is sent to the assistant', last && !last.body.system[1].text.includes('דנה') && !/data:image|blob:/.test(last.body.system[1].text));
   check('proxy uses claude-opus-5-5 with server-side fallbacks', last && last.body.model === 'claude-opus-5-5' && last.body.fallbacks === 'default');
   check('API key is added by the server only', last && last.headers.get('x-api-key') === 'sk-ant-e2e-fake');
+  const repliesBefore = await page.locator('.msg.assistant:not(.typing)').count();
   await page.fill('#chat-input', 'מה לאכול לפני אימון?');
   await page.keyboard.press('Enter');
-  await page.waitForFunction(() => document.querySelectorAll('.msg.assistant:not(.typing)').length >= 2);
+  await page.waitForFunction((n) => document.querySelectorAll('.msg.assistant:not(.typing)').length > n, repliesBefore);
   check('free-text question answered', (await page.locator('.msg.assistant').last().innerText()).includes('יוגורט'));
   await shot('09-assistant');
 

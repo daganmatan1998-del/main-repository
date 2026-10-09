@@ -18,6 +18,12 @@ const QUICK = [
 
 // Called from meal cards: opens the assistant with a pre-filled substitution
 // question and the locally computed equivalents as grounding.
+// Any screen can open the assistant with a ready question (e.g. a recipe idea).
+export function queueAsk(text, extra = {}) {
+  pendingAsk = { text, extra, local: null };
+  location.hash = '#/assistant';
+}
+
 export function queueSubstitution(item, meal, res) {
   const role = ROLE_LABEL[item.role];
   pendingAsk = {

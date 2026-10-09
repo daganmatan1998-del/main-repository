@@ -129,6 +129,21 @@ Then make three changes:
 - **New foods:** butter, entrecote, 20% ground beef and hard cheese.
 - **Explanations:** choosing either diet shows what it means, and carnivore recommends checking with a doctor.
 
+### Recipes for every meal
+
+- Every meal card has **🍳 Recipes for this meal**. The recipes come from `www/js/recipes.js`, a recipe engine rather than a fixed list.
+- **How recipes are built:** the meal's own ingredients, at exactly the planned grams, or their substitutes. Each is combined with a cooking method suited to that food (oven, pan, air fryer, grill, stir-fry, shakshuka-style sauce, bowls, sandwiches, wraps, meatballs, stews, soups, spreads, porridge, shakes, pancakes…) and one of ~29 flavour profiles. Only spices, herbs, lemon and garlic are added.
+- **Volume:** a typical meal gets 500–4,000 recipes; even the most restricted diets get 40+ per meal. The order reshuffles daily, so the list feels new.
+- **Filters** (remembered between visits):
+  - what I have at home: about 40 spices and basics, plus "only recipes I have everything for"
+  - favourite style: Israeli, Mediterranean, Italian, Asian, Mexican, Indian, BBQ, European, sweet
+  - cooking tool, prep time, no spicy food
+  - only the menu's own ingredients
+  - ❤ favourites, and free-text search
+- **Using a recipe with a substitute:** one tap updates the menu (and so the shopping list).
+- **"Brand-new idea from the assistant"** asks Claude for a recipe from the same ingredients and amounts.
+- **Quality checks:** a scan of ~325,000 generated recipes across 7 diets × 7 days checks the Hebrew constructions (articles, ב-prefix merging, doubled words, units) and finds no issues. Unit tests check the amounts, restrictions and filters.
+
 ### Weekly-gate rules (what "can't be bypassed" means here)
 
 - The gate decision is made in one function, `render()` in `app.js`. It runs on every route change, return from the background, focus, bfcache restore, and every 30 seconds.
@@ -144,8 +159,8 @@ Then make three changes:
 ## Tests
 
 ```bash
-npm test              # 29 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, proxy
-npm run test:e2e      # 139 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm test              # 32 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, proxy
+npm run test:e2e      # 147 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 ```
 
 The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.

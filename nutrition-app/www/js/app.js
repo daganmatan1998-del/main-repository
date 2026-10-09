@@ -12,7 +12,7 @@ import { renderOnboarding } from './screens/onboarding.js';
 import { renderGate, renderSummary, hasSummary } from './screens/checkin.js';
 import { renderToday } from './screens/today.js';
 import { renderPlan } from './screens/plan.js';
-import { renderAssistant, queueSubstitution } from './screens/assistant.js';
+import { renderAssistant, queueSubstitution, queueAsk } from './screens/assistant.js';
 import { renderGallery } from './screens/gallery.js';
 import { renderProfile } from './screens/profile.js';
 import { renderShopping } from './screens/shopping.js';
@@ -177,6 +177,7 @@ async function boot() {
 
   store.onChange(rerender);
   window.addEventListener('app:rerender', rerender);
+  window.addEventListener('app:ask', (e) => queueAsk(e.detail.text, e.detail.extra));
   window.addEventListener('hashchange', () => render());
   // Coming back from the background, restoring from bfcache, or regaining focus
   // all re-check the gate: a week may have rolled over while the app was hidden.

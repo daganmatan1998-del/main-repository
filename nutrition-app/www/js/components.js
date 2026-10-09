@@ -6,6 +6,7 @@ import { alternatives } from './substitutions.js';
 import { state, setOverride, excludeFood } from './store.js';
 import { validBf } from './nutrition.js';
 import { openBodyFatEstimator } from './screens/bodyfat.js';
+import { openRecipes } from './screens/recipes.js';
 
 export function ring(value, target, label, sub) {
   const pct = target > 0 ? Math.min(1, value / target) : 0;
@@ -71,6 +72,12 @@ export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {
     list.appendChild(li);
   }
   card.appendChild(list);
+  if (day) {
+    card.appendChild(h('button', {
+      class: 'btn btn-block rc-open',
+      onclick: () => openRecipes(meal, day),
+    }, h('span', { 'aria-hidden': 'true' }, '🍳'), 'מתכונים לארוחה'));
+  }
   return card;
 }
 
