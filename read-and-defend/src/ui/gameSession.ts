@@ -283,6 +283,11 @@ export class GameSession {
       clear(score);
       score.append(icon('coin'), el('span', {}, String(this.app.profile.coins + this.coins)));
     }
+    this.updateEar();
+  }
+
+  /** The listening indicator: off (paused), on (listening) or hearing (speech now). */
+  private updateEar(): void {
     const earState = !this.ears ? 'off' : this.state.listening ? 'hearing' : 'on';
     if (this.ear.dataset.k !== earState) {
       this.ear.dataset.k = earState;
@@ -369,12 +374,14 @@ export class GameSession {
       onLevel: (lvl) => { if (lvl > 0.25) this.speakingUntil = performance.now() + 600; },
       simulateTarget: () => { const tg = currentTarget(this.state); return tg ? currentItem(tg).display : ''; },
     });
+    this.updateEar();
   }
 
   private stopEars(): void {
     this.ears?.stop();
     this.ears = null;
     this.speakingUntil = 0;
+    if (this.state) { this.state.listening = false; this.updateEar(); }
   }
 
   /**
@@ -422,7 +429,13 @@ export class GameSession {
     const item = currentItem(target);
     const words = Math.max(...alts.map((a) => tokenize(a.transcript, lang).length));
     const limit = item.kind === 'sentence' ? item.parts.length + 3 : 3;
-    if (words === 0 || words > limit) return;
+    if (words === 0) {
+      // Only noise, and the engine itself is unsure: tell the child, count nothing.
+      const conf = alts[0].confidence;
+      if (conf !== undefined && conf < getEvalConfig().lowConfidence) { sound.play('unclear'); this.say(t('unclear'), 'info'); }
+      return;
+    }
+    if (words > limit) return;
     const ev = evaluate(item, alts);
     this.lastEval = { enemyId: target.id, ev };
     if (ev.outcome === 'incorrect') {

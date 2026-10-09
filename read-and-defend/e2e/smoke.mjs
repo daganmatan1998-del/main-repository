@@ -427,7 +427,8 @@ await test('the microphone opens by itself once permission is given, and pauses 
   assert(await page.getAttribute('[data-testid=ear]', 'class') !== 'ear off', 'listening indicator should be on');
   await page.click('[data-testid=pause]');
   await page.waitForFunction(() => window.__live === 0, null, { timeout: 3000 });
-  assert((await page.getAttribute('[data-testid=ear]', 'class')).includes('off'), 'indicator should show the mic is paused');
+  await page.waitForFunction(() => document.querySelector('[data-testid=ear]').className.includes('off'), null, { timeout: 1000 })
+    .catch(() => { throw new Error('indicator should show the mic is paused'); });
   await page.click('[data-testid=resume]');
   await page.waitForFunction(() => window.__live === 1, null, { timeout: 3000 });
   await page.context().close();
