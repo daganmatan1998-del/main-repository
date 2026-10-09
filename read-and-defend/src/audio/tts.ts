@@ -27,20 +27,34 @@ export class Speaker {
     return this.supported && !!this.voiceFor(lang);
   }
 
+  /** Until when the game's own voice may still be audible (ms, performance clock). */
+  private busyUntil = 0;
+
+  /**
+   * True while the game is speaking (and a moment after). The microphone is
+   * always open, so anything heard now may be the game's own voice reading
+   * the word aloud — it must never count as the child's reading.
+   */
+  isBusy(): boolean {
+    return performance.now() < this.busyUntil || (this.supported && speechSynthesis.speaking);
+  }
+
   speak(text: string, lang: string, rate = 0.8): Promise<void> {
     return new Promise((resolve) => {
       if (!this.supported) return resolve();
       const voice = this.voiceFor(lang);
       if (!voice) return resolve();
       speechSynthesis.cancel();
+      this.busyUntil = performance.now() + 8000;
+      const done = () => { this.busyUntil = performance.now() + 700; resolve(); };
       const u = new SpeechSynthesisUtterance(text);
       u.lang = voice.lang;
       u.voice = voice;
       u.rate = rate;
-      u.onend = () => resolve();
-      u.onerror = () => resolve();
+      u.onend = done;
+      u.onerror = done;
       speechSynthesis.speak(u);
-      setTimeout(resolve, 6000);
+      setTimeout(done, 6000);
     });
   }
 

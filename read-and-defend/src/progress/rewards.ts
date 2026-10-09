@@ -56,7 +56,7 @@ export function checkAchievements(profile: Profile, lang: LanguageCode, pack: La
 
 export interface ShopItem {
   id: string;
-  slot: 'banner' | 'walls' | 'magic';
+  slot: 'banner' | 'walls' | 'magic' | 'weapon';
   price: number;
   color: string;
   name: { en: string; he: string };
@@ -74,6 +74,14 @@ export const SHOP: ShopItem[] = [
   { id: 'magic-gold', slot: 'magic', price: 0, color: '#ffd166', name: { en: 'Golden spark', he: 'נִיצוֹץ זָהָב' } },
   { id: 'magic-rainbow', slot: 'magic', price: 80, color: 'rainbow', name: { en: 'Rainbow spark', he: 'נִיצוֹץ קֶשֶׁת' } },
   { id: 'magic-frost', slot: 'magic', price: 60, color: '#a0e7ff', name: { en: 'Frost spark', he: 'נִיצוֹץ קֶרַח' } },
+  // Weapons only change how the castle's shot looks and hits — never the rules.
+  { id: 'weapon-magic', slot: 'weapon', price: 0, color: '#ffd166', name: { en: 'Magic bolt', he: 'כַּדּוּר קֶסֶם' } },
+  { id: 'weapon-arrows', slot: 'weapon', price: 40, color: '#e63946', name: { en: 'Arrow volley', he: 'מַטַּח חִצִּים' } },
+  { id: 'weapon-ice', slot: 'weapon', price: 60, color: '#a0e7ff', name: { en: 'Ice shard', he: 'רְסִיס קֶרַח' } },
+  { id: 'weapon-fire', slot: 'weapon', price: 90, color: '#ff7b00', name: { en: 'Fireball', he: 'כַּדּוּר אֵשׁ' } },
+  { id: 'weapon-cannon', slot: 'weapon', price: 110, color: '#263238', name: { en: 'Cannon', he: 'תּוֹתָח' } },
+  { id: 'weapon-lightning', slot: 'weapon', price: 150, color: '#fff59d', name: { en: 'Lightning', he: 'בָּרָק' } },
+  { id: 'weapon-stars', slot: 'weapon', price: 200, color: 'rainbow', name: { en: 'Star shower', he: 'מְטַר כּוֹכָבִים' } },
 ];
 
 export function buy(profile: Profile, id: string): boolean {

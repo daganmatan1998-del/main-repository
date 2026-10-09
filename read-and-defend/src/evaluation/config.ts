@@ -44,9 +44,30 @@ export interface HebrewEvalConfig {
   otherLetterSimilarity: number;
 }
 
+/**
+ * Guessing from the start of a word. While the child is still speaking the
+ * recogniser streams partial text; when that partial text is clearly the
+ * beginning of the target word, the reading can be credited without waiting
+ * for the engine to finish (fast readers), and when the engine's final text
+ * is cut short, the beginning it did catch can still count.
+ */
+export interface PrefixConfig {
+  /** Credit immediately when the heard beginning covers this much of the word. */
+  early: number;
+  /** When the final transcript is cut short, credit at this coverage. */
+  fallback: number;
+  /** Minimum consonants that must have been heard before guessing at all. */
+  minHeard: number;
+  /** Words shorter than this (in consonants) are never guessed. */
+  minTarget: number;
+  /** How closely the heard beginning must match the target's beginning. */
+  similarity: number;
+}
+
 export interface EvalConfig {
   /** Confidence below which a non-match is "didn't catch that". */
   lowConfidence: number;
+  prefix: PrefixConfig;
   /** Fraction of a sentence's words that must be read. */
   sentenceThreshold: number;
   he: HebrewEvalConfig;
@@ -71,7 +92,12 @@ export const HEBREW_PRESETS: Record<HebrewLetterMode, HebrewEvalConfig> = {
 };
 
 export function configForMode(mode: HebrewLetterMode): EvalConfig {
-  return { lowConfidence: 0.4, sentenceThreshold: 0.8, he: HEBREW_PRESETS[mode] };
+  return {
+    lowConfidence: 0.4, sentenceThreshold: 0.8, he: HEBREW_PRESETS[mode],
+    prefix: mode === 'strict' ? { early: 1.01, fallback: 1.01, minHeard: 99, minTarget: 99, similarity: 1 }
+      : mode === 'lenient' ? { early: 0.7, fallback: 0.55, minHeard: 2, minTarget: 3, similarity: 0.8 }
+      : { early: 0.75, fallback: 0.6, minHeard: 2, minTarget: 3, similarity: 0.85 },
+  };
 }
 
 let current: EvalConfig = configForMode('normal');

@@ -90,24 +90,55 @@ async function startLevelById(page, id) {
 }
 
 /** A stand-in for the browser's speech engine that returns scripted transcripts. */
+/**
+ * A stand-in for the browser's speech engine, in continuous mode like the
+ * real one: while running it delivers each queued phrase (window.__say) as a
+ * final result, and window.__sayPartial as a partial result first.
+ */
 const SPEECH_STUB = () => {
   window.__say = [];
+  window.__sayPartial = [];
   window.__heard = [];
+  window.__starts = 0;
+  window.__live = 0;
   const Stub = class {
     start() {
-      setTimeout(() => {
-        const transcript = window.__say.length ? window.__say.shift() : '';
-        window.__heard.push(transcript);
-        if (transcript) this.onresult({ resultIndex: 0, results: { length: 1, 0: { isFinal: true, length: 1, 0: { transcript, confidence: 0.9 } } } });
-        this.onend();
-      }, 150);
+      window.__starts++;
+      window.__live++;
+      this.alive = true;
+      this.results = [];
+      const emit = (transcript, isFinal) => {
+        const res = { isFinal, length: 1, 0: { transcript, confidence: 0.9 } };
+        if (this.results.length && !this.results[this.results.length - 1].isFinal) this.results[this.results.length - 1] = res;
+        else this.results.push(res);
+        const results = { length: this.results.length };
+        this.results.forEach((r, k) => { results[k] = r; });
+        this.onresult({ resultIndex: this.results.length - 1, results });
+      };
+      const poll = () => {
+        if (!this.alive) return;
+        if (window.__sayPartial.length) emit(window.__sayPartial.shift(), false);
+        else if (window.__say.length) { const t = window.__say.shift(); window.__heard.push(t); emit(t, true); }
+        setTimeout(poll, 80);
+      };
+      setTimeout(poll, 80);
     }
-    stop() {}
-    abort() {}
+    end() { if (!this.alive) return; this.alive = false; window.__live--; this.onend && this.onend(); }
+    stop() { this.end(); }
+    abort() { this.end(); }
   };
   for (const k of ['SpeechRecognition', 'webkitSpeechRecognition']) Object.defineProperty(window, k, { configurable: true, writable: true, value: Stub });
   navigator.mediaDevices.getUserMedia = async () => ({ getTracks: () => [{ stop() {} }] });
 };
+
+/** Start the game with the stand-in engine (real browser speech code path). */
+async function startWithStub(page, lang, settings = {}) {
+  await page.click(`[data-testid=lang-${lang}]`);
+  await page.evaluate((st) => { const a = window.__rd.app; Object.assign(a.profile.settings, { engine: 'browser', voiceHints: false }, st); a.progress.tutorialDone = true; a.save(); }, settings);
+  await page.click('[data-testid=play]');
+  await page.click('[data-testid=allow-mic]');
+  await page.waitForFunction(() => window.__rd.session?.state?.enemies.some((e) => e.status === 'walking'), null, { timeout: 8000 });
+}
 
 async function readCorrectUntil(page, selector, max = 90) {
   for (let i = 0; i < max; i++) {
@@ -134,7 +165,8 @@ await test('tutorial, win level 1, progress persists after refresh (English, LTR
   assert(await readCorrectUntil(page, '[data-testid=tut-done]'), 'tutorial did not finish');
   await page.click('[data-testid=tut-done]');
   await page.waitForTimeout(500);
-  const lang = await page.getAttribute('[data-testid=target-text]', 'lang').catch(() => 'en');
+  await page.waitForFunction(() => document.querySelector('[data-testid=target-text]')?.textContent);
+  const lang = await page.getAttribute('[data-testid=target-text]', 'lang');
   assert(lang === 'en', 'target text should be marked English');
   assert(await readCorrectUntil(page, '[data-testid=victory]'), 'level 1 was not won');
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('read-and-defend:profile:v1')));
@@ -224,14 +256,23 @@ await test('narrow phone (320×568): no horizontal scroll, controls on screen', 
   await page.waitForFunction(() => window.__rd.session?.state?.enemies.some((e) => e.status === 'walking'));
   await page.waitForTimeout(500);
   const m = await page.evaluate(() => {
-    const mic = document.querySelector('[data-testid=mic]').getBoundingClientRect();
-    const txt = document.querySelector('[data-testid=target-text]').getBoundingClientRect();
-    return { sw: document.documentElement.scrollWidth, iw: innerWidth, ih: innerHeight, mic: [mic.left, mic.right, mic.bottom, mic.width], txt: [txt.left, txt.right, txt.width] };
+    const inside = (el) => { const r = el.getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1 && r.width > 0; };
+    const hud = [...document.querySelectorAll('.hud > *')];
+    const pause = document.querySelector('[data-testid=pause]').getBoundingClientRect();
+    const field = window.__rd.app.renderer.sceneLayout.field;
+    return {
+      sw: document.documentElement.scrollWidth, iw: innerWidth, ih: innerHeight,
+      hudInside: hud.every(inside), hudCount: hud.length,
+      pause: [pause.width, pause.height],
+      mic: document.querySelectorAll('[data-testid=mic]').length,
+      fieldShare: field.h / innerHeight,
+    };
   });
   assert(m.sw <= m.iw, `horizontal overflow: ${m.sw} > ${m.iw}`);
-  assert(m.mic[0] >= 0 && m.mic[1] <= m.iw && m.mic[2] <= m.ih, 'mic button off screen: ' + JSON.stringify(m.mic));
-  assert(m.mic[3] >= 56, 'mic button too small to tap');
-  assert(m.txt[0] >= 0 && m.txt[1] <= m.iw && m.txt[2] > 0, 'reading text off screen');
+  assert(m.hudInside, 'a HUD element is cut off on a 320 px phone');
+  assert(Math.abs(m.pause[0] - m.pause[1]) <= 2, `pause button is not round: ${m.pause}`);
+  assert(m.mic === 0, 'there should be no microphone button');
+  assert(m.fieldShare > 0.65, `the battlefield should fill most of the screen, got ${(m.fieldShare * 100).toFixed(0)}%`);
   await page.context().close();
 });
 
@@ -354,19 +395,20 @@ await test('boss fight: announced, three words one at a time, wrong answers do n
   const readShown = () => page.textContent('[data-testid=target-text]');
   for (let stage = 0; stage < 3; stage++) {
     const shown = (await readShown()).trim();
-    assert(shown === words[stage], `stage ${stage + 1} shows "${shown}", expected "${words[stage]}"`);
-    const label = await page.textContent('.read-card .label');
-    assert(label.includes(`${stage + 1}`) && label.includes('3'), 'label should say which word of three: ' + label);
+    assert(shown.endsWith(`: ${words[stage]}`), `stage ${stage + 1} shows "${shown}", expected "${words[stage]}"`);
+    assert(shown.includes(`${stage + 1}`) && shown.includes('3'), 'should say which word of three: ' + shown);
     for (const other of words.filter((_, i) => i !== stage)) {
-      const visible = await page.evaluate((w) => document.querySelector('.read-card').textContent.includes(w), other);
-      assert(!visible || other === shown || shown.includes(other), `another boss word "${other}" is visible while reading "${shown}"`);
+      assert(!shown.endsWith(`: ${other}`), `another boss word "${other}" is shown while reading "${shown}"`);
     }
+    // what the boss's sign shows is its current item, one word only
+    const signItem = await page.evaluate(() => { const b = window.__rd.session.state.enemies.find((e) => e.type === 'boss'); return b.items[b.phase].display; });
+    assert(signItem === words[stage], 'the boss sign is not on the current word');
     if (stage === 1) {
       // wrong, unclear and silent attempts leave the boss on the second word
       for (const a of ['wrong', 'unclear', 'silence']) { await page.click(`[data-sim=${a}]`); await page.waitForTimeout(650); }
       const phase = await page.evaluate(() => window.__rd.session.state.enemies.find((e) => e.type === 'boss').phase);
       assert(phase === 1, 'a failed attempt advanced the boss to phase ' + phase);
-      assert((await readShown()).trim() === words[1], 'the word changed after a failed attempt');
+      assert((await readShown()).trim().endsWith(`: ${words[1]}`), 'the word changed after a failed attempt');
     }
     await page.click('[data-sim=correct]');
     await page.waitForTimeout(700);
@@ -377,50 +419,105 @@ await test('boss fight: announced, three words one at a time, wrong answers do n
   await page.context().close();
 });
 
-await test('Hebrew letter: a correct but oddly transcribed reading is accepted; another letter is not (browser speech path)', async () => {
+await test('the microphone opens by itself once permission is given, and pauses with the game', async () => {
   const page = await newPage({ init: SPEECH_STUB });
-  await page.click('[data-testid=lang-he]');
-  await page.evaluate(() => { const a = window.__rd.app; a.profile.settings.engine = 'browser'; a.profile.settings.voiceHints = false; a.progress.tutorialDone = true; a.save(); });
-  await page.click('[data-testid=play]');
-  await page.click('[data-testid=allow-mic]');
-  await page.waitForFunction(() => window.__rd.session?.state?.enemies.some((e) => e.status === 'walking'), null, { timeout: 8000 });
+  await startWithStub(page, 'he');
+  assert(await page.locator('[data-testid=mic]').count() === 0, 'there should be no microphone button');
+  await page.waitForFunction(() => window.__live === 1, null, { timeout: 3000 });
+  assert(await page.getAttribute('[data-testid=ear]', 'class') !== 'ear off', 'listening indicator should be on');
+  await page.click('[data-testid=pause]');
+  await page.waitForFunction(() => window.__live === 0, null, { timeout: 3000 });
+  assert((await page.getAttribute('[data-testid=ear]', 'class')).includes('off'), 'indicator should show the mic is paused');
+  await page.click('[data-testid=resume]');
+  await page.waitForFunction(() => window.__live === 1, null, { timeout: 3000 });
+  await page.context().close();
+});
+
+await test('Hebrew letter: a correct but oddly transcribed reading is accepted; another letter is not', async () => {
+  const page = await newPage({ init: SPEECH_STUB });
+  await startWithStub(page, 'he');
+  await page.waitForFunction(() => window.__live === 1);
   const target = await page.evaluate(() => {
-    const s = window.__rd.session.state;
-    const e = s.enemies.find((x) => x.status === 'walking');
-    return { id: e.id, letter: e.items[0].display.normalize('NFD').replace(/[\u0591-\u05C7]/g, ''), kind: e.items[0].kind };
+    const e = window.__rd.session.state.enemies.find((x) => x.status === 'walking');
+    return { letter: e.items[0].display.normalize('NFD').replace(/[\u0591-\u05C7]/g, ''), kind: e.items[0].kind };
   });
   assert(target.kind === 'letter', 'level 1 should start with a letter, got ' + target.kind);
-  // another letter, said clearly
   const other = target.letter === 'ל' ? 'מם' : 'למד';
   await page.evaluate((t) => { window.__say.push(t); }, other);
-  await page.click('[data-testid=mic]');
-  await page.waitForTimeout(900);
-  let st = await page.evaluate(() => window.__rd.session.state.correct);
-  assert(st === 0, 'a different letter was accepted');
-  // the right letter, transcribed the way engines often do ("letter" + a vowel letter)
+  await page.waitForTimeout(700);
+  assert((await page.evaluate(() => window.__rd.session.state.correct)) === 0, 'a different letter was accepted');
   await page.evaluate((t) => { window.__say.push(t); }, target.letter + 'י');
-  await page.click('[data-testid=mic]');
   await page.waitForFunction(() => window.__rd.session.state.correct >= 1, null, { timeout: 4000 });
-  const heard = await page.evaluate(() => window.__heard);
-  assert(heard.length >= 2, 'the stand-in engine was not used: ' + JSON.stringify(heard));
+  await page.context().close();
+});
+
+await test('fast reading: two letters in one breath both count', async () => {
+  const page = await newPage({ init: SPEECH_STUB });
+  await startWithStub(page, 'he', { pace: 'verySlow' });
+  await page.waitForFunction(() => window.__rd.session.state.enemies.filter((e) => e.status === 'walking').length >= 2, null, { timeout: 12000 });
+  const names = await page.evaluate(() => {
+    const letters = window.__rd.app.pack.items.filter((i) => i.kind === 'letter');
+    return window.__rd.session.state.enemies.filter((e) => e.status === 'walking')
+      .sort((a, b) => b.progress - a.progress)
+      .map((e) => letters.find((l) => l.id === e.items[0].id).accepted[1]); // the letter's name, as engines write it
+  });
+  await page.evaluate((t) => { window.__say.push(t); }, names.slice(0, 2).join(' '));
+  await page.waitForFunction(() => window.__rd.session.state.correct >= 2, null, { timeout: 4000 });
+  await page.context().close();
+});
+
+await test('a reading counts while the child is still speaking (partial result)', async () => {
+  const page = await newPage({ init: SPEECH_STUB });
+  await startWithStub(page, 'en');
+  await page.waitForFunction(() => window.__live === 1);
+  const name = await page.evaluate(() => window.__rd.session.state.enemies.find((x) => x.status === 'walking').items[0].accepted[0]);
+  await page.evaluate((t) => { window.__sayPartial.push(t); }, name); // never finalised
+  await page.waitForFunction(() => window.__rd.session.state.correct >= 1, null, { timeout: 3000 });
   await page.context().close();
 });
 
 await test('English still works through the real browser speech path', async () => {
   const page = await newPage({ init: SPEECH_STUB });
-  await page.click('[data-testid=lang-en]');
-  await page.evaluate(() => { const a = window.__rd.app; a.profile.settings.engine = 'browser'; a.profile.settings.voiceHints = false; a.progress.tutorialDone = true; a.save(); });
-  await page.click('[data-testid=play]');
-  await page.click('[data-testid=allow-mic]');
-  await page.waitForFunction(() => window.__rd.session?.state?.enemies.some((e) => e.status === 'walking'), null, { timeout: 8000 });
+  await startWithStub(page, 'en');
+  await page.waitForFunction(() => window.__live === 1);
   const item = await page.evaluate(() => window.__rd.session.state.enemies.find((x) => x.status === 'walking').items[0].accepted[0]);
   await page.evaluate(() => { window.__say.push('banana'); });
-  await page.click('[data-testid=mic]');
-  await page.waitForTimeout(900);
+  await page.waitForTimeout(700);
   assert((await page.evaluate(() => window.__rd.session.state.correct)) === 0, 'a wrong English answer was accepted');
   await page.evaluate((t) => { window.__say.push(t); }, item);
-  await page.click('[data-testid=mic]');
   await page.waitForFunction(() => window.__rd.session.state.correct >= 1, null, { timeout: 4000 });
+  await page.context().close();
+});
+
+await test('monster speed can be slowed from the pause menu, mid-level', async () => {
+  const page = await newPage();
+  await setup(page, 'en');
+  await startLevelById(page, 'en-1a');
+  await page.waitForFunction(() => window.__rd.session.state.enemies[0].status === 'walking');
+  const before = await page.evaluate(() => window.__rd.session.state.config.durationFactor);
+  await page.click('[data-testid=pause]');
+  await page.click('[data-testid=pace-verySlow]');
+  await page.click('[data-testid=resume]');
+  const after = await page.evaluate(() => window.__rd.session.state.config.durationFactor);
+  assert(Math.abs(after / before - 3) < 0.01, `very slow should triple the walk: ${before} → ${after}`);
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('read-and-defend:profile:v1')).settings.pace);
+  assert(saved === 'verySlow', 'speed choice should be saved, got ' + saved);
+  await page.context().close();
+});
+
+await test('weapons shop: buy, equip and the game uses it', async () => {
+  const page = await newPage();
+  await page.click('[data-testid=lang-en]');
+  await page.evaluate(() => { const a = window.__rd.app; a.profile.coins = 120; a.save(); });
+  await page.click('[data-testid=open-shop]');
+  await page.click('[data-testid=try-weapon-cannon]');            // try before buying
+  await page.click('[data-testid=shop-weapon-fire]');              // buy (90)
+  await page.waitForSelector('[data-testid=screen-shop]');
+  const p = await page.evaluate(() => { const pr = window.__rd.app.profile; return { coins: pr.coins, weapon: pr.equipped.weapon, owned: pr.owned }; });
+  assert(p.coins === 30 && p.weapon === 'weapon-fire' && p.owned.includes('weapon-fire'), 'purchase failed: ' + JSON.stringify(p));
+  const rendererWeapon = await page.evaluate(() => window.__rd.app.renderer.opts.weapon);
+  assert(rendererWeapon === 'weapon-fire', 'the game renderer is not using the equipped weapon');
+  assert(page.errors.length === 0, 'page errors: ' + page.errors.join('; '));
   await page.context().close();
 });
 

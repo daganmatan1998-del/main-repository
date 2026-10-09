@@ -60,6 +60,13 @@ export const ICONS = {
   crown: S('<path fill="currentColor" d="m3 7 4.5 4L12 4l4.5 7L21 7l-2 12H5L3 7Z"/>'),
   shield: S('<path fill="currentColor" d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Z"/>'),
   troll: S('<circle cx="12" cy="13" r="7" fill="currentColor"/><path fill="currentColor" d="M6 8 4 3l5 3zM18 8l2-5-5 3z"/>'),
+  orb: S('<circle cx="12" cy="12" r="7" fill="#fff8d6"/><circle cx="12" cy="12" r="4.5" fill="currentColor"/><circle cx="10.5" cy="10.5" r="1.6" fill="#fff"/>'),
+  arrow: S('<path d="M3 21 17 7" stroke="#5d4037" stroke-width="2.4" stroke-linecap="round"/><path fill="#eceff1" d="m21 3-7.5 2.2 5.3 5.3z"/><path fill="#e63946" d="M3 21l1-5 2 2zM3 21l5-1-2-2z"/>'),
+  snow: S('<g stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><path d="M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7"/><path d="m9 4 3 3 3-3M9 20l3-3 3 3"/></g>'),
+  flame: S('<path fill="#ffb703" d="M12 22c-4.4 0-7-3-7-6.8C5 10.7 9.6 8 9.6 3c3.7 2 4.4 5.2 4 7.4 1-.6 1.8-1.8 2-3.2 2.4 2 3.4 4.8 3.4 8C19 19 16.4 22 12 22Z"/><path fill="#fff3b0" d="M12 21c-2 0-3.3-1.3-3.3-3.2 0-2.3 2.1-3.4 2.4-5.8 2.4 1.5 4.2 3.4 4.2 5.8 0 1.9-1.3 3.2-3.3 3.2Z"/>'),
+  bomb: S('<circle cx="11" cy="14" r="7" fill="currentColor"/><circle cx="8.5" cy="11.5" r="1.8" fill="#fff" opacity=".6"/><path d="M15.5 8.5 18 6" stroke="#8d6e63" stroke-width="2"/><path fill="#ffb703" d="m19 2 .9 2.1L22 5l-2.1.9L19 8l-.9-2.1L16 5l2.1-.9z"/>'),
+  bolt: S('<path fill="#fff59d" stroke="#f9a825" stroke-width="1" d="M13.5 2 5 13.5h5.5L9 22l9.5-12.5H13z"/>'),
+  stars: S('<path fill="#ffd166" d="m8 2 1.8 3.8 4.2.5-3.1 2.9.8 4.1L8 11.3l-3.7 2 .8-4.1L2 6.3l4.2-.5z"/><path fill="#ff8fab" d="m17 10 1.2 2.5 2.8.4-2 1.9.5 2.8-2.5-1.3-2.5 1.3.5-2.8-2-1.9 2.8-.4z"/><path fill="#7ae7ff" d="m10 16 .8 1.7 1.9.3-1.4 1.3.3 1.9-1.6-.9-1.7.9.4-1.9-1.4-1.3 1.9-.3z"/>'),
   monster: S('<path fill="#2bb673" d="M3 20c0-8 4-13 9-13s9 5 9 13H3Z"/><circle cx="9.5" cy="13" r="2" fill="#fff"/><circle cx="14.5" cy="13" r="2" fill="#fff"/><circle cx="10" cy="13.3" r="1" fill="#1d1d2b"/><circle cx="15" cy="13.3" r="1" fill="#1d1d2b"/>'),
 };
 

@@ -313,3 +313,35 @@ export function evaluate(item: LearningItem, alternatives: RecognitionAlternativ
   }
   return { outcome: 'incorrect', heard: best.transcript, reason: 'mismatch', focusPart: firstDifference(item, best.transcript) };
 }
+
+/* ------------------------------------------------------------- prefixes */
+
+/**
+ * How much of the target word a heard *beginning* covers, 0 if it is not a
+ * beginning of the target at all. "שול" for שֻׁלְחָן → 0.75; "קו" for קוֹף → 0.67;
+ * "קום" for קוֹף → 0 (a different, complete word is not a beginning).
+ *
+ * Only words are guessed: letters and syllables are already whole after one
+ * sound, and a sentence is matched word by word.
+ */
+export function prefixCoverage(item: LearningItem, heardToken: string, cfg: EvalConfig = getEvalConfig()): number {
+  if (item.kind !== 'word') return 0;
+  const p = cfg.prefix;
+  if (item.lang === 'en') {
+    const h = normalizeEnglish(heardToken).replace(/[^a-z]/g, '');
+    const target = item.display.toLowerCase();
+    if (h.length < Math.max(3, p.minHeard) || target.length < Math.max(4, p.minTarget + 1)) return 0;
+    if (h.length >= target.length || !target.startsWith(h)) return 0;
+    return h.length / target.length;
+  }
+  const h = normalizeHebrew(heardToken).replace(/ /g, '');
+  if (!h || /^[a-z]+$/i.test(h)) return 0;
+  const heard = strong(toSyms(h));
+  let best = 0;
+  for (const spelling of new Set([...item.accepted, item.display])) {
+    const target = strong(toSyms(spelling));
+    if (target.length < p.minTarget || heard.length < p.minHeard || heard.length >= target.length) continue;
+    if (similarity(heard, target.slice(0, heard.length), cfg.he) >= p.similarity) best = Math.max(best, heard.length / target.length);
+  }
+  return best;
+}

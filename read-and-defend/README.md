@@ -27,14 +27,14 @@ Vite, Vitest, TypeScript and `@types/node`.
 | Area | What exists |
 |---|---|
 | Onboarding | Language picker (Hebrew / English), interactive 3-step tutorial, microphone explanation **before** the browser prompt, a practice stage whose monster cannot hurt the castle |
-| Gameplay | Winding road, castle with 5 hearts (6 when the game is easing off), enemies spawn up to 3 at a time, the one closest to the castle glows and has a bouncing arrow, time slows to 20 % while the child reads, pause/retry/quit |
-| Enemy speed | A standard enemy (slime, goblin) takes **7 seconds** from spawn to castle. Speed is `road length ÷ 7 s`, derived from the real path, so it is the same on a phone and a desktop, survives window resizes (positions are kept as fractions of the road) and does not depend on frame rate. The Speed setting and the adaptive difficulty scale the 7 s (Slow ≈ 10 s, Fast ≈ 5.6 s) |
+| Gameplay | Winding road, castle with 5 hearts (6 when the game is easing off), enemies spawn up to 3 at a time, the one closest to the castle glows and has a bouncing arrow. **No reading panel and no microphone button:** the word is on the monster's sign (long sentences wrap onto several lines), the microphone opens once permission is given and stays open for the level, and a small indicator in the HUD shows listening / hearing you / paused. Enemies slow to 20 % while the child is speaking. Pause, retry, quit |
+| Enemy speed | A standard enemy (slime, goblin) takes **7 seconds** from spawn to castle at *Normal*. Speed is `road length ÷ walk time`, derived from the real path, so it is the same on a phone and a desktop, survives window resizes and does not depend on frame rate. **Five speeds:** Very slow 21 s · Slow 14 s · Relaxed ≈ 10 s · Normal 7 s · Fast ≈ 5.6 s — in Settings and in the pause menu, applied immediately to monsters already on the road. Adaptive difficulty scales them further |
 | Enemies | **Slime** — letters & sound chunks; **Goblin** — words; **Knight** (armoured, 9 s, 2 damage) — long/complex words and sentences; **Bat** (5 s) — words this child already reads fluently; **Troll boss** — see below |
 | Boss | **Every level ends with a boss.** Once the regular enemies are done the scene dims, "BOSS" sweeps in and the troll rises while nothing moves; then it walks (40 s). It carries **three words, shown one at a time** ("Word 2 of 3"); each correct reading knocks it back and updates it, the third defeats it and ends the level. Wrong or unclear attempts change nothing. Waiting cannot win: if it reaches the castle it costs 2 hearts and trudges back to the start, keeping the words already read |
-| Feedback | Correct: projectile, burst, chime, "+150". Wrong: gentle two-note hum, "Almost!", the word splits into its sounds with the wrong one highlighted; after 2 tries a **Listen** button plays an example; after 3 the monster freezes so there is no time pressure. Unclear/silence: "I didn't quite hear that" — never counted as a mistake |
-| Progression | 32 English and 26 Hebrew levels across 6 worlds (Letter Meadow → Sky Castle of Stories), stars, coins, XP, castle workshop (banners, walls, magic colours), optional daily challenge (no streaks), 8 learning achievements, reading-progress report for grown-ups |
-| Settings | Speed (slow/normal/fast), hold-to-talk or tap-to-talk, sound, spoken instructions, extra-large text, less motion, difficulty cap, speech engine, server address, development mode, reset — behind a 3-second "grown-ups" hold |
-| Platform | Responsive phone/tablet/desktop, portrait & landscape (sideways phones dock the reading panel), safe-area insets, touch-first, keyboard-operable mic, offline service worker, PWA manifest, Capacitor config |
+| Feedback | Correct: the castle fires the equipped weapon, burst, chime, "+150". Wrong: gentle two-note hum, "Almost!", the word's sounds appear in a strip at the bottom with the wrong one highlighted; after 2 tries a **Listen** button plays an example; after 3 the monster freezes so there is no time pressure. Unclear: "I didn't quite hear that" — never counted as a mistake |
+| Progression | 26 English and 22 Hebrew levels across 6 worlds, every one ending in a boss, stars, coins, XP, castle workshop (**weapons**, banners, walls, magic colours), optional daily challenge (no streaks), 8 learning achievements, reading-progress report for grown-ups |
+| Settings | Monster speed (5 levels), sound, spoken instructions, extra-large text, less motion, difficulty cap, Hebrew letter listening (Exact / Forgiving / Very forgiving), speech engine, server address, development mode, reset — behind a 3-second "grown-ups" hold |
+| Platform | Responsive phone/tablet/desktop, portrait & landscape, one-row HUD that fits a 320 px phone, safe-area insets, touch-first, offline service worker, PWA manifest, Capacitor config |
 
 ## How the reading curriculum works
 
@@ -188,6 +188,46 @@ target word as a hint. Check the transcription provider's own retention
 policy (OpenAI's API does not train on API data by default) before deploying
 for children, and obtain parental consent as your jurisdiction requires
 (COPPA, GDPR-K, Israeli Privacy Protection Law).
+
+## Listening: always on, live, and fast readers
+
+There is no microphone button. When a level starts (after the one-time
+permission prompt) the microphone opens and stays open until the level ends
+or the game is paused; it closes when the app goes to the background.
+
+- **Live results.** The browser engine runs in continuous mode with partial
+  results, so a reading is credited the moment it is recognisable, without
+  waiting for the engine to decide the child has finished.
+- **Several readings in one breath.** A fast reader often says three letters
+  as one utterance ("מם למד שין"). Each utterance is split into words and
+  matched left to right against every monster on the road
+  (`game/utterance.ts`), so each one read is credited. A boss loses its words
+  in order only.
+- **Guessing from how a word starts.** For words of three or more consonants,
+  a heard beginning counts when it covers ¾ of the word while the child is
+  still speaking, or 60 % when the engine's final text stops there
+  (`prefixCoverage`; thresholds in `evaluation/config.ts`). A *different
+  complete* word ("קום" for קוֹף) is never a beginning. Only the monster
+  nearest the castle is guessed, and *Exact* mode turns guessing off.
+- **The room is not the reader.** An utterance of three or more words must be
+  mostly readings, or it credits nothing (a parent saying "מה אתה עושה" does
+  not defeat the מ monster). Inside a multi-word utterance a letter is
+  matched only by its name. Long unrelated talk is ignored silently.
+- **The game's own voice is not the child.** While the Listen button or
+  spoken instructions are playing (and 0.7 s after), everything heard is
+  ignored, so the game can never "read" a word to itself.
+- Engines without a continuous mode (the server proxy, the native plugin)
+  run as a loop of single utterances. The server engine never uploads a clip
+  in which no speech was detected, so an open microphone in a quiet room
+  sends nothing.
+
+## Weapons
+
+The workshop sells weapons — magic bolt (free), arrow volley, ice shard,
+fireball, cannon, lightning, star shower. They change **only** how the castle
+shoots and how a hit looks; every weapon defeats a monster on exactly one
+correct reading. The workshop preview is the real game renderer, and
+**Try it** fires a weapon at a practice monster before buying.
 
 ## Privacy
 

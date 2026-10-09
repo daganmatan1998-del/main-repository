@@ -3,7 +3,14 @@ import type { HebrewLetterMode } from '../evaluation/config';
 import { createLearner, type LearnerState } from '../learning/learner';
 import type { StorageAdapter } from '../persistence/storage';
 
-export type Pace = 'slow' | 'normal' | 'fast';
+export type Pace = 'verySlow' | 'slow' | 'relaxed' | 'normal' | 'fast';
+
+/**
+ * How long a standard monster takes to reach the castle is 7 s × this factor.
+ * The slower settings are for beginners who need time to sound words out.
+ */
+export const PACE_FACTOR: Record<Pace, number> = { verySlow: 3, slow: 2, relaxed: 1.45, normal: 1, fast: 0.8 };
+export const PACES: Pace[] = ['verySlow', 'slow', 'relaxed', 'normal', 'fast'];
 export type MicMode = 'hold' | 'tap';
 export type EngineChoice = 'auto' | 'browser' | 'server' | 'native';
 
@@ -60,7 +67,7 @@ export interface Profile {
   coins: number;
   xp: number;
   owned: string[];
-  equipped: { banner: string; walls: string; magic: string };
+  equipped: { banner: string; walls: string; magic: string; weapon: string };
   achievements: Record<string, number>;
   langs: Record<LanguageCode, LangProgress>;
 }
@@ -78,11 +85,14 @@ export function newLangProgress(): LangProgress {
   };
 }
 
+/** Free items every profile owns, including ones added after a save was made. */
+export const DEFAULT_OWNED = ['banner-red', 'walls-stone', 'magic-gold', 'weapon-magic'];
+
 export function newProfile(): Profile {
   return {
     version: 1, lang: null, settings: { ...DEFAULT_SETTINGS }, coins: 0, xp: 0,
-    owned: ['banner-red', 'walls-stone', 'magic-gold'],
-    equipped: { banner: 'banner-red', walls: 'walls-stone', magic: 'magic-gold' },
+    owned: [...DEFAULT_OWNED],
+    equipped: { banner: 'banner-red', walls: 'walls-stone', magic: 'magic-gold', weapon: 'weapon-magic' },
     achievements: {}, langs: { en: newLangProgress(), he: newLangProgress() },
   };
 }
@@ -100,6 +110,7 @@ export function loadProfile(storage: StorageAdapter): Profile {
     return {
       ...base, ...p,
       settings: { ...base.settings, ...(p.settings ?? {}) },
+      owned: [...new Set([...DEFAULT_OWNED, ...(p.owned ?? [])])],
       equipped: { ...base.equipped, ...(p.equipped ?? {}) },
       langs: {
         en: { ...newLangProgress(), ...(p.langs?.en ?? {}) },

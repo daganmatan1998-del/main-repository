@@ -1,7 +1,7 @@
 import { requestMicrophone } from './micPermission';
 import {
-  nextSessionId, SpeechError, type Availability, type ListenOptions, type ListenSession,
-  type RecognitionResult, type SpeechProvider,
+  FATAL_SPEECH_ERRORS, nextSessionId, SpeechError, type Availability, type ContinuousOptions, type ContinuousSession,
+  type ListenOptions, type ListenSession, type RecognitionResult, type SpeechProvider,
 } from './types';
 
 /* Minimal typings: the Web Speech API is not in lib.dom for every TS version. */
@@ -113,6 +113,73 @@ export class WebSpeechProvider implements SpeechProvider {
       result,
       stop: () => { try { rec.stop(); } catch { /* already ended */ } },
       abort: () => { finalAlts = []; lastInterim = ''; try { rec.abort(); } catch { /* ended */ } },
+    };
+  }
+
+  /**
+   * Always-on listening with the engine's own continuous mode and live
+   * partial results. Browsers end a continuous session after a stretch of
+   * silence (Chrome: about a minute, sooner on Android), so it is restarted
+   * whenever it ends, with a back-off if it keeps failing.
+   */
+  listen(opts: ContinuousOptions): ContinuousSession {
+    const Ctor = getSpeechRecognitionCtor();
+    let stopped = false;
+    let rec: SR | null = null;
+    let generation = 0;
+    let quickEnds = 0;
+    let startedAt = 0;
+    let restartTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const begin = () => {
+      if (stopped) return;
+      if (!Ctor) { opts.onError(new SpeechError('not-supported'), true); return; }
+      const gen = ++generation;
+      const r = new Ctor();
+      rec = r;
+      r.lang = opts.lang;
+      r.continuous = true;
+      r.interimResults = true;
+      r.maxAlternatives = 5;
+      startedAt = performance.now();
+      r.onresult = (e) => {
+        if (stopped || gen !== generation) return;
+        quickEnds = 0;
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const res = e.results[i];
+          const alts = [];
+          for (let j = 0; j < res.length; j++) {
+            const t = res[j]?.transcript ?? '';
+            if (t.trim()) alts.push({ transcript: t, confidence: res[j].confidence > 0 ? res[j].confidence : undefined });
+          }
+          if (alts.length) opts.onResult(alts, res.isFinal, `${gen}:${i}`);
+        }
+      };
+      r.onerror = (e) => {
+        const err = mapError(e.error);
+        if (!err) return; // no-speech / aborted: just restart
+        const fatal = FATAL_SPEECH_ERRORS.has(err.code);
+        opts.onError(err, fatal);
+        if (fatal) stopped = true;
+      };
+      r.onend = () => {
+        if (stopped || gen !== generation) return;
+        // A session that dies straight away, repeatedly, means something is
+        // wrong (network, engine busy): back off instead of spinning.
+        quickEnds = performance.now() - startedAt < 1500 ? quickEnds + 1 : 0;
+        const delay = quickEnds >= 3 ? Math.min(8000, 1000 * quickEnds) : 150;
+        restartTimer = setTimeout(begin, delay);
+      };
+      try { r.start(); } catch (e) { opts.onError(new SpeechError('unknown', String(e)), false); restartTimer = setTimeout(begin, 1000); }
+    };
+    begin();
+
+    return {
+      stop: () => {
+        stopped = true;
+        if (restartTimer) clearTimeout(restartTimer);
+        try { rec?.abort(); } catch { /* ended */ }
+      },
     };
   }
 }

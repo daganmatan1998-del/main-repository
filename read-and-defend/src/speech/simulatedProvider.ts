@@ -1,5 +1,5 @@
 import { Emitter } from '../core/emitter';
-import { nextSessionId, type Availability, type ListenOptions, type ListenSession, type RecognitionResult, type SpeechProvider } from './types';
+import { nextSessionId, type Availability, type ContinuousOptions, type ContinuousSession, type ListenOptions, type ListenSession, type RecognitionResult, type SpeechProvider } from './types';
 
 export type SimulatedAnswer = 'correct' | 'wrong' | 'unclear' | 'silence';
 
@@ -19,6 +19,20 @@ export class SimulatedProvider implements SpeechProvider {
 
   async checkAvailability(): Promise<Availability> { return { ok: true }; }
   async requestPermission(): Promise<Availability> { return { ok: true }; }
+
+  /** Always-on: every button press in the dev panel is one utterance. */
+  listen(opts: ContinuousOptions): ContinuousSession {
+    let n = 0;
+    const off = simulatorBus.on('answer', (a) => {
+      if (a === 'silence') return; // silence produces no result at all
+      const t = opts.simulateTarget?.() ?? '';
+      const alts = a === 'correct' ? [{ transcript: t, confidence: 0.92 }]
+        : a === 'wrong' ? [{ transcript: opts.lang.startsWith('he') ? 'מכונית' : 'banana', confidence: 0.9 }]
+        : [{ transcript: '…', confidence: 0.2 }];
+      opts.onResult(alts, true, `sim:${++n}`);
+    });
+    return { stop: () => { off(); } };
+  }
 
   start(opts: ListenOptions): ListenSession {
     const id = nextSessionId();

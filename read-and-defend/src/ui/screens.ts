@@ -3,11 +3,12 @@ import { speaker } from '../audio/tts';
 import type { LanguageCode } from '../content/types';
 import { stringsFor, t } from '../i18n/strings';
 import { averageReadingMs, isMastered, recentAccuracy, transferRate, weakSkills } from '../learning/learner';
-import { clearProfile, newProfile } from '../progress/profile';
+import { clearProfile, newProfile, PACE_FACTOR, PACES, type Pace } from '../progress/profile';
 import { ACHIEVEMENTS, buy, DAILY_REWARD, ensureDaily, equip, SHOP, shopColor } from '../progress/rewards';
 import type { ProviderChoice } from '../speech/providerFactory';
 import type { App } from './app';
-import { drawCastle } from '../game/art';
+import { SceneRenderer } from '../game/renderer';
+import { createLevelState, type LevelState } from '../game/levelState';
 import { el, icon, starsRow, toast } from './dom';
 
 /* ================================================================ helpers */
@@ -168,53 +169,97 @@ export function mapScreen(app: App): void {
 
 /* ================================================================ shop */
 
+let shopScroll = 0;
+
+/**
+ * The castle workshop. The preview is the real game renderer: a monster
+ * stands on the road and "Try it" fires the chosen weapon at it, so a child
+ * can see a weapon before spending coins on it.
+ */
 export function shopScreen(app: App): void {
   const s = el('div', { class: 'screen dim', 'data-testid': 'screen-shop' });
-  s.append(topbar(app, t('shop'), () => app.show('home')));
+  s.append(topbar(app, t('shop'), () => { shopScroll = 0; app.show('home'); }));
   const col = el('div', { class: 'center-col', style: 'margin-top:0' });
   const preview = el('canvas', { class: 'castle-preview', 'aria-hidden': 'true' }) as HTMLCanvasElement;
   col.append(preview);
-  const drawPreview = () => {
-    const r = preview.getBoundingClientRect();
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    preview.width = r.width * dpr; preview.height = r.height * dpr;
-    const ctx = preview.getContext('2d');
-    if (!ctx) return;
-    ctx.scale(dpr, dpr);
-    const g = ctx.createLinearGradient(0, 0, 0, r.height);
-    g.addColorStop(0, '#7ec8f2'); g.addColorStop(1, '#fff4d6');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, r.width, r.height);
-    ctx.fillStyle = '#6cc46a'; ctx.fillRect(0, r.height * 0.82, r.width, r.height);
-    drawCastle(ctx, r.width / 2, r.height * 0.88, r.height / 95, {
-      walls: shopColor(app.profile.equipped.walls), banner: shopColor(app.profile.equipped.banner), hp: 1, t: 0.4,
-      charging: true, magic: shopColor(app.profile.equipped.magic), mirror: app.pack.dir === 'rtl',
-    });
+
+  const opts = {
+    walls: shopColor(app.profile.equipped.walls), banner: shopColor(app.profile.equipped.banner),
+    magic: shopColor(app.profile.equipped.magic), reducedMotion: app.profile.settings.reducedMotion, bigText: false,
+    lang: app.lang, bossLabel: t('boss'), weapon: app.profile.equipped.weapon,
   };
-  for (const slot of ['banner', 'walls', 'magic'] as const) {
-    const panel = el('div', { class: 'panel' }, el('h3', {}, t(slot === 'banner' ? 'banners' : slot)));
+  const demo = new SceneRenderer(preview, opts);
+  const demoItem = app.pack.items.find((i) => i.kind === 'letter')!;
+  const freshState = (): LevelState => {
+    const st = createLevelState([{ type: 'goblin', items: [demoItem] }]);
+    st.enemies[0].status = 'walking';
+    st.enemies[0].progress = 0.6;
+    return st;
+  };
+  let state = freshState();
+  let busy = false;
+  const fireDemo = (weapon: string) => {
+    if (busy) return;
+    busy = true;
+    demo.setOptions({ weapon });
+    const enemy = state.enemies[0];
+    demo.onEvents([{ type: 'defeat', enemy, item: demoItem, firstTry: true }], state);
+    sound.play('zap');
+    setTimeout(() => { sound.play('pop'); }, 300);
+    setTimeout(() => { demo.reset(); state = freshState(); busy = false; demo.setOptions({ weapon: app.profile.equipped.weapon }); }, 1500);
+  };
+  let last = 0;
+  const loop = (now: number) => {
+    if (!preview.isConnected) return; // left the shop
+    const dt = Math.min(0.05, (now - (last || now)) / 1000);
+    last = now;
+    demo.render(state, dt, { targetId: null, listening: false });
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(() => {
+    const r = preview.getBoundingClientRect();
+    demo.setScene('meadow', app.pack.dir === 'rtl');
+    demo.resize({ x: 0, y: r.height * 0.1, w: r.width, h: r.height * 0.85 });
+    requestAnimationFrame(loop);
+  });
+
+  const reshow = () => { shopScroll = s.scrollTop; app.save(); app.applyDocumentSettings(); app.show('shop'); };
+  for (const slot of ['weapon', 'banner', 'walls', 'magic'] as const) {
+    const title = slot === 'weapon' ? t('weapons') : t(slot === 'banner' ? 'banners' : slot);
+    const panel = el('div', { class: 'panel' }, el('h3', {}, title));
     const grid = el('div', { class: 'shop-grid' });
     for (const it of SHOP.filter((x) => x.slot === slot)) {
       const owned = app.profile.owned.includes(it.id);
       const equipped = app.profile.equipped[slot] === it.id;
-      const sw = el('span', { class: 'swatch' });
-      sw.style.background = it.color === 'rainbow' ? 'linear-gradient(135deg,#ff595e,#ffca3a,#8ac926,#1982c4,#6a4c93)' : it.color;
-      const btn = el('button', { class: `btn ${equipped ? '' : owned ? 'btn-blue' : 'btn-gold'}`, disabled: equipped || (!owned && app.profile.coins < it.price) },
+      const sw = el('span', { class: `swatch ${slot === 'weapon' ? 'weapon' : ''}` });
+      sw.style.background = slot === 'weapon' ? 'linear-gradient(160deg,#3d2a73,#2b1b54)' : it.color === 'rainbow' ? 'linear-gradient(135deg,#ff595e,#ffca3a,#8ac926,#1982c4,#6a4c93)' : it.color;
+      const weaponIcon: Record<string, Parameters<typeof icon>[0]> = {
+        'weapon-magic': 'orb', 'weapon-arrows': 'arrow', 'weapon-ice': 'snow', 'weapon-fire': 'flame',
+        'weapon-cannon': 'bomb', 'weapon-lightning': 'bolt', 'weapon-stars': 'stars',
+      };
+      if (slot === 'weapon') sw.append(icon(weaponIcon[it.id] ?? 'spark'));
+      const btn = el('button', { class: `btn ${equipped ? '' : owned ? 'btn-blue' : 'btn-gold'}`, disabled: equipped || (!owned && app.profile.coins < it.price), 'data-testid': `shop-${it.id}` },
         equipped ? t('equipped') : owned ? t('equip') : el('span', { style: 'display:inline-flex;gap:4px;align-items:center' }, icon('coin'), String(it.price)));
       btn.addEventListener('click', () => {
         if (owned) equip(app.profile, it.id);
         else if (buy(app.profile, it.id)) sound.play('coin');
-        app.save();
-        app.applyDocumentSettings();
-        app.show('shop');
+        reshow();
       });
-      grid.append(el('div', { class: 'shop-item' }, sw, el('span', {}, it.name[app.lang]), btn));
+      const card = el('div', { class: 'shop-item' }, sw, el('span', {}, it.name[app.lang]));
+      if (slot === 'weapon') {
+        const tryBtn = el('button', { class: 'btn btn-try', 'data-testid': `try-${it.id}` }, icon('play'), t('tryWeapon'));
+        tryBtn.addEventListener('click', () => { preview.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); fireDemo(it.id); });
+        card.append(tryBtn);
+      }
+      card.append(btn);
+      grid.append(card);
     }
     panel.append(grid);
     col.append(panel);
   }
   s.append(col);
   app.layer.append(s);
-  requestAnimationFrame(drawPreview);
+  requestAnimationFrame(() => { s.scrollTop = shopScroll; setTimeout(() => fireDemo(app.profile.equipped.weapon), 500); });
 }
 
 /* ============================================================ progress */
@@ -282,6 +327,9 @@ export function progressScreen(app: App): void {
 
 /* ============================================================ settings */
 
+export const paceName = (p: Pace): string =>
+  ({ verySlow: t('paceVerySlow'), slow: t('paceSlow'), relaxed: t('paceRelaxed'), normal: t('paceNormal'), fast: t('paceFast') })[p];
+
 /** Grown-up gate: press and hold for three seconds. Simple, no reading needed by adults, hard for small children by accident. */
 export function grownUpGate(app: App, onPass: () => void): void {
   const btn = el('button', { class: 'btn btn-gold btn-big gate-btn', 'data-testid': 'gate' }, el('span', { class: 'fill' }), el('span', { style: 'position:relative' }, t('gateQ')));
@@ -329,8 +377,7 @@ export function settingsScreen(app: App): void {
 
   const child = el('div', { class: 'panel' });
   child.append(
-    seg(t('pace'), st.pace, [['slow', t('paceSlow')], ['normal', t('paceNormal')], ['fast', t('paceFast')]], (v) => { st.pace = v; }, 'pace'),
-    seg(t('micMode'), st.micMode, [['hold', t('micHold')], ['tap', t('micTap')]], (v) => { st.micMode = v; }, 'mic'),
+    seg(t('monsterSpeed'), st.pace, PACES.map((p): [Pace, string] => [p, `${paceName(p)} · ${t('seconds', { n: Math.round(7 * PACE_FACTOR[p]) })}`]), (v) => { st.pace = v; }, 'pace'),
     toggle(t('soundFx'), st.sound, (v) => { st.sound = v; }, 'sound'),
     toggle(t('voiceHints'), st.voiceHints, (v) => { st.voiceHints = v; }, 'voice'),
     toggle(t('bigText'), st.bigText, (v) => { st.bigText = v; }, 'bigtext'),

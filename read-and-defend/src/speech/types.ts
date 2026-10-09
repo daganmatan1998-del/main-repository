@@ -63,6 +63,29 @@ export interface Availability {
   detail?: string;
 }
 
+/** Always-on listening: the microphone stays open for the whole level. */
+export interface ContinuousOptions {
+  lang: string;
+  /**
+   * Every recognition result, partial (still speaking) or final. One
+   * utterance keeps the same id from its first partial to its final result.
+   */
+  onResult: (alternatives: RecognitionResult['alternatives'], final: boolean, utteranceId: string) => void;
+  /** Fatal errors stop listening; others are reported and listening resumes. */
+  onError: (err: SpeechError, fatal: boolean) => void;
+  onLevel?: (level: number) => void;
+  /** Development simulator only: the current target, for "correct" answers. */
+  simulateTarget?: () => string;
+}
+
+export interface ContinuousSession {
+  stop(): void;
+}
+
+export const FATAL_SPEECH_ERRORS: ReadonlySet<SpeechErrorCode> = new Set<SpeechErrorCode>([
+  'permission-denied', 'not-supported', 'insecure-context', 'no-microphone', 'language-unsupported', 'not-configured',
+]);
+
 export interface SpeechProvider {
   readonly id: 'webspeech' | 'server' | 'native' | 'simulated';
   /** True only for the development simulator. Shown in the UI, always. */
@@ -71,6 +94,8 @@ export interface SpeechProvider {
   /** Ask for the microphone. Resolves to an availability verdict. */
   requestPermission(): Promise<Availability>;
   start(opts: ListenOptions): ListenSession;
+  /** Native always-on mode, where the engine supports it (see speech/continuous.ts). */
+  listen?(opts: ContinuousOptions): ContinuousSession;
 }
 
 let sessionCounter = 0;

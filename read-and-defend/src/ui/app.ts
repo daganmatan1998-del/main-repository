@@ -47,6 +47,7 @@ export class App {
       bigText: this.profile.settings.bigText,
       lang: this.profile.lang ?? 'en',
       bossLabel: 'BOSS',
+      weapon: this.profile.equipped.weapon ?? 'weapon-magic',
     });
     sound.enabled = this.profile.settings.sound;
     window.addEventListener('resize', () => this.onResize());
@@ -85,6 +86,7 @@ export class App {
     setEvalConfig(configForMode(this.profile.settings.hebrewLetterMode ?? 'normal'));
     this.renderer.setOptions({
       bossLabel: t('boss'),
+      weapon: this.profile.equipped.weapon ?? 'weapon-magic',
       lang,
       bigText: this.profile.settings.bigText,
       reducedMotion: this.profile.settings.reducedMotion || prefersReducedMotion(),

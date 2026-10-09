@@ -7,7 +7,18 @@ import { computeLayout, pointAt, type Field, type SceneLayout } from './path';
 type Ctx = CanvasRenderingContext2D;
 
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; kind: 'spark' | 'star' | 'dust' | 'ring' | 'confetti'; rot?: number }
-interface Projectile { fx: number; fy: number; enemyId: number; t: number; dur: number; color: string; onHit: () => void }
+type ShotKind = 'magic' | 'arrow' | 'ice' | 'fire' | 'cannon' | 'lightning' | 'star';
+interface Projectile {
+  fx: number; fy: number; enemyId: number; t: number; dur: number; color: string;
+  kind: ShotKind;
+  /** Seconds before this shot leaves (volleys). */
+  delay: number;
+  /** Only the shot that carries the hit triggers the impact. */
+  onHit?: () => void;
+  /** Sideways offset of a volley shot, in units. */
+  spread: number;
+  rot: number;
+}
 interface Dying { type: EnemyType; x: number; y: number; t: number; facing: 1 | -1 }
 interface Floater { text: string; x: number; y: number; t: number; color: string; size: number }
 
@@ -20,6 +31,8 @@ export interface RenderOptions {
   lang: 'en' | 'he';
   /** Word shown in the boss announcement ("BOSS"). */
   bossLabel: string;
+  /** Equipped weapon id (shop): how the castle's shots look. Purely visual. */
+  weapon: string;
 }
 
 /**
@@ -40,12 +53,16 @@ export class SceneRenderer {
   private ambient: Particle[] = [];
   private projectiles: Projectile[] = [];
   private dying: Dying[] = [];
+  /** Defeated monsters whose shot is still in the air (drawn stunned). */
+  private awaitingHit = new Map<number, Dying>();
   private floaters: Floater[] = [];
   private confused = new Map<number, number>();
   private hurt = new Map<number, number>();
   private hidden = new Set<number>();
   private shake = 0;
   private castleFlash = 0;
+  /** Whole-screen flash (lightning), 1 → 0. */
+  private flash = 0;
   private field: Field = { x: 0, y: 0, w: 0, h: 0 };
   private rtl = false;
   orb = { x: 0, y: 0 };
@@ -107,10 +124,15 @@ export class SceneRenderer {
           const pos = this.enemyPos(e);
           const final = ev.type === 'defeat';
           if (!final && e.type === 'boss') this.hurt.set(e.id, 1);
-          if (final) this.hidden.add(e.id);
+          if (final) {
+            // The monster stays where it was hit until the shot lands, then goes down.
+            this.hidden.add(e.id);
+            this.awaitingHit.set(e.id, { type: e.type, x: pos.x, y: pos.y, t: 0, facing: pos.facing });
+          }
           this.fire(e.id, () => {
+            this.awaitingHit.delete(e.id);
             const u = this.layout.unit;
-            this.burst(pos.x, pos.y - u * 0.5, final ? 34 : 18, this.magicColor(), 'spark');
+            this.impact(pos.x, pos.y - u * 0.5, final);
             this.burst(pos.x, pos.y - u * 0.5, 8, '#ffffff', 'ring');
             if (final) {
               this.dying.push({ type: e.type, x: pos.x, y: pos.y, t: 0, facing: pos.facing });
@@ -118,7 +140,7 @@ export class SceneRenderer {
             }
             if (final && e.type === 'boss') {
               // The boss goes down in style: a big burst, confetti and a shake.
-              this.burst(pos.x, pos.y - u, 60, this.magicColor(), 'spark');
+              this.burst(pos.x, pos.y - u, 60, this.impactColor(), 'spark');
               this.burst(pos.x, pos.y - u, 50, '#ffffff', 'confetti');
               this.burst(pos.x, pos.y - u, 20, '#ffd166', 'star');
               if (!this.opts.reducedMotion) this.shake = 0.5;
@@ -156,8 +178,95 @@ export class SceneRenderer {
     return this.opts.magic === 'rainbow' ? `hsl(${(this.t * 120) % 360},90%,65%)` : this.opts.magic;
   }
 
+  private weaponKind(): ShotKind {
+    switch (this.opts.weapon) {
+      case 'weapon-arrows': return 'arrow';
+      case 'weapon-ice': return 'ice';
+      case 'weapon-fire': return 'fire';
+      case 'weapon-cannon': return 'cannon';
+      case 'weapon-lightning': return 'lightning';
+      case 'weapon-stars': return 'star';
+      default: return 'magic';
+    }
+  }
+
+  private impactColor(): string {
+    switch (this.weaponKind()) {
+      case 'arrow': return '#ffd166';
+      case 'ice': return '#a0e7ff';
+      case 'fire': return '#ff7b00';
+      case 'cannon': return '#a1887f';
+      case 'lightning': return '#fff59d';
+      case 'star': return `hsl(${(this.t * 200) % 360},95%,65%)`;
+      default: return this.magicColor();
+    }
+  }
+
+  /**
+   * The castle shoots. Every weapon hits exactly once per reading — volleys
+   * (arrows, stars) carry the hit on their last shot — so a weapon changes
+   * how a defeat looks, never what it takes to defeat a monster.
+   */
   private fire(enemyId: number, onHit: () => void): void {
-    this.projectiles.push({ fx: this.orb.x, fy: this.orb.y, enemyId, t: 0, dur: this.opts.reducedMotion ? 0.15 : 0.38, color: this.magicColor(), onHit });
+    const kind = this.weaponKind();
+    const fast = this.opts.reducedMotion;
+    const base = { fx: this.orb.x, fy: this.orb.y, enemyId, t: 0, color: this.impactColor(), kind, spread: 0, rot: Math.random() * 6 };
+    const volley = (n: number, gap: number, dur: number, spread: number) => {
+      for (let i = 0; i < n; i++) {
+        this.projectiles.push({ ...base, dur, delay: fast ? 0 : i * gap, spread: (i - (n - 1) / 2) * spread, onHit: i === n - 1 ? onHit : undefined });
+      }
+    };
+    switch (kind) {
+      case 'arrow': volley(fast ? 1 : 3, 0.08, 0.42, 0.25); break;
+      case 'star': volley(fast ? 1 : 5, 0.06, 0.5, 0.3); break;
+      case 'ice': this.projectiles.push({ ...base, dur: fast ? 0.12 : 0.28, delay: 0, onHit }); break;
+      case 'fire': this.projectiles.push({ ...base, dur: fast ? 0.15 : 0.45, delay: 0, onHit }); break;
+      case 'cannon': {
+        // From the wall, not the orb, on a high arc.
+        const c = this.layout.castle;
+        this.projectiles.push({ ...base, fx: c.x, fy: c.y - 26 * c.scale, dur: fast ? 0.2 : 0.62, delay: 0, onHit });
+        break;
+      }
+      case 'lightning': this.projectiles.push({ ...base, dur: 0.16, delay: 0, onHit }); break;
+      default: this.projectiles.push({ ...base, dur: fast ? 0.15 : 0.38, delay: 0, onHit });
+    }
+  }
+
+  /** What a hit looks like, per weapon. */
+  private impact(x: number, y: number, final: boolean): void {
+    const n = final ? 34 : 18;
+    switch (this.weaponKind()) {
+      case 'ice':
+        this.burst(x, y, n, '#e0f7ff', 'spark');
+        this.burst(x, y, 10, '#a0e7ff', 'star');
+        this.burst(x, y, 6, '#ffffff', 'ring');
+        break;
+      case 'fire':
+        this.burst(x, y, n, '#ff7b00', 'spark');
+        this.burst(x, y, 14, '#ffd166', 'spark');
+        this.burst(x, y, 10, '#6d6875', 'dust');
+        break;
+      case 'cannon':
+        this.burst(x, y, 24, '#8d6e63', 'dust');
+        this.burst(x, y, n, '#ffcc80', 'spark');
+        if (!this.opts.reducedMotion) this.shake = Math.max(this.shake, 0.18);
+        break;
+      case 'lightning':
+        this.burst(x, y, n, '#fff59d', 'spark');
+        this.burst(x, y, 8, '#ffffff', 'ring');
+        this.flash = 0.6;
+        break;
+      case 'star':
+        this.burst(x, y, n, '#ffd166', 'star');
+        this.burst(x, y, 20, '#ffffff', 'confetti');
+        break;
+      case 'arrow':
+        this.burst(x, y, n, '#ffd166', 'spark');
+        this.burst(x, y, 8, '#a1887f', 'dust');
+        break;
+      default:
+        this.burst(x, y, n, this.magicColor(), 'spark');
+    }
   }
 
   private burst(x: number, y: number, n: number, color: string, kind: Particle['kind']): void {
@@ -417,6 +526,13 @@ export class SceneRenderer {
         });
       }
     }
+    for (const d of this.awaitingHit.values()) {
+      d.t += dt;
+      list.push({
+        y: d.y,
+        draw: () => drawEnemy(ctx, d.type, d.x, d.y, L.unit, { t: this.t, facing: d.facing, confused: 0, target: false, frozen: false, hurt: 0.4 + 0.3 * Math.sin(d.t * 30) }),
+      });
+    }
     for (const d of this.dying) {
       d.t += dt;
       const k = Math.min(1, d.t / 0.45);
@@ -488,6 +604,25 @@ export class SceneRenderer {
     ctx.restore();
   }
 
+  /** Split text into lines no wider than maxW (by words; a single long word stays whole). */
+  private wrap(ctx: Ctx, text: string, maxW: number): string[] {
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let line = '';
+    for (const w of words) {
+      const tryLine = line ? `${line} ${w}` : w;
+      if (line && ctx.measureText(tryLine).width > maxW) { lines.push(line); line = w; } else line = tryLine;
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  /**
+   * The sign above a monster. The target's sign is the reading surface of
+   * the game (there is no separate reading panel), so it is large, and a
+   * long sentence wraps onto several lines. Other monsters show smaller
+   * signs; a sentence on a monster that is not next shows a scroll.
+   */
   private drawLabel(ctx: Ctx, e: Enemy, isTarget: boolean, listening: boolean): void {
     const L = this.layout;
     const pos = this.enemyPos(e);
@@ -495,18 +630,28 @@ export class SceneRenderer {
     const u = L.unit;
     const he = this.opts.lang === 'he';
     const text = item.display;
-    // Long sentences are read from the big reading panel; the plaque shows
-    // a drawn scroll so the board stays uncluttered.
     const long = text.length > 16;
-    const base = (isTarget ? 0.62 : 0.44) * u * (this.opts.bigText ? 1.2 : 1) * (he ? 1.15 : 1);
-    const font = he
-      ? `700 ${base}px "Noto Sans Hebrew", "Arial Hebrew", "David", Arial, sans-serif`
-      : `700 ${base}px "Andika", "Fredoka", "Nunito", system-ui, sans-serif`;
-    ctx.font = font;
+    const maxW = Math.min(this.w * 0.92, Math.max(this.field.w * 0.9, 240)) - 8;
+    let base = (isTarget ? 0.74 : 0.44) * u * (this.opts.bigText ? 1.2 : 1) * (he ? 1.15 : 1);
+    const fontFor = (b: number) => (he
+      ? `700 ${b}px "Noto Sans Hebrew", "Arial Hebrew", "David", Arial, sans-serif`
+      : `700 ${b}px "Andika", "Fredoka", "Nunito", system-ui, sans-serif`);
     ctx.direction = he ? 'rtl' : 'ltr';
-    const tw = long ? base * 1.2 : ctx.measureText(text).width;
+    ctx.font = fontFor(base);
+    const scroll = long && !isTarget;
+    let lines = scroll ? [''] : [text];
+    if (!scroll) {
+      const padding = base * 0.9;
+      lines = this.wrap(ctx, text, maxW - padding);
+      // A single word wider than the screen: shrink the type rather than overflow.
+      const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
+      if (widest > maxW - padding) { base *= (maxW - padding) / widest; ctx.font = fontFor(base); }
+    }
+    const font = fontFor(base);
+    const lineH = base * (he ? 1.45 : 1.25);
+    const tw = scroll ? base * 1.2 : Math.max(...lines.map((l) => ctx.measureText(l).width));
     const padX = base * 0.45, padY = base * 0.32;
-    const bw = tw + padX * 2, bh = base * (he ? 1.45 : 1.25) + padY;
+    const bw = tw + padX * 2, bh = lineH * lines.length + padY;
     const bob = isTarget && !this.opts.reducedMotion ? Math.sin(this.t * 4) * u * 0.05 : 0;
     let cx = pos.x;
     const top = pos.y - enemyTop(e.type, u) - bh - u * 0.18 + bob;
@@ -528,7 +673,7 @@ export class SceneRenderer {
     // Pointer.
     ctx.fillStyle = isTarget ? '#fffdf5' : 'rgba(255,255,255,0.86)';
     ctx.beginPath(); ctx.moveTo(cx - base * 0.25, ty + bh - 1); ctx.lineTo(cx, ty + bh + base * 0.3); ctx.lineTo(cx + base * 0.25, ty + bh - 1); ctx.closePath(); ctx.fill();
-    if (long) {
+    if (scroll) {
       const sw = base * 1.1, sh = base * 0.8, sx0 = cx - sw / 2, sy0 = ty + bh / 2 - sh / 2;
       ctx.fillStyle = '#f6e7c1';
       ctx.strokeStyle = '#a07a3c';
@@ -542,7 +687,22 @@ export class SceneRenderer {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.font = font;
-      ctx.fillText(text, cx, ty + bh / 2 + base * (he ? 0.08 : 0.04));
+      lines.forEach((l, i) => ctx.fillText(l, cx, ty + padY / 2 + lineH * (i + 0.5) + base * (he ? 0.08 : 0.04)));
+    }
+    // A boss shows which of its three words this is.
+    if (e.type === 'boss' && e.items.length > 1) {
+      const r = Math.max(13, base * 0.42);
+      const bx = he ? cx - bw / 2 : cx + bw / 2, by = ty;
+      ctx.fillStyle = '#7d3c98';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = `800 ${r * 0.9}px system-ui, sans-serif`;
+      ctx.direction = 'ltr';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${e.phase + 1}/${e.items.length}`, bx, by + 1);
     }
     ctx.restore();
 
@@ -558,22 +718,109 @@ export class SceneRenderer {
   }
 
   private updateProjectiles(ctx: Ctx, dt: number, state: LevelState | null): void {
+    const u = this.layout.unit;
     for (const p of this.projectiles) {
+      if (p.delay > 0) { p.delay -= dt; continue; }
       p.t += dt;
       const k = Math.min(1, p.t / p.dur);
       const e = state?.enemies.find((x) => x.id === p.enemyId);
       const target = e ? this.enemyPos(e) : { x: p.fx, y: p.fy };
-      const tx = target.x, ty = target.y - this.layout.unit * 0.5;
+      const tx = target.x + p.spread * u * 0.6, ty = target.y - u * 0.5;
+      const arc = p.kind === 'cannon' ? 2.6 : p.kind === 'ice' || p.kind === 'lightning' ? 0 : p.kind === 'arrow' ? 1.6 : 1.2;
       const x = p.fx + (tx - p.fx) * k;
-      const y = p.fy + (ty - p.fy) * k - Math.sin(k * Math.PI) * this.layout.unit * 1.2;
-      const g = ctx.createRadialGradient(x, y, 0, x, y, this.layout.unit * 0.35);
-      g.addColorStop(0, '#ffffff'); g.addColorStop(0.4, p.color); g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(x, y, this.layout.unit * 0.35, 0, Math.PI * 2); ctx.fill();
-      if (!this.opts.reducedMotion) this.particles.push({ x, y, vx: 0, vy: 0, life: 0, max: 0.25, size: this.layout.unit * 0.08, color: p.color, kind: 'spark' });
-      if (k >= 1) p.onHit();
+      const y = p.fy + (ty - p.fy) * k - Math.sin(k * Math.PI) * u * arc;
+      // Heading, for arrows and ice shards.
+      const k2 = Math.min(1, k + 0.02);
+      const ang = Math.atan2((p.fy + (ty - p.fy) * k2 - Math.sin(k2 * Math.PI) * u * arc) - y, (p.fx + (tx - p.fx) * k2) - x);
+      this.drawShot(ctx, p, x, y, ang, tx, ty);
+      if (k >= 1) p.onHit?.();
     }
-    this.projectiles = this.projectiles.filter((p) => p.t < p.dur);
+    this.projectiles = this.projectiles.filter((p) => p.delay > 0 || p.t < p.dur);
+    if (this.flash > 0) {
+      ctx.save();
+      ctx.globalAlpha = this.flash * 0.35;
+      ctx.fillStyle = '#fffde7';
+      ctx.fillRect(0, 0, this.w, this.h);
+      ctx.restore();
+      this.flash = Math.max(0, this.flash - dt * 3);
+    }
+  }
+
+  private drawShot(ctx: Ctx, p: Projectile, x: number, y: number, ang: number, tx: number, ty: number): void {
+    const u = this.layout.unit;
+    const trail = (color: string, size: number) => {
+      if (!this.opts.reducedMotion) this.particles.push({ x, y, vx: 0, vy: 0, life: 0, max: 0.25, size, color, kind: 'spark' });
+    };
+    ctx.save();
+    switch (p.kind) {
+      case 'arrow': {
+        ctx.translate(x, y); ctx.rotate(ang);
+        ctx.strokeStyle = '#6d4c41'; ctx.lineWidth = Math.max(2, u * 0.05);
+        ctx.beginPath(); ctx.moveTo(-u * 0.45, 0); ctx.lineTo(u * 0.25, 0); ctx.stroke();
+        ctx.fillStyle = '#cfd8dc';
+        ctx.beginPath(); ctx.moveTo(u * 0.38, 0); ctx.lineTo(u * 0.2, -u * 0.08); ctx.lineTo(u * 0.2, u * 0.08); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#e63946';
+        ctx.beginPath(); ctx.moveTo(-u * 0.45, 0); ctx.lineTo(-u * 0.55, -u * 0.1); ctx.lineTo(-u * 0.35, 0); ctx.lineTo(-u * 0.55, u * 0.1); ctx.closePath(); ctx.fill();
+        break;
+      }
+      case 'ice': {
+        ctx.translate(x, y); ctx.rotate(ang);
+        const g = ctx.createLinearGradient(-u * 0.4, 0, u * 0.3, 0);
+        g.addColorStop(0, 'rgba(160,231,255,0)'); g.addColorStop(1, '#e0f7ff');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.moveTo(u * 0.35, 0); ctx.lineTo(-u * 0.1, -u * 0.12); ctx.lineTo(-u * 0.5, 0); ctx.lineTo(-u * 0.1, u * 0.12); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke();
+        trail('#a0e7ff', u * 0.06);
+        break;
+      }
+      case 'fire': {
+        const r = u * 0.32 * (1 + Math.sin(this.t * 40) * 0.08);
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, '#fff3b0'); g.addColorStop(0.35, '#ffb703'); g.addColorStop(0.7, '#ff5400'); g.addColorStop(1, 'rgba(255,84,0,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+        trail(Math.random() < 0.5 ? '#ff7b00' : '#ffd166', u * 0.1);
+        break;
+      }
+      case 'cannon': {
+        ctx.fillStyle = '#263238';
+        ctx.beginPath(); ctx.arc(x, y, u * 0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath(); ctx.arc(x - u * 0.06, y - u * 0.06, u * 0.06, 0, Math.PI * 2); ctx.fill();
+        trail('rgba(120,120,120,0.6)', u * 0.08);
+        break;
+      }
+      case 'lightning': {
+        // A jagged bolt from the sky straight down onto the monster.
+        const top = this.field.y;
+        ctx.strokeStyle = '#fffde7'; ctx.lineWidth = Math.max(3, u * 0.09);
+        ctx.shadowColor = '#fff59d'; ctx.shadowBlur = u * 0.6;
+        ctx.beginPath(); ctx.moveTo(tx + (Math.random() - 0.5) * u, top);
+        const steps = 7;
+        for (let i = 1; i <= steps; i++) {
+          const yy = top + ((ty - top) * i) / steps;
+          ctx.lineTo(tx + (i === steps ? 0 : (Math.random() - 0.5) * u * 0.9), yy);
+        }
+        ctx.stroke();
+        void x; void y;
+        break;
+      }
+      case 'star': {
+        ctx.translate(x, y); ctx.rotate(p.rot + p.t * 10);
+        ctx.fillStyle = `hsl(${(p.rot * 60 + this.t * 200) % 360},95%,65%)`;
+        this.star(ctx, 0, 0, u * 0.18, 0);
+        trail('#ffffff', u * 0.05);
+        break;
+      }
+      default: {
+        const g = ctx.createRadialGradient(x, y, 0, x, y, u * 0.35);
+        g.addColorStop(0, '#ffffff'); g.addColorStop(0.4, p.color); g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(x, y, u * 0.35, 0, Math.PI * 2); ctx.fill();
+        trail(p.color, u * 0.08);
+      }
+    }
+    ctx.restore();
   }
 
   private updateParticles(ctx: Ctx, dt: number): void {
@@ -618,6 +865,7 @@ export class SceneRenderer {
       f.t += dt;
       ctx.globalAlpha = Math.max(0, 1 - f.t / 1.1);
       ctx.font = `800 ${f.size}px system-ui, sans-serif`;
+      ctx.direction = 'ltr'; // "+150", also in Hebrew
       ctx.textAlign = 'center';
       ctx.lineWidth = 4;
       ctx.strokeStyle = 'rgba(40,20,60,0.7)';
@@ -637,6 +885,7 @@ export class SceneRenderer {
     this.floaters = [];
     this.confused.clear();
     this.hurt.clear();
+    this.awaitingHit.clear();
     this.hidden.clear();
     this.shake = 0;
   }
