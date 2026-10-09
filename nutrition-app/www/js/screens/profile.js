@@ -3,7 +3,8 @@
 import { h, icon, sheet, toast, fmt, fmtDate, parseNum, ltr, signed } from '../util.js';
 import { metricsForm, segmented, stepper, disclaimer } from '../components.js';
 import { GOALS, ACTIVITY } from '../nutrition.js';
-import { ALLERGENS, DIETS, FOODS, parseDislikes, dislikeMatches } from '../foods.js';
+import { ALLERGENS, DIETS, FOODS, FOOD_BY_ID, parseDislikes, dislikeMatches } from '../foods.js';
+import { openFoodPicker, pickerLabel } from './food-picker.js';
 import { state, targets, activePeriod, currentMetrics, addMetrics, updateProfile, saveSettings, wipe, currentWeek } from '../store.js';
 import { openPeriodReview } from './period.js';
 import { enableReminders, disableReminders, downloadCalendar, supported as notifSupported } from '../notify.js';
@@ -57,7 +58,7 @@ export function renderProfile(root) {
     h('div', { class: 'kv' },
       h('span', null, 'תזונה'), h('b', null, `${diet}${p.prefs.kosher ? ' · כשר' : ''}`),
       h('span', null, 'אלרגיות'), h('b', null, allergies),
-      h('span', null, 'לא אוכל/ת'), h('b', null, p.prefs.dislikes || '—'),
+      h('span', null, 'לא אוכל/ת'), h('b', null, [p.prefs.dislikes, ...(p.prefs.excluded || []).map((id) => FOOD_BY_ID[id]?.name)].filter(Boolean).join(', ') || '—'),
       h('span', null, 'ארוחות ביום'), h('b', null, String(p.prefs.mealsPerDay)))));
 
   // ---- app settings ----
@@ -137,7 +138,7 @@ function editDetails() {
 
 function editPrefs() {
   const p = state.profile.prefs;
-  const d = { diet: p.diet, kosher: !!p.kosher, allergies: [...(p.allergies || [])], dislikes: p.dislikes || '', mealsPerDay: p.mealsPerDay };
+  const d = { diet: p.diet, kosher: !!p.kosher, allergies: [...(p.allergies || [])], dislikes: p.dislikes || '', excluded: [...(p.excluded || [])], mealsPerDay: p.mealsPerDay };
   sheet('העדפות תזונה', (close) => {
     const preview = h('div', { class: 'muted small', 'aria-live': 'polite' });
     const upd = () => {
@@ -160,6 +161,13 @@ function editPrefs() {
         }, a.label)))),
       h('label', { class: 'field' }, h('span', null, 'מאכלים שאני לא אוכל/ת'),
         h('input', { value: d.dislikes, oninput: (e) => { d.dislikes = e.target.value; upd(); } }), preview),
+      h('button', {
+            type: 'button', class: 'btn btn-block', id: 'btn-food-picker',
+            onclick: (e) => {
+              const btn = e.currentTarget;
+              openFoodPicker(d, (ids) => { d.excluded = ids;  btn.lastChild.textContent = pickerLabel(ids); });
+            },
+          }, icon('edit', 18), h('span', null, pickerLabel(d.excluded))),
       h('div', { class: 'field' }, h('span', null, 'ארוחות ביום'),
         segmented([3, 4, 5, 6].map((n) => ({ id: n, label: String(n) })), d.mealsPerDay, (v) => { d.mealsPerDay = v; }, 'ארוחות ביום')),
       h('button', {

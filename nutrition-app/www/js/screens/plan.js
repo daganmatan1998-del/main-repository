@@ -18,6 +18,7 @@ export function renderPlan(root, { askAbout }) {
 
   root.appendChild(h('header', { class: 'page-head' },
     h('div', null, h('h1', null, 'התפריט שלי'), h('p', { class: 'muted' }, 'מותאם ליעד, להגבלות ולמספר הארוחות שלך'))));
+  root.appendChild(h('a', { href: '#/shopping', class: 'btn btn-primary btn-block shop-btn', id: 'btn-shopping' }, h('span', { 'aria-hidden': 'true' }, '🛒'), 'קניות לשבוע'));
 
   const strip = h('div', { class: 'day-strip', role: 'tablist', 'aria-label': 'בחירת יום' });
   for (let i = 0; i < 7; i++) {

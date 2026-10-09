@@ -1,9 +1,9 @@
 // Reusable UI pieces: macro rings/bars, meal cards, the swap sheet, metric forms.
 
 import { h, icon, sheet, toast, fmt, parseNum, ltr } from './util.js';
-import { FOOD_BY_ID, household, ROLE_LABEL } from './foods.js';
+import { FOOD_BY_ID, household, ROLE_LABEL, canExclude } from './foods.js';
 import { alternatives } from './substitutions.js';
-import { state, setOverride } from './store.js';
+import { state, setOverride, excludeFood } from './store.js';
 import { validBf } from './nutrition.js';
 
 export function ring(value, target, label, sub) {
@@ -101,6 +101,19 @@ export function openSwapSheet(item, meal, day, onAsk) {
         }, 'החלף')));
     }
     body.appendChild(list);
+    body.appendChild(h('button', {
+      class: 'btn btn-ghost btn-block danger-text',
+      id: 'btn-never',
+      onclick: async () => {
+        if (!canExclude(item.foodId, state.profile.prefs)) {
+          toast('אי אפשר להוציא גם את זה — צריך להשאיר לפחות 2 אפשרויות מכל סוג כדי שתמיד יהיה תחליף.');
+          return;
+        }
+        await excludeFood(item.foodId);
+        close();
+        toast(`${res.source.name} הוצא מהתפריט לתמיד. אפשר להחזיר בפרופיל ← העדפות תזונה.`);
+      },
+    }, icon('close', 18), 'אני לא אוכל/ת את זה — להוציא מהתפריט'));
     if (onAsk) {
       body.appendChild(h('button', {
         class: 'btn btn-ghost btn-block',

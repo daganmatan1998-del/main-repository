@@ -233,6 +233,48 @@ try {
   await page.locator('.day-strip .day').first().click();
   await wait(300);
 
+  // =============== "I don't eat this" ===============
+  const firstItem = page.locator('.meal').first().locator('.item').first();
+  const neverName = (await firstItem.locator('.item-name').innerText()).trim();
+  await firstItem.locator('.chip-btn').click();
+  await page.waitForSelector('#btn-never');
+  await page.click('#btn-never');
+  await wait(500);
+  let seen = 0;
+  for (let i = 0; i < 7; i++) {
+    await page.locator('.day-strip .day').nth(i).click();
+    await wait(150);
+    if ((await page.locator('.page-plan').innerText()).includes(neverName)) seen++;
+  }
+  check(`"I don't eat this" removes ${neverName} from the whole week`, seen === 0, `still on ${seen} days`);
+  await page.locator('.day-strip .day').first().click();
+  await wait(200);
+
+  // =============== weekly shopping list ===============
+  await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
+  await page.click('#btn-shopping');
+  await page.waitForSelector('.page-shopping .shop-item');
+  const products = await page.locator('.shop-item').count();
+  const depts = await page.locator('.shop-group').count();
+  check(`shopping list built (${products} products in ${depts} sections)`, products >= 8 && products <= 40 && depts >= 3);
+  check('shopping list never lists an excluded food', !(await page.locator('.page-shopping').innerText()).includes(neverName.split(' ')[0]) || neverName.length < 3);
+  check('plan tab stays highlighted on the shopping screen', (await page.locator('#tabbar .tab.on').innerText()).includes('תפריט'));
+  await shot('22-shopping', { fullPage: true });
+  await page.locator('.shop-item input').first().check();
+  await wait(300);
+  await page.reload();
+  await page.waitForSelector('.page-shopping .shop-item');
+  check('ticked shopping items survive a reload', await page.locator('.shop-item input').first().isChecked());
+  await page.click('#shop-share');
+  await wait(300);
+  const shared = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
+  check('shopping list can be shared / copied', shared.includes('🛒') && shared.includes('☐'), shared.slice(0, 80));
+  await page.getByRole('radio', { name: /שבוע הבא/ }).click();
+  await wait(300);
+  check('next week has its own list', (await page.locator('.shop-item input:checked').count()) === 0 && (await page.locator('.shop-item').count()) > 0);
+  await page.click('a[aria-label="חזרה לתפריט"]');
+  await page.waitForSelector('.page-plan');
+
   // =============== Assistant ===============
   await page.locator('.meal').first().getByRole('button', { name: /החלף חלבון/ }).first().click();
   await page.waitForSelector('.sheet .alt, .sheet .empty');
@@ -434,6 +476,22 @@ try {
   await wait(500);
   check('manual weight / body-fat update recalculates the plan', (await page.locator('#period-settings').innerText()) !== kcalBefore);
   await page.locator('.card', { hasText: 'העדפות תזונה' }).getByRole('button', { name: /עריכה/ }).click();
+  await page.click('#btn-food-picker');
+  await page.waitForSelector('.picker .food-chip');
+  await shot('23-food-picker');
+  // Try to exclude every fat: the picker must stop at two.
+  const fatChips = page.locator('.picker-group', { hasText: 'שומנים' }).locator('.food-chip');
+  const fatCount = await fatChips.count();
+  for (let i = 0; i < fatCount; i++) {
+    const chip = page.locator('.picker-group', { hasText: 'שומנים' }).locator('.food-chip:not(.off)').first();
+    if (await chip.count()) await chip.click();
+    await wait(60);
+  }
+  const fatsLeft = await page.locator('.picker-group', { hasText: 'שומנים' }).locator('.food-chip:not(.off)').count();
+  check('food picker always keeps at least 2 options per category', fatsLeft === 2, `${fatsLeft} left of ${fatCount}`);
+  await page.click('#picker-save');
+  await wait(300);
+  check('picker shows how many foods were removed', (await page.locator('#btn-food-picker').innerText()).includes('הוצאו'));
   await page.locator('.sheet').getByRole('radio', { name: '3' }).click();
   await page.locator('.sheet .btn-primary').click();
   await wait(400);

@@ -185,7 +185,7 @@ button { cursor: pointer; touch-action: manipulation; }
 .form { display: grid; gap: 4px; }
 .field { display: grid; gap: 6px; margin-bottom: 14px; }
 .field > span { font-weight: 500; font-size: .92rem; }
-input[type="text"], input:not([type]), input[inputmode], select, textarea {
+input[type="text"], input[type="search"], input:not([type]), input[inputmode], select, textarea {
   width: 100%; min-height: 50px; padding: 12px 14px; font-size: 16px;
   background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; color: var(--text);
   transition: border-color .2s;
@@ -518,3 +518,29 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 }
 .ltr { unicode-bidi: isolate; direction: ltr; display: inline-block; font-variant-numeric: tabular-nums; }
 .delta { color: var(--muted); font-weight: 400; }
+
+/* ============ shopping list ============ */
+.shop-btn { margin-bottom: 14px; font-size: 1.02rem; }
+.shop-btn span[aria-hidden] { font-size: 1.2rem; }
+.shop-actions { margin: 12px 0 4px; }
+.shop-group { padding: 14px 14px 6px; }
+.shop-group h2 { font-size: 1.02rem; margin-bottom: 4px; }
+.shop-items { list-style: none; margin: 0; padding: 0; }
+.shop-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); min-height: 52px; cursor: pointer; }
+.shop-items li:first-child .shop-item { border-top: 0; }
+.shop-item input { width: 24px; height: 24px; margin: 2px 0 0; accent-color: var(--primary); flex-shrink: 0; }
+.shop-text { display: grid; gap: 1px; min-width: 0; }
+.shop-name { font-weight: 500; }
+.shop-qty { font-size: .9rem; color: var(--primary); font-weight: 500; }
+.shop-note { display: block; }
+.shop-item.done .shop-name, .shop-item.done .shop-qty { text-decoration: line-through; color: var(--muted); }
+.page-shopping .segmented button { font-size: .82rem; }
+
+/* ============ food picker ============ */
+.picker-search { margin-bottom: 8px; }
+.picker-group { margin: 12px 0; }
+.picker-group h3 { margin: 0 0 8px; }
+.food-chip { display: inline-flex; align-items: center; gap: 4px; }
+.food-chip.off { background: var(--err-bg); border-color: var(--danger); color: var(--danger); text-decoration: line-through; }
+.picker-actions { position: sticky; bottom: 0; background: var(--surface); padding: 10px 0 4px; }
+.danger-text { color: var(--danger); }

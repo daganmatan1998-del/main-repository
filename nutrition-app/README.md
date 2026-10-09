@@ -12,7 +12,7 @@ nutrition-app/
 │   │   ├── nutrition.js     BMR/TDEE, safe pacing, calories & macros (pure)
 │   │   ├── mealplan.js      daily menu generator + portion solver (pure)
 │   │   ├── substitutions.js equivalent swaps (pure)
-│   │   ├── foods.js         food database (53 foods), diet/allergy/kosher rules
+│   │   ├── foods.js         food database (72 foods), diet/allergy/kosher rules
 │   │   ├── schedule.js      week math from the registration date (pure)
 │   │   ├── store.js  db.js  state + IndexedDB, clock-rollback guard
 │   │   ├── image.js         client-side photo compression
@@ -106,6 +106,12 @@ Then make three changes:
 | Reminders | Periodic Background Sync, plus a weekly calendar event (.ics) | The web cannot schedule a future local notification. Periodic sync works only for an installed app on Chrome/Android; the .ics alarm works everywhere, including iPhone. |
 | Assistant disclaimer | Pinned disclaimer on the chat screen; the model adds a one-line "not medical advice" whenever a question touches health | One on every reply was noisy. Say if you want it on every reply. |
 
+### Foods you don't eat, and the weekly shopping list
+
+- **Removing foods:** any food can be taken off the menu from its "replace" sheet ("I don't eat this"). There's also a full picker in Profile → Food preferences, and in sign-up. Each category (protein, carb, fat, vegetables, fruit) always keeps at least 2 foods, so every menu item always has a substitute. The swap search also relaxes its limits rather than ever returning nothing.
+- **Weekly food set:** a menu week follows the check-in week. Each week draws from a rotating set of about 5 proteins, 4 carbs, 3 fats, 4 vegetables and 3 fruits. Meals still vary day to day, but the shopping list stays at roughly 20–30 products instead of ~55.
+- **Shopping list** (Menu → 🛒 Weekly shopping): adds up the rest of this week, or the whole of next week, including any swaps you made. Amounts are converted to what you buy: dry rice and grains, raw meat, whole eggs, avocados and fruit by the piece, and mixed salads split into vegetables. They're rounded to real packages and grouped by supermarket section. Tick items as you shop; the list can be shared to WhatsApp or copied.
+
 ### Weekly-gate rules (what "can't be bypassed" means here)
 
 - The gate decision is made in one function, `render()` in `app.js`. It runs on every route change, return from the background, focus, bfcache restore, and every 30 seconds.
@@ -121,8 +127,8 @@ Then make three changes:
 ## Tests
 
 ```bash
-npm test              # 19 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, proxy
-npm run test:e2e      # 115 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm test              # 24 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, proxy
+npm run test:e2e      # 124 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 ```
 
 The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.

@@ -20,13 +20,15 @@ export const state = {
   overrides: {}, // { [day]: { [mealIdx]: { reseed, swaps } } }
   logs: {}, // { [day]: { eaten: number[] } }
   chat: [],
+  shopping: {}, // { [menuWeek]: checkedItemIds[] }
   meta: { maxSeen: 0 },
 };
 
 export async function load() {
-  const [profile, periods, settings, overrides, logs, chat, meta, checkins, metrics] = await Promise.all([
+  const [profile, periods, settings, overrides, logs, chat, meta, checkins, metrics, shopping] = await Promise.all([
     db.kv.get('profile'), db.kv.get('periods'), db.kv.get('settings'), db.kv.get('overrides'),
     db.kv.get('logs'), db.kv.get('chat'), db.kv.get('meta'), db.getAll('checkins'), db.getAll('metrics'),
+    db.kv.get('shopping'),
   ]);
   state.profile = profile || null;
   state.periods = periods || [];
@@ -34,6 +36,7 @@ export async function load() {
   state.overrides = overrides || {};
   state.logs = logs || {};
   state.chat = chat || [];
+  state.shopping = shopping || {};
   state.meta = { ...state.meta, ...(meta || {}) };
   state.checkins = checkins || [];
   state.metrics = (metrics || []).sort((a, b) => a.at - b.at);
@@ -97,7 +100,18 @@ export function targets(day = today()) {
 export function dayPlan(day = today()) {
   const t = targets(day);
   if (!t) return [];
-  return generateDay(day, t, state.profile.prefs, state.overrides[day] || {}, state.profile.seed || 0);
+  return generateDay(day, t, state.profile.prefs, state.overrides[day] || {}, state.profile.seed || 0, menuWeek(day));
+}
+
+// Menu weeks follow the check-in weeks (registration day = start of week 0),
+// so each week's food set lines up with one shopping trip.
+export function menuWeek(day = today()) {
+  return Math.floor(daysBetween(state.profile.regDay, day) / 7);
+}
+
+export function menuWeekRange(week) {
+  const start = addDays(state.profile.regDay, week * 7);
+  return { start, end: addDays(start, 6) };
 }
 
 export function gate() {
@@ -220,6 +234,20 @@ export async function startNextPeriod(period) {
   state.periods.push({ id, ...period, startDate: t, endDate: addDays(t, period.weeks * 7), startWeight: cur.weight, startBf: cur.bf, status: 'active' });
   await db.kv.set('periods', state.periods);
   emit();
+}
+
+export async function saveShoppingChecks(key, ids) {
+  state.shopping = { ...state.shopping, [key]: ids };
+  // Keep the last few weeks only.
+  const keys = Object.keys(state.shopping).map(Number).sort((a, b) => b - a);
+  for (const k of keys.slice(4)) delete state.shopping[k];
+  await db.kv.set('shopping', state.shopping);
+}
+
+export async function excludeFood(foodId) {
+  const excluded = new Set(state.profile.prefs.excluded || []);
+  excluded.add(foodId);
+  await updateProfile({ prefs: { excluded: [...excluded] } });
 }
 
 export async function saveChat(messages) {

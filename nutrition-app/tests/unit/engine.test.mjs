@@ -154,6 +154,8 @@ test('household measures read naturally', () => {
   // Energy from macros roughly matches the stated kcal for every food.
   for (const f of FOODS) {
     const est = f.p * 4 + f.c * 4 + f.f * 9;
-    assert.ok(Math.abs(est - f.kcal) / f.kcal < 0.2, `${f.id}: ${est} vs ${f.kcal}`);
+    // Vegetables are mostly fibre, which labels count at ~2 kcal/g, so allow more slack there.
+    const tolerance = f.role === 'veg' ? 0.35 : 0.2;
+    assert.ok(Math.abs(est - f.kcal) / f.kcal < tolerance, `${f.id}: ${est} vs ${f.kcal}`);
   }
 });

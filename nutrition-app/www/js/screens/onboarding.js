@@ -7,6 +7,7 @@ import { GOALS, ACTIVITY, assessGoal, projectBf, computeTargets, validBf } from 
 import { ALLERGENS, DIETS, FOODS, isAllowed, parseDislikes, dislikeMatches } from '../foods.js';
 import { completeOnboarding } from '../store.js';
 import { pickPhoto } from './photo-picker.js';
+import { openFoodPicker, pickerLabel } from './food-picker.js';
 
 const DRAFT_KEY = 'nutri-onboarding-draft';
 
@@ -20,7 +21,7 @@ function loadDraft() {
     name: '', sex: '', age: '', height: '', weight: '', bf: '',
     goal: '', weeks: 8, customWeeks: '', targetWeight: '', targetBf: '', targetsTouched: false,
     activity: '', workouts: 3,
-    diet: 'omni', kosher: false, allergies: [], dislikes: '', mealsPerDay: 4,
+    diet: 'omni', kosher: false, allergies: [], dislikes: '', excluded: [], mealsPerDay: 4,
   };
 }
 
@@ -139,7 +140,7 @@ export function renderOnboarding(root) {
       height: parseNum(d.height),
       activity: d.activity,
       workouts: d.workouts,
-      prefs: { diet: d.diet, kosher: d.kosher, allergies: d.allergies, dislikes: d.dislikes.trim(), mealsPerDay: d.mealsPerDay },
+      prefs: { diet: d.diet, kosher: d.kosher, allergies: d.allergies, dislikes: d.dislikes.trim(), excluded: d.excluded || [], mealsPerDay: d.mealsPerDay },
     };
   }
 
@@ -283,6 +284,13 @@ export function renderOnboarding(root) {
           h('label', { class: 'field' }, h('span', null, 'מאכלים שאני לא אוכל/ת'),
             h('input', { type: 'text', value: d.dislikes, placeholder: 'לדוגמה: טונה, בטטה, קוטג׳', oninput: (e) => { d.dislikes = e.target.value; saveDraft(d); updatePreview(); } }),
             dislikePreview),
+          h('button', {
+            type: 'button', class: 'btn btn-block', id: 'btn-food-picker',
+            onclick: (e) => {
+              const btn = e.currentTarget;
+              openFoodPicker({ diet: d.diet, kosher: d.kosher, allergies: d.allergies, dislikes: d.dislikes, excluded: d.excluded || [] }, (ids) => { d.excluded = ids; saveDraft(d); btn.lastChild.textContent = pickerLabel(ids); });
+            },
+          }, icon('edit', 18), h('span', null, pickerLabel(d.excluded))),
           h('div', { class: 'field' }, h('span', null, 'ארוחות ביום'),
             segmented([3, 4, 5, 6].map((n) => ({ id: n, label: String(n) })), d.mealsPerDay, (v) => { d.mealsPerDay = v; saveDraft(d); }, 'ארוחות ביום')));
       }

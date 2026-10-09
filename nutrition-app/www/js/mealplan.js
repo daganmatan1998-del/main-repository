@@ -7,7 +7,7 @@
 // counts 9/4 of a gram of carbs). Discrete foods (eggs, bread slices) are
 // rounded to whole units and the rest re-solved around them.
 
-import { allowedFoods, kosherCompatible, macrosFor, FOOD_BY_ID } from './foods.js';
+import { allowedFoods, kosherCompatible, macrosFor, FOOD_BY_ID, isAllowed } from './foods.js';
 import { rng, hashStr, clamp } from './util.js';
 
 const MEAL_NAMES = {
@@ -132,7 +132,7 @@ const capacity = (f) => f.max * f.p / 100;
 // Protein density, with a small bonus for foods that belong in this meal.
 const fitScore = (f, type) => f.p / f.kcal + (f.meals.includes(type) ? 0.03 : 0);
 
-export function buildMeal(type, target, allowed, rand, usedProteins) {
+export function buildMeal(type, target, allowed, rand, usedProteins, everything = allowed) {
   const chosen = [];
   for (const slot of SLOTS[type]) {
     let pool = poolFor(slot, type, allowed).filter((f) => kosherCompatible(f, chosen.map((c) => c.food)));
@@ -161,9 +161,11 @@ export function buildMeal(type, target, allowed, rand, usedProteins) {
   const got = totals(items).p;
   if (got < target.p * 0.85) {
     const inMeal = chosen.map((c) => c.food);
-    const extra = allowed
+    const candidates = (list) => list
       .filter((f) => f.role === 'protein' && !inMeal.some((x) => x.id === f.id) && kosherCompatible(f, inMeal))
-      .sort((a, b) => fitScore(b, type) - fitScore(a, type))[0];
+      .sort((a, b) => fitScore(b, type) - fitScore(a, type));
+    // Prefer this week's foods; reach outside only if none fit.
+    const extra = candidates(allowed)[0] || candidates(everything)[0];
     if (extra) {
       chosen.push({ slot: 'protein2', food: extra });
       items = solvePortions(chosen.map(toItem), target);
@@ -172,10 +174,43 @@ export function buildMeal(type, target, allowed, rand, usedProteins) {
   return items;
 }
 
+// The foods of one menu week. Picking each day from the whole database makes
+// a shopping list of ~55 products; a weekly set keeps the cart realistic while
+// meals still vary day to day, and the set rotates every week.
+const POOL_SIZE = { protein: 5, carb: 4, fat: 3, veg: 4, fruit: 3 };
+
+export function weeklyPool(allowed, types, poolKey, userSeed = 0) {
+  const rand = rng(hashStr(`pool|${poolKey}|${userSeed}`));
+  const shuffled = allowed.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  const picked = new Set();
+  for (const [role, n] of Object.entries(POOL_SIZE)) {
+    shuffled.filter((f) => f.role === role).slice(0, n).forEach((f) => picked.add(f.id));
+  }
+  // Every slot of every meal type needs at least two choices in the pool.
+  for (const type of new Set(types)) {
+    for (const slot of SLOTS[type]) {
+      const roles = slot === 'carb' && type === 's' ? ['carb', 'fruit'] : [slot];
+      const fits = (f) => roles.includes(f.role) && f.meals.includes(type);
+      let have = shuffled.filter((f) => picked.has(f.id) && fits(f)).length;
+      for (const f of shuffled) {
+        if (have >= 2) break;
+        if (!picked.has(f.id) && fits(f)) { picked.add(f.id); have++; }
+      }
+    }
+  }
+  return allowed.filter((f) => picked.has(f.id));
+}
+
 // overrides: { [mealIndex]: { reseed?: number, swaps?: { [slot]: { foodId, grams } } } }
-export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 0) {
-  const allowed = allowedFoods(prefs);
+// poolKey: the menu-week number; omit it to draw from every allowed food.
+export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 0, poolKey = null) {
+  const everything = allowedFoods(prefs);
   const tmpl = mealTemplate(prefs.mealsPerDay);
+  const allowed = poolKey === null ? everything : weeklyPool(everything, tmpl.map((m) => m.type), poolKey, userSeed);
   const used = new Set();
   return tmpl.map((m, idx) => {
     const ov = overrides[idx] || {};
@@ -186,11 +221,12 @@ export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 
       c: targets.carbs * m.share,
       f: targets.fat * m.share,
     };
-    let items = buildMeal(m.type, target, allowed, rand, used);
+    let items = buildMeal(m.type, target, allowed, rand, used, everything);
     if (ov.swaps) {
       for (const [slot, sw] of Object.entries(ov.swaps)) {
         const food = FOOD_BY_ID[sw.foodId];
-        if (!food) continue;
+        // A swap to a food the user has since excluded is dropped.
+        if (!food || !isAllowed(food, prefs)) continue;
         const replacement = { slot, role: food.role, foodId: food.id, grams: sw.grams };
         const at = items.findIndex((i) => i.slot === slot);
         if (at >= 0) items[at] = replacement;

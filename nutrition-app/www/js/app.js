@@ -15,6 +15,7 @@ import { renderPlan } from './screens/plan.js';
 import { renderAssistant, queueSubstitution } from './screens/assistant.js';
 import { renderGallery } from './screens/gallery.js';
 import { renderProfile } from './screens/profile.js';
+import { renderShopping } from './screens/shopping.js';
 import { applyTheme } from './theme.js';
 import { onInstallChange } from './install.js';
 
@@ -24,6 +25,8 @@ const ROUTES = {
   assistant: { label: 'עוזר', icon: 'chat', render: renderAssistant },
   gallery: { label: 'גלריה', icon: 'gallery', render: renderGallery },
   profile: { label: 'פרופיל', icon: 'profile', render: renderProfile },
+  // Not a tab: opened from the menu screen, which stays highlighted.
+  shopping: { render: renderShopping, tab: 'plan' },
 };
 
 const view = document.getElementById('view');
@@ -40,6 +43,7 @@ function route() {
 function buildTabbar(active) {
   clear(tabbar);
   for (const [name, r] of Object.entries(ROUTES)) {
+    if (r.tab) continue;
     tabbar.appendChild(h('a', {
       href: `#/${name}`,
       class: 'tab' + (name === active ? ' on' : ''),
@@ -119,7 +123,7 @@ export function render(force = false) {
   runCleanup();
   clear(view);
   document.body.dataset.screen = name;
-  buildTabbar(name);
+  buildTabbar(ROUTES[name].tab || name);
   const ctx = {
     askAbout: (item, meal, res) => queueSubstitution(item, meal, res),
   };

@@ -38,6 +38,12 @@ export const FOODS = [
   { id: 'lentils', name: 'עדשים ירוקות מבושלות', aliases: ['עדשים', 'קטניות'], role: 'protein', kcal: 116, p: 9, c: 20, f: 0.4, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(200)], min: 120, max: 400 },
   { id: 'chickpeas', name: 'גרגרי חומוס מבושלים', aliases: ['חומוס', 'קטניות', 'גרגרי חומוס'], role: 'protein', kcal: 164, p: 8.9, c: 27, f: 2.6, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(165)], min: 100, max: 330 },
   { id: 'edamame', name: 'אדממה (פולי סויה)', aliases: ['אדממה', 'סויה'], role: 'protein', kcal: 121, p: 11.9, c: 8.9, f: 5.2, meals: 'lds', src: 'plant', kosher: 'parve', allergens: ['soy'], units: [U.cup(155)], min: 100, max: 300 },
+  { id: 'turkey_pastrami', name: 'פסטרמה הודו', aliases: ['פסטרמה', 'הודו', 'נקניק'], role: 'protein', kcal: 110, p: 20, c: 2, f: 2, meals: 'bls', src: 'poultry', kosher: 'meat', allergens: [], units: [{ s: 'פרוסה', p: 'פרוסות', g: 15, step: 1 }], min: 45, max: 200, discrete: true },
+  { id: 'sardines', name: 'סרדינים בשמן (מסוננים)', aliases: ['סרדינים', 'דג'], role: 'protein', kcal: 208, p: 25, c: 0, f: 11, meals: 'bls', src: 'fish', kosher: 'parve', allergens: ['fish'], units: [{ s: 'קופסה מסוננת', p: 'קופסאות מסוננות', g: 90, step: 0.5 }], min: 45, max: 180 },
+  { id: 'yellow_cheese', name: 'גבינה צהובה 9%', aliases: ['גבינה צהובה', 'גבינה'], role: 'protein', kcal: 205, p: 30, c: 1, f: 9, meals: 'bsd', src: 'dairy', kosher: 'dairy', allergens: ['dairy'], units: [{ s: 'פרוסה', p: 'פרוסות', g: 20, step: 1 }], min: 20, max: 120, discrete: true },
+  { id: 'labane', name: 'לבנה 5%', aliases: ['לבנה', 'גבינה'], role: 'protein', kcal: 90, p: 6, c: 4, f: 5, meals: 'bsd', src: 'dairy', kosher: 'dairy', allergens: ['dairy'], units: [U.tbsp(25)], min: 50, max: 250 },
+  { id: 'seitan', name: 'סייטן', aliases: ['סייטן', 'גלוטן'], role: 'protein', kcal: 130, p: 25, c: 4, f: 2, meals: 'ld', src: 'plant', kosher: 'parve', allergens: ['gluten'], units: [U.palm(100)], min: 80, max: 250 },
+  { id: 'black_beans', name: 'שעועית שחורה מבושלת', aliases: ['שעועית', 'קטניות'], role: 'protein', kcal: 132, p: 8.9, c: 23.7, f: 0.5, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(170)], min: 120, max: 400 },
 
   // ---------------- carbs ----------------
   { id: 'white_rice', name: 'אורז לבן מבושל', aliases: ['אורז'], role: 'carb', kcal: 130, p: 2.7, c: 28, f: 0.3, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(160), U.tbsp(15)], min: 60, max: 400 },
@@ -54,6 +60,10 @@ export const FOODS = [
   { id: 'oats', name: 'שיבולת שועל', aliases: ['קוואקר', 'שיבולת', 'דייסה'], role: 'carb', kcal: 389, p: 16.9, c: 66, f: 6.9, meals: 'bs', src: 'plant', kosher: 'parve', allergens: ['gluten'], units: [{ s: 'חצי כוס', p: 'חצאי כוס', g: 40, step: 0.5 }, U.tbsp(10)], min: 20, max: 120 },
   { id: 'rice_cakes', name: 'פריכיות אורז', aliases: ['פריכיות', 'פריכית'], role: 'carb', kcal: 387, p: 8, c: 81, f: 2.8, meals: 'bs', src: 'plant', kosher: 'parve', allergens: [], units: [{ s: 'פריכית', p: 'פריכיות', g: 9, step: 1 }], min: 18, max: 72, discrete: true },
   { id: 'gf_bread', name: 'לחם ללא גלוטן', aliases: ['לחם'], role: 'carb', kcal: 250, p: 4, c: 46, f: 5, meals: 'bs', src: 'plant', kosher: 'parve', allergens: [], units: [{ s: 'פרוסה', p: 'פרוסות', g: 35, step: 1 }], min: 35, max: 140, discrete: true },
+  { id: 'corn', name: 'תירס מתוק', aliases: ['תירס'], role: 'carb', kcal: 96, p: 3.4, c: 21, f: 1.5, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(150)], min: 60, max: 400 },
+  { id: 'freekeh', name: 'פריקי מבושל', aliases: ['פריקי', 'פריקה'], role: 'carb', kcal: 125, p: 5, c: 25, f: 0.8, meals: 'ld', src: 'plant', kosher: 'parve', allergens: ['gluten'], units: [U.cup(160), U.tbsp(15)], min: 60, max: 400 },
+  { id: 'rye_bread', name: 'לחם שיפון', aliases: ['לחם', 'שיפון', 'פרוסה'], role: 'carb', kcal: 259, p: 9, c: 48, f: 3.3, meals: 'bls', src: 'plant', kosher: 'parve', allergens: ['gluten'], units: [{ s: 'פרוסה', p: 'פרוסות', g: 32, step: 1 }], min: 32, max: 160, discrete: true },
+  { id: 'tortilla', name: 'טורטייה מקמח מלא', aliases: ['טורטייה', 'לאפה', 'לחם'], role: 'carb', kcal: 295, p: 9, c: 49, f: 7, meals: 'bl', src: 'plant', kosher: 'parve', allergens: ['gluten'], units: [{ s: 'טורטייה', p: 'טורטיות', g: 45, step: 0.5 }], min: 45, max: 180, discrete: true },
 
   // ---------------- fats ----------------
   { id: 'olive_oil', name: 'שמן זית', aliases: ['שמן'], role: 'fat', kcal: 884, p: 0, c: 0, f: 100, meals: 'bld', src: 'plant', kosher: 'parve', allergens: [], units: [U.tbsp(14), U.tsp], min: 3, max: 30 },
@@ -64,6 +74,9 @@ export const FOODS = [
   { id: 'peanut_butter', name: 'חמאת בוטנים טבעית', aliases: ['חמאת בוטנים', 'בוטנים'], role: 'fat', kcal: 588, p: 25, c: 20, f: 50, meals: 'bs', src: 'plant', kosher: 'parve', allergens: ['peanut'], units: [U.tbsp(16), U.tsp], min: 8, max: 40 },
   { id: 'chia', name: "זרעי צ'יה", aliases: ["צ'יה", 'צ׳יה', 'זרעים'], role: 'fat', kcal: 486, p: 17, c: 42, f: 31, meals: 'bs', src: 'plant', kosher: 'parve', allergens: [], units: [U.tbsp(12)], min: 6, max: 36 },
   { id: 'olives', name: 'זיתים', aliases: ['זית', 'זיתים'], role: 'fat', kcal: 115, p: 0.8, c: 6, f: 11, meals: 'bld', src: 'plant', kosher: 'parve', allergens: [], units: [{ s: 'זית', p: 'זיתים', g: 4, step: 1 }], min: 20, max: 60 },
+  { id: 'cashews', name: 'קשיו', aliases: ['קשיו', 'אגוזים'], role: 'fat', kcal: 570, p: 18, c: 30, f: 44, meals: 'bs', src: 'plant', kosher: 'parve', allergens: ['treenut'], units: [{ s: 'חופן קטן (~10 קשיו)', p: 'חופנים קטנים', g: 15, step: 0.5 }], min: 8, max: 50 },
+  { id: 'flaxseed', name: 'זרעי פשתן טחונים', aliases: ['פשתן', 'זרעים'], role: 'fat', kcal: 534, p: 18, c: 29, f: 42, meals: 'bs', src: 'plant', kosher: 'parve', allergens: [], units: [U.tbsp(10)], min: 5, max: 30 },
+  { id: 'pumpkin_seeds', name: 'גרעיני דלעת קלופים', aliases: ['גרעינים', 'דלעת', 'זרעים'], role: 'fat', kcal: 559, p: 30, c: 11, f: 49, meals: 'bsld', src: 'plant', kosher: 'parve', allergens: [], units: [U.tbsp(10)], min: 5, max: 40 },
 
   // ---------------- vegetables (fixed portion, near-free) ----------------
   { id: 'salad', name: 'סלט ירקות (עגבנייה, מלפפון, פלפל)', aliases: ['סלט', 'ירקות', 'עגבנייה', 'מלפפון', 'פלפל'], role: 'veg', kcal: 20, p: 0.9, c: 4, f: 0.2, meals: 'bld', src: 'plant', kosher: 'parve', allergens: [], units: [{ s: 'קערה בינונית', p: 'קערות בינוניות', g: 200, step: 0.5 }], min: 100, max: 300, portion: 200 },
@@ -72,6 +85,9 @@ export const FOODS = [
   { id: 'roasted_veg', name: 'ירקות אפויים (קישוא, פלפל, בצל)', aliases: ['קישוא', 'ירקות', 'בצל', 'פלפל'], role: 'veg', kcal: 35, p: 1.2, c: 7, f: 0.3, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(150)], min: 100, max: 300, portion: 180 },
   { id: 'leafy', name: 'סלט עלים ירוקים', aliases: ['חסה', 'עלים', 'ירקות', 'תרד'], role: 'veg', kcal: 20, p: 1.8, c: 3.3, f: 0.3, meals: 'bld', src: 'plant', kosher: 'parve', allergens: [], units: [{ s: 'קערה', p: 'קערות', g: 100, step: 0.5 }], min: 60, max: 200, portion: 120 },
   { id: 'carrot', name: 'גזר', aliases: ['גזר', 'ירקות'], role: 'veg', kcal: 41, p: 0.9, c: 9.6, f: 0.2, meals: 'bls', src: 'plant', kosher: 'parve', allergens: [], units: [{ s: 'גזר בינוני', p: 'גזרים בינוניים', g: 70, step: 0.5 }], min: 70, max: 210, portion: 140 },
+  { id: 'spinach', name: 'תרד מאודה', aliases: ['תרד', 'ירקות', 'עלים'], role: 'veg', kcal: 23, p: 2.9, c: 3.6, f: 0.4, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(180)], min: 80, max: 250, portion: 150 },
+  { id: 'cauliflower', name: 'כרובית אפויה', aliases: ['כרובית', 'ירקות'], role: 'veg', kcal: 25, p: 1.9, c: 5, f: 0.3, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(125)], min: 100, max: 300, portion: 160 },
+  { id: 'mushrooms', name: 'פטריות מוקפצות', aliases: ['פטריות', 'ירקות'], role: 'veg', kcal: 22, p: 3.1, c: 3.3, f: 0.3, meals: 'bld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(110)], min: 80, max: 250, portion: 130 },
 
   // ---------------- fruit ----------------
   { id: 'banana', name: 'בננה', aliases: ['בננה', 'פרי'], role: 'fruit', kcal: 89, p: 1.1, c: 22.8, f: 0.3, meals: 'bs', src: 'plant', kosher: 'parve', allergens: [], units: [{ s: 'בננה בינונית', p: 'בננות בינוניות', g: 120, step: 0.25 }], min: 60, max: 240, portion: 120 },
@@ -79,6 +95,9 @@ export const FOODS = [
   { id: 'berries', name: 'פירות יער', aliases: ['פירות יער', 'תות', 'פרי'], role: 'fruit', kcal: 50, p: 0.7, c: 12, f: 0.3, meals: 'bs', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(140)], min: 70, max: 300, portion: 140 },
   { id: 'orange', name: 'תפוז', aliases: ['תפוז', 'הדרים', 'פרי'], role: 'fruit', kcal: 47, p: 0.9, c: 11.8, f: 0.1, meals: 'bs', src: 'plant', kosher: 'parve', allergens: [], units: [{ s: 'תפוז בינוני', p: 'תפוזים בינוניים', g: 160, step: 0.25 }], min: 80, max: 320, portion: 160 },
   { id: 'dates', name: "תמרי מג'הול", aliases: ['תמר', 'תמרים', 'פרי'], role: 'fruit', kcal: 282, p: 2.5, c: 75, f: 0.4, meals: 's', src: 'plant', kosher: 'parve', allergens: [], units: [{ s: 'תמר', p: 'תמרים', g: 24, step: 1 }], min: 24, max: 96, portion: 48, discrete: true },
+  { id: 'grapes', name: 'ענבים', aliases: ['ענבים', 'פרי'], role: 'fruit', kcal: 69, p: 0.7, c: 18, f: 0.2, meals: 'bs', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(150)], min: 75, max: 300, portion: 150 },
+  { id: 'pear', name: 'אגס', aliases: ['אגס', 'פרי'], role: 'fruit', kcal: 57, p: 0.4, c: 15, f: 0.1, meals: 'bs', src: 'plant', kosher: 'parve', allergens: [], units: [{ s: 'אגס בינוני', p: 'אגסים בינוניים', g: 170, step: 0.25 }], min: 85, max: 340, portion: 170 },
+  { id: 'kiwi', name: 'קיווי', aliases: ['קיווי', 'פרי'], role: 'fruit', kcal: 61, p: 1.1, c: 15, f: 0.5, meals: 'bs', src: 'plant', kosher: 'parve', allergens: [], units: [{ s: 'קיווי', p: 'קיווים', g: 75, step: 1 }], min: 75, max: 300, portion: 150, discrete: true },
 ];
 
 export const FOOD_BY_ID = Object.fromEntries(FOODS.map((f) => [f.id, f]));
@@ -138,8 +157,28 @@ export function isAllowed(food, prefs) {
   if (prefs.kosher && food.nonKosher) return false;
   const allergies = prefs.allergies || [];
   if (food.allergens.some((a) => allergies.includes(a))) return false;
+  if ((prefs.excluded || []).includes(food.id)) return false;
   if (dislikeMatches(food, parseDislikes(prefs.dislikes))) return false;
   return true;
+}
+
+// Every role must keep at least this many foods, so every menu item always
+// has a substitute. The food picker refuses to exclude below it.
+export const MIN_PER_ROLE = 2;
+export const ROLES = ['protein', 'carb', 'fat', 'veg', 'fruit'];
+
+export function countByRole(prefs) {
+  const out = Object.fromEntries(ROLES.map((r) => [r, 0]));
+  for (const f of FOODS) if (isAllowed(f, prefs)) out[f.role] += 1;
+  return out;
+}
+
+// Can this food be excluded without leaving its role short of substitutes?
+export function canExclude(foodId, prefs) {
+  const food = FOOD_BY_ID[foodId];
+  if (!food) return false;
+  if (!isAllowed(food, prefs)) return true;
+  return countByRole(prefs)[food.role] - 1 >= MIN_PER_ROLE;
 }
 
 export function allowedFoods(prefs) {
