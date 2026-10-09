@@ -2,11 +2,12 @@
 // nothing is stored until the user finishes.
 
 import { h, icon, clear, parseNum, fmt, toast } from '../util.js';
-import { segmented, stepper, assessmentBox, disclaimer } from '../components.js';
+import { segmented, stepper, assessmentBox, disclaimer, dietNoteBox } from '../components.js';
 import { GOALS, ACTIVITY, assessGoal, projectBf, computeTargets, validBf } from '../nutrition.js';
 import { ALLERGENS, DIETS, FOODS, isAllowed, parseDislikes, dislikeMatches } from '../foods.js';
 import { completeOnboarding } from '../store.js';
 import { pickPhoto } from './photo-picker.js';
+import { openBodyFatEstimator } from './bodyfat.js';
 import { openFoodPicker, pickerLabel } from './food-picker.js';
 
 const DRAFT_KEY = 'nutri-onboarding-draft';
@@ -191,7 +192,25 @@ export function renderOnboarding(root) {
           h('h2', null, 'המדדים שלך היום'),
           field('משקל (ק״ג)', 'weight', { type: 'text', inputmode: 'decimal' }),
           field('אחוז שומן (%)', 'bf', { type: 'text', inputmode: 'decimal' },
-            'הערכה מספיקה: משקל חכם, קליפר או מדידה במכון. אחוז השומן מאפשר חישוב מדויק יותר (נוסחת Katch-McArdle).'));
+            'הערכה מספיקה: משקל חכם, קליפר או מדידה במכון. אחוז השומן מאפשר חישוב מדויק יותר (נוסחת Katch-McArdle).'),
+          h('button', {
+            type: 'button',
+            class: 'btn btn-block bf-link',
+            id: 'ob-bf-estimate',
+            onclick: async () => {
+              const w = parseNum(d.weight);
+              const ok = setErr('weight', w >= 30 && w <= 300 ? '' : 'קודם הזינו משקל — הוא חלק מההערכה.');
+              if (!ok) { root.querySelector('#ob-weight').focus(); return; }
+              const v = await openBodyFatEstimator({ sex: d.sex, age: parseNum(d.age), height: parseNum(d.height), weight: w });
+              if (v !== null) {
+                d.bf = String(v);
+                saveDraft(d);
+                const inp = root.querySelector('#ob-bf');
+                if (inp) inp.value = d.bf;
+                setErr('bf', '');
+              }
+            },
+          }, icon('camera', 18), 'לא יודע/ת את אחוז השומן שלך? לחצו כאן'));
       case 3:
         return h('div', null,
           h('h2', null, 'מה המטרה?'),
@@ -254,6 +273,7 @@ export function renderOnboarding(root) {
           h('div', { class: 'field' }, h('span', null, 'אימונים בשבוע'),
             stepper(d.workouts, 0, 14, (v) => { d.workouts = v; saveDraft(d); }, 'אימונים בשבוע')));
       case 6: {
+        const dietNote = dietNoteBox(d.diet);
         const dislikePreview = h('div', { class: 'muted small', 'aria-live': 'polite' });
         const updatePreview = () => {
           const terms = parseDislikes(d.dislikes);
@@ -276,7 +296,8 @@ export function renderOnboarding(root) {
         return h('div', null,
           h('h2', null, 'העדפות תזונה'),
           h('div', { class: 'field' }, h('span', null, 'סוג תזונה'),
-            segmented(DIETS.map((x) => ({ id: x.id, label: x.label.split(' (')[0] })), d.diet, (v) => { d.diet = v; saveDraft(d); }, 'סוג תזונה')),
+            segmented(DIETS.map((x) => ({ id: x.id, label: x.label.split(' (')[0] })), d.diet, (v) => { d.diet = v; saveDraft(d); dietNote.update(v); }, 'סוג תזונה'),
+            dietNote.el),
           h('label', { class: 'switch-row' },
             h('span', null, h('strong', null, 'כשרות'), h('small', { class: 'muted' }, 'בלי בשר וחלב באותה ארוחה, בלי מאכלים לא כשרים')),
             h('input', { type: 'checkbox', role: 'switch', checked: d.kosher, onchange: (e) => { d.kosher = e.target.checked; saveDraft(d); } })),

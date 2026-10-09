@@ -100,7 +100,8 @@ export function targets(day = today()) {
 export function dayPlan(day = today()) {
   const t = targets(day);
   if (!t) return [];
-  return generateDay(day, t, state.profile.prefs, state.overrides[day] || {}, state.profile.seed || 0, menuWeek(day));
+  return generateDay(day, t, state.profile.prefs, state.overrides[day] || {}, state.profile.seed || 0,
+    { week: menuWeek(day), dayIndex: daysBetween(state.profile.regDay, day) - menuWeek(day) * 7 });
 }
 
 // Menu weeks follow the check-in weeks (registration day = start of week 0),

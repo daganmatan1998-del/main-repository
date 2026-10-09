@@ -159,3 +159,24 @@ test('household measures read naturally', () => {
     assert.ok(Math.abs(est - f.kcal) / f.kcal < tolerance, `${f.id}: ${est} vs ${f.kcal}`);
   }
 });
+
+test('body-fat formulas: Deurenberg, US Navy and how estimates combine', async () => {
+  const { deurenberg, navy, combine } = await import('../../www/js/bodyfat.js');
+  // 30-year-old man, 180 cm / 82 kg → BMI 25.3 → 1.2·25.3 + 6.9 − 10.8 − 5.4 = 21.1
+  assert.equal(deurenberg({ sex: 'male', age: 30, height: 180, weight: 82 }), 21.1);
+  // woman 30, 165 cm / 60 kg → BMI 22.04 → 26.45 + 6.9 − 5.4 = 27.95
+  assert.ok(Math.abs(deurenberg({ sex: 'female', age: 30, height: 165, weight: 60 }) - 27.95) <= 0.1);
+  // Navy: man 180 cm, waist 88, neck 38 → ≈ 17.6%
+  const m = navy({ sex: 'male', height: 180, waist: 88, neck: 38 });
+  assert.ok(m > 16 && m < 19, `navy male ${m}`);
+  const f = navy({ sex: 'female', height: 165, waist: 72, neck: 32, hip: 98 });
+  assert.ok(f > 24 && f < 29, `navy female ${f}`);
+  assert.equal(navy({ sex: 'female', height: 165, waist: 72, neck: 32 }), null, 'women need hip');
+  assert.equal(navy({ sex: 'male', height: 180, waist: 30, neck: 40 }), null, 'impossible measurements');
+  const ai = { estimate: 22, low: 19, high: 25, confidence: 'medium' };
+  assert.deepEqual(combine({ ai, tapeEstimate: null, prior: 21 }).method, 'ai');
+  const both = combine({ ai, tapeEstimate: 18, prior: 21 });
+  assert.equal(both.estimate, 20);
+  assert.ok(both.low <= 18 && both.high >= 25);
+  assert.equal(combine({ ai: null, tapeEstimate: null, prior: 21 }).method, 'bmi');
+});

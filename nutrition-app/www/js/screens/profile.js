@@ -1,7 +1,7 @@
 // Profile & settings.
 
 import { h, icon, sheet, toast, fmt, fmtDate, parseNum, ltr, signed } from '../util.js';
-import { metricsForm, segmented, stepper, disclaimer } from '../components.js';
+import { metricsForm, segmented, stepper, disclaimer, dietNoteBox } from '../components.js';
 import { GOALS, ACTIVITY } from '../nutrition.js';
 import { ALLERGENS, DIETS, FOODS, FOOD_BY_ID, parseDislikes, dislikeMatches } from '../foods.js';
 import { openFoodPicker, pickerLabel } from './food-picker.js';
@@ -28,6 +28,7 @@ export function renderProfile(root) {
     metricsForm({
       submitLabel: 'עדכון וחישוב מחדש',
       previous: cur,
+      person: () => ({ sex: p.sex, age: p.age, height: p.height }),
       onSubmit: async (w, b) => {
         await addMetrics(w, b, 'manual');
         toast('המדדים נשמרו והתוכנית עודכנה');
@@ -139,6 +140,7 @@ function editDetails() {
 function editPrefs() {
   const p = state.profile.prefs;
   const d = { diet: p.diet, kosher: !!p.kosher, allergies: [...(p.allergies || [])], dislikes: p.dislikes || '', excluded: [...(p.excluded || [])], mealsPerDay: p.mealsPerDay };
+  const dietNote = dietNoteBox(d.diet);
   sheet('העדפות תזונה', (close) => {
     const preview = h('div', { class: 'muted small', 'aria-live': 'polite' });
     const upd = () => {
@@ -147,7 +149,7 @@ function editPrefs() {
     };
     upd();
     return h('div', { class: 'form' },
-      h('div', { class: 'field' }, h('span', null, 'סוג תזונה'), segmented(DIETS.map((x) => ({ id: x.id, label: x.label.split(' (')[0] })), d.diet, (v) => { d.diet = v; }, 'סוג תזונה')),
+      h('div', { class: 'field' }, h('span', null, 'סוג תזונה'), segmented(DIETS.map((x) => ({ id: x.id, label: x.label.split(' (')[0] })), d.diet, (v) => { d.diet = v; dietNote.update(v); }, 'סוג תזונה'), dietNote.el),
       h('label', { class: 'switch-row' }, h('span', null, h('strong', null, 'כשרות')),
         h('input', { type: 'checkbox', role: 'switch', checked: d.kosher, onchange: (e) => { d.kosher = e.target.checked; } })),
       h('div', { class: 'field' }, h('span', null, 'אלרגיות'),

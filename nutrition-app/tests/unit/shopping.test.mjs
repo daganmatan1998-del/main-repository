@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateDay, weeklyPool, mealTemplate } from '../../www/js/mealplan.js';
+import { generateDay } from '../../www/js/mealplan.js';
 import { alternatives } from '../../www/js/substitutions.js';
 import { buildShoppingList, SHOP, fmtWeight } from '../../www/js/shopping.js';
 import { FOODS, FOOD_BY_ID, isAllowed, canExclude, countByRole, allowedFoods, MIN_PER_ROLE, ROLES } from '../../www/js/foods.js';
@@ -13,8 +13,8 @@ const PREFS = [
   { diet: 'vegetarian', kosher: true, allergies: ['treenut'], dislikes: 'טונה', excluded: ['tofu', 'eggs'], mealsPerDay: 5 },
   { diet: 'vegan', kosher: false, allergies: ['soy', 'gluten'], dislikes: '', excluded: [], mealsPerDay: 6 },
 ];
-const week = (prefs, poolKey, start = '2026-11-01') =>
-  [...Array(7)].map((_, i) => ({ day: addDays(start, i), meals: generateDay(addDays(start, i), T, prefs, {}, 11, poolKey) }));
+const week = (prefs, weekNo, start = '2026-11-01', targets = T) =>
+  [...Array(7)].map((_, i) => ({ day: addDays(start, i), meals: generateDay(addDays(start, i), targets, prefs, {}, 11, { week: weekNo, dayIndex: i }) }));
 
 test('every food has shopping info', () => {
   assert.deepEqual(FOODS.filter((f) => !SHOP[f.id]).map((f) => f.id), []);
@@ -47,25 +47,63 @@ test('the picker cannot leave a category without substitutes', () => {
   for (const r of ROLES) assert.ok(countByRole(prefs)[r] >= MIN_PER_ROLE);
 });
 
-test('a menu week uses a realistic set of products and still hits the targets', () => {
-  for (const prefs of PREFS) {
+test('every day of the week shows different meals', () => {
+  for (const prefs of PREFS.slice(0, 3)) {
     const days = week(prefs, 4);
+    const signatures = new Set(days.map((d) => d.meals.map((m) => m.items.map((i) => i.foodId).join('+')).join('|')));
+    assert.equal(signatures.size, 7, `${prefs.diet}: identical days`);
+    for (let mi = 0; mi < days[0].meals.length; mi++) {
+      const mains = new Set(days.map((d) => d.meals[mi].items.find((i) => i.slot === 'protein').foodId));
+      assert.equal(mains.size, 7, `${prefs.diet}: ${days[0].meals[mi].name} repeats its main within the week`);
+    }
+    for (const d of days) {
+      const mains = d.meals.map((m) => m.items.find((i) => i.slot === 'protein').foodId);
+      assert.equal(new Set(mains).size, mains.length, `${prefs.diet}: same main twice on ${d.day}`);
+    }
     const products = buildShoppingList(days).reduce((n, g) => n + g.items.length, 0);
-    assert.ok(products <= 32, `${prefs.diet}: ${products} products`);
-    const pool = new Set(weeklyPool(allowedFoods(prefs), mealTemplate(prefs.mealsPerDay).map((m) => m.type), 4, 11).map((f) => f.id));
-    const used = new Set(days.flatMap((d) => d.meals.flatMap((m) => m.items.map((i) => i.foodId))));
-    const outside = [...used].filter((id) => !pool.has(id));
-    assert.ok(outside.length <= 1, `outside pool: ${outside}`);
+    assert.ok(products <= 50, `${prefs.diet}: ${products} products`);
     let kcal = 0;
     let p = 0;
     for (const d of days) for (const m of d.meals) { kcal += m.totals.kcal; p += m.totals.p; }
     assert.ok(Math.abs(kcal / 7 - T.calories) / T.calories < 0.1, `${prefs.diet} kcal ${kcal / 7}`);
     assert.ok(p / 7 >= T.protein * 0.85, `${prefs.diet} protein ${p / 7}`);
   }
-  // Different weeks rotate the set.
-  const a = new Set(weeklyPool(allowedFoods(PREFS[0]), ['b', 'l', 'd'], 1, 11).map((f) => f.id));
-  const b = new Set(weeklyPool(allowedFoods(PREFS[0]), ['b', 'l', 'd'], 2, 11).map((f) => f.id));
-  assert.ok([...a].some((id) => !b.has(id)));
+  // The next week starts a fresh rotation.
+  const a = week(PREFS[0], 1)[0].meals.map((m) => m.items[0].foodId).join();
+  const b = week(PREFS[0], 2)[0].meals.map((m) => m.items[0].foodId).join();
+  assert.notEqual(a, b);
+});
+
+test('keto and carnivore menus follow their rules and targets', async () => {
+  const { computeTargets } = await import('../../www/js/nutrition.js');
+  const prof = { sex: 'male', age: 30, height: 180, activity: 'light', workouts: 4 };
+  for (const prefs of [
+    { diet: 'keto', kosher: false, allergies: [], dislikes: '', excluded: [], mealsPerDay: 4 },
+    { diet: 'keto', kosher: true, allergies: ['treenut'], dislikes: '', excluded: [], mealsPerDay: 3 },
+    { diet: 'carnivore', kosher: false, allergies: [], dislikes: '', excluded: [], mealsPerDay: 4 },
+    { diet: 'carnivore', kosher: true, allergies: [], dislikes: '', excluded: [], mealsPerDay: 5 },
+  ]) {
+    const t = computeTargets({ ...prof, prefs }, { goal: 'cut', endDate: '2026-12-31', targetWeight: 75 }, { weight: 82, bf: 20 }, '2026-11-01');
+    assert.ok(prefs.diet === 'keto' ? t.carbs <= 50 : t.carbs <= 10, `${prefs.diet} carb target ${t.carbs}`);
+    assert.ok(t.fat * 9 > t.calories * 0.5, `${prefs.diet}: fat should supply most energy`);
+    const days = week(prefs, 3, '2026-11-01', t);
+    let kcal = 0;
+    let carbs = 0;
+    for (const d of days) {
+      for (const m of d.meals) {
+        kcal += m.totals.kcal;
+        carbs += m.totals.c;
+        for (const it of m.items) {
+          const f = FOOD_BY_ID[it.foodId];
+          assert.ok(isAllowed(f, prefs), `${f.id} on ${prefs.diet}`);
+          assert.ok(!['carb', 'fruit'].includes(f.role), `${f.id}: ${f.role} on ${prefs.diet}`);
+          if (prefs.diet === 'carnivore') assert.notEqual(f.src, 'plant', `${f.id} is a plant food`);
+        }
+      }
+    }
+    assert.ok(Math.abs(kcal / 7 - t.calories) / t.calories < 0.12, `${prefs.diet} kcal ${kcal / 7} vs ${t.calories}`);
+    assert.ok(carbs / 7 <= (prefs.diet === 'keto' ? 70 : 20), `${prefs.diet} carbs ${carbs / 7}`);
+  }
 });
 
 test('quantities are converted to what you buy', () => {

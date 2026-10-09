@@ -48,6 +48,8 @@ export const SHOP = {
   lentils: { dept: 'dry', name: 'עדשים ירוקות (יבשות)', raw: 0.4, pack: pk(500, 'שקית 500 ג׳') },
   chickpeas: { dept: 'dry', name: 'גרגרי חומוס (יבשים)', raw: 0.45, pack: pk(500, 'שקית 500 ג׳'), note: 'או שימורים: קופסה מסוננת ≈ 240 ג׳' },
   black_beans: { dept: 'dry', name: 'שעועית שחורה (יבשה)', raw: 0.42, pack: pk(500, 'שקית 500 ג׳') },
+  entrecote: { dept: 'meat', name: 'אנטריקוט', raw: 1.3 },
+  beef_20: { dept: 'meat', name: 'בקר טחון 20%', raw: 1.3, pack: pk(500, 'אריזת 500 ג׳') },
   edamame: { dept: 'other', name: 'אדממה קפואה', pack: pk(400, 'שקית 400 ג׳') },
 
   white_rice: { dept: 'dry', name: 'אורז לבן (יבש)', raw: 0.36, pack: pk(1000, 'שקית 1 ק״ג') },
@@ -80,6 +82,8 @@ export const SHOP = {
   flaxseed: { dept: 'fats', name: 'זרעי פשתן טחונים', pack: pk(200, 'שקית 200 ג׳'), staple: true },
   pumpkin_seeds: { dept: 'fats', name: 'גרעיני דלעת קלופים', pack: pk(200, 'שקית 200 ג׳') },
   olives: { dept: 'fats', name: 'זיתים', pack: pk(300, 'צנצנת (300 ג׳ מסונן)') },
+  butter: { dept: 'dairy', name: 'חמאה', pack: pk(200, 'חבילת 200 ג׳') },
+  hard_cheese: { dept: 'dairy', name: 'גבינה קשה (פרמזן / צ׳דר)', pack: pk(200, 'אריזת 200 ג׳') },
 
   salad: { dept: 'produce', split: [
     { name: 'עגבניות', share: 0.4 },

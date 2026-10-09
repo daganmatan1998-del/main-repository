@@ -30,6 +30,27 @@ const SLOTS = {
   s: ['protein', 'carb', 'fat'],
 };
 
+// Keto drops the carb slot (vegetables carry the few carbs); carnivore keeps
+// only animal protein and fat.
+const DIET_SLOTS = {
+  keto: {
+    b: ['protein', 'fat', 'fat2', 'veg'],
+    l: ['protein', 'fat', 'fat2', 'veg'],
+    d: ['protein', 'fat', 'fat2', 'veg'],
+    s: ['protein', 'fat'],
+  },
+  carnivore: {
+    b: ['protein', 'fat', 'fat2'],
+    l: ['protein', 'fat', 'fat2'],
+    d: ['protein', 'fat', 'fat2'],
+    s: ['protein', 'fat'],
+  },
+};
+
+export function slotsFor(diet) {
+  return DIET_SLOTS[diet] || SLOTS;
+}
+
 export function mealTemplate(count) {
   const t = TEMPLATES[clamp(Number(count) || 4, 3, 6)];
   return t.map(([type, share, name]) => ({ type, share, name: name || MEAL_NAMES[type] }));
@@ -42,13 +63,18 @@ function pick(list, rand, avoid) {
   return pool[Math.floor(rand() * pool.length)];
 }
 
+// Slot names are unique per meal (overrides are keyed by them); 'fat2' is a
+// second fat slot used by the high-fat diets.
+const slotRole = (slot) => (slot === 'fat2' ? 'fat' : slot);
+
 function poolFor(slot, type, allowed) {
-  let roles = [slot];
+  let roles = [slotRole(slot)];
   if (slot === 'carb' && type === 's') roles = ['carb', 'fruit'];
   const byMeal = allowed.filter((f) => roles.includes(f.role) && f.meals.includes(type));
-  if (byMeal.length) return byMeal;
-  // Restrictions emptied the meal-appropriate list: fall back to any allowed food in the role.
-  return allowed.filter((f) => roles.includes(f.role));
+  if (byMeal.length >= 3) return byMeal;
+  // Restrictions left too few foods that usually belong in this meal: add the
+  // rest of the category after them, so a week can still vary.
+  return byMeal.concat(allowed.filter((f) => roles.includes(f.role) && !f.meals.includes(type)));
 }
 
 const W = { p: 16 * 1.5, c: 16, f: 81 };
@@ -132,19 +158,134 @@ const capacity = (f) => f.max * f.p / 100;
 // Protein density, with a small bonus for foods that belong in this meal.
 const fitScore = (f, type) => f.p / f.kcal + (f.meals.includes(type) ? 0.03 : 0);
 
-export function buildMeal(type, target, allowed, rand, usedProteins, everything = allowed) {
-  const chosen = [];
-  for (const slot of SLOTS[type]) {
-    let pool = poolFor(slot, type, allowed).filter((f) => kosherCompatible(f, chosen.map((c) => c.food)));
+// Picks the food for one slot.
+//  - Day mode (no week plan): random, avoiding what the day already uses.
+//  - Week mode: every meal slot walks its own shuffled list of options, one
+//    step per day, so each day of the week shows different meals. Collisions
+//    within a day (same protein at lunch and dinner) step on to the next option.
+function chooser({ rand, week, dayIndex, mealIdx, reseed, userSeed, roleFoods, weekPlan }) {
+  if (week === undefined || week === null) {
+    return (slot, eligible, avoid) => pick(eligible, rand, avoid);
+  }
+  return (slot, eligible, avoid, all) => {
+    if (!eligible.length) return null;
     if (slot === 'protein') {
-      // Prefer proteins that can carry this meal's protein on their own.
-      const able = pool.filter((f) => capacity(f) >= target.p * 0.85);
-      if (able.length) pool = able;
+      // "Another meal" steps along this meal's rotation from the planned main.
+      const planned = weekPlan.days[dayIndex][mealIdx];
+      const { order } = weekPlan.orders[mealIdx];
+      if (!reseed && planned) return planned;
+      const from = Math.max(0, order.findIndex((f) => f.id === (planned && planned.id)));
+      for (let k = 1; k <= order.length; k++) {
+        const f = order[(from + reseed * k) % order.length] || order[(from + k) % order.length];
+        if (f && !avoid.has(f.id)) return f;
+      }
+      return planned || pick(eligible, rand, avoid);
     }
-    const avoid = slot === 'protein' ? usedProteins : new Set(chosen.map((c) => c.food.id));
-    const food = pick(pool, rand, avoid);
+    // One shuffled order per role and meal group (lunch + dinner share one),
+    // built from the whole category so it is identical every day. Day d takes
+    // option d; the second meal of a group starts half-way round, so lunch and
+    // dinner never land on the same food and neither repeats within the week.
+    const role = slotRole(slot);
+    let order = shuffled(roleFoods(role), `week|${week}|${role}|${userSeed}`);
+    const forMeal = new Set(all.map((f) => f.id));
+    order = order.filter((f) => forMeal.has(f.id));
+    // Sides rotate within a small set so the shopping list stays sane.
+    const cycle = SIDE_CYCLE[role];
+    if (cycle && order.length > cycle) order = order.slice(0, cycle);
+    if (!order.length) return pick(eligible, rand, avoid);
+    const start = (dayIndex + mealIdx + reseed) % order.length;
+    const ok = new Set(eligible.map((f) => f.id));
+    let fallback = null;
+    for (let k = 0; k < order.length; k++) {
+      const f = order[(start + k) % order.length];
+      if (!ok.has(f.id)) continue;
+      if (!avoid.has(f.id)) return f;
+      fallback = fallback || f;
+    }
+    // Nothing in the rotation fits this meal (kosher, capacity): any eligible food.
+    return fallback || pick(eligible, rand, avoid);
+  };
+}
+
+// Proteins a meal may be built on: ones that can carry most of the meal's
+// protein (a second protein tops up), with a loose bar so a week still has
+// enough different options.
+function proteinPool(type, target, allowed) {
+  const pool = poolFor('protein', type, allowed);
+  const strong = (f) => capacity(f) >= target.p * 0.6;
+  let out = pool.filter(strong);
+  if (out.length < 3) out = pool;
+  // Fewer than a week of options for this meal: borrow suitable proteins that
+  // usually belong to other meals (cottage at lunch), so days don't repeat.
+  if (out.length < 7) {
+    const have = new Set(out.map((f) => f.id));
+    out = out.concat(allowed.filter((f) => f.role === 'protein' && !have.has(f.id) && strong(f)));
+  }
+  return out;
+}
+
+function shuffled(list, seedText) {
+  const out = list.slice().sort((x, y) => (x.id < y.id ? -1 : 1));
+  const r = rng(hashStr(seedText));
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(r() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+// The main protein of every meal for all 7 days of a menu week, planned in
+// one pass: no food twice in the same day, and each meal shows a different
+// main every day of the week whenever there are enough options.
+function planWeekMains({ tmpl, mealTargets, allowed, week, userSeed, groups }) {
+  const orders = tmpl.map((m, idx) => {
+    const group = groups[idx];
+    const order = shuffled(proteinPool(m.type, mealTargets[idx], allowed), `main|${week}|${group}|${userSeed}`);
+    const pos = groups.slice(0, idx).filter((g) => g === group).length;
+    const size = groups.filter((g) => g === group).length;
+    return { order, offset: pos * Math.floor(order.length / size) };
+  });
+  const usedByMeal = tmpl.map(() => new Set());
+  const days = [];
+  for (let d = 0; d < 7; d++) {
+    const today = new Set();
+    const picks = [];
+    orders.forEach(({ order, offset }, idx) => {
+      if (!order.length) { picks.push(null); return; }
+      const start = (d + offset) % order.length;
+      const at = (k) => order[(start + k) % order.length];
+      let food = null;
+      for (let k = 0; k < order.length && !food; k++) {
+        const f = at(k);
+        if (!today.has(f.id) && !usedByMeal[idx].has(f.id)) food = f;
+      }
+      for (let k = 0; k < order.length && !food; k++) {
+        const f = at(k);
+        if (!today.has(f.id)) food = f;
+      }
+      food = food || at(0);
+      today.add(food.id);
+      usedByMeal[idx].add(food.id);
+      picks.push(food);
+    });
+    days.push(picks);
+  }
+  return { days, orders };
+}
+
+// How many different sides each week rotates through.
+const SIDE_CYCLE = { carb: 5, fat: 3, veg: 4, fruit: 3 };
+
+export function buildMeal(type, target, allowed, choose, usedToday, slots = SLOTS) {
+  const chosen = [];
+  for (const slot of slots[type]) {
+    const all = poolFor(slot, type, allowed);
+    let pool = all.filter((f) => kosherCompatible(f, chosen.map((c) => c.food)));
+    if (slot === 'protein') pool = proteinPool(type, target, allowed);
+    const avoid = new Set([...usedToday, ...chosen.map((c) => c.food.id)]);
+    const food = choose(slot, pool, avoid, all);
     if (!food) continue;
-    if (slot === 'protein') usedProteins.add(food.id);
+    usedToday.add(food.id);
     chosen.push({ slot, food });
   }
   const toItem = ({ slot, food }) => ({
@@ -161,11 +302,9 @@ export function buildMeal(type, target, allowed, rand, usedProteins, everything 
   const got = totals(items).p;
   if (got < target.p * 0.85) {
     const inMeal = chosen.map((c) => c.food);
-    const candidates = (list) => list
+    const extra = allowed
       .filter((f) => f.role === 'protein' && !inMeal.some((x) => x.id === f.id) && kosherCompatible(f, inMeal))
-      .sort((a, b) => fitScore(b, type) - fitScore(a, type));
-    // Prefer this week's foods; reach outside only if none fit.
-    const extra = candidates(allowed)[0] || candidates(everything)[0];
+      .sort((a, b) => fitScore(b, type) - fitScore(a, type))[0];
     if (extra) {
       chosen.push({ slot: 'protein2', food: extra });
       items = solvePortions(chosen.map(toItem), target);
@@ -174,54 +313,41 @@ export function buildMeal(type, target, allowed, rand, usedProteins, everything 
   return items;
 }
 
-// The foods of one menu week. Picking each day from the whole database makes
-// a shopping list of ~55 products; a weekly set keeps the cart realistic while
-// meals still vary day to day, and the set rotates every week.
-const POOL_SIZE = { protein: 5, carb: 4, fat: 3, veg: 4, fruit: 3 };
-
-export function weeklyPool(allowed, types, poolKey, userSeed = 0) {
-  const rand = rng(hashStr(`pool|${poolKey}|${userSeed}`));
-  const shuffled = allowed.slice();
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  const picked = new Set();
-  for (const [role, n] of Object.entries(POOL_SIZE)) {
-    shuffled.filter((f) => f.role === role).slice(0, n).forEach((f) => picked.add(f.id));
-  }
-  // Every slot of every meal type needs at least two choices in the pool.
-  for (const type of new Set(types)) {
-    for (const slot of SLOTS[type]) {
-      const roles = slot === 'carb' && type === 's' ? ['carb', 'fruit'] : [slot];
-      const fits = (f) => roles.includes(f.role) && f.meals.includes(type);
-      let have = shuffled.filter((f) => picked.has(f.id) && fits(f)).length;
-      for (const f of shuffled) {
-        if (have >= 2) break;
-        if (!picked.has(f.id) && fits(f)) { picked.add(f.id); have++; }
-      }
-    }
-  }
-  return allowed.filter((f) => picked.has(f.id));
-}
-
 // overrides: { [mealIndex]: { reseed?: number, swaps?: { [slot]: { foodId, grams } } } }
-// poolKey: the menu-week number; omit it to draw from every allowed food.
-export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 0, poolKey = null) {
-  const everything = allowedFoods(prefs);
+// plan: { week, dayIndex } — the menu week and the day within it (0–6). With it,
+// the whole week is planned together so no two days look alike; without it,
+// each day is drawn on its own.
+export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 0, plan = null) {
+  const allowed = allowedFoods(prefs);
   const tmpl = mealTemplate(prefs.mealsPerDay);
-  const allowed = poolKey === null ? everything : weeklyPool(everything, tmpl.map((m) => m.type), poolKey, userSeed);
+  const slots = slotsFor(prefs.diet);
   const used = new Set();
+  // Lunch and dinner form one group, snacks another; each meal's position in
+  // its group sets where it starts in the weekly rotation.
+  const groupOf = (type) => (type === 'l' || type === 'd' ? 'main' : type);
+  const groups = tmpl.map((m) => groupOf(m.type));
+  const roleFoods = (role) => allowed.filter((f) => f.role === role);
+  const mealTargets = tmpl.map((m) => ({
+    kcal: targets.calories * m.share,
+    p: targets.protein * m.share,
+    c: targets.carbs * m.share,
+    f: targets.fat * m.share,
+  }));
+  const weekPlan = plan ? planWeekMains({ tmpl, mealTargets, allowed, week: plan.week, userSeed, groups }) : null;
   return tmpl.map((m, idx) => {
     const ov = overrides[idx] || {};
-    const rand = rng(hashStr(`${dateKey}|${idx}|${ov.reseed || 0}|${userSeed}`));
-    const target = {
-      kcal: targets.calories * m.share,
-      p: targets.protein * m.share,
-      c: targets.carbs * m.share,
-      f: targets.fat * m.share,
-    };
-    let items = buildMeal(m.type, target, allowed, rand, used, everything);
+    const choose = chooser({
+      weekPlan,
+      roleFoods,
+      rand: rng(hashStr(`${dateKey}|${idx}|${ov.reseed || 0}|${userSeed}`)),
+      week: plan ? plan.week : null,
+      dayIndex: plan ? plan.dayIndex : 0,
+      mealIdx: idx,
+      reseed: ov.reseed || 0,
+      userSeed,
+    });
+    const target = mealTargets[idx];
+    let items = buildMeal(m.type, target, allowed, choose, used, slots);
     if (ov.swaps) {
       for (const [slot, sw] of Object.entries(ov.swaps)) {
         const food = FOOD_BY_ID[sw.foodId];

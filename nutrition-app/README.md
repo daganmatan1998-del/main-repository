@@ -12,7 +12,7 @@ nutrition-app/
 │   │   ├── nutrition.js     BMR/TDEE, safe pacing, calories & macros (pure)
 │   │   ├── mealplan.js      daily menu generator + portion solver (pure)
 │   │   ├── substitutions.js equivalent swaps (pure)
-│   │   ├── foods.js         food database (72 foods), diet/allergy/kosher rules
+│   │   ├── foods.js         food database (76 foods), diet/allergy/kosher rules
 │   │   ├── schedule.js      week math from the registration date (pure)
 │   │   ├── store.js  db.js  state + IndexedDB, clock-rollback guard
 │   │   ├── image.js         client-side photo compression
@@ -109,8 +109,25 @@ Then make three changes:
 ### Foods you don't eat, and the weekly shopping list
 
 - **Removing foods:** any food can be taken off the menu from its "replace" sheet ("I don't eat this"). There's also a full picker in Profile → Food preferences, and in sign-up. Each category (protein, carb, fat, vegetables, fruit) always keeps at least 2 foods, so every menu item always has a substitute. The swap search also relaxes its limits rather than ever returning nothing.
-- **Weekly food set:** a menu week follows the check-in week. Each week draws from a rotating set of about 5 proteins, 4 carbs, 3 fats, 4 vegetables and 3 fruits. Meals still vary day to day, but the shopping list stays at roughly 20–30 products instead of ~55.
+- **A different menu every day:** a menu week follows the check-in week and is planned as a whole. Each meal's main dish rotates through its options, so no meal repeats its main within the week and no main appears twice in a day; vegans with a soy allergy are the exception, with only ~5 suitable proteins. Sides (carbs, fats, vegetables, fruit) rotate within a small weekly set, which keeps the shopping list at about 30–50 products.
 - **Shopping list** (Menu → 🛒 Weekly shopping): adds up the rest of this week, or the whole of next week, including any swaps you made. Amounts are converted to what you buy: dry rice and grains, raw meat, whole eggs, avocados and fruit by the piece, and mixed salads split into vegetables. They're rounded to real packages and grouped by supermarket section. Tick items as you shop; the list can be shared to WhatsApp or copied.
+
+### "Don't know your body fat?" (photo estimate)
+
+- **Where it appears:** sign-up, the weekly check-in and Profile each offer "don't know your body fat?".
+- **Capture:** a guided camera takes 4 photos (front, left, back, right) with a 3/5/10-second self-timer and an outline to stand inside. Without a camera, photos can be uploaded instead.
+- **Consent first:** the user agrees before anything is sent. The photos go once, through your Worker (`/api/bodyfat`), to Claude for analysis. They're never stored on the server or in the app.
+- **Answer format:** the model answers in a fixed JSON schema: estimate, range, confidence and short notes, or a reason when the photos can't be used.
+- **Optional tape measurements:** waist, neck, and hip for women (the US Navy method). If given, they're averaged with the photo estimate.
+- **Fallbacks when analysis is unavailable:** the tape method if measured, otherwise a rough BMI-and-age formula (Deurenberg). It's always labelled with which method was used.
+- **Disclaimer:** shown before capture and next to the result. There's no guarantee of exact numbers, and a dietitian or a professional measurement is recommended for an exact figure.
+
+### Keto and carnivore
+
+- **Keto:** no grains, bread, starchy vegetables, legumes or fruit. Carbs are capped at about 50 g total (20–30 g net) and fat fills the rest. Meals are protein, two fats and low-carb vegetables.
+- **Carnivore:** animal foods only (meat, poultry, fish, eggs, dairy). Carbs are near zero, and meals are protein and two fats.
+- **New foods:** butter, entrecote, 20% ground beef and hard cheese.
+- **Explanations:** choosing either diet shows what it means, and carnivore recommends checking with a doctor.
 
 ### Weekly-gate rules (what "can't be bypassed" means here)
 
@@ -127,8 +144,8 @@ Then make three changes:
 ## Tests
 
 ```bash
-npm test              # 24 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, proxy
-npm run test:e2e      # 124 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm test              # 29 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, proxy
+npm run test:e2e      # 139 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 ```
 
 The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.

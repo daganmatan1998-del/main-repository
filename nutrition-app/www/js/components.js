@@ -1,10 +1,11 @@
 // Reusable UI pieces: macro rings/bars, meal cards, the swap sheet, metric forms.
 
 import { h, icon, sheet, toast, fmt, parseNum, ltr } from './util.js';
-import { FOOD_BY_ID, household, ROLE_LABEL, canExclude } from './foods.js';
+import { FOOD_BY_ID, household, ROLE_LABEL, canExclude, DIET_NOTES } from './foods.js';
 import { alternatives } from './substitutions.js';
 import { state, setOverride, excludeFood } from './store.js';
 import { validBf } from './nutrition.js';
+import { openBodyFatEstimator } from './screens/bodyfat.js';
 
 export function ring(value, target, label, sub) {
   const pct = target > 0 ? Math.min(1, value / target) : 0;
@@ -126,7 +127,8 @@ export function openSwapSheet(item, meal, day, onAsk) {
 }
 
 // Weight + body-fat form with validation; used by the weekly gate and Profile.
-export function metricsForm({ weight, bf, submitLabel = 'שמירה', onSubmit, previous }) {
+// person(): { sex, age, height } for the body-fat estimator (optional).
+export function metricsForm({ weight, bf, submitLabel = 'שמירה', onSubmit, previous, person }) {
   const wIn = h('input', { id: 'm-weight', type: 'text', inputmode: 'decimal', autocomplete: 'off', required: true, value: weight ?? '', 'aria-describedby': 'm-weight-err', placeholder: 'לדוגמה 72.5' });
   const bIn = h('input', { id: 'm-bf', type: 'text', inputmode: 'decimal', autocomplete: 'off', required: true, value: bf ?? '', 'aria-describedby': 'm-bf-err', placeholder: 'לדוגמה 18' });
   const wErr = h('div', { class: 'field-err', id: 'm-weight-err', role: 'alert' });
@@ -136,6 +138,17 @@ export function metricsForm({ weight, bf, submitLabel = 'שמירה', onSubmit, 
     h('label', { class: 'field' }, h('span', null, 'משקל נוכחי (ק״ג)'), wIn, wErr),
     h('label', { class: 'field' }, h('span', null, 'אחוז שומן נוכחי (%)'), bIn, bErr,
       h('small', { class: 'muted' }, 'הערכה ממשקל חכם, קליפר או מדידה מקצועית. כדאי למדוד באותם תנאים בכל שבוע.')),
+    person ? h('button', {
+      type: 'button',
+      class: 'btn btn-ghost btn-block bf-link',
+      id: 'm-bf-estimate',
+      onclick: async () => {
+        const w = parseNum(wIn.value);
+        const p = person();
+        const v = await openBodyFatEstimator({ ...p, weight: w >= 30 && w <= 300 ? w : (previous && previous.weight) || 70 });
+        if (v !== null) { bIn.value = String(v); bErr.textContent = ''; bIn.setAttribute('aria-invalid', 'false'); }
+      },
+    }, icon('camera', 18), 'לא יודע/ת את אחוז השומן? הערכה מתמונות') : null,
     btn);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -216,4 +229,15 @@ export function assessmentBox(a, onApply) {
 export function disclaimer() {
   return h('p', { class: 'disclaimer' }, icon('info', 16),
     'המידע באפליקציה הוא כללי ואינו מהווה ייעוץ רפואי. במצב רפואי, הריון, הפרעות אכילה או נטילת תרופות — יש להתייעץ עם רופא/ה או דיאטן/ית קליני/ת.');
+}
+
+// Explains what keto / carnivore mean, under the diet picker.
+export function dietNoteBox(diet) {
+  const el = h('p', { class: 'notice warn small diet-note', 'aria-live': 'polite' });
+  const update = (v) => {
+    el.textContent = DIET_NOTES[v] || '';
+    el.hidden = !DIET_NOTES[v];
+  };
+  update(diet);
+  return { el, update };
 }

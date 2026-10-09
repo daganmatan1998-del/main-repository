@@ -44,6 +44,8 @@ export const FOODS = [
   { id: 'labane', name: 'לבנה 5%', aliases: ['לבנה', 'גבינה'], role: 'protein', kcal: 90, p: 6, c: 4, f: 5, meals: 'bsd', src: 'dairy', kosher: 'dairy', allergens: ['dairy'], units: [U.tbsp(25)], min: 50, max: 250 },
   { id: 'seitan', name: 'סייטן', aliases: ['סייטן', 'גלוטן'], role: 'protein', kcal: 130, p: 25, c: 4, f: 2, meals: 'ld', src: 'plant', kosher: 'parve', allergens: ['gluten'], units: [U.palm(100)], min: 80, max: 250 },
   { id: 'black_beans', name: 'שעועית שחורה מבושלת', aliases: ['שעועית', 'קטניות'], role: 'protein', kcal: 132, p: 8.9, c: 23.7, f: 0.5, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(170)], min: 120, max: 400 },
+  { id: 'entrecote', name: 'אנטריקוט צלוי', aliases: ['אנטריקוט', 'סטייק', 'בקר', 'בשר'], role: 'protein', kcal: 291, p: 24, c: 0, f: 22, meals: 'ld', src: 'meat', kosher: 'meat', allergens: [], units: [U.palm(130)], min: 100, max: 300 },
+  { id: 'beef_20', name: 'בקר טחון 20% מבושל', aliases: ['בקר', 'בשר', 'בשר טחון', 'קציצות'], role: 'protein', kcal: 254, p: 26, c: 0, f: 17, meals: 'ld', src: 'meat', kosher: 'meat', allergens: [], units: [U.palm(120)], min: 80, max: 300 },
 
   // ---------------- carbs ----------------
   { id: 'white_rice', name: 'אורז לבן מבושל', aliases: ['אורז'], role: 'carb', kcal: 130, p: 2.7, c: 28, f: 0.3, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(160), U.tbsp(15)], min: 60, max: 400 },
@@ -77,6 +79,8 @@ export const FOODS = [
   { id: 'cashews', name: 'קשיו', aliases: ['קשיו', 'אגוזים'], role: 'fat', kcal: 570, p: 18, c: 30, f: 44, meals: 'bs', src: 'plant', kosher: 'parve', allergens: ['treenut'], units: [{ s: 'חופן קטן (~10 קשיו)', p: 'חופנים קטנים', g: 15, step: 0.5 }], min: 8, max: 50 },
   { id: 'flaxseed', name: 'זרעי פשתן טחונים', aliases: ['פשתן', 'זרעים'], role: 'fat', kcal: 534, p: 18, c: 29, f: 42, meals: 'bs', src: 'plant', kosher: 'parve', allergens: [], units: [U.tbsp(10)], min: 5, max: 30 },
   { id: 'pumpkin_seeds', name: 'גרעיני דלעת קלופים', aliases: ['גרעינים', 'דלעת', 'זרעים'], role: 'fat', kcal: 559, p: 30, c: 11, f: 49, meals: 'bsld', src: 'plant', kosher: 'parve', allergens: [], units: [U.tbsp(10)], min: 5, max: 40 },
+  { id: 'butter', name: 'חמאה', aliases: ['חמאה'], role: 'fat', kcal: 717, p: 0.9, c: 0.1, f: 81, meals: 'bsd', src: 'dairy', kosher: 'dairy', allergens: ['dairy'], units: [U.tbsp(14), U.tsp], min: 3, max: 30 },
+  { id: 'hard_cheese', name: 'גבינה קשה 28% (פרמזן/צ׳דר)', aliases: ['גבינה קשה', 'פרמזן', 'צדר', 'גבינה'], role: 'fat', kcal: 402, p: 25, c: 1.3, f: 33, meals: 'bsd', src: 'dairy', kosher: 'dairy', allergens: ['dairy'], units: [{ s: 'פרוסה', p: 'פרוסות', g: 20, step: 1 }], min: 10, max: 80 },
 
   // ---------------- vegetables (fixed portion, near-free) ----------------
   { id: 'salad', name: 'סלט ירקות (עגבנייה, מלפפון, פלפל)', aliases: ['סלט', 'ירקות', 'עגבנייה', 'מלפפון', 'פלפל'], role: 'veg', kcal: 20, p: 0.9, c: 4, f: 0.2, meals: 'bld', src: 'plant', kosher: 'parve', allergens: [], units: [{ s: 'קערה בינונית', p: 'קערות בינוניות', g: 200, step: 0.5 }], min: 100, max: 300, portion: 200 },
@@ -119,7 +123,14 @@ export const DIETS = [
   { id: 'pescatarian', label: 'פסקטריאני (דגים, בלי בשר)' },
   { id: 'vegetarian', label: 'צמחוני' },
   { id: 'vegan', label: 'טבעוני' },
+  { id: 'keto', label: 'קיטו (דל פחמימות)' },
+  { id: 'carnivore', label: 'קרניבור (מן החי בלבד)' },
 ];
+
+export const DIET_NOTES = {
+  keto: 'קיטו: עד כ-50 ג׳ פחמימות ביום (20–30 ג׳ נטו, אחרי סיבים) — בלי לחם, דגנים, קטניות ופירות. רוב האנרגיה משומן. בימים הראשונים ייתכנו עייפות וכאב ראש ("שפעת קיטו"); הקפידו על מים ומלח.',
+  carnivore: 'קרניבור: רק מזון מן החי — בשר, עוף, דגים, ביצים ומוצרי חלב. בלי פירות, ירקות ודגנים. תפריט קיצוני: מומלץ להתייעץ עם רופא/ה, במיוחד עם כולסטרול גבוה או בעיה בכליות.',
+};
 
 export const ROLE_LABEL = { protein: 'חלבון', carb: 'פחמימה', fat: 'שומן', veg: 'ירקות', fruit: 'פרי' };
 
@@ -128,7 +139,19 @@ const DIET_ALLOWED_SRC = {
   pescatarian: ['fish', 'shellfish', 'dairy', 'egg', 'plant'],
   vegetarian: ['dairy', 'egg', 'plant'],
   vegan: ['plant'],
+  keto: ['meat', 'poultry', 'fish', 'shellfish', 'dairy', 'egg', 'plant'],
+  carnivore: ['meat', 'poultry', 'fish', 'shellfish', 'dairy', 'egg'],
 };
+
+// Keto keeps protein, fat and low-carb vegetables; these are too starchy.
+const KETO_EXCLUDE = new Set(['lentils', 'chickpeas', 'black_beans', 'cashews', 'carrot', 'corn']);
+
+// The categories a diet's menus actually use.
+export function dietRoles(diet) {
+  if (diet === 'keto') return ['protein', 'fat', 'veg'];
+  if (diet === 'carnivore') return ['protein', 'fat'];
+  return ['protein', 'carb', 'fat', 'veg', 'fruit'];
+}
 
 function norm(s) {
   return String(s).toLowerCase().replace(/[׳'"״`]/g, '').replace(/\s+/g, ' ').trim();
@@ -154,6 +177,8 @@ export function dislikeMatches(food, terms) {
 export function isAllowed(food, prefs) {
   const diet = prefs.diet || 'omni';
   if (!DIET_ALLOWED_SRC[diet].includes(food.src)) return false;
+  if (!dietRoles(diet).includes(food.role)) return false;
+  if (diet === 'keto' && KETO_EXCLUDE.has(food.id)) return false;
   if (prefs.kosher && food.nonKosher) return false;
   const allergies = prefs.allergies || [];
   if (food.allergens.some((a) => allergies.includes(a))) return false;
@@ -178,6 +203,7 @@ export function canExclude(foodId, prefs) {
   const food = FOOD_BY_ID[foodId];
   if (!food) return false;
   if (!isAllowed(food, prefs)) return true;
+  if (!dietRoles(prefs.diet || 'omni').includes(food.role)) return true;
   return countByRole(prefs)[food.role] - 1 >= MIN_PER_ROLE;
 }
 

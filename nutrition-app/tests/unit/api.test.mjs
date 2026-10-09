@@ -96,3 +96,52 @@ test('worker routes /api to the handler and the rest to static assets', async ()
   const health = await worker.fetch(new Request('https://nutri.example/api/health'), env);
   assert.deepEqual(await health.json(), { ok: true, configured: true });
 });
+
+// ---------- /api/bodyfat ----------
+const PHOTO = Buffer.from('fake-jpeg-bytes').toString('base64');
+const bfReq = (body, headers = {}) => new Request('https://nutri.example/api/bodyfat', {
+  method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': `198.51.100.${Math.floor(Math.random() * 200)}`, ...headers }, body: JSON.stringify(body),
+});
+const bfBody = {
+  photos: ['front', 'left', 'back', 'right'].map((angle) => ({ angle, data: PHOTO })),
+  profile: { sex: 'male', age: 30, heightCm: 180, weightKg: 82, bmiPriorPct: 19.6 },
+};
+
+test('bodyfat: sends all four photos as images with a JSON schema and returns a clamped estimate', async () => {
+  const { calls, fetchImpl } = stubAnthropic({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ ok: true, estimate: 21.5, low: 18, high: 25, confidence: 'medium', notes: 'קווי מותן רכים.', issue: '' }) }] });
+  const res = await handleApi(bfReq(bfBody), ENV, { fetchImpl });
+  const j = await res.json();
+  assert.equal(res.status, 200);
+  assert.deepEqual([j.ok, j.estimate, j.low, j.high, j.confidence], [true, 21.5, 18, 25, 'medium']);
+  const body = calls[0].body;
+  assert.equal(body.model, 'claude-opus-5-5');
+  assert.equal(body.output_config.format.type, 'json_schema');
+  assert.equal(body.messages[0].content.filter((b) => b.type === 'image').length, 4);
+  assert.match(body.system, /body fat/);
+  assert.match(body.messages[0].content.at(-1).text, /bmiPriorPct/);
+});
+
+test('bodyfat: unsuitable photos and refusals come back as ok=false with a reason', async () => {
+  let { fetchImpl } = stubAnthropic({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ ok: false, estimate: 0, low: 0, high: 0, confidence: 'low', notes: '', issue: 'לא רואים את כל הגוף.' }) }] });
+  let j = await (await handleApi(bfReq(bfBody), ENV, { fetchImpl })).json();
+  assert.equal(j.ok, false);
+  assert.match(j.issue, /הגוף/);
+  ({ fetchImpl } = stubAnthropic({ stop_reason: 'refusal', content: [] }));
+  j = await (await handleApi(bfReq(bfBody), ENV, { fetchImpl })).json();
+  assert.equal(j.ok, false);
+});
+
+test('bodyfat: rejects bad input before calling the model', async () => {
+  const { calls, fetchImpl } = stubAnthropic();
+  for (const body of [
+    { photos: [] },
+    { photos: [{ angle: 'top', data: PHOTO }] },
+    { photos: [{ angle: 'front', data: '<script>' }] },
+    { photos: [{ angle: 'front', data: 'A'.repeat(1000 * 1024) }] },
+    { photos: Array(5).fill({ angle: 'front', data: PHOTO }) },
+  ]) {
+    assert.equal((await handleApi(bfReq(body), ENV, { fetchImpl })).status, 400);
+  }
+  assert.equal(calls.length, 0);
+  assert.equal((await handleApi(bfReq(bfBody), {}, { fetchImpl })).status, 503);
+});

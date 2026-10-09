@@ -211,7 +211,7 @@ export function computeTargets(profile, period, current, today = dayKey()) {
   }
   if (reached) warnings.push('הגעת למשקל היעד של התקופה! הקלוריות הותאמו לשמירה.');
 
-  const m = macros(period.goal, calories, weight, bf);
+  const m = macros(period.goal, calories, weight, bf, profile.prefs?.diet);
   return {
     ...e,
     calories,
@@ -228,8 +228,15 @@ export function computeTargets(profile, period, current, today = dayKey()) {
   };
 }
 
-export function macros(goal, calories, weight, bf) {
+export function macros(goal, calories, weight, bf, diet = 'omni') {
   const lbm = bf ? weight * (1 - bf / 100) : weight * 0.8;
+  if (diet === 'keto' || diet === 'carnivore') {
+    // Low-carb: carbs capped (keto ≤50 g total, carnivore near zero), fat fills the rest.
+    const p = round(clamp(lbm * (goal === 'cut' ? 2.5 : 2.2), weight * 1.4, weight * 2.4), 5);
+    const c = diet === 'keto' ? Math.min(50, round(calories * 0.1 / 4, 5)) : 5; // keto: ≤50 g total ≈ 20–30 g net
+    const f = Math.max(round((calories - p * 4 - c * 4) / 9, 5), round(weight * 0.6, 5));
+    return { protein: p, carbs: c, fat: f };
+  }
   const perLbm = goal === 'cut' ? 2.5 : 2.2;
   let protein = clamp(lbm * perLbm, weight * 1.4, weight * 2.4);
   const fatPct = goal === 'maintain' ? 0.28 : 0.25;

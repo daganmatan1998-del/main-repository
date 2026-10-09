@@ -1,7 +1,7 @@
 // Weekly shopping list screen. A menu week matches a check-in week, so the
 // list covers either the rest of this week or the whole of next week.
 
-import { h, icon, clear, fmtDate, addDays, daysBetween, toast } from '../util.js';
+import { h, icon, fmtDate, addDays, daysBetween, toast } from '../util.js';
 import { state, today, targets, dayPlan, menuWeek, menuWeekRange, saveShoppingChecks } from '../store.js';
 import { buildShoppingList, shoppingText } from '../shopping.js';
 
@@ -53,7 +53,7 @@ export function renderShopping(root) {
     const ul = h('ul', { class: 'shop-items' });
     for (const it of g.items) {
       const on = checked.has(it.id);
-      const li = h('li', null,
+      const li = h('li', { 'data-item': it.id },
         h('label', { class: 'shop-item' + (on ? ' done' : '') },
           h('input', {
             type: 'checkbox', checked: on,

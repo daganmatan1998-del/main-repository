@@ -56,7 +56,8 @@ function setLocked(locked) {
   document.body.classList.toggle('locked', locked);
   tabbar.hidden = locked;
   tabbar.inert = locked;
-  if (locked) document.querySelectorAll('.sheet-backdrop, .overlay').forEach((el) => el.remove());
+  // Overlays marked .keep (the body-fat camera) are part of the current flow.
+  if (locked) document.querySelectorAll('.sheet-backdrop, .overlay:not(.keep)').forEach((el) => el.remove());
 }
 
 function watchGate() {

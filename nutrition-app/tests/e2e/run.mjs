@@ -33,6 +33,13 @@ const upstream = [];
 async function fakeAnthropic(url, init) {
   const body = JSON.parse(init.body);
   upstream.push({ url: String(url), headers: new Headers(init.headers), body });
+  if (typeof body.system === 'string' && body.system.includes('body fat')) {
+    const est = { ok: true, estimate: 26.5, low: 23, high: 30, confidence: 'medium', notes: 'הערכה לפי קו המותן והירכיים.', issue: '' };
+    return new Response(JSON.stringify({
+      id: 'msg_bf', type: 'message', role: 'assistant', model: body.model, stop_reason: 'end_turn',
+      usage: { input_tokens: 10, output_tokens: 10 }, content: [{ type: 'text', text: JSON.stringify(est) }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
   const ctx = body.system[1].text;
   const text = ctx.includes('computedEquivalents')
     ? 'במקום הפריט:\n- **קינואה מבושלת** — 160 ג׳ (כוס אחת), 192 קק״ל\n- **כוסמת** — 210 ג׳, 193 קק״ל'
@@ -53,16 +60,19 @@ const T0 = new Date('2026-10-11T09:00:00+03:00').getTime();
 const at = (days) => new Date(T0 + days * DAY);
 
 // Full Chromium (new headless) when available: the headless shell always denies notifications.
-const browser = await chromium.launch({ channel: 'chromium' }).catch(() => chromium.launch());
+const LAUNCH = { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required'] };
+const browser = await chromium.launch({ channel: 'chromium', ...LAUNCH }).catch(() => chromium.launch(LAUNCH));
 const ctx = await browser.newContext({
   viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
   locale: 'he-IL', timezoneId: 'Asia/Jerusalem', acceptDownloads: true,
 });
 await ctx.clock.setFixedTime(at(0));
+await ctx.grantPermissions(['camera']);
 const page = await ctx.newPage();
 const pageErrors = [];
 page.on('pageerror', (e) => pageErrors.push(e.message));
-page.on('console', (m) => { if (m.type() === 'error') pageErrors.push(m.text()); });
+// The one deliberate failure (body-fat service down) is not a page error.
+page.on('console', (m) => { if (m.type() === 'error' && !/status of 503/.test(m.text())) pageErrors.push(m.text()); });
 
 const shot = (name, opts = {}) => page.screenshot({ path: path.join(SHOTS, `${name}.png`), ...opts });
 const wait = (ms = 250) => page.waitForTimeout(ms);
@@ -159,6 +169,40 @@ try {
   await shot('02-onboarding-details');
   await page.click('#ob-next');
   await page.fill('#ob-weight', '68');
+
+  // ---- "don't know my body fat": four-angle camera capture ----
+  await page.click('#ob-bf-estimate');
+  await page.waitForSelector('.overlay.bf #bf-start');
+  check('body-fat photos need explicit consent first', await page.locator('#bf-start').isDisabled());
+  check('body-fat screen shows the no-guarantee disclaimer up front', (await page.locator('.overlay.bf').innerText()).includes('אין התחייבות'));
+  await page.check('#bf-consent');
+  await page.click('#bf-start');
+  await page.waitForSelector('.bf-video');
+  await page.getByRole('radio', { name: '3 שנ׳' }).click();
+  await page.waitForFunction(() => document.querySelector('.bf-video')?.videoWidth > 0, null, { timeout: 10000 });
+  await shot('24-bodyfat-camera');
+  for (let i = 0; i < 4; i++) {
+    await page.waitForSelector('#bf-shoot:not([disabled])');
+    await page.waitForFunction(() => document.querySelector('.bf-video')?.videoWidth > 0, null, { timeout: 10000 });
+    await page.evaluate(() => window.dispatchEvent(new Event('focus'))); // a re-render must not close the camera
+    await page.click('#bf-shoot');
+    await page.waitForSelector('#bf-keep', { timeout: 10000 });
+    await page.click('#bf-keep');
+  }
+  await page.waitForSelector('#bf-skip-tape');
+  await page.click('#bf-skip-tape');
+  await page.waitForSelector('#bf-use', { timeout: 20000 });
+  const bfReqBody = upstream.filter((u) => typeof u.body.system === 'string').at(-1)?.body;
+  check('four photos (front, left, back, right) go to the analysis', bfReqBody && bfReqBody.messages[0].content.filter((b) => b.type === 'image').length === 4
+    && ['front', 'left', 'back', 'right'].every((a) => bfReqBody.messages[0].content.some((b) => b.type === 'text' && b.text.includes(a))));
+  check('result screen has no stray "null" text', !(await page.locator('.overlay.bf').innerText()).includes('null'));
+  check('result shows the estimate, range and disclaimer', (await page.locator('#bf-value').innerText()).includes('26.5') && (await page.locator('#bf-disclaimer').innerText()).includes('תזונאי'));
+  await shot('25-bodyfat-result');
+  await page.click('#bf-use');
+  await wait(300);
+  check('estimate fills the body-fat field', (await page.inputValue('#ob-bf')) === '26.5');
+  check('camera is released after the estimate', await page.evaluate(() => !document.querySelector('.bf-video')));
+
   await page.fill('#ob-bf', '80');
   await page.click('#ob-next');
   check('body-fat 80% rejected', (await page.locator('#err-bf').innerText()).includes('3'));
@@ -213,6 +257,15 @@ try {
   await page.click('a[href="#/plan"]');
   await page.waitForSelector('.page-plan');
   await shot('07-plan', { fullPage: true });
+  const firstMains = [];
+  for (let i = 0; i < 7; i++) {
+    await page.locator('.day-strip .day').nth(i).click();
+    await wait(120);
+    firstMains.push(await page.locator('.meal').nth(2).locator('.item-name').first().innerText());
+  }
+  await page.locator('.day-strip .day').first().click();
+  await wait(150);
+  check(`each day of the week shows a different lunch (${new Set(firstMains).size}/7)`, new Set(firstMains).size === 7, firstMains.join(' | '));
   const firstMeal = page.locator('.meal').first();
   const before = await firstMeal.innerText();
   await firstMeal.getByRole('button', { name: /החלף פחמימה/ }).first().click();
@@ -256,8 +309,10 @@ try {
   await page.waitForSelector('.page-shopping .shop-item');
   const products = await page.locator('.shop-item').count();
   const depts = await page.locator('.shop-group').count();
-  check(`shopping list built (${products} products in ${depts} sections)`, products >= 8 && products <= 40 && depts >= 3);
-  check('shopping list never lists an excluded food', !(await page.locator('.page-shopping').innerText()).includes(neverName.split(' ')[0]) || neverName.length < 3);
+  check(`shopping list built (${products} products in ${depts} sections)`, products >= 8 && products <= 55 && depts >= 3);
+  const excludedIds = (await idbDump()).kv.find((v) => v && v.prefs)?.prefs.excluded || [];
+  const listed = await page.locator('.shop-items li').evaluateAll((els) => els.map((e) => e.dataset.item));
+  check('shopping list never lists an excluded food', excludedIds.length > 0 && !listed.some((id) => excludedIds.includes(id)), `${excludedIds} vs ${listed}`);
   check('plan tab stays highlighted on the shopping screen', (await page.locator('#tabbar .tab.on').innerText()).includes('תפריט'));
   await shot('22-shopping', { fullPage: true });
   await page.locator('.shop-item input').first().check();
@@ -379,6 +434,30 @@ try {
     await wait(200);
     check(`step 2 also blocks ${hash}`, await visible('#m-weight'));
   }
+  // Estimator inside the weekly gate, with the analysis service down → tape fallback.
+  await page.route('**/api/bodyfat', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"not_configured"}' }));
+  await page.click('#m-bf-estimate');
+  await page.check('#bf-consent');
+  await page.click('#bf-start');
+  for (let i = 0; i < 4; i++) {
+    await page.waitForSelector('#bf-file', { state: 'attached' });
+    await page.locator('#bf-file').setInputFiles(await makeImage(`bf${i}.jpg`, { w: 900, h: 1200, hue: 40 }));
+    await page.waitForSelector('#bf-keep');
+    await page.click('#bf-keep');
+  }
+  await page.fill('#bf-waist', '74');
+  await page.fill('#bf-neck', '32');
+  await page.fill('#bf-hip', '100');
+  await page.click('#bf-analyze');
+  await page.waitForSelector('#bf-use');
+  const fb = await page.locator('.overlay.bf').innerText();
+  check('analysis unavailable → falls back to the tape-measure method and says so', fb.includes('לא הוגדר') && fb.includes('מדידות סרט'), fb.slice(0, 160));
+  check('estimator survives inside the locked weekly gate', await visible('#gate'));
+  await page.click('#bf-use');
+  await wait(200);
+  check('fallback estimate fills the weekly body-fat field', /^\d+(\.5)?$/.test(await page.inputValue('#m-bf')));
+  await page.unroute('**/api/bodyfat');
+  await page.fill('#m-bf', '');
   await page.click('#gate button[type=submit]');
   await wait(200);
   check('metrics are required', (await page.locator('#m-weight-err').innerText()).length > 0 && (await page.locator('#m-bf-err').innerText()).length > 0);
@@ -498,6 +577,34 @@ try {
   await page.click('a[href="#/today"]');
   await page.waitForSelector('.page-today');
   check('changing meals/day regenerates the menu', (await page.locator('.meal').count()) === 3);
+
+  for (const [diet, banned] of [['קיטו', ['לחם', 'אורז', 'פסטה', 'קינואה', 'בטטה', 'תפוח', 'בננה', 'עדשים', 'פיתה']], ['קרניבור', ['לחם', 'אורז', 'סלט', 'ירקות', 'ברוקולי', 'טופו', 'שמן זית', 'אבוקדו', 'טחינה', 'עדשים']]]) {
+    await page.click('a[href="#/profile"]');
+    await page.waitForSelector('.page-profile');
+    await page.locator('.card', { hasText: 'העדפות תזונה' }).getByRole('button', { name: /עריכה/ }).click();
+    await page.locator('.sheet').getByRole('radio', { name: diet }).click();
+    check(`${diet}: the diet is explained when chosen`, (await page.locator('.sheet .diet-note').innerText()).length > 20);
+    await page.locator('.sheet .btn-primary').last().click();
+    await wait(400);
+    await page.click('a[href="#/plan"]');
+    await page.waitForSelector('.page-plan');
+    let found = [];
+    for (let i = 0; i < 7; i++) {
+      await page.locator('.day-strip .day').nth(i).click();
+      await wait(120);
+      const txt = (await page.locator('.page-plan .meal').allInnerTexts()).join('\n');
+      found = found.concat(banned.filter((b) => txt.includes(b)));
+    }
+    check(`${diet}: a week of menus has none of ${banned.length} off-plan foods`, found.length === 0, [...new Set(found)].join(','));
+    if (diet === 'קיטו') await shot('26-keto-plan', { fullPage: true });
+  }
+  await page.click('a[href="#/profile"]');
+  await page.locator('.card', { hasText: 'העדפות תזונה' }).getByRole('button', { name: /עריכה/ }).click();
+  await page.locator('.sheet').getByRole('radio', { name: 'צמחוני' }).click();
+  await page.locator('.sheet .btn-primary').last().click();
+  await wait(300);
+  await page.click('a[href="#/today"]');
+  await page.waitForSelector('.page-today');
 
   await ctx.grantPermissions(['notifications'], { origin: BASE });
   await page.click('a[href="#/profile"]');

@@ -62,6 +62,7 @@ export function renderGate(root, gate) {
       metricsForm({
         submitLabel: 'שמירה ופתיחת האפליקציה',
         previous: prev,
+        person: () => ({ sex: state.profile.sex, age: state.profile.age, height: state.profile.height }),
         onSubmit: async (w, b) => {
           summary = await completeCheckin(gate.week, w, b);
           summary.week = gate.week;
