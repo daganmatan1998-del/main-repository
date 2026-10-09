@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "נוטרי — תוכנית תזונה אישית",
+  "short_name": "נוטרי",
+  "description": "תוכנית תזונה אישית לחיטוב, שמירה ומסה, עם עוזר תזונה ומעקב התקדמות שבועי.",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "./#/today",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#f4f7f5",
+  "theme_color": "#2b7a67",
+  "categories": ["health", "fitness", "food"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "התפריט שלי", "url": "./#/plan", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "עוזר תזונה", "url": "./#/assistant", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

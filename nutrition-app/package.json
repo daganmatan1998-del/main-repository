@@ -1,0 +1,22 @@
+{
+  "name": "nutri",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hebrew RTL nutrition-planning PWA with a Claude-powered assistant",
+  "type": "module",
+  "scripts": {
+    "dev": "node server/dev-server.mjs",
+    "test": "node --test tests/unit/*.test.mjs",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.132.1"
+  },
+  "devDependencies": {
+    "wrangler": "^4.149.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

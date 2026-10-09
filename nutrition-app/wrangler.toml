@@ -1,0 +1,23 @@
+# Cloudflare Worker: serves the PWA (www/) and the /api/chat proxy from one origin.
+#   npx wrangler secret put ANTHROPIC_API_KEY
+#   npx wrangler deploy
+name = "nutri"
+main = "server/worker.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./www"
+binding = "ASSETS"
+
+[vars]
+# Comma-separated extra origins allowed to call /api/chat (same-origin always works).
+# For a Capacitor build add: "capacitor://localhost,https://localhost"
+ALLOWED_ORIGINS = ""
+
+# Recommended in production: Cloudflare's rate limiter (20 requests / minute per IP).
+# Uncomment after creating it; api.js uses it automatically when bound.
+# [[ratelimits]]
+# name = "RATE_LIMITER"
+# namespace_id = "1001"
+# simple = { limit = 20, period = 60 }

@@ -1,0 +1,9 @@
+{
+  "appId": "app.nutri.planner",
+  "appName": "נוטרי",
+  "webDir": "www",
+  "server": { "androidScheme": "https" },
+  "plugins": {
+    "LocalNotifications": { "smallIcon": "ic_stat_icon", "iconColor": "#2b7a67" }
+  }
+}
