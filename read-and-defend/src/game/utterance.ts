@@ -45,13 +45,22 @@ export const MIN_READING_SHARE = 0.5;
 const EN_HESITATIONS = new Set(['um', 'uh', 'er', 'erm', 'hmm', 'oh', 'okay', 'ok']);
 const MAX_WINDOW = 3;
 
+/**
+ * The words of an utterance, as said (vowel marks kept: a recogniser that
+ * returns niqqud has given the most precise evidence there is, and the
+ * evaluator normalises for itself). Hesitations are dropped unless they are
+ * all there is.
+ */
 export function tokenize(text: string, lang: LanguageCode): string[] {
+  const raw = text.split(/\s+/)
+    .map((w) => w.replace(/^[^\p{L}\p{M}]+|[^\p{L}\p{M}]+$/gu, ''))
+    .filter(Boolean);
   if (lang === 'he') {
-    const all = normalizeHebrew(text).split(' ').filter(Boolean);
-    const content = all.filter((t) => !HE_FILLERS.has(t));
-    return content.length ? content : all;
+    const real = raw.filter((w) => normalizeHebrew(w));
+    const content = real.filter((w) => !HE_FILLERS.has(normalizeHebrew(w)));
+    return content.length ? content : real;
   }
-  return normalizeEnglish(text).split(' ').filter((t) => t && !EN_HESITATIONS.has(t));
+  return raw.filter((w) => normalizeEnglish(w) && !EN_HESITATIONS.has(normalizeEnglish(w)));
 }
 
 interface Candidate { enemy: Enemy; phase: number }

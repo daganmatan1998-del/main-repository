@@ -199,7 +199,10 @@ await test('wrong answers never defeat an enemy; unclear answers cost nothing', 
   assert(s.correct === before && s.wrong === 1, `unclear/silence changed the score: ${JSON.stringify(s)}`);
   const fb = await page.textContent('[data-testid=feedback]');
   assert(/hear/i.test(fb), 'expected a "didn\'t hear" message, got: ' + fb);
-  assert(await page.locator('.parts .part').count() > 0, 'sound-it-out breakdown should appear after a wrong reading');
+  // The breakdown appears after a miss when there is something to split (a word, not a single letter).
+  const parts = await page.evaluate(() => { const s = window.__rd.session.state; const e = s.enemies.filter((x) => x.status === 'walking').sort((a, b) => b.progress - a.progress)[0]; return e ? e.items[e.phase].parts.length : 0; });
+  const shown = await page.locator('.parts .part').count();
+  if (parts > 1) assert(shown > 0, 'sound-it-out breakdown should appear after a wrong reading');
   await page.context().close();
 });
 

@@ -115,9 +115,30 @@ describe('guessing from how a word starts', () => {
   });
 });
 
+describe('pointed syllables (engines that return niqqud, and the simulator)', () => {
+  const syl = (d: string) => he.items.find((i) => i.kind === 'syllable' && i.display === d.normalize('NFC'))!;
+  it('a syllable read with its vowel mark is credited', () => {
+    for (const d of ['שַׁ', 'סִ', 'נִ', 'יָ', 'בּוֹ']) {
+      expect(matchUtterance(say(d), road([syl(d)]), { lang: 'he', final: true, cfg }), d).toHaveLength(1);
+    }
+  });
+  it('…and a different vowel is not', () => {
+    expect(matchUtterance(say('שִׁ'), road([syl('שַׁ')]), { lang: 'he', final: true, cfg })).toEqual([]);
+  });
+  it('every item in both banks is credited when read exactly as shown', () => {
+    for (const pack of [he, en]) {
+      const bad = pack.items.filter((it) => it.kind !== 'sentence' && matchUtterance(say(it.display), road([it]), { lang: pack.lang, final: true, cfg }).length !== 1);
+      expect(bad.map((b) => b.id)).toEqual([]);
+    }
+  });
+});
+
 describe('tokens', () => {
   it('drops hesitations but keeps words', () => {
-    expect(tokenize('אה... מם, למד!', 'he')).toEqual(['ממ', 'למד']);
-    expect(tokenize('um, cat. Sun!', 'en')).toEqual(['cat', 'sun']);
+    expect(tokenize('אה... מם, למד!', 'he')).toEqual(['מם', 'למד']);
+    expect(tokenize('um, cat. Sun!', 'en')).toEqual(['cat', 'Sun']);
+  });
+  it('keeps vowel marks, which are the most precise evidence', () => {
+    expect(tokenize('שַׁ', 'he')).toEqual(['שַׁ']);
   });
 });
