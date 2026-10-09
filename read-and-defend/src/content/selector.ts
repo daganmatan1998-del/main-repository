@@ -1,9 +1,9 @@
 import type { Rng } from '../core/rng';
-import { shuffle, weightedPick } from '../core/rng';
+import { weightedPick } from '../core/rng';
 import type { DifficultyProfile } from '../learning/adaptive';
-import { isNovel, type LearnerState } from '../learning/learner';
+import { isFluent, isNovel, recentAccuracy, recentTransfer, type LearnerState } from '../learning/learner';
 import { knownSkills } from './registry';
-import type { LanguagePack, LearningItem } from './types';
+import type { ItemKind, LanguagePack, LearningItem } from './types';
 
 /**
  * Chooses the items for one attempt at a level.
@@ -18,6 +18,10 @@ import type { LanguagePack, LearningItem } from './types';
  *
  * A retry passes the previous attempt(s), whose items are penalised, so the
  * same objectives come back with a different selection and order.
+ *
+ * Progression follows ability, not just level count: once a child is fluent
+ * in a unit's skills, the *next* unit's kinds of exercise (letters → short
+ * words, short → longer words) start to appear a unit early (see unitView).
  */
 
 export interface SelectOptions {
@@ -26,15 +30,66 @@ export interface SelectOptions {
   profile: DifficultyProfile;
   /** Item ids used in previous attempts at this level, most recent first. */
   previous?: string[][];
-  /** Reserve a boss slot (returned separately). */
+  /** Also choose the boss's three words. */
   boss?: boolean;
 }
 
 export interface Selection {
   items: LearningItem[];
-  /** One sentence, or for early stages a short chain of items. */
+  /** The boss's words, easiest first. Exactly three when requested. */
   boss: LearningItem[];
+  /** The boss words use skills not yet taught: show them with a sound breakdown. */
+  bossAssist: boolean;
   focusSkills: string[];
+}
+
+export const BOSS_WORDS = 3;
+
+/* ------------------------------------------------------------ unit view */
+
+export interface UnitView {
+  known: Set<string>;
+  kinds: Partial<Record<ItemKind, number>>;
+  ceiling: number;
+  /** The learner is ahead: the next unit's exercise kinds are mixed in. */
+  ahead: boolean;
+}
+
+/** Fluent in everything this unit teaches, and reading accurately lately. */
+export function unitReady(pack: LanguagePack, unitIndex: number, learner: LearnerState): boolean {
+  const unit = pack.units[unitIndex];
+  const core = unit.newSkills.filter((k) => pack.skills[k] && pack.skills[k].kind !== 'pattern');
+  const acc = recentAccuracy(learner);
+  if (acc === undefined || acc < 0.8) return false;
+  if (!core.length) return (recentTransfer(learner) ?? 0) >= 0.7; // explorer units: success on new words
+  // Two different items per sound — or as many as this unit actually offers
+  // for it (a Hebrew letter has one item, an English one has a and A).
+  const known = knownSkills(pack, unitIndex);
+  const offered = (k: string) => pack.items.filter((it) => unit.kinds[it.kind] && it.skills.includes(k) && it.skills.every((x) => known.has(x))).length;
+  return core.every((k) => isFluent(learner, k, Math.max(1, Math.min(2, offered(k)))));
+}
+
+/**
+ * What a unit offers *to this learner*. A new learner (or one who is still
+ * struggling) sees exactly the unit as authored. A fluent one also gets the
+ * next unit's exercise kinds, and the next unit's procedural skills
+ * (blending, silent letters), but never its letters or vowels: whatever is
+ * shown can still be decoded from taught sounds.
+ */
+export function unitView(pack: LanguagePack, unitIndex: number, learner?: LearnerState): UnitView {
+  const unit = pack.units[unitIndex];
+  const known = knownSkills(pack, unitIndex);
+  const kinds: UnitView['kinds'] = { ...unit.kinds };
+  let ceiling = unit.maxDifficulty;
+  let ahead = false;
+  const next = pack.units[unitIndex + 1];
+  if (learner && next && unitReady(pack, unitIndex, learner)) {
+    ahead = true;
+    for (const [k, w] of Object.entries(next.kinds) as Array<[ItemKind, number]>) kinds[k] = Math.max(kinds[k] ?? 0, w * 0.6);
+    next.newSkills.filter((k) => pack.skills[k]?.kind === 'pattern' && k !== 'he:P:plain').forEach((k) => known.add(k));
+    ceiling = Math.max(ceiling, next.maxDifficulty);
+  }
+  return { known, kinds, ceiling, ahead };
 }
 
 function unitFocus(pack: LanguagePack, unitIndex: number, known: Set<string>): string[] {
@@ -44,26 +99,15 @@ function unitFocus(pack: LanguagePack, unitIndex: number, known: Set<string>): s
   return [...known];
 }
 
-export function eligibleItems(pack: LanguagePack, unitIndex: number, profile?: DifficultyProfile): LearningItem[] {
-  const unit = pack.units[unitIndex];
-  const known = knownSkills(pack, unitIndex);
-  const ceiling = unit.maxDifficulty + (profile?.difficultyShift ?? 0);
-  return pack.items.filter((it) => {
-    if (!(unit.kinds[it.kind] && unit.kinds[it.kind]! > 0)) return false;
-    if (!it.skills.every((s) => known.has(s))) return false;
-    // Keep at least the unit's own kinds available when easing.
-    return it.difficulty <= Math.max(ceiling, minDifficultyOf(pack, unitIndex));
-  });
-}
-
-function minDifficultyOf(pack: LanguagePack, unitIndex: number): number {
-  const unit = pack.units[unitIndex];
-  const known = knownSkills(pack, unitIndex);
+export function eligibleItems(pack: LanguagePack, unitIndex: number, profile?: DifficultyProfile, learner?: LearnerState): LearningItem[] {
+  const view = unitView(pack, unitIndex, learner);
+  const ceiling = view.ceiling + (profile?.difficultyShift ?? 0);
+  const fits = (it: LearningItem) => !!view.kinds[it.kind] && it.skills.every((s) => view.known.has(s));
   let min = Infinity;
-  for (const it of pack.items) {
-    if (unit.kinds[it.kind] && it.skills.every((s) => known.has(s))) min = Math.min(min, it.difficulty);
-  }
-  return min === Infinity ? 0 : min;
+  for (const it of pack.items) if (fits(it)) min = Math.min(min, it.difficulty);
+  // Keep at least the unit's easiest items available when easing.
+  const cap = Math.max(ceiling, min === Infinity ? 0 : min);
+  return pack.items.filter((it) => fits(it) && it.difficulty <= cap);
 }
 
 function weaknessOf(learner: LearnerState, item: LearningItem): number {
@@ -75,18 +119,87 @@ function weaknessOf(learner: LearnerState, item: LearningItem): number {
   return n ? sum / n : 0.5;
 }
 
+/* ----------------------------------------------------------------- boss */
+
+export interface BossChoice { items: LearningItem[]; assist: boolean }
+
+/**
+ * Three words for the boss, easiest first.
+ *
+ * Words are real, decodable from what the child has been taught (blending
+ * excepted — see LanguagePack.bossFreeSkills), and picked by skill rather
+ * than from a list: previously unseen words are preferred, words that
+ * exercise this unit's new sounds and the child's weak sounds are preferred,
+ * and the previous attempt's words are strongly avoided, so a retry fights
+ * a boss with different words and the same objectives.
+ *
+ * If a unit teaches so little that fewer than MIN_POOL words are decodable
+ * (the very first Hebrew levels: no vowel yet), the pool widens one untaught
+ * skill at a time and the boss is flagged `assist`, so the game shows the
+ * sound breakdown from the start instead of springing unknown sounds on the child.
+ */
+const MIN_POOL = 6;
+
+export function selectBossWords(
+  pack: LanguagePack, unitIndex: number, learner: LearnerState,
+  opts: { rng: Rng; previous?: string[][]; taken?: Set<string> },
+): BossChoice {
+  const view = unitView(pack, unitIndex, learner);
+  const free = new Set(pack.bossFreeSkills);
+  const unknown = (it: LearningItem) => it.skills.filter((k) => !view.known.has(k) && !free.has(k)).length;
+  // Letter-stage units have a tiny difficulty ceiling; a boss word is still a word.
+  const ceiling = Math.max(view.ceiling, 4.5);
+  const words = pack.items.filter((it) => it.kind === 'word' && it.isRealWord && it.niqqud !== false && it.difficulty <= ceiling);
+
+  let tier = 0;
+  let pool = words.filter((w) => unknown(w) <= tier);
+  while (pool.length < MIN_POOL && tier < 3) { tier++; pool = words.filter((w) => unknown(w) <= tier); }
+  if (opts.taken) pool = pool.filter((w) => !opts.taken!.has(w.id) && !opts.taken!.has(`d:${w.display}`));
+  if (pool.length < BOSS_WORDS) pool = words.filter((w) => unknown(w) <= 3 && !opts.taken?.has(w.id));
+
+  const focus = new Set(unitFocus(pack, unitIndex, view.known));
+  const prev = (opts.previous ?? []).map((ids) => new Set(ids));
+  const lo = Math.min(...pool.map((w) => w.difficulty));
+  const hi = Math.max(...pool.map((w) => w.difficulty));
+  const score = (w: LearningItem): number => {
+    let x = 1;
+    if (w.skills.some((k) => focus.has(k))) x += 1.5;
+    if (isNovel(learner, w.id)) x += 1.5;
+    x += 2 * weaknessOf(learner, w);
+    x *= 0.6 + 0.8 * (hi > lo ? (w.difficulty - lo) / (hi - lo) : 0.5); // lean toward the harder end of what is taught
+    if (prev[0]?.has(w.id)) x *= 0.1;
+    else if (prev.some((s) => s.has(w.id))) x *= 0.5;
+    const seen = learner.items[w.id];
+    if (seen && seen.firstTry >= 3) x *= 0.4;
+    return x * (0.75 + opts.rng() * 0.5);
+  };
+
+  const chosen: LearningItem[] = [];
+  const shown = new Set<string>();
+  for (let i = 0; i < BOSS_WORDS; i++) {
+    const cands = pool.filter((w) => !chosen.includes(w) && !shown.has(w.display));
+    const pick = weightedPick(cands.map((w) => ({ value: w, weight: score(w) })), opts.rng);
+    if (!pick) break;
+    chosen.push(pick);
+    shown.add(pick.display);
+  }
+  chosen.sort((a, b) => a.difficulty - b.difficulty);
+  return { items: chosen, assist: tier > 0 };
+}
+
+/* ---------------------------------------------------------------- level */
+
 export function selectLevelItems(pack: LanguagePack, unitIndex: number, learner: LearnerState, opts: SelectOptions): Selection {
   const { rng, profile } = opts;
   const unit = pack.units[unitIndex];
-  const known = knownSkills(pack, unitIndex);
-  const focusSkills = unitFocus(pack, unitIndex, known);
+  const view = unitView(pack, unitIndex, learner);
+  const focusSkills = unitFocus(pack, unitIndex, view.known);
   const focusSet = new Set(focusSkills);
   const prevSets = (opts.previous ?? []).map((ids) => new Set(ids));
   const lastAttempt = prevSets[0] ?? new Set<string>();
 
-  const all = eligibleItems(pack, unitIndex, profile);
-  const regular = all.filter((it) => it.kind !== 'sentence');
-  const sentences = all.filter((it) => it.kind === 'sentence');
+  const all = eligibleItems(pack, unitIndex, profile, learner);
+  const regular = all.filter((it) => it.kind !== 'sentence' || !!view.kinds.sentence);
 
   const hasFocus = (it: LearningItem) => it.skills.some((s) => focusSet.has(s));
   const score = (it: LearningItem): number => {
@@ -99,7 +212,7 @@ export function selectLevelItems(pack: LanguagePack, unitIndex: number, learner:
     const seen = learner.items[it.id];
     if (seen && seen.firstTry >= 3) w *= 0.35; // well known: little to learn
     if (unit.reducedNiqqud && it.niqqud === false) w *= 3;
-    w *= unit.kinds[it.kind] ?? 0;
+    w *= view.kinds[it.kind] ?? 0;
     return w * (0.75 + rng() * 0.5);
   };
 
@@ -138,25 +251,18 @@ export function selectLevelItems(pack: LanguagePack, unitIndex: number, learner:
     .map((x) => x.it);
   const prevOrder = opts.previous?.[0];
   if (prevOrder && ordered.length > 1 && ordered.every((it, i) => prevOrder[i] === it.id)) {
-    ordered = shuffle(ordered, rng);
+    ordered = [...ordered].reverse();
   }
 
   let boss: LearningItem[] = [];
+  let bossAssist = false;
   if (opts.boss) {
-    const sentencePool = sentences.filter((s) => !lastAttempt.has(s.id));
-    if (sentencePool.length) {
-      const pick = weightedPick(sentencePool.map((it) => ({ value: it, weight: score(it) + 0.1 })), rng);
-      if (pick) boss = [pick];
-    } else {
-      // Before sentences are taught, the boss is a chain of three readings,
-      // hardest available, none repeated from the regular enemies.
-      const pool = regular
-        .filter((it) => !taken.has(it.id))
-        .sort((a, b) => b.difficulty - a.difficulty)
-        .slice(0, 12);
-      boss = shuffle(pool, rng).slice(0, 3);
-    }
+    // Words the child reads in this very level are not reused for the boss.
+    const used = new Set<string>([...taken, ...ordered.map((i) => `d:${i.display}`)]);
+    const b = selectBossWords(pack, unitIndex, learner, { rng, previous: opts.previous, taken: used });
+    boss = b.items;
+    bossAssist = b.assist;
   }
 
-  return { items: ordered, boss, focusSkills };
+  return { items: ordered, boss, bossAssist, focusSkills };
 }

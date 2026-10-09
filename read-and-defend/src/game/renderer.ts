@@ -18,6 +18,8 @@ export interface RenderOptions {
   reducedMotion: boolean;
   bigText: boolean;
   lang: 'en' | 'he';
+  /** Word shown in the boss announcement ("BOSS"). */
+  bossLabel: string;
 }
 
 /**
@@ -40,6 +42,7 @@ export class SceneRenderer {
   private dying: Dying[] = [];
   private floaters: Floater[] = [];
   private confused = new Map<number, number>();
+  private hurt = new Map<number, number>();
   private hidden = new Set<number>();
   private shake = 0;
   private castleFlash = 0;
@@ -103,6 +106,7 @@ export class SceneRenderer {
           const e = ev.enemy;
           const pos = this.enemyPos(e);
           const final = ev.type === 'defeat';
+          if (!final && e.type === 'boss') this.hurt.set(e.id, 1);
           if (final) this.hidden.add(e.id);
           this.fire(e.id, () => {
             const u = this.layout.unit;
@@ -112,6 +116,13 @@ export class SceneRenderer {
               this.dying.push({ type: e.type, x: pos.x, y: pos.y, t: 0, facing: pos.facing });
               this.burst(pos.x, pos.y - u * 0.6, 12, '#ffd166', 'star');
             }
+            if (final && e.type === 'boss') {
+              // The boss goes down in style: a big burst, confetti and a shake.
+              this.burst(pos.x, pos.y - u, 60, this.magicColor(), 'spark');
+              this.burst(pos.x, pos.y - u, 50, '#ffffff', 'confetti');
+              this.burst(pos.x, pos.y - u, 20, '#ffd166', 'star');
+              if (!this.opts.reducedMotion) this.shake = 0.5;
+            }
             if (final && ev.type === 'defeat') this.floaters.push({ text: ev.firstTry ? '+150' : '+100', x: pos.x, y: pos.y - u * 1.4, t: 0, color: '#ffd166', size: u * 0.42 });
           });
           break;
@@ -120,7 +131,7 @@ export class SceneRenderer {
           this.confused.set(ev.enemy.id, 1);
           break;
         case 'breach': {
-          this.hidden.add(ev.enemy.id);
+          if (!ev.returns) this.hidden.add(ev.enemy.id);
           const g = this.layout.gate;
           this.burst(g.x, g.y - this.layout.unit * 0.4, 24, '#c8b6a6', 'dust');
           if (!this.opts.reducedMotion) this.shake = 0.35;
@@ -346,7 +357,7 @@ export class SceneRenderer {
     ctx.globalAlpha = 1;
   }
 
-  render(state: LevelState | null, dt: number, ui: { targetId: number | null; listening: boolean; hpRatio?: number }): void {
+  render(state: LevelState | null, dt: number, ui: { targetId: number | null; listening: boolean; hpRatio?: number; intro?: number; introTotal?: number }): void {
     const ctx = this.ctx;
     this.t += dt;
     if (!this.bg) this.buildBackground();
@@ -395,11 +406,13 @@ export class SceneRenderer {
         const pos = this.enemyPos(e);
         const conf = this.confused.get(e.id) ?? 0;
         if (conf > 0) this.confused.set(e.id, Math.max(0, conf - dt * 1.2));
+        const hurt = this.hurt.get(e.id) ?? 0;
+        if (hurt > 0) this.hurt.set(e.id, Math.max(0, hurt - dt * 2.2));
         list.push({
           y: pos.y,
           draw: () => drawEnemy(ctx, e.type, pos.x, pos.y, L.unit, {
             t: this.t + e.id * 1.7, facing: pos.facing, confused: conf, target: e.id === ui.targetId, frozen: e.frozen,
-            phase: e.phase, phases: e.items.length,
+            phase: e.phase, phases: e.items.length, hurt,
           }),
         });
       }
@@ -432,6 +445,46 @@ export class SceneRenderer {
     this.updateProjectiles(ctx, dt, state);
     this.updateParticles(ctx, dt);
     this.updateFloaters(ctx, dt);
+    ctx.restore();
+    if (state && (ui.intro ?? 0) > 0) this.drawBossIntro(ctx, state, ui.intro!, ui.introTotal ?? 2.4);
+  }
+
+  /**
+   * "Here comes the boss": the scene dims, red bars sweep in and the troll
+   * rises up from the road's far end while the banner plays. Nothing moves in
+   * the simulation meanwhile (see levelState.bossStep).
+   */
+  private drawBossIntro(ctx: Ctx, state: LevelState, left: number, total: number): void {
+    const k = 1 - Math.max(0, left) / total;                       // 0 → 1
+    const fade = Math.min(1, k * 5, (1 - k) * 4 + 0.2);            // quick in, gentle out
+    const w = this.w, h = this.h, u = this.layout.unit;
+    ctx.save();
+    ctx.globalAlpha = 0.55 * fade;
+    ctx.fillStyle = '#12002b';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalAlpha = fade;
+    const bar = h * 0.1 * Math.min(1, k * 4);
+    ctx.fillStyle = '#c1121f';
+    ctx.fillRect(0, h * 0.28 - bar / 2, w, bar);
+    ctx.fillRect(0, h * 0.5 - bar / 2 + h * 0.2, w, bar * 0.5);
+    // The boss rises and grows.
+    const boss = state.enemies.find((e) => e.type === 'boss');
+    if (boss) {
+      const rise = 1 - Math.pow(1 - Math.min(1, k * 1.6), 3);
+      drawEnemy(ctx, 'boss', w / 2, h * (0.62 + 0.2 * (1 - rise)), u * (0.6 + 0.6 * rise), {
+        t: this.t, facing: this.rtl ? -1 : 1, confused: 0, target: false, frozen: false,
+        phase: 0, phases: boss.items.length,
+      });
+    }
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const size = u * 1.3 * (0.8 + 0.2 * Math.min(1, k * 3));
+    ctx.font = `900 ${size}px "Fredoka", "Noto Sans Hebrew", system-ui, sans-serif`;
+    ctx.lineWidth = u * 0.12;
+    ctx.strokeStyle = '#3a0010';
+    ctx.strokeText(this.opts.bossLabel, w / 2, h * 0.28);
+    ctx.fillStyle = '#fff4d6';
+    ctx.fillText(this.opts.bossLabel, w / 2, h * 0.28);
     ctx.restore();
   }
 
@@ -583,6 +636,7 @@ export class SceneRenderer {
     this.dying = [];
     this.floaters = [];
     this.confused.clear();
+    this.hurt.clear();
     this.hidden.clear();
     this.shake = 0;
   }

@@ -32,7 +32,8 @@ export class SimulatedProvider implements SpeechProvider {
         const alts =
           a === 'correct' ? [{ transcript: t, confidence: 0.92 }]
           : a === 'wrong' ? [{ transcript: opts.lang.startsWith('he') ? 'מכונית' : 'banana', confidence: 0.9 }]
-          : a === 'unclear' ? [{ transcript: t.slice(0, 1) + '…', confidence: 0.2 }]
+          // Unintelligible, whatever the target: a letter-sized prefix of the target would be a valid reading.
+          : a === 'unclear' ? [{ transcript: '…', confidence: 0.2 }]
           : [];
         resolve({ alternatives: alts, provider: this.id });
       });

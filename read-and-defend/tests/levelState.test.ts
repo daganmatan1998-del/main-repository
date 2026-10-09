@@ -89,7 +89,7 @@ describe('level state', () => {
 
   it('can be won', () => {
     const s = createLevelState(specs('cat', 'sun', 'map'));
-    for (let i = 0; i < 3; i++) { tick(s, 0.1); tick(s, 7); readTarget(s); }
+    for (let i = 0; i < 3; i++) { tick(s, 0.1); tick(s, 2); readTarget(s); }
     expect(s.status).toBe('won');
     expect(starsFor(s)).toBe(3);
   });
@@ -134,7 +134,7 @@ describe('level state', () => {
 
   it('a boss needs every phase read', () => {
     const s = createLevelState([{ type: 'boss', items: [w('cat'), w('sun'), w('map')] }]);
-    tick(s, 0.1);
+    for (let i = 0; i < 100 && !currentTarget(s); i++) tick(s, 0.1); // announcement first
     const boss = currentTarget(s)!;
     readTarget(s); readTarget(s);
     expect(boss.status).toBe('walking');

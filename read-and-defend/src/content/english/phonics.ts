@@ -47,6 +47,8 @@ export function patternOf(graphemes: string[]): string {
 /** True when the word holds a consonant cluster (blend) of two graphemes. */
 export function hasBlend(graphemes: string[]): boolean {
   for (let i = 0; i < graphemes.length - 1; i++) {
+    // A plural / third-person -s (pats, taps) is an ending, not a blend.
+    if (i + 1 === graphemes.length - 1 && graphemes[i + 1] === 's' && i > 0) continue;
     if (!isVowelGrapheme(graphemes[i]) && !isVowelGrapheme(graphemes[i + 1])) return true;
   }
   return false;

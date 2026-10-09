@@ -56,7 +56,7 @@ export const CHUNKS: Array<{ text: string; accepted: string[] }> = [
 /** Real decodable words, grouped loosely; the grouping is not used by code. */
 export const WORDS: string[] = [
   // short a
-  'cat', 'bat', 'hat', 'mat', 'rat', 'sat', 'pat', 'fat', 'can', 'fan', 'man', 'pan', 'ran',
+  'cat', 'bat', 'hat', 'mat', 'rat', 'sat', 'pat', 'pats', 'taps', 'saps', 'fat', 'can', 'fan', 'man', 'pan', 'ran',
   'tan', 'van', 'map', 'cap', 'nap', 'tap', 'lap', 'gap', 'bag', 'rag', 'tag', 'wag', 'dad',
   'sad', 'mad', 'bad', 'had', 'pad', 'jam', 'ham', 'ram', 'dam', 'ant', 'sap', 'nag', 'van',
   // short i

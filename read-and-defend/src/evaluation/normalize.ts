@@ -50,7 +50,7 @@ export function normalizeHebrew(s: string): string {
     .trim();
 }
 
-export const HE_FILLERS = new Set(['אה', 'אמ', 'אממ', 'אהה', 'זה', 'כאילו', 'נו', 'אוקיי', 'האות']);
+export const HE_FILLERS = new Set(['אה', 'אמ', 'אממ', 'אהה', 'זה', 'כאילו', 'נו', 'אוקיי', 'האות', 'אות', 'סופית']);
 
 const CONS: Record<string, string> = {
   'ב': '(?:b|v)', 'ג': '(?:g|j)', 'ד': 'd', 'ז': '(?:z|j)', 'ח': 'kh', 'ט': 't', 'כ': '(?:k|kh)',

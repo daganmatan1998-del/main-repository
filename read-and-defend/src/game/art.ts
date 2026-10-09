@@ -176,6 +176,8 @@ export interface EnemyLook {
   frozen: boolean;
   phase?: number;
   phases?: number;
+  /** 1 → 0 after being hit (a boss losing a word): flash and recoil. */
+  hurt?: number;
 }
 
 function eyes(ctx: Ctx, x: number, y: number, r: number, gap: number, t: number): void {
@@ -194,9 +196,12 @@ function eyes(ctx: Ctx, x: number, y: number, r: number, gap: number, t: number)
 export function drawEnemy(ctx: Ctx, type: EnemyType, x: number, y: number, u: number, look: EnemyLook): void {
   ctx.save();
   ctx.translate(x, y);
+  const hurt = look.hurt ?? 0;
   const wob = look.confused > 0 ? Math.sin(look.t * 30) * look.confused * 0.12 : 0;
-  ctx.rotate(wob);
-  ctx.scale(look.facing, 1);
+  ctx.rotate(wob + (hurt > 0 ? Math.sin(look.t * 40) * hurt * 0.1 : 0));
+  // A hit squashes the monster briefly and makes it glow white.
+  ctx.scale(look.facing * (1 + hurt * 0.12), 1 - hurt * 0.1);
+  if (hurt > 0) { ctx.shadowColor = '#ffffff'; ctx.shadowBlur = u * 0.9 * hurt; }
 
   // Ground shadow.
   ctx.fillStyle = 'rgba(0,0,0,0.2)';

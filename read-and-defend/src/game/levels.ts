@@ -25,19 +25,24 @@ export const STAGE_ENVIRONMENT: Record<number, EnvironmentId> = {
   1: 'meadow', 2: 'forest', 3: 'canyon', 4: 'snow', 5: 'volcano', 6: 'sky',
 };
 
+/**
+ * Every level ends with a boss (three words, one at a time). A unit has two
+ * levels; a fluent reader may skip the second (see progress/fastTrack.ts).
+ */
 export function buildLevels(pack: LanguagePack): LevelDef[] {
   const levels: LevelDef[] = [];
   pack.units.forEach((u, unitIndex) => {
-    for (const boss of [false, true]) {
+    for (const second of [false, true]) {
       const n = levels.length + 1;
+      // Regular enemies before the boss; the boss is extra.
       const base = u.stage <= 2 ? 6 : u.stage <= 4 ? 7 : 8;
       levels.push({
-        id: `${u.id}${boss ? 'b' : 'a'}`,
+        id: `${u.id}${second ? 'b' : 'a'}`,
         lang: pack.lang,
         unitIndex,
         number: n,
-        boss,
-        enemyCount: base + (boss ? 1 : 0),
+        boss: true,
+        enemyCount: base,
         environment: STAGE_ENVIRONMENT[u.stage],
         stage: u.stage,
       });

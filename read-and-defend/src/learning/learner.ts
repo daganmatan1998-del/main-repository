@@ -137,6 +137,16 @@ export function recordResult(state: LearnerState, r: ReadingResult): RecordOutco
   return { novel, newlyMastered };
 }
 
+/**
+ * Fluent enough to move on: accurate on at least `minItems` different items.
+ * Lighter than mastery (which needs three), because letters only have two
+ * items (a, A) — used to decide when to look ahead, never for rewards.
+ */
+export function isFluent(state: LearnerState, skillId: string, minItems = 2): boolean {
+  const s = state.skills[skillId];
+  return !!s && s.score >= MASTERY_SCORE && s.solvedItems.length >= minItems;
+}
+
 /** Mastered = consistently accurate across at least three different items. */
 export function isMastered(state: LearnerState, skillId: string): boolean {
   const s = state.skills[skillId];

@@ -10,6 +10,8 @@ import {
   type Enemy, type GameEvent, type LevelState,
 } from '../game/levelState';
 import { buildEnemyPlan } from '../game/plan';
+import { setPathLength } from '../game/levelState';
+import { fastTrackTarget } from '../progress/fastTrack';
 import { stringsFor, t } from '../i18n/strings';
 import { chooseDifficulty, scaffoldFor, type DifficultyProfile } from '../learning/adaptive';
 import { recordResult } from '../learning/learner';
@@ -172,11 +174,14 @@ export class GameSession {
     if (this.ended) return;
     const dt = Math.min(0.05, (now - (this.last || now)) / 1000);
     this.last = now;
+    // The road's real length drives enemy speed (levelState.speedOf), so a
+    // resize rescales speed and the walk still takes the same time.
+    setPathLength(this.state, this.app.renderer.sceneLayout.total);
     tick(this.state, dt);
     const events = drainEvents(this.state);
     if (events.length) this.handleEvents(events);
     const target = currentTarget(this.state);
-    this.app.renderer.render(this.state, dt, { targetId: target?.id ?? null, listening: this.state.listening });
+    this.app.renderer.render(this.state, dt, { targetId: target?.id ?? null, listening: this.state.listening, intro: this.state.intro, introTotal: this.state.config.bossIntroSeconds });
     this.updateHud();
     this.updatePanel(target);
     this.raf = requestAnimationFrame(this.loop);
@@ -326,7 +331,7 @@ export class GameSession {
       return;
     }
     const lang = item.lang;
-    this.card.append(el('div', { class: 'label' }, icon('spark'), target?.type === 'boss' && target.items.length > 1 ? `${t('readThis')} (${target.phase + 1}/${target.items.length})` : t('readThis')));
+    this.card.append(el('div', { class: 'label' }, icon('spark'), target?.type === 'boss' ? `${t('boss')} — ${t('bossWord', { n: target.phase + 1, total: target.items.length })}` : t('readThis')));
 
     const text = el('div', { class: `target-text ${item.kind === 'sentence' ? 'sentence' : ''}`, lang, dir: this.app.pack.dir, 'data-testid': 'target-text' });
     const ev = this.lastEval && this.lastEval.enemyId === target?.id ? this.lastEval.ev : null;
@@ -343,7 +348,7 @@ export class GameSession {
     }
     this.card.append(text);
 
-    const showParts = (this.showParts || sc.breakdown) && item.parts.length > 1 && item.kind !== 'sentence';
+    const showParts = (this.showParts || sc.breakdown || !!target?.assist) && item.parts.length > 1 && item.kind !== 'sentence';
     if (showParts) {
       const parts = el('div', { class: 'parts', lang, dir: this.app.pack.dir, 'aria-label': t('tryParts') });
       item.parts.forEach((p, i) => {
@@ -360,7 +365,7 @@ export class GameSession {
       help.addEventListener('click', () => { this.showParts = true; sound.play('tap'); });
       tools.append(help);
     }
-    const canListen = (sc.listen || this.opts.tutorial) && speaker.canSpeak(this.app.pack.speechLang);
+    const canListen = (sc.listen || this.opts.tutorial || !!target?.assist) && speaker.canSpeak(this.app.pack.speechLang);
     if (sc.listen && !speaker.canSpeak(this.app.pack.speechLang) && !this.noVoiceToasted) {
       this.noVoiceToasted = true;
       toast(t('noVoice'));
@@ -495,13 +500,16 @@ export class GameSession {
         case 'resolved': this.recordLearning(ev.item, ev.wrongAttempts, ev.solved, ev.ms); break;
         case 'defeat': sound.play('pop'); break;
         case 'phase': sound.play('pop'); break;
-        case 'spawn':
-          if (ev.enemy.type === 'boss') { sound.play('boss'); toast(t('bossIncoming')); }
+        case 'bossIntro':
+          sound.play('boss');
+          haptic('success');
+          toast(t('bossIncoming'), '', 2600);
+          if (this.settings.voiceHints) speaker.speak(t('bossIncoming'), this.app.pack.speechLang, 0.95);
           break;
         case 'breach':
           sound.play('breach');
           haptic('soft');
-          this.say(`${t('practiceNow')}: ${currentItem(ev.enemy).display}`, 'info');
+          if (!ev.returns) this.say(`${t('practiceNow')}: ${currentItem(ev.enemy).display}`, 'info');
           break;
         case 'won':
           sound.play('win');
@@ -629,6 +637,13 @@ export class GameSession {
       rec.bestScore = Math.max(rec.bestScore, this.state.score);
       lp.stats.levelsWon += 1;
       this.coins += stars * 2;
+    }
+    if (won) {
+      const skip = fastTrackTarget(lp, this.app.pack, this.app.levels, this.level, stars);
+      if (skip) {
+        levelRecord(lp, skip.id).skipped = true;
+        setTimeout(() => toast(t('fastTrack'), 'good', 2800), 600);
+      }
     }
     p.coins += this.coins;
     p.xp += this.xp;

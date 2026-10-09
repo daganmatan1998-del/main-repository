@@ -82,4 +82,10 @@ export interface LanguagePack {
   units: Unit[];
   /** The whole item bank: curated + rule-generated, all validated. */
   items: LearningItem[];
+  /**
+   * Skills that are procedure rather than letter knowledge (blending sounds
+   * into a word). Boss words may assume them: the first level's boss can use
+   * s-a-t-p words even though blending is formally taught later.
+   */
+  bossFreeSkills: string[];
 }

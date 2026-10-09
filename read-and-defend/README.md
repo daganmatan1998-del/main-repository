@@ -12,7 +12,7 @@ words they have never seen, built only from sounds they have learned.
 cd read-and-defend
 npm install
 npm run dev          # http://localhost:5173
-npm test             # 73 unit tests (content, selection, difficulty, evaluation, level state, proxy)
+npm test             # unit tests (content, selection, difficulty, evaluation, timing, boss, progression, proxy)
 npm run build        # typecheck + production build into dist/
 npm run test:e2e     # browser tests against dist/ (needs Playwright + Chromium)
 ```
@@ -28,7 +28,9 @@ Vite, Vitest, TypeScript and `@types/node`.
 |---|---|
 | Onboarding | Language picker (Hebrew / English), interactive 3-step tutorial, microphone explanation **before** the browser prompt, a practice stage whose monster cannot hurt the castle |
 | Gameplay | Winding road, castle with 5 hearts (6 when the game is easing off), enemies spawn up to 3 at a time, the one closest to the castle glows and has a bouncing arrow, time slows to 20 % while the child reads, pause/retry/quit |
-| Enemies | **Slime** — letters & sound chunks; **Goblin** — words; **Knight** (armoured, slower, 2 damage) — long/complex words; **Bat** (fast) — words this child already reads fluently; **Troll boss** — a whole sentence, or a chain of three readings before sentences are taught |
+| Enemy speed | A standard enemy (slime, goblin) takes **7 seconds** from spawn to castle. Speed is `road length ÷ 7 s`, derived from the real path, so it is the same on a phone and a desktop, survives window resizes (positions are kept as fractions of the road) and does not depend on frame rate. The Speed setting and the adaptive difficulty scale the 7 s (Slow ≈ 10 s, Fast ≈ 5.6 s) |
+| Enemies | **Slime** — letters & sound chunks; **Goblin** — words; **Knight** (armoured, 9 s, 2 damage) — long/complex words and sentences; **Bat** (5 s) — words this child already reads fluently; **Troll boss** — see below |
+| Boss | **Every level ends with a boss.** Once the regular enemies are done the scene dims, "BOSS" sweeps in and the troll rises while nothing moves; then it walks (40 s). It carries **three words, shown one at a time** ("Word 2 of 3"); each correct reading knocks it back and updates it, the third defeats it and ends the level. Wrong or unclear attempts change nothing. Waiting cannot win: if it reaches the castle it costs 2 hearts and trudges back to the start, keeping the words already read |
 | Feedback | Correct: projectile, burst, chime, "+150". Wrong: gentle two-note hum, "Almost!", the word splits into its sounds with the wrong one highlighted; after 2 tries a **Listen** button plays an example; after 3 the monster freezes so there is no time pressure. Unclear/silence: "I didn't quite hear that" — never counted as a mistake |
 | Progression | 32 English and 26 Hebrew levels across 6 worlds (Letter Meadow → Sky Castle of Stories), stars, coins, XP, castle workshop (banners, walls, magic colours), optional daily challenge (no streaks), 8 learning achievements, reading-progress report for grown-ups |
 | Settings | Speed (slow/normal/fast), hold-to-talk or tap-to-talk, sound, spoken instructions, extra-large text, less motion, difficulty cap, speech engine, server address, development mode, reset — behind a 3-second "grown-ups" hold |
@@ -56,13 +58,36 @@ grapheme parser knows `sh`, `ck`, `ee`, magic-e (`a_e`)…; the Hebrew parser re
 the niqqud (dagesh decides בּ/ב, כּ/כ, פּ/פ; shin/sin dots; holam male, shuruk,
 silent final ה/א, patah genuva). Adding a word is adding one string to a list.
 
-**Units** introduce skills in order. English: s a t p → i n m d → … → sound
-chunks → sh ch th → CVC words → *Explorer* (transfer) → digraphs → blends →
-magic e → vowel teams → *Explorer* → sentences. Hebrew: בּ מ ל שׁ → ד ת נ ר א →
-קָמָץ/פַּתָּח syllables → חִירִיק → first words + final letters → חוֹלָם → שׁוּרוּק/קֻבּוּץ →
-צֵירֵה/סֶגּוֹל + soft ב כ פ → *Explorer* → שְׁוָא and longer words → reading without
-niqqud → sentences. The two languages have separate progressions and
-separate decoding rules; nothing is translated across.
+**Units** introduce skills in order, and the course is deliberately front-loaded
+with reading rather than with letters. English: s a t p → i n d m (both **letters
+only**, exactly the first four levels as originally shipped) → g o c k e with
+sound chunks and the first CVC words → u r h b f l → j v w x y z q + sh ch th →
+*Explorer* (transfer) → ck ng ll ss ff zz qu wh → blends → magic e → vowel teams →
+*Explorer* → sentences (13 units; first words at level 5, previously level 13).
+Hebrew: בּ מ ל שׁ (letters only) → ד ת נ ר א + קָמָץ/פַּתָּח with a few syllables →
+חִירִיק, silent ה/א, first words → חוֹלָם + final letters + more consonants →
+שׁוּרוּק/קֻבּוּץ → צֵירֵה/סֶגּוֹל + soft ב כ פ → *Explorer* → שְׁוָא and longer words →
+reading without niqqud → sentences (11 units; first words at level 5, previously 9).
+The two languages have separate progressions and separate decoding rules.
+
+**Progress follows ability, not level count.** Once a reader is *fluent* in a
+unit's sounds (accurate on at least two different items per sound, ≥ 80 % recent
+first-try accuracy) the **next unit's exercises start to appear a unit early** —
+letters → short words → longer words — using only sounds already taught (only
+procedural skills such as blending or silent letters are borrowed from the next
+unit). A reader who three-stars a level, is fluent, and is reading unseen words
+first try **skips the unit's second level** ("Skipped" on the map). Neither
+happens in the first two units, and neither can be triggered by repeating the
+same word. A struggling reader gets the unit as written, eased (slower, fewer
+monsters) with the sound-it-out scaffolds.
+
+**The boss's three words** are chosen by the same skill-based selector: real,
+decodable words, easiest first, preferring unseen words, this unit's new sounds
+and the child's weak sounds, avoiding the previous attempt's words and the words
+already read in the level. Blending is assumed (so English level 1's boss can use
+sat / pat / tap / sap). The very first Hebrew levels have no vowel taught yet, so
+there the pool widens by at most two untaught skills and the boss shows the
+sound breakdown from the start (flagged `assist`).
 
 **Generation is rule-based and validated.** Hebrew CV syllables (בָּ בִּ בּוֹ …)
 are generated for every taught consonant × vowel sign — they are legitimate
@@ -119,21 +144,30 @@ simulator. Text input never counts as reading.
 - English: lowercase, strip punctuation, digits → words, filler words
   removed, homophones a recogniser cannot distinguish accepted (sun/son),
   all alternatives checked. A near miss reports which grapheme differed.
-- Hebrew: niqqud and final-letter normalisation; exact unpointed and plene
-  spellings accepted; otherwise the recogniser's spelling is turned into a
-  regular expression of its possible readings and tested against the
-  target's phonetic form (so כיתה matches כִּתָּה, תל matches טַל, but אמא does
-  not match מָה and שר does not match שִׁיר). CV syllables are strict about the
-  vowel; a bare consonant ("ב") is *uncertain*, not wrong.
+- Hebrew uses a **layered pipeline** (`evaluation/evaluator.ts`, `hebrewPhonetic.ts`, `config.ts`):
+  1. *Normalise* — niqqud, final letters (ך→כ…), punctuation, geresh, filler words ("אה", "האות …", "סופית") removed.
+  2. *Exact* — unpointed or plene spelling equal to the target, or a spelling whose possible readings (a regular expression over consonants + vowel letters) include the target's pronunciation (כיתה = כִּתָּה, תל = טַל).
+  3. *Phonetic similarity* — letters are mapped to sound classes (ט=ת, א=ע, כ≈ק, ב≈ו…) and compared with a weighted edit distance in which acoustically close consonants (b/p, d/t, m/n, g/k…) cost a little, vowel letters (ו י) and a final ה cost a full edit (kara ≠ kora, gadol ≠ gdola), and only the silent א/ע are cheap.
+  4. *Per-kind thresholds* — `config.ts` holds `accept` and `floor` for letters, syllables, words and sentence words, plus the near/flex costs. Similarity ≥ `accept` is correct; between `floor` and `accept` is **"try again"** (never marked wrong); below, wrong.
+  - **Letters** are the most forgiving. The name is matched by sound, not spelling; letters that sound alike (ט/ת, א/ע, final forms) share their names; a short word that starts with the right consonant ("מה" for מ) is recovered using the known target; and an unexpected word is "try again". A letter is only called **wrong** when the engine clearly returned a *different* letter.
+  - **Syllables**: consonant by sound, vowel strictly (ba vs bi is wrong; a vs e cannot be told apart in spelling, so both pass).
+  - **Words** keep a high bar; one close-consonant slip is tolerated only in words of four or more letters.
+  - A **Hebrew letter-listening setting** (Settings → for grown-ups: Exact / Forgiving / Very forgiving) switches the preset without code changes. *Forgiving* is the default.
 - Sentences: in-order word alignment, ≥ 80 % of words; feedback marks which
   words were read.
 - Uncertain (silence, confidence < 0.4, long unrelated talk) → "try again",
   no penalty. A short cooldown stops one utterance from triggering twice.
 
 Known limitation, stated plainly: general-purpose recognisers are poor at
-**isolated phonemes** ("sss"), so letter levels accept letter *names* (and a
-few sound spellings), and letter-sound knowledge is assessed through syllables
-and words, where recognition is reliable.
+**isolated phonemes** ("sss") and often at isolated Hebrew letters. The
+evaluator can forgive a different *spelling* of what the engine heard; it
+**cannot recover speech the engine never captured** (a letter returned as a
+completely unrelated word, a very quiet child, a noisy room). In those cases
+the game says "I didn't quite hear that — try again" rather than marking the
+child wrong, and "Very forgiving" accepts more near-misses at the price of
+occasionally accepting a similar-sounding wrong letter (measured: ≈1 % of
+wrong-letter attempts in that mode, 0 % in the default). Letter-sound knowledge
+is also assessed through syllables and words, where recognition is more reliable.
 
 ### Setting up the server engine (optional, needs a paid API key)
 

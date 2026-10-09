@@ -1,4 +1,5 @@
 import type { LanguageCode } from '../content/types';
+import type { HebrewLetterMode } from '../evaluation/config';
 import { createLearner, type LearnerState } from '../learning/learner';
 import type { StorageAdapter } from '../persistence/storage';
 
@@ -21,9 +22,13 @@ export interface Settings {
   difficultyCap: 'auto' | 'ease' | 'normal';
   reducedMotion: boolean;
   bigText: boolean;
+  /** How forgiving Hebrew letter/syllable/word matching is (see evaluation/config.ts). */
+  hebrewLetterMode: HebrewLetterMode;
 }
 
 export interface LevelRecord {
+  /** Passed over because the reader showed mastery of the unit's skills. */
+  skipped?: boolean;
   stars: number;
   bestScore: number;
   attempts: number;
@@ -62,7 +67,7 @@ export interface Profile {
 
 export const DEFAULT_SETTINGS: Settings = {
   pace: 'normal', micMode: 'hold', sound: true, voiceHints: true, engine: 'auto',
-  sttEndpoint: '/api/stt', devMode: false, difficultyCap: 'auto', reducedMotion: false, bigText: false,
+  sttEndpoint: '/api/stt', devMode: false, difficultyCap: 'auto', reducedMotion: false, bigText: false, hebrewLetterMode: 'normal',
 };
 
 export function newLangProgress(): LangProgress {

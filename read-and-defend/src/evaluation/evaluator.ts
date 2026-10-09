@@ -1,5 +1,10 @@
 import type { LearningItem } from '../content/types';
 import { phonetic } from '../content/hebrew/script';
+import { getPack } from '../content/registry';
+import { getEvalConfig, type EvalConfig, type HebrewEvalConfig } from './config';
+import {
+  bestSimilarity, latinToSyms, letterCandidates, similarity, strong, syllableVowel, toSyms, vowelEvidence, type Sym,
+} from './hebrewPhonetic';
 import {
   EN_FILLERS, englishSoundAlikes, HE_FILLERS, hebrewReadingRegex, normalizeEnglish, normalizeHebrew,
   normalizeLatinPhonetic, shvaVariants,
@@ -25,9 +30,8 @@ export interface Evaluation {
   wordsRead?: boolean[];
 }
 
-/** Below this, a non-matching result is "didn't catch that", not "wrong". */
+/** Defaults, kept for callers that import them; the live values come from config.ts. */
 export const LOW_CONFIDENCE = 0.4;
-/** Fraction of a sentence's words that must be read. */
 export const SENTENCE_THRESHOLD = 0.8;
 
 /* -------------------------------------------------------------- matchers */
@@ -85,7 +89,7 @@ function hebrewSingleMatch(item: LearningItem, transcript: string): boolean {
 }
 
 /** Greedy in-order alignment of target words against heard tokens. */
-function alignSentence(item: LearningItem, transcript: string): boolean[] {
+function alignSentence(item: LearningItem, transcript: string, cfg: EvalConfig): boolean[] {
   const he = item.lang === 'he';
   const heard = (he ? normalizeHebrew(transcript) : normalizeEnglish(transcript)).split(' ').filter(Boolean);
   const targets = item.parts.map((p) => (he ? p : normalizeEnglish(p)));
@@ -93,11 +97,149 @@ function alignSentence(item: LearningItem, transcript: string): boolean[] {
   let j = 0;
   targets.forEach((t, i) => {
     for (let k = j; k < Math.min(heard.length, j + 3); k++) {
-      const ok = he ? hebrewWordMatches(t, [], heard[k]) : englishTokenMatches(heard[k], t);
+      const ok = he
+        ? hebrewWordMatches(t, [], heard[k]) || heWordSimilarity([t], heard[k], cfg.he) >= cfg.he.sentenceWord
+        : englishTokenMatches(heard[k], t);
       if (ok) { read[i] = true; j = k + 1; return; }
     }
   });
   return read;
+}
+
+/* ---------------------------------------------- Hebrew phonetic layer */
+
+/**
+ * Similarity of a recogniser's word to the target, by sound. Latin
+ * transliterations are compared on consonants only (they carry no vowel
+ * letters); Hebrew spellings on weighted sound classes (see hebrewPhonetic).
+ */
+function heWordSimilarity(targetSpellings: string[], heardWord: string, th: HebrewEvalConfig): number {
+  const h = normalizeHebrew(heardWord).replace(/ /g, '');
+  if (!h) return 0;
+  let best = 0;
+  if (/^[a-z]+$/i.test(h)) {
+    const hs = latinToSyms(h);
+    for (const sp of targetSpellings) best = Math.max(best, similarity(hs, strong(toSyms(sp)), th));
+    return best;
+  }
+  const hs = toSyms(h);
+  for (const sp of targetSpellings) best = Math.max(best, similarity(hs, toSyms(sp), th));
+  return best;
+}
+
+/** What the recogniser said, as candidate strings: whole utterance and each short token. */
+function heardStrings(transcript: string): string[] {
+  const norm = normalizeHebrew(transcript);
+  const all = norm.split(' ').filter(Boolean);
+  // Hesitations ("אמ") are dropped only when something else was said: on its
+  // own, "אמ" is also the letter מ (and "אם", the word "if", normalises to it).
+  const content = all.filter((t) => !HE_FILLERS.has(t));
+  const tokens = content.length ? content : all.filter((t) => t !== 'אות' && t !== 'סופית');
+  if (!tokens.length) return [];
+  const out = new Set<string>([tokens.join('')]);
+  if (tokens.length <= 3) tokens.forEach((t) => out.add(t));
+  return [...out];
+}
+
+interface HebrewVerdict { outcome: Outcome; reason?: Evaluation['reason'] }
+
+const otherLetterCache = new Map<string, Sym[][]>();
+function candidatesOf(l: LearningItem): Sym[][] {
+  let c = otherLetterCache.get(l.id);
+  if (!c) { c = letterCandidates(l.display, l.accepted); otherLetterCache.set(l.id, c); }
+  return c;
+}
+
+/** First pronounced consonant class of a target letter, if it has one. */
+function firstStrong(cands: Sym[][]): string | null {
+  for (const c of cands) { const s = strong(c); if (s.length) return s[0].c; }
+  return null;
+}
+
+/**
+ * Isolated letters. Recognisers are poor at these — they return the name in
+ * odd spellings, a short word that starts with the sound, or a different
+ * letter. So: accept the name by sound (not by spelling), recover a short
+ * word that starts with the right consonant, and only call it WRONG when the
+ * engine clearly heard some other letter; anything else is "try again".
+ */
+function judgeHebrewLetter(item: LearningItem, alts: RecognitionAlternative[], cfg: EvalConfig): HebrewVerdict {
+  const th = cfg.he;
+  const own = candidatesOf(item);
+  const allLetters = getPack('he').items.filter((l) => l.kind === 'letter' && l.id !== item.id);
+  // Letters that are the same sound (ט/ת, א/ע) share their names' spellings:
+  // no engine can tell them apart, so neither do we.
+  const twins = allLetters.filter((l) => similarity(candidatesOf(l)[0] ?? [], own[0] ?? [], th) >= 0.99);
+  const cands = [...own, ...twins.flatMap(candidatesOf)];
+  const target1 = firstStrong(cands);
+  // Letters that sound the same as the target (בּ/ב…) are not "other" letters.
+  const others = allLetters.filter((l) => !twins.includes(l) && bestSimilarity(candidatesOf(l)[0] ?? [], own, th) < 0.85);
+
+  let bestSim = 0;
+  let confidentOther = false;
+  for (const a of alts) {
+    for (const h of heardStrings(a.transcript)) {
+      const latin = /^[a-z]+$/i.test(h);
+      const syms = latin ? latinToSyms(h) : toSyms(h);
+      if (!syms.length) continue;
+      const mine = latin
+        ? Math.max(0, ...cands.map((c) => similarity(syms, strong(c), th)))
+        : bestSimilarity(syms, cands, th);
+      const theirs = others.reduce((m, o) => Math.max(m, latin
+        ? Math.max(0, ...candidatesOf(o).map((c) => similarity(syms, strong(c), th)))
+        : bestSimilarity(syms, candidatesOf(o), th)), 0);
+      bestSim = Math.max(bestSim, mine);
+      if (mine >= th.letter.accept && mine + 0.05 >= theirs) return { outcome: 'correct' };
+      // Contextual recovery: a short word that starts with this letter's sound.
+      const st = strong(syms);
+      if (th.letterRecoveryMax > 0 && target1 && st.length >= 1 && st.length <= th.letterRecoveryMax
+          && similarity([st[0]], [{ c: target1, weak: false }], th) >= 1 - th.flexCost && theirs < th.otherLetterSimilarity) {
+        return { outcome: 'correct' };
+      }
+      if (theirs >= th.otherLetterSimilarity && theirs > mine + 0.05) confidentOther = true;
+    }
+  }
+  if (th.letter.floor >= 1) return { outcome: 'incorrect', reason: 'mismatch' }; // strict mode
+  if (confidentOther) return { outcome: 'incorrect', reason: 'mismatch' };
+  void bestSim;
+  return { outcome: 'uncertain', reason: 'ambiguous' };
+}
+
+/** CV syllables: the consonant by sound, the vowel strictly (within what spelling can show). */
+function judgeHebrewSyllable(item: LearningItem, alts: RecognitionAlternative[], cfg: EvalConfig): HebrewVerdict {
+  const th = cfg.he;
+  const tv = syllableVowel(item.display);
+  const target = toSyms(item.display.normalize('NFD').replace(/[^\u05D0-\u05EA]/g, '').slice(0, 1));
+  const tStrong = strong(target);
+  let ambiguous = false;
+  let vowelWrong = false;
+  for (const a of alts) {
+    for (const h of heardStrings(a.transcript)) {
+      if (/^[a-z]+$/i.test(h)) continue; // a Latin syllable cannot be checked reliably
+      const ev = vowelEvidence(h);
+      if (ev === null) { ambiguous = true; continue; }
+      const hs = strong(toSyms(h));
+      const consonant = tStrong.length === 0 && hs.length === 0 ? 1 : similarity(hs, tStrong, th);
+      const vowelOk = !tv || ev.has(tv);
+      if (vowelOk && consonant >= th.syllable.accept) return { outcome: 'correct' };
+      if (vowelOk && consonant >= th.syllable.floor) ambiguous = true;
+      if (!vowelOk && consonant >= th.syllable.accept) vowelWrong = true;
+    }
+  }
+  if (vowelWrong) return { outcome: 'incorrect', reason: 'mismatch' };
+  if (ambiguous && th.syllable.floor < 1) return { outcome: 'uncertain', reason: 'ambiguous' };
+  return { outcome: 'incorrect', reason: 'mismatch' };
+}
+
+/** Words: exact/regex match first (done by the caller), then by sound with a high bar. */
+function judgeHebrewWord(item: LearningItem, alts: RecognitionAlternative[], cfg: EvalConfig): HebrewVerdict {
+  const th = cfg.he;
+  const spellings = [...new Set([item.display, ...item.accepted])];
+  let best = 0;
+  for (const a of alts) for (const h of heardStrings(a.transcript)) best = Math.max(best, heWordSimilarity(spellings, h, th));
+  if (best >= th.word.accept) return { outcome: 'correct' };
+  if (best >= th.word.floor && th.word.floor < 1) return { outcome: 'uncertain', reason: 'ambiguous' };
+  return { outcome: 'incorrect', reason: 'mismatch' };
 }
 
 /* ------------------------------------------------------- partial feedback */
@@ -123,33 +265,42 @@ function firstDifference(item: LearningItem, heard: string): number | undefined 
 
 /* --------------------------------------------------------------- evaluate */
 
-export function evaluate(item: LearningItem, alternatives: RecognitionAlternative[]): Evaluation {
+export function evaluate(item: LearningItem, alternatives: RecognitionAlternative[], cfg: EvalConfig = getEvalConfig()): Evaluation {
   const alts = alternatives.filter((a) => a.transcript && a.transcript.trim());
   if (alts.length === 0) return { outcome: 'uncertain', heard: '', reason: 'silence' };
   const best = alts[0];
+  const lowConf = best.confidence !== undefined && best.confidence > 0 && best.confidence < cfg.lowConfidence;
 
   if (item.kind === 'sentence') {
     let bestRead: boolean[] = [];
     let bestScore = -1;
     for (const a of alts) {
-      const read = alignSentence(item, a.transcript);
+      const read = alignSentence(item, a.transcript, cfg);
       const score = read.filter(Boolean).length / read.length;
       if (score > bestScore) { bestScore = score; bestRead = read; }
     }
-    if (bestScore >= SENTENCE_THRESHOLD) return { outcome: 'correct', heard: best.transcript, wordsRead: bestRead };
-    if (best.confidence !== undefined && best.confidence > 0 && best.confidence < LOW_CONFIDENCE) {
-      return { outcome: 'uncertain', heard: best.transcript, reason: 'low-confidence', wordsRead: bestRead };
-    }
+    if (bestScore >= cfg.sentenceThreshold) return { outcome: 'correct', heard: best.transcript, wordsRead: bestRead };
+    if (lowConf) return { outcome: 'uncertain', heard: best.transcript, reason: 'low-confidence', wordsRead: bestRead };
     return { outcome: 'incorrect', heard: best.transcript, reason: bestScore > 0 ? 'partial' : 'mismatch', wordsRead: bestRead };
   }
 
   const match = item.lang === 'he' ? hebrewSingleMatch : englishSingleMatch;
   if (alts.some((a) => match(item, a.transcript))) return { outcome: 'correct', heard: best.transcript };
 
-  // Not a match. Decide whether we actually know the child read it wrong.
-  if (best.confidence !== undefined && best.confidence > 0 && best.confidence < LOW_CONFIDENCE) {
-    return { outcome: 'uncertain', heard: best.transcript, reason: 'low-confidence' };
+  // Layer 2+: Hebrew is compared by sound, with thresholds per exercise kind.
+  if (item.lang === 'he') {
+    const bareConsonant = item.kind === 'syllable' && normalizeHebrew(best.transcript).replace(/ /g, '').length === 1;
+    if (!bareConsonant) {
+      const v = item.kind === 'letter' ? judgeHebrewLetter(item, alts, cfg)
+        : item.kind === 'syllable' ? judgeHebrewSyllable(item, alts, cfg)
+        : judgeHebrewWord(item, alts, cfg);
+      if (v.outcome === 'correct') return { outcome: 'correct', heard: best.transcript };
+      if (v.outcome === 'uncertain') return { outcome: 'uncertain', heard: best.transcript, reason: v.reason };
+    }
   }
+
+  // Not a match. Decide whether we actually know the child read it wrong.
+  if (lowConf) return { outcome: 'uncertain', heard: best.transcript, reason: 'low-confidence' };
   const words = best.transcript.trim().split(/\s+/);
   const targetWords = item.display.trim().split(/\s+/).length;
   if (words.length > Math.max(4, targetWords * 3)) {

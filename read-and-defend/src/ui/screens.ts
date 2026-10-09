@@ -149,7 +149,8 @@ export function mapScreen(app: App): void {
       });
       if (unlocked) {
         node.append(el('span', { class: 'num' }, String(l.number)), el('span', { class: 'sub' }, unit.title[app.lang]), starsRow(rec?.stars ?? 0));
-        if (idx === next) node.append(el('span', { class: 'tag next-tag' }, t('play')));
+        if (rec?.skipped) node.append(el('span', { class: 'tag' }, t('skippedTag')));
+        else if (idx === next) node.append(el('span', { class: 'tag next-tag' }, t('play')));
         else if (l.unitIndex === reviewUnit && !l.boss && (rec?.wins ?? 0) > 0) node.append(el('span', { class: 'tag' }, t('practiceSuggest')));
         if (l.boss) node.append(el('span', { class: 'boss-badge' }, icon('troll')));
         node.addEventListener('click', () => { sound.play('tap'); app.startLevel(l); });
@@ -343,6 +344,8 @@ export function settingsScreen(app: App): void {
   const input = el('input', { class: 'text-input', value: st.sttEndpoint, 'aria-label': t('sttEndpoint'), inputmode: 'url', spellcheck: 'false' }) as HTMLInputElement;
   input.addEventListener('change', () => { st.sttEndpoint = input.value.trim() || '/api/stt'; app.save(); });
   tech.append(el('div', { class: 'setting' }, el('label', {}, t('sttEndpoint')), input));
+  tech.append(seg(t('hebrewLetters'), st.hebrewLetterMode, [['strict', t('hlStrict')], ['normal', t('hlNormal')], ['lenient', t('hlLenient')]], (v) => { st.hebrewLetterMode = v; }, 'hlmode'));
+  tech.append(el('p', { style: 'color:var(--ink-soft);font-size:.9rem;margin:0 0 6px' }, t('hlHelp')));
   tech.append(toggle(t('devMode'), st.devMode, (v) => { st.devMode = v; }, 'dev'));
   if (st.devMode) tech.append(el('p', { style: 'color:#a61e4d;font-weight:700;margin:6px 0' }, t('devBanner')));
   const langBtn = el('button', { class: 'btn', 'data-testid': 'settings-lang' }, t('switchLanguage'));

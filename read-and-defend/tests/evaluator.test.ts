@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { getPack } from '../src/content/registry';
 import { evaluate } from '../src/evaluation/evaluator';
 import type { LearningItem } from '../src/content/types';
+import { configForMode, HEBREW_PRESETS, type EvalConfig } from '../src/evaluation/config';
+import { stripNiqqud } from '../src/content/hebrew/script';
 
 const en = getPack('en');
 const he = getPack('he');
@@ -71,7 +73,8 @@ describe('Hebrew evaluation', () => {
   it('does not accept a different word just because its letters overlap', () => {
     const w = (d: string) => item(he, 'he:word:' + d.normalize('NFC'));
     expect(evaluate(w('מָה'), say('אמא')).outcome).toBe('incorrect');
-    expect(evaluate(w('בָּא'), say('אבא')).outcome).toBe('incorrect');
+    // An extra silent alef is ambiguous (the engine may have added it): try again, never accepted.
+    expect(evaluate(w('בָּא'), say('אבא')).outcome).toBe('uncertain');
     expect(evaluate(w('שִׁיר'), say('שר')).outcome).toBe('incorrect');
     expect(evaluate(w('יוֹם'), say('ים')).outcome).toBe('incorrect');
     expect(evaluate(w('חָלָב'), say('כלב')).outcome).toBe('incorrect');
@@ -121,5 +124,135 @@ describe('self-consistency over the whole bank', () => {
       if (a !== b && evaluate(a, say(b.display)).outcome === 'correct') clashes.push(`${a.display}<-${b.display}`);
     }
     expect(clashes).toEqual([]);
+  });
+});
+
+
+describe('Hebrew phonetic layer — isolated letters', () => {
+  const letter = (l: string) => he.items.find((i) => i.kind === 'letter' && i.display === l)!;
+  const ok = (l: string, said: string, cfg?: EvalConfig) => evaluate(letter(l), say(said), cfg).outcome;
+
+  it('accepts the transcriptions engines actually return for a correctly spoken letter', () => {
+    // מ: the engine heard "mem", "mm", "me", "ma", "am" — all spelled differently
+    for (const said of ['מ', 'מם', 'ממ', 'מים', 'מה', 'מי', 'אם', 'האות מם', 'mem']) expect(ok('מ', said), said).toBe('correct');
+    for (const said of ['ל', 'למד', 'לאמד', 'לה', 'לי']) expect(ok('ל', said), said).toBe('correct');
+    for (const said of ['ש', 'שין', 'שי', 'שה']) expect(ok('שׁ', said), said).toBe('correct');
+    for (const said of ['ר', 'ריש', 'רי', 'ראש'.slice(0, 2)]) expect(ok('ר', said), said).toBe('correct');
+  });
+
+  it('accepts niqqud, final forms and punctuation differences', () => {
+    expect(ok('מ', 'מֵם')).toBe('correct');
+    expect(ok('מ', 'ם')).toBe('correct');     // final mem is the same sound
+    expect(ok('נ', 'נוּן.')).toBe('correct');
+    expect(ok('ך', 'כ')).toBe('correct');
+    expect(ok('ם', 'מם סופית')).toBe('correct');
+  });
+
+  it('accepts same-sound letters, which no recogniser can tell apart', () => {
+    expect(ok('ט', 'ת')).toBe('correct');
+    expect(ok('ת', 'טית')).toBe('correct');
+    expect(ok('א', 'ע')).toBe('correct');
+  });
+
+  it('never accepts a different letter said clearly', () => {
+    const names: Record<string, string> = { 'מ': 'מם', 'נ': 'נון', 'ל': 'למד', 'ר': 'ריש', 'ד': 'דלת', 'ג': 'גימל', 'ב': 'בית', 'ס': 'סמך', 'צ': 'צדי', 'ק': 'קוף' };
+    for (const [target, tn] of Object.entries(names)) {
+      for (const [other, on] of Object.entries(names)) {
+        if (target === other) continue;
+        const r = evaluate(letter(target), say(on)).outcome;
+        expect(r, `${target} heard as ${on}`).not.toBe('correct');
+        expect(r, `${target} heard as ${on}`).toBe('incorrect');
+      }
+      void tn;
+    }
+  });
+
+  it('an unexpected word is "try again", not "wrong" — the engine may simply have misheard', () => {
+    expect(ok('מ', 'שלום')).toBe('uncertain');
+    expect(ok('פּ', 'כסא')).toBe('uncertain');
+    expect(evaluate(letter('מ'), say('שלום')).reason).toBe('ambiguous');
+  });
+
+  it('recovers a short word that starts with the right sound, using the expected target', () => {
+    // "מה" ("what") is what engines often return for the sound of מ
+    expect(ok('מ', 'מה')).toBe('correct');
+    // …but not a short word starting with a different sound
+    expect(ok('מ', 'לא')).not.toBe('correct');
+  });
+
+  it('is far more forgiving than exact matching, and the modes are ordered', () => {
+    const outputs = ['מ', 'מם', 'מים', 'מה', 'אם', 'מי', 'ממ'];
+    const accepted = (mode: 'strict' | 'normal' | 'lenient') => outputs.filter((o) => ok('מ', o, configForMode(mode)) === 'correct').length;
+    expect(accepted('normal')).toBeGreaterThan(accepted('strict'));
+    expect(accepted('lenient')).toBeGreaterThanOrEqual(accepted('normal'));
+  });
+
+  it('whole-alphabet check: plausible outputs accepted, other letters rejected', () => {
+    const letters = he.items.filter((i) => i.kind === 'letter');
+    const base = (l: LearningItem) => l.display.normalize('NFD').replace(/[\u0591-\u05C7]/g, '');
+    let total = 0, accepted = 0, falseTotal = 0, falseHit = 0;
+    for (const l of letters) {
+      const L = base(l), name = stripNiqqud(l.speakAs);
+      for (const said of [L, name, name + 'ה', L + 'ה', L + 'י', 'האות ' + L]) {
+        total++;
+        if (evaluate(l, say(said)).outcome === 'correct') accepted++;
+      }
+      for (const o of letters) {
+        if (o === l || evaluate(l, say(stripNiqqud(o.speakAs)), configForMode('strict')).outcome === 'correct') continue; // same-sound twins
+        falseTotal++;
+        if (evaluate(l, say(stripNiqqud(o.speakAs))).outcome === 'correct') falseHit++;
+      }
+    }
+    expect(accepted / total).toBeGreaterThan(0.85);
+    expect(falseHit / falseTotal).toBeLessThan(0.01);
+  });
+
+  it('low engine confidence on a non-match is still "try again"', () => {
+    expect(evaluate(letter('מ'), [{ transcript: 'נון', confidence: 0.2 }]).outcome).toBe('uncertain');
+  });
+});
+
+describe('Hebrew phonetic layer — syllables and words', () => {
+  const syl = (s: string) => he.items.find((i) => i.kind === 'syllable' && i.display === s.normalize('NFC'))!;
+  const word = (s: string) => he.items.find((i) => i.kind === 'word' && i.niqqud && i.display === s.normalize('NFC'))!;
+
+  it('syllables: tolerant about the consonant, strict about the vowel', () => {
+    expect(evaluate(syl('מָ'), say('מא')).outcome).toBe('correct');
+    expect(evaluate(syl('מִ'), say('מי')).outcome).toBe('correct');
+    expect(evaluate(syl('מוּ'), say('מו')).outcome).toBe('correct');
+    expect(evaluate(syl('מוֹ'), say('מו')).outcome).toBe('correct');
+    expect(evaluate(syl('מִ'), say('מא')).outcome).toBe('incorrect'); // consonant right, vowel wrong
+    expect(evaluate(syl('מוֹ'), say('מי')).outcome).toBe('incorrect');
+  });
+
+  it('syllables: a near-confusion of the consonant is "try again", not wrong', () => {
+    // נ for מ is a classic recogniser confusion — not accepted, but not condemned
+    expect(evaluate(syl('מָ'), say('נא')).outcome).not.toBe('correct');
+  });
+
+  it('words are held to a higher standard than letters', () => {
+    expect(evaluate(word('דָּג'), say('דג')).outcome).toBe('correct');
+    expect(evaluate(word('דָּג'), say('דק')).outcome).not.toBe('correct');
+    expect(evaluate(word('כֶּלֶב'), say('קלב')).outcome).toBe('correct');   // כ/ק spelling variant
+    expect(evaluate(word('גָּדוֹל'), say('גדולה')).outcome).not.toBe('correct'); // different ending
+    expect(evaluate(word('קוֹרֵא'), say('קרא')).outcome).not.toBe('correct');   // kore ≠ kara
+  });
+
+  it('a long word tolerates one acoustically close consonant, a short one does not', () => {
+    expect(evaluate(word('שֻׁלְחָן'), say('שולחם')).outcome).not.toBe('incorrect');
+    expect(evaluate(word('שָׁם'), say('שן')).outcome).toBe('incorrect');
+  });
+
+  it('thresholds are configurable without touching the evaluator', () => {
+    const picky: EvalConfig = { ...configForMode('normal'), he: { ...HEBREW_PRESETS.normal, letter: { accept: 0.95, floor: 0.5 }, letterRecoveryMax: 0 } };
+    expect(evaluate(he.items.find((i) => i.display === 'מ')!, say('אם'), configForMode('normal')).outcome).toBe('correct');
+    expect(evaluate(he.items.find((i) => i.display === 'מ')!, say('אם'), picky).outcome).not.toBe('correct');
+  });
+
+  it('English evaluation is unchanged by the Hebrew layer', () => {
+    expect(evaluate(item(en, 'en:word:cat'), say('cat'), configForMode('lenient')).outcome).toBe('correct');
+    expect(evaluate(item(en, 'en:word:cat'), say('cap'), configForMode('lenient')).outcome).toBe('incorrect');
+    expect(evaluate(item(en, 'en:letter:b'), say('dee'), configForMode('lenient')).outcome).toBe('incorrect');
+    expect(evaluate(item(en, 'en:word:cat'), say('hat')).outcome).toBe('incorrect');
   });
 });

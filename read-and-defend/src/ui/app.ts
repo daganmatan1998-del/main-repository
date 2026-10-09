@@ -8,7 +8,9 @@ import { speaker } from '../audio/tts';
 import { prefersReducedMotion } from '../platform/platform';
 import { createStorage, type StorageAdapter } from '../persistence/storage';
 import { loadProfile, saveProfile, type LangProgress, type Profile } from '../progress/profile';
+import { levelDone } from '../progress/fastTrack';
 import { shopColor } from '../progress/rewards';
+import { configForMode, setEvalConfig } from '../evaluation/config';
 import { chooseProvider, type ProviderChoice } from '../speech/providerFactory';
 import { clear } from './dom';
 
@@ -44,6 +46,7 @@ export class App {
       reducedMotion: this.profile.settings.reducedMotion || prefersReducedMotion(),
       bigText: this.profile.settings.bigText,
       lang: this.profile.lang ?? 'en',
+      bossLabel: 'BOSS',
     });
     sound.enabled = this.profile.settings.sound;
     window.addEventListener('resize', () => this.onResize());
@@ -79,7 +82,9 @@ export class App {
     root.dataset.reducedMotion = this.profile.settings.reducedMotion ? '1' : '0';
     document.title = t('appName');
     sound.enabled = this.profile.settings.sound;
+    setEvalConfig(configForMode(this.profile.settings.hebrewLetterMode ?? 'normal'));
     this.renderer.setOptions({
+      bossLabel: t('boss'),
       lang,
       bigText: this.profile.settings.bigText,
       reducedMotion: this.profile.settings.reducedMotion || prefersReducedMotion(),
@@ -89,17 +94,16 @@ export class App {
     });
   }
 
-  /** Index of the next level to play: the first not yet won. */
+  /** Index of the next level to play: the first not yet won (or skipped by fast-track). */
   nextLevelIndex(): number {
     const lv = this.levels;
-    const i = lv.findIndex((l) => !(this.progress.levels[l.id]?.wins > 0));
+    const i = lv.findIndex((l) => !levelDone(this.progress, l.id));
     return i === -1 ? lv.length - 1 : i;
   }
 
   isUnlocked(index: number): boolean {
     if (index === 0) return true;
-    const prev = this.levels[index - 1];
-    return (this.progress.levels[prev.id]?.wins ?? 0) > 0;
+    return levelDone(this.progress, this.levels[index - 1].id);
   }
 
   show(name: ScreenName): void {

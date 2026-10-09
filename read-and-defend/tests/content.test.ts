@@ -71,7 +71,7 @@ describe('item selection', () => {
   const unit = (id: string) => en.units.findIndex((u) => u.id === id);
 
   it('only selects items whose skills have been taught', () => {
-    const ui = unit('en-7');
+    const ui = unit('en-4');
     const known = knownSkills(en, ui);
     for (let seed = 1; seed < 20; seed++) {
       const sel = selectLevelItems(en, ui, createLearner(), { count: 8, rng: createRng(seed), profile: normal, boss: true });
@@ -85,14 +85,14 @@ describe('item selection', () => {
   });
 
   it('includes the unit\'s new skills', () => {
-    const ui = unit('en-10');
+    const ui = unit('en-7');
     const sel = selectLevelItems(en, ui, createLearner(), { count: 8, rng: createRng(5), profile: normal });
     const focus = new Set(en.units[ui].newSkills);
     expect(sel.items.filter((it) => it.skills.some((s) => focus.has(s))).length).toBeGreaterThanOrEqual(3);
   });
 
   it('a retry keeps the objectives but changes the words and order', () => {
-    const ui = unit('en-8');
+    const ui = unit('en-4');
     const learner = createLearner();
     const first = selectLevelItems(en, ui, learner, { count: 8, rng: createRng(11), profile: normal });
     const firstIds = first.items.map((i) => i.id);
@@ -105,7 +105,7 @@ describe('item selection', () => {
   });
 
   it('transfer units prefer words the child has never seen', () => {
-    const ui = unit('en-9');
+    const ui = unit('en-6');
     const learner = createLearner();
     // The child has already read 40 CVC words.
     const seen = eligibleItems(en, ui).slice(0, 40);
@@ -120,7 +120,7 @@ describe('item selection', () => {
   });
 
   it('weak skills come back more often', () => {
-    const ui = unit('en-8');
+    const ui = unit('en-4');
     const learner = createLearner();
     const items = eligibleItems(en, ui);
     // Struggles with short u, fine with everything else.
@@ -138,20 +138,12 @@ describe('item selection', () => {
     expect(u / total).toBeGreaterThan(baseRate);
   });
 
-  it('boss is a sentence once sentences are taught, a chain before that', () => {
-    const s = selectLevelItems(en, unit('en-15'), createLearner(), { count: 8, rng: createRng(1), profile: normal, boss: true });
-    expect(s.boss).toHaveLength(1);
-    expect(s.boss[0].kind).toBe('sentence');
-    const c = selectLevelItems(en, unit('en-3'), createLearner(), { count: 6, rng: createRng(1), profile: normal, boss: true });
-    expect(c.boss.length).toBeGreaterThanOrEqual(2);
-  });
-
   it('Hebrew levels show Hebrew items only, from taught letters', () => {
     const he = getPack('he');
     const sel = selectLevelItems(he, 2, createLearner(), { count: 8, rng: createRng(2), profile: normal });
     for (const it of sel.items) {
       expect(it.lang).toBe('he');
-      expect(['letter', 'syllable']).toContain(it.kind);
+      expect(['letter', 'syllable', 'word']).toContain(it.kind);
     }
   });
 });
