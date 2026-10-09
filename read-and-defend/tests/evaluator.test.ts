@@ -140,6 +140,15 @@ describe('Hebrew phonetic layer — isolated letters', () => {
     for (const said of ['ר', 'ריש', 'רי', 'ראש'.slice(0, 2)]) expect(ok('ר', said), said).toBe('correct');
   });
 
+  it('ל and ש: cut-off, drawn-out and doubled names are the letter', () => {
+    for (const said of ['למה', 'למ', 'לם', 'לל', 'lamed', 'lamad']) expect(ok('ל', said), said).toBe('correct');
+    for (const said of ['שש', 'shh', 'shhh', 'she', 'shin', 'sheen']) expect(ok('שׁ', said), said).toBe('correct');
+    // ...but the cut-off name rule does not open the door to other letters
+    expect(ok('ל', 'מם')).not.toBe('correct');
+    expect(ok('שׁ', 'סמך')).not.toBe('correct');
+    expect(ok('ל', 'נון')).not.toBe('correct');
+  });
+
   it('accepts niqqud, final forms and punctuation differences', () => {
     expect(ok('מ', 'מֵם')).toBe('correct');
     expect(ok('מ', 'ם')).toBe('correct');     // final mem is the same sound

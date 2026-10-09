@@ -148,18 +148,18 @@ function buildItems(): LearningItem[] {
 const Ls = (...forms: string[]) => forms.map(L);
 
 /**
- * Units 1–2 (the first four levels) teach letters, as the game first shipped
- * (unit 2 also meets the "a" vowel in a few syllables). After that the five
- * vowels and the remaining letters arrive together, so syllables and first
- * words start in unit 3 instead of unit 5.
+ * Unit 1 (the first two levels) teaches letters only, as the game first
+ * shipped. From unit 2 on the monsters carry real words — there are no
+ * separate syllable drills: the vowels and the remaining letters are learned
+ * by reading words built from them.
  */
 const UNITS: Unit[] = [
   { id: 'he-1', stage: 1, newSkills: Ls('בּ', 'מ', 'ל', 'שׁ'), kinds: { letter: 1 }, maxDifficulty: 1, title: { he: 'אוֹתִיּוֹת רִאשׁוֹנוֹת', en: 'First letters' } },
-  { id: 'he-2', stage: 1, newSkills: [...Ls('ד', 'ת', 'נ', 'ר', 'א'), V('a')], kinds: { letter: 1, syllable: 0.3 }, maxDifficulty: 2.2, title: { he: 'עוֹד אוֹתִיּוֹת וְקָמָץ', en: 'More letters, and the "a" vowel' } },
-  { id: 'he-3', stage: 2, newSkills: [...Ls('ג', 'ה', 'י', 'ס'), V('i'), P_SILENT], kinds: { syllable: 1, letter: 0.4, word: 0.6 }, maxDifficulty: 4.5, title: { he: 'חִירִיק וּמִלִּים רִאשׁוֹנוֹת', en: 'The "i" vowel and first words' } },
-  { id: 'he-4', stage: 3, newSkills: [...Ls('ם', 'ן', 'כּ', 'פּ', 'ק', 'ט', 'ע'), V('o')], kinds: { word: 1, syllable: 0.5, letter: 0.3 }, maxDifficulty: 4.8, title: { he: 'חוֹלָם', en: 'The "o" vowel' } },
-  { id: 'he-5', stage: 3, newSkills: [...Ls('ח', 'ז', 'צ', 'ו'), V('u')], kinds: { word: 1, syllable: 0.5, letter: 0.3 }, maxDifficulty: 5, title: { he: 'שׁוּרוּק וְקֻבּוּץ', en: 'The "u" vowel' } },
-  { id: 'he-6', stage: 3, newSkills: [...Ls('ב', 'כ', 'פ', 'שׂ', 'ך', 'ף', 'ץ'), V('e')], kinds: { word: 1, syllable: 0.4, letter: 0.3 }, maxDifficulty: 5.2, title: { he: 'צֵירֵה וְסֶגּוֹל', en: 'The "e" vowel' } },
+  { id: 'he-2', stage: 1, newSkills: [...Ls('ד', 'ת', 'נ', 'ר', 'א'), V('a')], kinds: { letter: 1, word: 0.4 }, maxDifficulty: 4.5, title: { he: 'עוֹד אוֹתִיּוֹת וְקָמָץ', en: 'More letters, and the "a" vowel' } },
+  { id: 'he-3', stage: 2, newSkills: [...Ls('ג', 'ה', 'י', 'ס'), V('i'), P_SILENT], kinds: { word: 1, letter: 0.4 }, maxDifficulty: 4.5, title: { he: 'חִירִיק וּמִלִּים רִאשׁוֹנוֹת', en: 'The "i" vowel and first words' } },
+  { id: 'he-4', stage: 3, newSkills: [...Ls('ם', 'ן', 'כּ', 'פּ', 'ק', 'ט', 'ע'), V('o')], kinds: { word: 1, letter: 0.3 }, maxDifficulty: 4.8, title: { he: 'חוֹלָם', en: 'The "o" vowel' } },
+  { id: 'he-5', stage: 3, newSkills: [...Ls('ח', 'ז', 'צ', 'ו'), V('u')], kinds: { word: 1, letter: 0.3 }, maxDifficulty: 5, title: { he: 'שׁוּרוּק וְקֻבּוּץ', en: 'The "u" vowel' } },
+  { id: 'he-6', stage: 3, newSkills: [...Ls('ב', 'כ', 'פ', 'שׂ', 'ך', 'ף', 'ץ'), V('e')], kinds: { word: 1, letter: 0.3 }, maxDifficulty: 5.2, title: { he: 'צֵירֵה וְסֶגּוֹל', en: 'The "e" vowel' } },
   { id: 'he-7', stage: 4, newSkills: [], transfer: true, kinds: { word: 1 }, maxDifficulty: 5.2, title: { he: 'מְגַלִּים מִלִּים חֲדָשׁוֹת', en: 'Explorer: new words' } },
   { id: 'he-8', stage: 5, newSkills: [V('shva')], kinds: { word: 1 }, maxDifficulty: 6.5, title: { he: 'שְׁוָא וּמִלִּים אֲרֻכּוֹת', en: 'Shva and longer words' } },
   { id: 'he-9', stage: 5, newSkills: [P_PLAIN], transfer: true, reducedNiqqud: true, kinds: { word: 1 }, maxDifficulty: 7, title: { he: 'קְרִיאָה בְּלִי נִקּוּד', en: 'Reading without niqqud' } },

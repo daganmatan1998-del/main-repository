@@ -97,17 +97,17 @@ const letters = (s: string) => s.split('').map(g);
 
 /**
  * Units 1–2 (the first four levels) are pure letters, exactly as the game
- * first shipped. From unit 3 on, syllables and then words arrive much sooner
- * than a letters-first course would allow: sound chunks and the first CVC
- * words in unit 3, all CVC words by unit 4, digraphs folded into unit 5.
+ * first shipped. From unit 3 on, the monsters carry real words straight away —
+ * there are no separate syllable drills: the first CVC words in unit 3, all
+ * CVC words by unit 4, digraphs folded into unit 5.
  * A fluent reader gets the next unit's exercises even earlier (unitView).
  */
 const UNITS: Unit[] = [
   { id: 'en-1', stage: 1, newSkills: letters('satp'), kinds: { letter: 1 }, maxDifficulty: 1.2, title: { en: 'First Sounds: s a t p', he: 'צלילים ראשונים' } },
   { id: 'en-2', stage: 1, newSkills: letters('indm'), kinds: { letter: 1 }, maxDifficulty: 1.2, title: { en: 'More Sounds: i n m d', he: 'עוד צלילים' } },
-  { id: 'en-3', stage: 2, newSkills: [...letters('gocke'), P_CVC], kinds: { letter: 0.5, syllable: 0.7, word: 0.6 }, maxDifficulty: 4, title: { en: 'Sound Chunks & First Words', he: 'צירופי צלילים ומילים ראשונות' } },
-  { id: 'en-4', stage: 2, newSkills: letters('urhbfl'), kinds: { word: 1, syllable: 0.3, letter: 0.25 }, maxDifficulty: 4.5, title: { en: 'Short Words: u r h b f l', he: 'מילים קצרות' } },
-  { id: 'en-5', stage: 3, newSkills: [...letters('jvwxyzq'), g('sh'), g('ch'), g('th')], kinds: { word: 1, syllable: 0.4, letter: 0.15 }, maxDifficulty: 4.8, title: { en: 'Buddy Letters: sh ch th', he: 'אותיות חברות' } },
+  { id: 'en-3', stage: 2, newSkills: [...letters('gocke'), P_CVC], kinds: { letter: 0.5, word: 1 }, maxDifficulty: 4, title: { en: 'g o c k e and First Words', he: 'מילים ראשונות' } },
+  { id: 'en-4', stage: 2, newSkills: letters('urhbfl'), kinds: { word: 1, letter: 0.25 }, maxDifficulty: 4.5, title: { en: 'Short Words: u r h b f l', he: 'מילים קצרות' } },
+  { id: 'en-5', stage: 3, newSkills: [...letters('jvwxyzq'), g('sh'), g('ch'), g('th')], kinds: { word: 1, letter: 0.15 }, maxDifficulty: 4.8, title: { en: 'Buddy Letters: sh ch th', he: 'אותיות חברות' } },
   { id: 'en-6', stage: 3, newSkills: [], transfer: true, kinds: { word: 1 }, maxDifficulty: 5, title: { en: 'Explorer: New Words', he: 'מגלי מילים' } },
   { id: 'en-7', stage: 4, newSkills: [g('ck'), g('ng'), g('ll'), g('ss'), g('ff'), g('zz'), g('qu'), g('wh')], focus: [g('sh'), g('ch'), g('th')], kinds: { word: 1 }, maxDifficulty: 5.4, title: { en: 'Digraph Words', he: 'מילים עם צמדים' } },
   { id: 'en-8', stage: 4, newSkills: [P_BLEND], kinds: { word: 1 }, maxDifficulty: 6.6, title: { en: 'Blends: fr- st- -mp', he: 'צרורות' } },

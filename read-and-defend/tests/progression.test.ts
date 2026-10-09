@@ -3,6 +3,7 @@ import { getPack, knownSkills } from '../src/content/registry';
 import { eligibleItems, selectLevelItems, unitReady, unitView } from '../src/content/selector';
 import { createRng } from '../src/core/rng';
 import { buildLevels } from '../src/game/levels';
+import { enemyTypeFor } from '../src/game/plan';
 import { chooseDifficulty, PROFILES } from '../src/learning/adaptive';
 import { createLearner, recordResult, type LearnerState } from '../src/learning/learner';
 import { fastTrackTarget, levelDone } from '../src/progress/fastTrack';
@@ -53,16 +54,29 @@ describe('the first levels keep their difficulty', () => {
   });
 });
 
-describe('the course reaches syllables and words sooner', () => {
+describe('the course reaches words sooner', () => {
   it('first words arrive at unit 3 (level 5) instead of unit 7 (level 13) in English', () => {
     expect(firstWordUnit(en) + 1).toBe(3);
     expect(firstWordUnit(en)).toBeLessThan(6); // the first version had them at unit index 6
   });
 
-  it('first syllables and words arrive by unit 3 in Hebrew (they were units 3 and 5)', () => {
-    expect(he.units.findIndex((u) => !!u.kinds.syllable)).toBeLessThanOrEqual(1);
-    expect(firstWordUnit(he)).toBe(2);
-    expect(firstWordUnit(he)).toBeLessThan(4);
+  it('Hebrew words arrive in the second stage, straight after the letters (no syllable drills)', () => {
+    expect(firstWordUnit(he)).toBe(1);
+    expect(Object.keys(he.units[0].kinds)).toEqual(['letter']);
+  });
+
+  it('in the second Hebrew stage the small monsters carry words', () => {
+    let slimeWords = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const sel = selectLevelItems(he, 1, createLearner(), { count: 8, rng: createRng(seed), profile: normal });
+      expect(sel.items.some((i) => i.kind === 'syllable')).toBe(false);
+      slimeWords += sel.items.filter((i) => i.kind === 'word' && enemyTypeFor(i, createLearner(), normal) === 'slime').length;
+    }
+    expect(slimeWords).toBeGreaterThan(0);
+  });
+
+  it('no unit in either language drills syllables', () => {
+    for (const pack of [en, he]) for (const u of pack.units) expect(u.kinds.syllable ?? 0).toBe(0);
   });
 
   it('the whole course is shorter, with nothing dropped', () => {
@@ -114,7 +128,7 @@ describe('progression follows demonstrated ability', () => {
     expect(eligibleItems(en, ui, normal, struggling).every((i) => i.kind === 'letter')).toBe(true);
   });
 
-  it('Hebrew letters unit also moves on to syllables once letters are fluent', () => {
+  it('Hebrew letters unit also moves on once letters are fluent', () => {
     const ui = 0;
     const fluent = learnerWho(he, ui, true, 30);
     expect(unitReady(he, ui, fluent)).toBe(true);

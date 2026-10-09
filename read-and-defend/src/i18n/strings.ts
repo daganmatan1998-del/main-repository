@@ -142,7 +142,7 @@ const en = {
   langNotSupported: 'This speech engine does not support this language here.',
   networkErr: 'The speech service could not be reached. Check the internet connection.',
   serviceErr: 'The speech service had a problem. Try again in a moment.',
-  stageNames: { 1: 'Letter Meadow', 2: 'Syllable Forest', 3: 'Word Canyon', 4: 'Explorer Snowfields', 5: 'Volcano of Big Words', 6: 'Sky Castle of Stories' } as Record<number, string>,
+  stageNames: { 1: 'Letter Meadow', 2: 'Forest of First Words', 3: 'Word Canyon', 4: 'Explorer Snowfields', 5: 'Volcano of Big Words', 6: 'Sky Castle of Stories' } as Record<number, string>,
 };
 
 type Strings = typeof en;
@@ -284,7 +284,7 @@ const he: Strings = {
   langNotSupported: 'מנוע הדיבור הזה לא תומך בשפה הזו כאן.',
   networkErr: 'אין חיבור לשירות הדיבור. בדקו את האינטרנט.',
   serviceErr: 'לשירות הדיבור יש תקלה. נסו שוב עוד רגע.',
-  stageNames: { 1: 'אחו האותיות', 2: 'יער ההברות', 3: 'קניון המילים', 4: 'שדות השלג של המגלים', 5: 'הר הגעש של המילים הגדולות', 6: 'טירת השמיים של הסיפורים' },
+  stageNames: { 1: 'אחו האותיות', 2: 'יער המילים הראשונות', 3: 'קניון המילים', 4: 'שדות השלג של המגלים', 5: 'הר הגעש של המילים הגדולות', 6: 'טירת השמיים של הסיפורים' },
 };
 
 export type StringKey = keyof Strings;

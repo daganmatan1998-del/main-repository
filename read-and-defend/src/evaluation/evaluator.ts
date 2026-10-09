@@ -150,6 +150,17 @@ function candidatesOf(l: LearningItem): Sym[][] {
   return c;
 }
 
+/** Does the heard text start a letter name, covering at least 60 % of its consonants (and two or more)? */
+function nameStartOf(heard: Sym[], cands: Sym[][], th: HebrewEvalConfig): boolean {
+  const hs = strong(heard);
+  if (hs.length < 2) return false;
+  return cands.some((c) => {
+    const cs = strong(c);
+    return cs.length >= 3 && hs.length < cs.length && hs.length / cs.length >= 0.6
+      && similarity(hs, cs.slice(0, hs.length), th) >= 0.99;
+  });
+}
+
 /** First pronounced consonant class of a target letter, if it has one. */
 function firstStrong(cands: Sym[][]): string | null {
   for (const c of cands) { const s = strong(c); if (s.length) return s[0].c; }
@@ -178,13 +189,18 @@ function judgeHebrewLetter(item: LearningItem, alts: RecognitionAlternative[], c
   let bestSim = 0;
   let confidentOther = false;
   for (const a of alts) {
-    for (const h of heardStrings(a.transcript)) {
-      const latin = /^[a-z]+$/i.test(h);
+    for (const raw of heardStrings(a.transcript)) {
+      const latin = /^[a-z]+$/i.test(raw);
+      // A drawn-out or doubled sound is the letter: "shhh", "mmm", "לל", "שש".
+      const h = latin ? raw.toLowerCase().replace(/(.)\1+/g, '$1') : /^(.)\1+$/.test(raw) ? raw[0] : raw;
       const syms = latin ? latinToSyms(h) : toSyms(h);
       if (!syms.length) continue;
-      const mine = latin
+      let mine = latin
         ? Math.max(0, ...cands.map((c) => similarity(syms, strong(c), th)))
         : bestSimilarity(syms, cands, th);
+      // The name cut short ("למ", or "למה" for למד): the engine caught the
+      // first two-thirds of the name's consonants and lost the end.
+      if (th.letterRecoveryMax > 0 && !latin && nameStartOf(syms, cands, th)) mine = Math.max(mine, th.letter.accept);
       const theirs = others.reduce((m, o) => Math.max(m, latin
         ? Math.max(0, ...candidatesOf(o).map((c) => similarity(syms, strong(c), th)))
         : bestSimilarity(syms, candidatesOf(o), th)), 0);

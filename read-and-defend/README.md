@@ -1,7 +1,7 @@
 # Read & Defend — קוראים ומגינים
 
 A castle-defense game that teaches children to **read** Hebrew and English.
-Monsters walk toward the castle carrying a letter, syllable, word or sentence;
+Monsters walk toward the castle carrying a letter, word or sentence;
 the child reads it aloud, the speech recogniser listens, and a correct reading
 zaps the monster. The learning system underneath teaches *decoding* — every
 item is chosen by the letter-sound skills it needs, never from a fixed word
@@ -61,13 +61,15 @@ silent final ה/א, patah genuva). Adding a word is adding one string to a list.
 **Units** introduce skills in order, and the course is deliberately front-loaded
 with reading rather than with letters. English: s a t p → i n d m (both **letters
 only**, exactly the first four levels as originally shipped) → g o c k e with
-sound chunks and the first CVC words → u r h b f l → j v w x y z q + sh ch th →
+the first CVC words → u r h b f l → j v w x y z q + sh ch th →
 *Explorer* (transfer) → ck ng ll ss ff zz qu wh → blends → magic e → vowel teams →
 *Explorer* → sentences (13 units; first words at level 5, previously level 13).
-Hebrew: בּ מ ל שׁ (letters only) → ד ת נ ר א + קָמָץ/פַּתָּח with a few syllables →
-חִירִיק, silent ה/א, first words → חוֹלָם + final letters + more consonants →
+Hebrew: בּ מ ל שׁ (letters only) → ד ת נ ר א + קָמָץ/פַּתָּח and the first words →
+חִירִיק, silent ה/א → חוֹלָם + final letters + more consonants →
 שׁוּרוּק/קֻבּוּץ → צֵירֵה/סֶגּוֹל + soft ב כ פ → *Explorer* → שְׁוָא and longer words →
-reading without niqqud → sentences (11 units; first words at level 5, previously 9).
+reading without niqqud → sentences (11 units; first words in the second stage, previously level 9).
+There are **no syllable drills**: from the second stage on, the small monsters
+carry short words (sounds are still shown under a word when the child is stuck).
 The two languages have separate progressions and separate decoding rules.
 
 **Progress follows ability, not level count.** Once a reader is *fluent* in a
@@ -90,8 +92,9 @@ there the pool widens by at most two untaught skills and the boss shows the
 sound breakdown from the start (flagged `assist`).
 
 **Generation is rule-based and validated.** Hebrew CV syllables (בָּ בִּ בּוֹ …)
-are generated for every taught consonant × vowel sign — they are legitimate
-reading drills and are marked as non-words. English word families are
+are still generated for every taught consonant × vowel sign and marked as
+non-words, but no unit practises them as monsters — they exist for the
+evaluator and for the sound breakdown shown under a word. English word families are
 practised as chunks (`at`, `an`, `ip`) and then as real words. No random
 strings are ever shown as vocabulary; every word in the bank is a real,
 curated word. Reduced-niqqud items are generated from the pointed words with
@@ -149,7 +152,7 @@ simulator. Text input never counts as reading.
   2. *Exact* — unpointed or plene spelling equal to the target, or a spelling whose possible readings (a regular expression over consonants + vowel letters) include the target's pronunciation (כיתה = כִּתָּה, תל = טַל).
   3. *Phonetic similarity* — letters are mapped to sound classes (ט=ת, א=ע, כ≈ק, ב≈ו…) and compared with a weighted edit distance in which acoustically close consonants (b/p, d/t, m/n, g/k…) cost a little, vowel letters (ו י) and a final ה cost a full edit (kara ≠ kora, gadol ≠ gdola), and only the silent א/ע are cheap.
   4. *Per-kind thresholds* — `config.ts` holds `accept` and `floor` for letters, syllables, words and sentence words, plus the near/flex costs. Similarity ≥ `accept` is correct; between `floor` and `accept` is **"try again"** (never marked wrong); below, wrong.
-  - **Letters** are the most forgiving. The name is matched by sound, not spelling; letters that sound alike (ט/ת, א/ע, final forms) share their names; a short word that starts with the right consonant ("מה" for מ) is recovered using the known target; and an unexpected word is "try again". A letter is only called **wrong** when the engine clearly returned a *different* letter.
+  - **Letters** are the most forgiving. The name is matched by sound, not spelling; letters that sound alike (ט/ת, א/ע, final forms) share their names; a short word that starts with the right consonant ("מה" for מ) is recovered using the known target; a name cut off or swallowed by the engine ("למ", "למה" for למד) or a drawn-out/doubled sound ("לל", "שש", "shhh") counts as the letter; and an unexpected word is "try again". A letter is only called **wrong** when the engine clearly returned a *different* letter.
   - **Syllables**: consonant by sound, vowel strictly (ba vs bi is wrong; a vs e cannot be told apart in spelling, so both pass).
   - **Words** keep a high bar; one close-consonant slip is tolerated only in words of four or more letters.
   - A **Hebrew letter-listening setting** (Settings → for grown-ups: Exact / Forgiving / Very forgiving) switches the preset without code changes. *Forgiving* is the default.
@@ -167,7 +170,7 @@ the game says "I didn't quite hear that — try again" rather than marking the
 child wrong, and "Very forgiving" accepts more near-misses at the price of
 occasionally accepting a similar-sounding wrong letter (measured: ≈1 % of
 wrong-letter attempts in that mode, 0 % in the default). Letter-sound knowledge
-is also assessed through syllables and words, where recognition is more reliable.
+is also assessed through words, where recognition is more reliable.
 
 ### Setting up the server engine (optional, needs a paid API key)
 

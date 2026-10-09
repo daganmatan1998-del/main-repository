@@ -7,7 +7,7 @@ import type { EnemySpec, EnemyType } from './levelState';
 /**
  * Enemy type follows the reading, so the visual variety always means
  * something:
- *   slime  — letters and sound chunks (small, beginner)
+ *   slime  — letters and short words (small, beginner)
  *   goblin — ordinary words
  *   knight — long or complex words and sentences (armoured, slower, hits harder)
  *   bat    — words this child already reads fluently (fast: tests fluency)
@@ -20,6 +20,8 @@ export function enemyTypeFor(item: LearningItem, learner: LearnerState, profile:
   const stats = learner.items[item.id];
   if (profile.fastEnemies && stats && stats.firstTry >= 2) return 'bat';
   if (item.difficulty >= 5.2 || item.parts.length >= 4) return 'knight';
+  // Short words ride on the small monsters, longer ones on goblins.
+  if (item.difficulty <= 3.6) return 'slime';
   return 'goblin';
 }
 
