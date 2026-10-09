@@ -119,6 +119,7 @@ svg text{font-family:system-ui,Arial,sans-serif}
   <section class="card full">
     <div class="tabs" id="tabs">
       <button data-tab="parts" class="active">📦 רשימת חלקים</button>
+      <button data-tab="cart">🛒 עגלת קניות</button>
       <button data-tab="how">⚙️ איך זה עובד</button>
       <button data-tab="wiring">🔌 חיווט</button>
       <button data-tab="assembly">🛠 הוראות הרכבה</button>
@@ -142,6 +143,19 @@ svg text{font-family:system-ui,Arial,sans-serif}
       </table>
       </div>
       <p class="muted" style="font-size:.88rem">מחירים משוערים בש״ח כולל משלוח, משתנים לפי מוכר ומבצעים. חפש באנגלית בדיוק כפי שכתוב, ומיין לפי „Orders” כדי לקבל מוכרים מוכחים.</p>
+    </div>
+
+    <div class="tab" id="tab-cart">
+      <div class="warn">אליאקספרס לא מאפשר לשתף עגלה מוכנה בקישור, ואין לי גישה לחשבון שלך. לכן יש כאן קישור לכל פריט: פותחים אותו, בוחרים מוכר ולוחצים „Add to cart”. ככה העגלה נבנית בחשבון שלך, ואחרי זה משלמים על הכל ביחד.</div>
+      <div class="row" style="margin-bottom:8px">
+        <label style="min-width:0"><input type="checkbox" id="cartOptional"> לכלול פריטים אופציונליים</label>
+        <span>נוספו לעגלה: <b id="cartProgress"></b></span>
+        <span class="muted">סה״כ משוער: <b id="cartTotal"></b></span>
+      </div>
+      <div style="overflow-x:auto"><table id="cartTable">
+        <thead><tr><th>✔ בעגלה</th><th>פריט</th><th>מה לבחור בדף</th><th>כמות</th><th>מחיר</th><th></th></tr></thead>
+        <tbody></tbody></table></div>
+      <div class="tip"><b>טיפים לבחירת מוכר:</b> הקישורים כבר ממוינים לפי מספר הזמנות. בחר מוכר עם דירוג 95% ומעלה ועם „Choice” או משלוח חינם. כדאי לקנות כמה פריטים מאותה חנות, כדי לחסוך במשלוח. לפני שמשלמים, בדוק בעמוד העגלה שהכמויות נכונות.</div>
     </div>
 
     <div class="tab" id="tab-how">
@@ -593,7 +607,7 @@ const PARTS = [
    tip:"מהלך 30 מ״מ מספיק לבריח רגיל. כוח 60–150N. מהירות 10–15 מ״מ/שנייה. ודא שהמהלך ≥ כמה שהבריח צריך לזוז."},
   {id:"mount", name:"תושבות למפעיל", ali:"linear actuator mounting bracket", qty:1, price:10, color:0x6e7781,
    role:"מחזיקות את המפעיל ומאפשרות לו להסתובב מעט (מונע היתקעות).", where:"אחורית — לפלטה. קדמית — דרך המצמד לבריח.", tip:"לפעמים כלולות עם המפעיל — בדוק בדף המוצר."},
-  {id:"coupler", name:"מצמד (זווית מתכת + בורג M4 + אום נעילה)", ali:"M4 nylon lock nut screw set stainless + small L bracket", qty:1, price:12, color:0xd29922,
+  {id:"coupler", name:"מצמד (זווית מתכת קטנה)", ali:"stainless steel small L corner bracket 20mm", qty:1, price:6, color:0xd29922,
    role:"מחבר את מוט המפעיל לבריח, במקום הידית הידנית.", where:"בין קצה מוט המפעיל לגוף הבריח.", tip:"השאר מעט חופש תנועה — חיבור קשיח מדי = היתקעות."},
   {id:"base", name:"פלטת בסיס", ali:"aluminum plate 3mm 200x100mm", qty:1, price:15, color:0x8c959f,
    role:"הבסיס שעליו מורכב כל המנגנון — שומר על יישור מדויק בין המפעיל לבריח.", where:"מוברגת לדלת.", tip:"אפשר גם לוח עץ קשה 12 מ״מ או הדפסה בתלת־ממד (PETG, 40% מילוי)."},
@@ -629,6 +643,18 @@ const PARTS = [
    role:"כל החיבורים.", where:"", tip:"חוטי המנוע: 20–22AWG."},
   {id:"cap", name:"קבל 1000µF 25V", ali:"1000uF 25V electrolytic capacitor", qty:1, price:3, color:0x0a3069,
    role:"מייצב מתח כשהמנוע מתניע — מונע איפוס של ה־Arduino.", where:"על כניסת 12V (פלוס לפלוס!).", tip:""},
+  {id:"woodscrews", name:"סט ברגי עץ נירוסטה (לפלטה ולתפס)", ali:"stainless steel wood screws assortment kit 4mm countersunk", qty:1, price:20, color:0x8c959f,
+   role:"מחברים את פלטת הבסיס לדלת ואת התפס למשקוף.", where:"4 ברגים 4×25–30 לפלטה, 4 ברגים 4×40 לתפס.", tip:"קנה סט עם כמה אורכים. לפלדלת קנה את הסט הבא במקום זה."},
+  {id:"metalscrews", name:"סט ברגים קודחים למתכת (רק לפלדלת / משקוף מתכת)", ali:"stainless self drilling screws assortment kit", qty:1, price:18, color:0x6e7781, optional:true,
+   role:"במקום ברגי העץ, אם הדלת או המשקוף ממתכת.", where:"פלטת הבסיס והתפס.", tip:"ראש קודח (self drilling) נכנס לפח בלי לקדוח לפני."},
+  {id:"m3kit", name:"סט ברגים, אומים וספייסרים M3 (לכרטיסים)", ali:"M3 nylon standoff spacer screw nut assortment kit", qty:1, price:15, color:0xd0d7de,
+   role:"מחזיקים את הכרטיסים מורמים בתוך הקופסה.", where:"Nano, ממסרים, ממיר, מקלט ← רצפת הקופסה.", tip:"ניילון ולא פליז, כדי שלא יהיה קצר."},
+  {id:"m4kit", name:"סט ברגי M4 עם אומי נעילה", ali:"M4 stainless steel hex socket screw nylon lock nut assortment kit", qty:1, price:15, color:0xb8c0c8,
+   role:"מצמד המפעיל לבריח ותושבות המפעיל לפלטה.", where:"מצמד + תושבות.", tip:"אומי Nyloc לא נפתחים מרעידות."},
+  {id:"vhb", name:"סרט דו־צדדי חזק 3M VHB", ali:"3M VHB double sided tape 20mm", qty:1, price:8, color:0x30363d,
+   role:"להדבקת החיישן המגנטי, המגנט והתעלה.", where:"חיישן, מגנט, תעלת חוטים.", tip:""},
+  {id:"channel", name:"תעלה דביקה לחוטים", ali:"self adhesive cable raceway wire channel 1m", qty:1, price:10, color:0xeeeeee,
+   role:"מסתירה ומגנה על החוטים בין הקופסה, המפעיל והחיישן.", where:"לאורך הדלת והקיר.", tip:""},
   {id:"ups", name:"UPS קטן 12V (אופציונלי)", ali:"12V mini UPS DC uninterruptible power supply 18650", qty:1, price:60, color:0x3fb950, optional:true,
    role:"ממשיך לעבוד בהפסקת חשמל.", where:"בין הספק לשקע DC.", tip:"מומלץ מאוד."}
 ];
@@ -664,6 +690,27 @@ PARTS.forEach((p, i) => {
   tbody.appendChild(tr);
 });
 $("#total").textContent = "~₪" + total + " (בלי UPS)";
+const PICK = {bolt:"6 inch / 150mm, Stainless", actuator:"12V · 30mm · 100N (או 64N)", nano:"Type-C, with pins soldered", rx:"RXB6 + spring antenna", relay:"2 Channel 5V",
+  psu:"12V 2A · EU plug", remote:"433MHz EV1527 · 4 keys · 3 pcs", leds:"Red + Green 5mm", btn:"12mm, momentary", buzzer:"Active 5V",
+  woodscrews:"4mm, assortment box", m3kit:"Nylon, black/white", m4kit:"M4, with nylon lock nuts", reed:"MC-38 wired", wires:"22AWG"};
+const aliUrl = q => "https://www.aliexpress.com/w/wholesale-" + encodeURIComponent(q.trim().replace(/\s+/g,"-")) + ".html?SortType=total_tranpro_desc";
+let inCart = {}; try { inCart = JSON.parse(localStorage.getItem("boltlock-cart")||"{}"); } catch(e){}
+function renderCart(){
+  const withOpt = $("#cartOptional").checked, tb = $("#cartTable tbody"); tb.innerHTML = "";
+  let n=0, done=0, sum=0;
+  PARTS.filter(p => p.price > 0 && (withOpt || !p.optional)).forEach(p => {
+    n++; if (inCart[p.id]) done++; sum += p.price*p.qty;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><input type="checkbox" ${inCart[p.id]?"checked":""}></td>
+      <td>${p.name}${p.optional?' <span class="muted">(אופציונלי)</span>':''}</td>
+      <td class="muted" dir="ltr" style="text-align:right">${PICK[p.id]||"—"}</td><td>${p.qty}</td><td>~₪${p.price*p.qty}</td>
+      <td><a href="${aliUrl(p.ali.replace(/ \+ .*$/,""))}" target="_blank" rel="noopener">פתח באליאקספרס ↗</a></td>`;
+    tr.querySelector("input").onchange = e => { inCart[p.id]=e.target.checked; try{localStorage.setItem("boltlock-cart",JSON.stringify(inCart));}catch(err){} renderCart(); };
+    tb.appendChild(tr);
+  });
+  $("#cartProgress").textContent = done + " / " + n; $("#cartTotal").textContent = "~₪" + sum;
+}
+$("#cartOptional").onchange = renderCart; renderCart();
 $("#copyAll").onclick = () => copy(PARTS.map((p,i)=>`${i+1}. ${p.name} ×${p.qty}\n   AliExpress: ${p.ali}`).join("\n"), $("#copyAllMsg"));
 
 const checks = ["הממיר מכוון ל־5.0V","השלטים נלמדו ונבדקו","המפעיל זז בכיוון הנכון","הבריח נכנס לתפס בחלקות (גם בדחיפת הדלת)","הנעילה נחסמת כשהדלת פתוחה","MOVE_MS כויל","יש דרך יציאה מבפנים בלי שלט","יש דרך כניסה חלופית בהפסקת חשמל","20 מחזורי בדיקה עברו"];
@@ -678,7 +725,7 @@ function showInfo(p){
     <div class="muted">כמות: ${p.qty} · מחיר משוער: ${p.price?("~₪"+p.price*p.qty):"כלול עם הבריח"}${p.optional?" · אופציונלי":""}</div>
     <div class="ali"><b>חיפוש באליאקספרס:</b> <code>${p.ali}</code>
       <button id="copyAli">📋 העתק</button>
-      <a href="https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(p.ali.replace(/^\(.*?\)\s*—\s*או:\s*/,""))}" target="_blank" rel="noopener">🔎 חפש</a>
+      <a href="${aliUrl(p.ali.replace(/^\(.*?\)\s*—\s*או:\s*/,"").replace(/ \+ .*$/,""))}" target="_blank" rel="noopener">🔎 חפש</a>
       <span id="copyAliMsg" class="copied"></span></div>
     <p><b>תפקיד:</b> ${p.role}</p>
     ${p.where?`<p><b>איפה מתחבר:</b> ${p.where}</p>`:""}
