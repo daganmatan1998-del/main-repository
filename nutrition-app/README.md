@@ -30,6 +30,10 @@ nutrition-app/
 ├── wrangler.toml  capacitor.config.json  package.json
 ```
 
+## Windows: one-click upload
+
+Install Node.js (LTS, from nodejs.org), then double-click **`UPLOAD-APP.bat`** in this folder. It installs, opens the Cloudflare sign-in, uploads the app, asks for the Claude key in a dialog (optional), and gives you the link, copied to the clipboard and saved in `APP-LINK.txt`. Run it again any time to publish changes. Everything happens in Hebrew dialog windows; nothing has to be typed in a terminal.
+
 ## Run it locally
 
 ```bash
