@@ -39,7 +39,7 @@ export const ICONS = {
   play: S('<path fill="currentColor" d="M8 5v14l11-7z"/>'),
   heart: S('<path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2 0 3.5 1.1 4.3 2.4.8-1.3 2.3-2.4 4.3-2.4 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21Z"/>'),
   heartEmpty: S('<path fill="none" stroke="currentColor" stroke-width="2" d="M12 19.8s-6.8-4.2-8.7-8.3C2 8.6 3.8 5.5 6.8 5.5c1.9 0 3.2 1.2 3.9 2.4L12 9.6l1.3-1.7c.7-1.2 2-2.4 3.9-2.4 3 0 4.8 3.1 3.5 6-1.9 4.1-8.7 8.3-8.7 8.3Z"/>'),
-  star: S('<path fill="currentColor" stroke="#b07a00" stroke-width="1" d="m12 2.6 2.9 6 6.5.8-4.8 4.5 1.2 6.5L12 17.2l-5.8 3.2 1.2-6.5-4.8-4.5 6.5-.8z"/>'),
+  star: S('<path fill="#ffc23d" stroke="#b07a00" stroke-width="1" d="m12 2.6 2.9 6 6.5.8-4.8 4.5 1.2 6.5L12 17.2l-5.8 3.2 1.2-6.5-4.8-4.5 6.5-.8z"/>'),
   starEmpty: S('<path fill="#e6dcc6" stroke="#b5a98f" stroke-width="1" d="m12 2.6 2.9 6 6.5.8-4.8 4.5 1.2 6.5L12 17.2l-5.8 3.2 1.2-6.5-4.8-4.5 6.5-.8z"/>'),
   lock: S('<path fill="currentColor" d="M7 10V8a5 5 0 0 1 10 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1Zm2 0h6V8a3 3 0 0 0-6 0v2Z"/>'),
   coin: S('<circle cx="12" cy="12" r="9" fill="#ffc23d" stroke="#c98a00" stroke-width="2"/><path d="M12 7v10M9.5 9.5h3.8a1.7 1.7 0 0 1 0 3.4h-2.6a1.7 1.7 0 0 0 0 3.4h3.8" fill="none" stroke="#8a5a00" stroke-width="1.6" stroke-linecap="round"/>'),

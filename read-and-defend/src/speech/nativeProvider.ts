@@ -20,9 +20,13 @@ interface NativePlugin {
 }
 
 export function getNativePlugin(): NativePlugin | null {
-  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean; Plugins?: Record<string, unknown> } }).Capacitor;
-  if (!cap?.isNativePlatform?.()) return null;
-  return (cap.Plugins?.SpeechRecognition as NativePlugin | undefined) ?? null;
+  const w = window as unknown as {
+    Capacitor?: { isNativePlatform?: () => boolean; Plugins?: Record<string, unknown> };
+    /** Set by the native build: window.__nativeSpeech = SpeechRecognition (see README). */
+    __nativeSpeech?: NativePlugin;
+  };
+  if (!w.Capacitor?.isNativePlatform?.()) return null;
+  return w.__nativeSpeech ?? (w.Capacitor.Plugins?.SpeechRecognition as NativePlugin | undefined) ?? null;
 }
 
 export class NativeProvider implements SpeechProvider {

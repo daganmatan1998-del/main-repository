@@ -535,7 +535,7 @@ export class GameSession {
     for (const k of out.newlyMastered) {
       this.newSkills.push(k);
       const sk = this.app.pack.skills[k];
-      if (sk) setTimeout(() => toast(t('newSkill', { s: sk.display }), 'good', 2200), 900);
+      if (sk) setTimeout(() => toast(t('newSkill', { s: sk.kind === 'grapheme' || sk.kind === 'vowel' ? sk.display : sk.label }), 'good', 2200), 900);
     }
     this.app.save();
   }
@@ -670,7 +670,7 @@ export class GameSession {
     m.append(rewards);
     for (const k of this.newSkills) {
       const sk = this.app.pack.skills[k];
-      if (sk) m.append(el('div', { class: 'achv' }, icon('star'), t('newSkill', { s: sk.display })));
+      if (sk) m.append(el('div', { class: 'achv' }, icon('star'), t('newSkill', { s: sk.kind === 'grapheme' || sk.kind === 'vowel' ? sk.display : sk.label })));
     }
     for (const a of earned) m.append(el('div', { class: 'achv' }, icon(a.icon === 'star' ? 'star' : a.icon), a.title[this.app.lang]));
     void ACHIEVEMENTS;
