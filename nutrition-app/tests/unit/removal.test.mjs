@@ -130,3 +130,32 @@ test('meals without protein still get plenty of recipes', () => {
     }
   }
 });
+
+test('meals stick to foods that belong in them, with one protein where one is enough', () => {
+  const plans = [
+    { diet: 'omni', kosher: true, allergies: [], dislikes: '', excluded: [], mealsPerDay: 4 },
+    { diet: 'omni', kosher: false, allergies: [], dislikes: '', excluded: [], mealsPerDay: 3 },
+    { diet: 'omni', kosher: true, allergies: ['gluten', 'dairy'], dislikes: '', excluded: [], mealsPerDay: 5 },
+    { diet: 'vegetarian', kosher: true, allergies: [], dislikes: '', excluded: [], mealsPerDay: 4 },
+  ];
+  let meals = 0;
+  let doubles = 0;
+  for (const prefs of plans) {
+    for (const t of [{ calories: 1600, protein: 125, carbs: 160, fat: 52 }, T, { calories: 3000, protein: 190, carbs: 360, fat: 90 }]) {
+      for (let d = 0; d < 14; d++) {
+        for (const m of generateDay(addDays('2026-11-01', d), t, prefs, {}, 3, { week: d > 6 ? 1 : 0, dayIndex: d % 7 })) {
+          if (prefs.diet === 'omni') meals++;
+          // Legume meals (vegetarian) still get a top-up; omnivores rarely need one.
+          if (prefs.diet === 'omni' && m.items.filter((i) => i.role === 'protein').length > 1) doubles++;
+          for (const it of m.items) {
+            const f = FOOD_BY_ID[it.foodId];
+            // No steak, chicken or fish dinner for breakfast, no rice or potatoes either.
+            if (m.type === 'b' && (['meat', 'poultry'].includes(f.src) && f.id !== 'turkey_pastrami' || ['salmon', 'white_fish', 'trout', 'hake', 'shrimp'].includes(f.id))) assert.fail(`${prefs.diet}: ${f.id} at breakfast`);
+            if (m.type === 'b' && f.role === 'carb') assert.ok(f.meals.includes('b'), `${prefs.diet}: ${f.id} at breakfast`);
+          }
+        }
+      }
+    }
+  }
+  assert.ok(doubles / meals < 0.07, `${doubles}/${meals} omnivore meals with two proteins`);
+});

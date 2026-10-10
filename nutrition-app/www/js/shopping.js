@@ -161,6 +161,23 @@ export const SHOP = {
   pomegranate: { dept: 'produce', name: 'רימונים (או גרגרי רימון ארוזים)', count: { g: 170, s: 'רימון', p: 'רימונים' } },
   clementine: { dept: 'produce', name: 'קלמנטינות', count: { g: 75, s: 'קלמנטינה', p: 'קלמנטינות' } },
   strawberries: { dept: 'produce', name: 'תותים', pack: pk(250, 'סלסלה 250 ג׳') },
+  persimmon: { dept: 'produce', name: 'אפרסמונים', count: { g: 170, s: 'אפרסמון', p: 'אפרסמונים' } },
+  figs: { dept: 'produce', name: 'תאנים טריות', count: { g: 50, s: 'תאנה', p: 'תאנים' } },
+  apricot: { dept: 'produce', name: 'משמשים', count: { g: 35, s: 'משמש', p: 'משמשים' } },
+  cherries: { dept: 'produce', name: 'דובדבנים (טריים או קפואים)', raw: 1.1 },
+  nectarine: { dept: 'produce', name: 'נקטרינות', count: { g: 140, s: 'נקטרינה', p: 'נקטרינות' } },
+  grapefruit: { dept: 'produce', name: 'אשכוליות', count: { g: 250, s: 'אשכולית', p: 'אשכוליות' } },
+  pomelo: { dept: 'produce', name: 'פומלה', raw: 1.6, note: 'פומלה אחת שוקלת כקילו וחצי, ומספיקה לכמה ימים' },
+  lychee: { dept: 'produce', name: "ליצ'י", raw: 1.4 },
+  passion_fruit: { dept: 'produce', name: 'פסיפלורות', count: { g: 18, s: 'פסיפלורה', p: 'פסיפלורות' } },
+  guava: { dept: 'produce', name: 'גויאבות', count: { g: 55, s: 'גויאבה', p: 'גויאבות' } },
+  papaya: { dept: 'produce', name: 'פפאיה', raw: 1.4 },
+  blueberries: { dept: 'produce', name: 'אוכמניות (טריות או קפואות)', pack: pk(125, 'סלסלה 125 ג׳') },
+  raspberries: { dept: 'produce', name: 'פטל (טרי או קפוא)', pack: pk(125, 'סלסלה 125 ג׳') },
+  loquat: { dept: 'produce', name: 'שסק', count: { g: 20, s: 'שסק', p: 'שסקים' } },
+  raisins: { dept: 'dry', name: 'צימוקים', pack: pk(250, 'שקית 250 ג׳'), staple: true },
+  dried_apricots: { dept: 'dry', name: 'משמש מיובש', pack: pk(200, 'שקית 200 ג׳') },
+  prunes: { dept: 'dry', name: 'שזיפים מיובשים', pack: pk(250, 'שקית 250 ג׳') },
 };
 
 export function fmtWeight(g) {

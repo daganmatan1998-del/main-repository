@@ -73,13 +73,16 @@ function poolFor(slot, type, allowed) {
   let roles = [slotRole(slot)];
   if (slot === 'carb' && type === 's') roles = ['carb', 'fruit'];
   const byMeal = allowed.filter((f) => roles.includes(f.role) && f.meals.includes(type));
-  if (byMeal.length >= 3) return byMeal;
-  // Restrictions left too few foods that usually belong in this meal: add the
-  // rest of the category after them, so a week can still vary.
+  if (byMeal.length >= 2) return byMeal;
+  // Restrictions left almost nothing that belongs in this meal: add the rest
+  // of the category after it. Two options are enough to alternate; padding
+  // sooner put potatoes and rice on the breakfast plate.
   return byMeal.concat(allowed.filter((f) => roles.includes(f.role) && !f.meals.includes(type)));
 }
 
 const W = { p: 16 * 1.5, c: 16, f: 81 };
+// Protein first: used before resorting to a second protein in a meal.
+const W_PROTEIN = { p: 16 * 8, c: 16, f: 81 };
 const KEYS = ['p', 'c', 'f'];
 
 function totals(items) {
@@ -91,7 +94,7 @@ function totals(items) {
   return t;
 }
 
-function descend(items, target, iterations = 80, keys = KEYS) {
+function descend(items, target, iterations = 80, keys = KEYS, w = W) {
   for (let i = 0; i < iterations; i++) {
     for (const it of items) {
       if (it.fixed) continue;
@@ -101,8 +104,8 @@ function descend(items, target, iterations = 80, keys = KEYS) {
       let den = 0;
       for (const k of keys) {
         const d = food[k] / 100;
-        num += W[k] * d * (target[k] - t[k]);
-        den += W[k] * d * d;
+        num += w[k] * d * (target[k] - t[k]);
+        den += w[k] * d * d;
       }
       if (den <= 0) continue;
       it.grams = clamp(it.grams + num / den, it.lo, it.hi || food.max);
@@ -122,7 +125,7 @@ function roundGrams(food, g) {
 // keys: the macros to aim at. A meal the user took a macro group out of aims
 // only at the remaining ones (whatever the other foods incidentally bring of
 // the removed macro isn't chased down to zero).
-export function solvePortions(items, target, keys = KEYS) {
+export function solvePortions(items, target, keys = KEYS, w = W) {
   for (const it of items) {
     const food = FOOD_BY_ID[it.foodId];
     if (it.fixed) continue;
@@ -131,14 +134,14 @@ export function solvePortions(items, target, keys = KEYS) {
     it.lo = it.role === 'protein' || it.keep ? food.min : 0;
     it.grams = it.grams || (food.min + food.max) / 3;
   }
-  descend(items, target, 80, keys);
+  descend(items, target, 80, keys, w);
 
   // Drop carbs/fats the meal doesn't need (e.g. salmon already brings the fat).
   let kept = items.filter((it) => it.fixed || it.keep || it.role === 'protein' || it.grams >= FOOD_BY_ID[it.foodId].min * 0.5);
   for (const it of kept) {
     if (!it.fixed) it.lo = FOOD_BY_ID[it.foodId].min;
   }
-  descend(kept, target, 80, keys);
+  descend(kept, target, 80, keys, w);
 
   // Whole eggs, whole slices: round, freeze, and re-solve the rest around them.
   for (const it of kept) {
@@ -148,7 +151,7 @@ export function solvePortions(items, target, keys = KEYS) {
       it.fixed = true;
     }
   }
-  descend(kept, target, 80, keys);
+  descend(kept, target, 80, keys, w);
   for (const it of kept) it.grams = roundGrams(FOOD_BY_ID[it.foodId], it.grams);
   return kept.map(({ lo, hi, fixed, keep, ...rest }) => rest);
 }
@@ -224,14 +227,29 @@ function chooser({ rand, week, dayIndex, mealIdx, reseed, userSeed, roleFoods, w
 // enough different options.
 function proteinPool(type, target, allowed) {
   const pool = poolFor('protein', type, allowed);
-  const strong = (f) => capacity(f) >= target.p * 0.6;
+  // A main that can carry nearly all of the meal's protein on its own, so the
+  // meal doesn't need a second protein beside it. Keto and carnivore keep the
+  // looser bar: their fats carry the calories, and two proteins are rare there.
+  const share = allowed.some((f) => f.role === 'carb') ? 0.85 : 0.6;
+  const strong = (f) => capacity(f) >= target.p * share;
   let out = pool.filter(strong);
   if (out.length < 3) out = pool;
-  // Fewer than a week of options for this meal: borrow suitable proteins that
-  // usually belong to other meals (cottage at lunch), so days don't repeat.
-  if (out.length < 7) {
+  // Fewer than a week of options for this meal: borrow suitable proteins from
+  // the meals that eat alike, so days don't repeat. Breakfast and snacks
+  // borrow from each other (cottage, tuna, eggs), lunch and dinner likewise;
+  // never steak for breakfast or skyr for dinner.
+  // Still short of a week: this meal's own slightly weaker proteins (a second
+  // protein may top them up), and only then anything strong enough.
+  const alike = type === 'b' || type === 's' ? 'bs' : 'ld';
+  const tiers = [
+    (f) => strong(f) && [...alike].some((t) => f.meals.includes(t)),
+    (f) => f.meals.includes(type) && capacity(f) >= target.p * 0.6,
+    strong,
+  ];
+  for (const tier of tiers) {
+    if (out.length >= 7) break;
     const have = new Set(out.map((f) => f.id));
-    out = out.concat(allowed.filter((f) => f.role === 'protein' && !have.has(f.id) && strong(f)));
+    out = out.concat(allowed.filter((f) => f.role === 'protein' && !have.has(f.id) && tier(f)));
   }
   return out;
 }
@@ -328,18 +346,25 @@ function solveWithout(items, target, removed) {
   // The macro aim leaves the meal off its calories when the remaining foods
   // also carry the removed macro (fat in entrecôte, carbs in chickpeas).
   // Calories come first: scale the remaining portions together onto them.
-  const variable = out.filter((it) => it.role !== 'veg');
-  for (let round = 0; round < 4 && variable.length; round++) {
-    const t = totals(out);
-    const varKcal = totals(variable).kcal;
-    if (varKcal <= 0) break;
-    const factor = (target.kcal - (t.kcal - varKcal)) / varKcal;
-    if (Math.abs(factor - 1) < 0.02) break;
-    for (const it of variable) {
-      const food = FOOD_BY_ID[it.foodId];
-      it.grams = roundGrams(food, clamp(it.grams * factor, food.min, food.max * STRETCH));
+  // Whole-unit foods (slices, eggs, clementines) are scaled and rounded
+  // first, then the rest fine-tuned around them.
+  const scaleOnto = (movable) => {
+    for (let round = 0; round < 4 && movable.length; round++) {
+      const t = totals(out);
+      const movKcal = totals(movable).kcal;
+      if (movKcal <= 0) break;
+      const factor = (target.kcal - (t.kcal - movKcal)) / movKcal;
+      if (Math.abs(factor - 1) < 0.02) break;
+      for (const it of movable) {
+        const food = FOOD_BY_ID[it.foodId];
+        it.grams = roundGrams(food, clamp(it.grams * factor, food.min, food.max * STRETCH));
+      }
     }
-  }
+  };
+  const variable = out.filter((it) => it.role !== 'veg');
+  scaleOnto(variable);
+  const smooth = variable.filter((it) => !FOOD_BY_ID[it.foodId].discrete);
+  if (smooth.length && smooth.length < variable.length) scaleOnto(smooth);
   return out;
 }
 
@@ -364,7 +389,7 @@ export function buildMeal(type, target, allowed, choose, usedToday, slots = SLOT
   }
   // Next to a breakfast fruit the bread / oats stay on the plate too, unless
   // the protein already brings the carbs (lentils, beans).
-  const carbyProtein = chosen.some((c) => c.slot === 'protein' && (c.food.c * 4) / c.food.kcal > 0.3);
+  const carbyProtein = chosen.some((c) => c.slot === 'protein' && (c.food.c * 4) / c.food.kcal > 0.45);
   const keepCarb = slots[type].includes('fruit') && !carbyProtein;
   const toItem = ({ slot, food }) => ({
     slot,
@@ -379,14 +404,27 @@ export function buildMeal(type, target, allowed, choose, usedToday, slots = SLOT
   });
   let items = solvePortions(chosen.map(toItem), target);
 
-  // Still short on protein (e.g. a vegan meal built on lentils)? Add the
-  // densest compatible second protein and solve again.
+  // Short on protein? First let the meal's own protein grow (solve again with
+  // protein weighted up), so a meal doesn't get a second protein it doesn't
+  // need: protein pudding 125 g + yogurt becomes just more pudding.
+  if (totals(items).p < target.p * 0.85) {
+    const alone = solvePortions(chosen.map(toItem), target, KEYS, W_PROTEIN);
+    const t = totals(alone);
+    if (t.p >= target.p * 0.85 && Math.abs(t.kcal - target.kcal) <= target.kcal * 0.12) items = alone;
+  }
+  // Still short (e.g. a vegan meal built on lentils, which can't carry the
+  // protein without far too many carbs)? Add the densest compatible second
+  // protein and solve again.
   const got = totals(items).p;
   if (got < target.p * 0.85) {
     const inMeal = chosen.map((c) => c.food);
+    // A dense protein that belongs in this meal (tuna at breakfast) before
+    // one that doesn't (chicken at breakfast); a weak one (lentils) only last.
+    const dense = (f) => f.p / f.kcal >= 0.1;
+    const rank = (f) => (dense(f) ? 2 : 0) + (f.meals.includes(type) ? 1 : 0);
     const extra = allowed
       .filter((f) => f.role === 'protein' && !inMeal.some((x) => x.id === f.id) && kosherCompatible(f, inMeal))
-      .sort((a, b) => fitScore(b, type) - fitScore(a, type))[0];
+      .sort((a, b) => rank(b) - rank(a) || fitScore(b, type) - fitScore(a, type))[0];
     if (extra) {
       chosen.push({ slot: 'protein2', food: extra });
       items = solvePortions(chosen.map(toItem), target);
@@ -477,8 +515,9 @@ export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 
         if (!food || !isAllowed(food, prefs)) continue;
         const replacement = { slot, role: food.role, foodId: food.id, grams: sw.grams };
         const at = items.findIndex((i) => i.slot === slot);
+        // A swap saved for a slot this meal no longer has (an old second
+        // protein) is ignored rather than added back.
         if (at >= 0) items[at] = replacement;
-        else items.push(replacement);
       }
     }
     // What's left of the meal grows to carry the removed group's calories:

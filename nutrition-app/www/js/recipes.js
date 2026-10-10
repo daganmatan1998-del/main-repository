@@ -30,6 +30,10 @@ const NAME = {
   rice_noodles: 'אטריות אורז', green_peas: 'אפונה', whole_bun: 'לחמנייה מלאה', crispbread: 'פת פריכה',
   mango: 'מנגו', watermelon: 'אבטיח', melon: 'מלון', peach: 'אפרסק', pineapple: 'אננס', plums: 'שזיפים',
   pomegranate: 'גרגרי רימון', clementine: 'קלמנטינות', strawberries: 'תותים',
+  persimmon: 'אפרסמון', figs: 'תאנים', apricot: 'משמשים', cherries: 'דובדבנים', nectarine: 'נקטרינה',
+  grapefruit: 'אשכולית', pomelo: 'פומלה', lychee: "ליצ'י", passion_fruit: 'פסיפלורה', guava: 'גויאבה',
+  papaya: 'פפאיה', blueberries: 'אוכמניות', raspberries: 'פטל', loquat: 'שסק', raisins: 'צימוקים',
+  dried_apricots: 'משמש מיובש', prunes: 'שזיפים מיובשים',
 };
 const nm = (id) => NAME[id] || FOOD_BY_ID[id].name;
 
@@ -54,6 +58,10 @@ const DEF = {
   rice_noodles: 'אטריות האורז', green_peas: 'האפונה', whole_bun: 'הלחמנייה', crispbread: 'הפת הפריכה',
   mango: 'המנגו', watermelon: 'האבטיח', melon: 'המלון', peach: 'האפרסק', pineapple: 'האננס', plums: 'השזיפים',
   pomegranate: 'גרגרי הרימון', clementine: 'הקלמנטינות', strawberries: 'התותים',
+  persimmon: 'האפרסמון', figs: 'התאנים', apricot: 'המשמשים', cherries: 'הדובדבנים', nectarine: 'הנקטרינה',
+  grapefruit: 'האשכולית', pomelo: 'הפומלה', lychee: "הליצ'י", passion_fruit: 'הפסיפלורה', guava: 'הגויאבה',
+  papaya: 'הפפאיה', blueberries: 'האוכמניות', raspberries: 'הפטל', loquat: 'השסק', raisins: 'הצימוקים',
+  dried_apricots: 'המשמש המיובש', prunes: 'השזיפים המיובשים',
 };
 const def = (id) => DEF[id] || `ה${nm(id)}`;
 // ב / ל + the article merge: "בפסטרמה", not "בהפסטרמה".
@@ -85,6 +93,9 @@ const KIND = {
   green_peas: 'corn', whole_bun: 'bread', crispbread: 'crackers',
   mango: 'fruit', watermelon: 'fruit', melon: 'fruit', peach: 'fruit', pineapple: 'fruit', plums: 'fruit',
   pomegranate: 'fruit', clementine: 'fruit', strawberries: 'fruit',
+  persimmon: 'fruit', figs: 'fruit', apricot: 'fruit', cherries: 'fruit', nectarine: 'fruit', grapefruit: 'fruit',
+  pomelo: 'fruit', lychee: 'fruit', passion_fruit: 'fruit', guava: 'fruit', papaya: 'fruit', blueberries: 'fruit',
+  raspberries: 'fruit', loquat: 'fruit', raisins: 'fruit', dried_apricots: 'fruit', prunes: 'fruit',
 };
 // Carb kinds that can carry a dish on their own (a meal without protein).
 const CARB_KINDS = ['grain', 'pasta', 'tuber', 'corn', 'oats', 'bread', 'pita', 'tortilla', 'crackers', 'fruit'];
@@ -166,7 +177,16 @@ function carbPrep(id, grams, inOven) {
   if (k === 'bread') return `קולים ${household(FOOD_BY_ID[id], grams)} ${n}`;
   if (k === 'pita') return `מחממים ${household(FOOD_BY_ID[id], grams)} במחבת יבשה או בטוסטר`;
   if (k === 'tortilla') return `מחממים ${household(FOOD_BY_ID[id], grams)} במחבת יבשה 20 שניות מכל צד`;
-  if (k === 'fruit') return `חותכים ${grams} ג׳ ${n}`;
+  if (k === 'fruit') {
+    // Berries and grapes are washed, citrus and lychee peeled, dried fruit
+    // added as is; the rest is cut.
+    if (['berries', 'blueberries', 'raspberries', 'grapes', 'cherries', 'strawberries'].includes(id)) return `שוטפים ${grams} ג׳ ${n}`;
+    if (['orange', 'clementine', 'grapefruit', 'pomelo', 'lychee'].includes(id)) return `מקלפים ${grams} ג׳ ${n}`;
+    if (id === 'passion_fruit') return `חוצים ${household(FOOD_BY_ID[id], grams)} וגורפים את התוכן בכפית`;
+    if (id === 'pomegranate') return `מפרידים ${grams} ג׳ גרגרי רימון`;
+    if (['raisins', 'dried_apricots', 'prunes', 'dates'].includes(id)) return `מוסיפים ${grams} ג׳ ${n}`;
+    return `חותכים ${grams} ג׳ ${n}`;
+  }
   return null;
 }
 

@@ -12,7 +12,7 @@ nutrition-app/
 │   │   ├── nutrition.js     BMR/TDEE, safe pacing, calories & macros (pure)
 │   │   ├── mealplan.js      daily menu generator + portion solver (pure)
 │   │   ├── substitutions.js equivalent swaps (pure)
-│   │   ├── foods.js         food database (126 foods), diet/allergy/kosher rules
+│   │   ├── foods.js         food database (143 foods), diet/allergy/kosher rules
 │   │   ├── schedule.js      week math from the registration date (pure)
 │   │   ├── store.js  db.js  state + IndexedDB, clock-rollback guard
 │   │   ├── image.js         client-side photo compression
@@ -166,12 +166,19 @@ The replace sheet shows the 6 closest matches first. **לראות את כל הא
 
 ### More food options (v1.4)
 
-126 foods, up from 76 (38 protein, 27 carb, 25 fat, 19 vegetable, 17 fruit). Each has shopping-list info, recipe support and correct Hebrew forms.
+143 foods, up from 76 (38 protein, 27 carb, 25 fat, 19 vegetable, 34 fruit). Each has shopping-list info, recipe support and correct Hebrew forms.
 - **Protein:** ground chicken and turkey, sirloin, trout, hake, Bulgarian cheese, skyr, protein pudding, soy chunks, white beans
 - **Carbs:** barley, millet, ptitim, whole-wheat / gluten-free pasta, rice noodles, peas, whole-wheat bun, crispbread
 - **Fats:** pistachios, hazelnuts, peanuts, sunflower and sesame seeds, almond butter, canola oil, hummus, mozzarella, feta, cream cheese, ghee
 - **Vegetables:** cucumber, tomato, peppers, zucchini, eggplant, cabbage, asparagus, Brussels sprouts, pumpkin, beets
 - **Fruit:** mango, watermelon, melon, peach, pineapple, plums, pomegranate, clementines, strawberries
+- **More fruit (v1.4.2):** persimmon, figs, apricot, cherries, nectarine, grapefruit, pomelo, lychee, passion fruit, guava, papaya, blueberries, raspberries, loquat, raisins, dried apricots, prunes
+
+### One protein per meal where one is enough (v1.4.2)
+
+A meal gets a second protein only when its main protein can't reach the meal's protein target. Before adding one, the generator first tries growing the main protein (solved again with protein weighted up). Main proteins are also chosen from those that can carry about 85% of the meal's protein alone. Keto and carnivore keep the looser 60% bar, because their fats carry the calories. Result: omnivore meals with two proteins fell from ~13% to ~5%. Vegan and vegetarian meals built on legumes still get a top-up, since lentils can't carry the protein without far too many carbs. Daily protein stays at 90%+ of target.
+
+Meals also stick to foods that belong in them. Breakfast and snacks only borrow proteins from each other, and lunch and dinner likewise, so there's no steak or salmon at breakfast. A meal only borrows carbs from other meals when restrictions leave it fewer than two options. A needed second protein prefers a dense one that fits the meal (tuna at breakfast). Eggs now count as a snack; feta, mozzarella, hard cheese and butter count as lunch foods.
 
 ### Weekly-gate rules (what "can't be bypassed" means here)
 
@@ -188,7 +195,7 @@ The replace sheet shows the 6 closest matches first. **לראות את כל הא
 ## Tests
 
 ```bash
-npm test              # 39 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
+npm test              # 40 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
 npm run test:e2e      # 161 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 ```
 
