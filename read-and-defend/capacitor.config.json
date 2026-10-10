@@ -1,0 +1,9 @@
+{
+  "appId": "com.readanddefend.app",
+  "appName": "Read & Defend",
+  "webDir": "dist",
+  "server": { "androidScheme": "https" },
+  "plugins": {
+    "SpeechRecognition": {}
+  }
+}

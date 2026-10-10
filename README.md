@@ -8,6 +8,7 @@ J.A.R.V.I.S. — the voice assistant, in the two halves it actually ships as.
 | `jarvis-desktop/` | The Tauri desktop app — the same page as a floating always-on-top orb on `Ctrl+Shift+Space`. See [its README](jarvis-desktop/README.md) for setup and for what the orb can and cannot do. |
 | `jarvis-desktop/dist/index.html` | The whole frontend, one file, no bundler. This is also what you host on the web. |
 | `jarvis-desktop/mic-test.html` | A standalone page that measures the exact RMS level the voice detector thresholds against, so "he cannot hear me" becomes a number instead of a guess. |
+| `read-and-defend/` | **Read & Defend** — a separate, self-contained bilingual (Hebrew/English) castle-defense reading game for children. Vite + TypeScript, Capacitor-ready. See [its README](read-and-defend/README.md). |
 
 The two halves are deployed separately and do not need each other to build: the
 worker goes up with `wrangler deploy`, the desktop app with `npm run build`
