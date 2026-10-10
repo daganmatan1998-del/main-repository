@@ -317,6 +317,8 @@ try {
     (await meal0().locator('.rm-chip').count()) === 5 && (await meal0().locator('.rm-chip[data-group="fruit"]').count()) === 1
     && (await page.locator('.meal').count()) === (await page.locator('.rm-bar').count()));
   check('breakfast comes with a fruit', (await meal0().locator('.item.role-fruit').count()) === 1);
+  const perMeal = await page.locator('.meal').evaluateAll((els) => els.map((e) => [e.querySelectorAll('.item.role-protein').length, e.querySelectorAll('.item.role-fruit').length]));
+  check(`every meal on screen has one protein and one fruit (${perMeal.length} meals)`, perMeal.every(([p, f]) => p === 1 && f === 1), JSON.stringify(perMeal));
   const namesOf = async () => (await meal0().locator('.item-name').allInnerTexts()).map((t) => t.trim());
   const namesBefore = await namesOf();
   await meal0().locator('.rm-chip[data-group="carb"]').click();

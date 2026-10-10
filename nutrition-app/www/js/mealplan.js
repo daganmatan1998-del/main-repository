@@ -23,12 +23,12 @@ const TEMPLATES = {
   6: [['b', 0.2], ['s', 0.1, 'ביניים בוקר'], ['l', 0.27], ['s', 0.11, 'ביניים אחר הצהריים'], ['d', 0.22], ['s', 0.1, 'ארוחת לילה']],
 };
 
-// Breakfast also gets a fruit (it can be taken out like any group).
+// Every meal comes with one fruit (it can be taken out like any group).
 const SLOTS = {
   b: ['protein', 'carb', 'fat', 'veg', 'fruit'],
-  l: ['protein', 'carb', 'fat', 'veg'],
-  d: ['protein', 'carb', 'fat', 'veg'],
-  s: ['protein', 'carb', 'fat'],
+  l: ['protein', 'carb', 'fat', 'veg', 'fruit'],
+  d: ['protein', 'carb', 'fat', 'veg', 'fruit'],
+  s: ['protein', 'carb', 'fat', 'fruit'],
 };
 
 // Keto drops the carb slot (vegetables carry the few carbs); carnivore keeps
@@ -70,8 +70,9 @@ function pick(list, rand, avoid) {
 const slotRole = (slot) => slot.replace(/\d+$/, '');
 
 function poolFor(slot, type, allowed) {
-  let roles = [slotRole(slot)];
-  if (slot === 'carb' && type === 's') roles = ['carb', 'fruit'];
+  const roles = [slotRole(slot)];
+  // Fruit goes with any meal (an apple after lunch is as normal as at breakfast).
+  if (slot === 'fruit') return allowed.filter((f) => f.role === 'fruit');
   const byMeal = allowed.filter((f) => roles.includes(f.role) && f.meals.includes(type));
   if (byMeal.length >= 2) return byMeal;
   // Restrictions left almost nothing that belongs in this meal: add the rest
@@ -165,6 +166,11 @@ const round1 = (n) => Math.round(n * 10) / 10;
 
 // Protein a food can deliver in one sensible serving.
 const capacity = (f) => f.max * f.p / 100;
+// Can this food carry `share` of the meal's protein on its own: enough in a
+// sensible serving, and lean enough to do it within ~3/4 of the meal's
+// calories (an entrecôte can't carry a cutting dinner; its calories are fat).
+const carries = (f, target, share) => capacity(f) >= target.p * share
+  && f.p / f.kcal >= (target.p * share) / (target.kcal * 0.75);
 // Protein density, with a small bonus for foods that belong in this meal.
 const fitScore = (f, type) => f.p / f.kcal + (f.meals.includes(type) ? 0.03 : 0);
 
@@ -217,8 +223,12 @@ function chooser({ rand, week, dayIndex, mealIdx, reseed, userSeed, roleFoods, w
     // Nothing in the rotation fits this meal (kosher, capacity): any eligible food.
     return fallback || pick(eligible, rand, avoid);
   };
-  // A seeded draw outside the weekly rotation (a main that doesn't suit a removal).
+  // A seeded draw outside the weekly rotation.
   choose.any = (slot, eligible, avoid) => pick(eligible, rand, avoid);
+  // Every main any meal has on any day of this week, and today's position:
+  // a last-resort replacement main comes from outside this set.
+  choose.dayIndex = dayIndex;
+  choose.weekMains = new Set(weekPlan.days.flat().filter(Boolean).map((f) => f.id));
   return choose;
 }
 
@@ -231,7 +241,7 @@ function proteinPool(type, target, allowed) {
   // meal doesn't need a second protein beside it. Keto and carnivore keep the
   // looser bar: their fats carry the calories, and two proteins are rare there.
   const share = allowed.some((f) => f.role === 'carb') ? 0.85 : 0.6;
-  const strong = (f) => capacity(f) >= target.p * share;
+  const strong = (f) => carries(f, target, share);
   let out = pool.filter(strong);
   if (out.length < 3) out = pool;
   // Fewer than a week of options for this meal: borrow suitable proteins from
@@ -300,6 +310,23 @@ function planWeekMains({ tmpl, mealTargets, allowed, week, userSeed, groups }) {
     });
     days.push(picks);
   }
+  // A main too weak to carry its meal's protein alone (lentils for a big
+  // lunch) is swapped, where the week allows, for a strong one this meal
+  // doesn't use on any day and no other meal uses that day — so the meal
+  // keeps a single protein and the week still never repeats.
+  const share = allowed.some((f) => f.role === 'carb') ? 0.85 : 0.6;
+  tmpl.forEach((m, idx) => {
+    const ok = (f) => carries(f, mealTargets[idx], share);
+    for (let d = 0; d < 7; d++) {
+      const pick = days[d][idx];
+      if (!pick || ok(pick)) continue;
+      const spare = allowed.find((f) => f.role === 'protein' && f.meals.includes(m.type) && ok(f)
+        && !usedByMeal[idx].has(f.id) && !days[d].some((x) => x && x.id === f.id));
+      if (!spare) continue;
+      days[d][idx] = spare;
+      usedByMeal[idx].add(spare.id);
+    }
+  });
   return { days, orders };
 }
 
@@ -361,7 +388,7 @@ function solveWithout(items, target, removed) {
       }
     }
   };
-  const variable = out.filter((it) => it.role !== 'veg');
+  const variable = out.filter((it) => it.role !== 'veg' && it.slot !== 'fruit');
   scaleOnto(variable);
   const smooth = variable.filter((it) => !FOOD_BY_ID[it.foodId].discrete);
   if (smooth.length && smooth.length < variable.length) scaleOnto(smooth);
@@ -375,7 +402,14 @@ export function buildMeal(type, target, allowed, choose, usedToday, slots = SLOT
   for (const slot of slots[type]) {
     const all = poolFor(slot, type, allowed);
     let pool = all.filter((f) => kosherCompatible(f, chosen.map((c) => c.food)));
-    if (slot === 'protein') pool = proteinPool(type, target, allowed);
+    if (slot === 'protein') {
+      pool = proteinPool(type, target, allowed);
+      // A single day on its own (no week plan to vary): strong mains only.
+      if (!choose.weekMains) {
+        const strong = pool.filter((f) => carries(f, target, 0.85));
+        if (strong.length) pool = strong;
+      }
+    }
     const avoid = new Set([...usedToday, ...chosen.map((c) => c.food.id)]);
     let food = choose(slot, pool, avoid, all);
     // Never the same food twice in one meal (olive oil as both fats).
@@ -407,28 +441,39 @@ export function buildMeal(type, target, allowed, choose, usedToday, slots = SLOT
   // Short on protein? First let the meal's own protein grow (solve again with
   // protein weighted up), so a meal doesn't get a second protein it doesn't
   // need: protein pudding 125 g + yogurt becomes just more pudding.
+  // Still short: a bigger portion of it (up to 1.5x its usual maximum).
+  // A meal always has one protein, never two; weak mains were already
+  // swapped for strong ones where the week allows it (planWeekMains).
+  const tryProtein = (list, grow) => {
+    const its = list.map((c) => ({ ...toItem(c), hi: c.slot === 'protein' && grow ? c.food.max * 1.5 : toItem(c).hi }));
+    const out = solvePortions(its, target, KEYS, W_PROTEIN);
+    const t = totals(out);
+    return t.p >= target.p * 0.85 && Math.abs(t.kcal - target.kcal) <= target.kcal * 0.12 ? out : null;
+  };
   if (totals(items).p < target.p * 0.85) {
-    const alone = solvePortions(chosen.map(toItem), target, KEYS, W_PROTEIN);
-    const t = totals(alone);
-    if (t.p >= target.p * 0.85 && Math.abs(t.kcal - target.kcal) <= target.kcal * 0.12) items = alone;
-  }
-  // Still short (e.g. a vegan meal built on lentils, which can't carry the
-  // protein without far too many carbs)? Add the densest compatible second
-  // protein and solve again.
-  const got = totals(items).p;
-  if (got < target.p * 0.85) {
-    const inMeal = chosen.map((c) => c.food);
-    // A dense protein that belongs in this meal (tuna at breakfast) before
-    // one that doesn't (chicken at breakfast); a weak one (lentils) only last.
-    const dense = (f) => f.p / f.kcal >= 0.1;
-    const rank = (f) => (dense(f) ? 2 : 0) + (f.meals.includes(type) ? 1 : 0);
-    const extra = allowed
-      .filter((f) => f.role === 'protein' && !inMeal.some((x) => x.id === f.id) && kosherCompatible(f, inMeal))
-      .sort((a, b) => rank(b) - rank(a) || fitScore(b, type) - fitScore(a, type))[0];
-    if (extra) {
-      chosen.push({ slot: 'protein2', food: extra });
-      items = solvePortions(chosen.map(toItem), target);
+    const at = chosen.findIndex((c) => c.slot === 'protein');
+    let better = tryProtein(chosen, false) || (at >= 0 && tryProtein(chosen, true));
+    // Last resort: a main that no meal has anywhere this week, so swapping it
+    // in can't repeat a day. Days start at different candidates.
+    if (!better && at >= 0 && choose.weekMains) {
+      const others = chosen.filter((c) => c.slot !== 'protein').map((c) => c.food);
+      const fresh = allowed
+        .filter((f) => f.role === 'protein' && !choose.weekMains.has(f.id) && !usedToday.has(f.id)
+          && f.meals.includes(type) && kosherCompatible(f, others) && carries(f, target, 0.85))
+        .sort((x, y) => (x.id < y.id ? -1 : 1));
+      const from = fresh.length ? choose.dayIndex % fresh.length : 0;
+      for (const f of fresh.slice(from).concat(fresh.slice(0, from)).slice(0, 4)) {
+        const swapped = chosen.map((c, i) => (i === at ? { slot: 'protein', food: f } : c));
+        better = tryProtein(swapped, true);
+        if (better) {
+          usedToday.delete(chosen[at].food.id);
+          usedToday.add(f.id);
+          chosen[at] = swapped[at];
+          break;
+        }
+      }
     }
+    if (better) items = better;
   }
   if (sink) sink.chosen = chosen.map(toItem);
   return items;
@@ -503,7 +548,7 @@ export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 
       // protein or carb (just seeds and salad), bring back the carb that was
       // picked for this meal but not needed while the protein was there.
       const left = (list) => list.filter((it) => !removed.includes(slotGroup(it.slot)));
-      const meal = (list) => list.some((it) => ['protein', 'carb', 'fruit'].includes(it.role));
+      const meal = (list) => list.some((it) => it.role === 'protein' || (it.role === 'carb' && it.slot === 'carb'));
       items = left(items);
       if (!meal(items)) items = left(sink.chosen);
     }
@@ -523,7 +568,9 @@ export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 
     // What's left of the meal grows to carry the removed group's calories:
     // same foods, bigger portions, nothing added in its place.
     if (removed.length) {
-      items = solveWithout(items.map(({ slot, role, foodId, grams }) => ({ slot, role, foodId, grams: role === 'veg' ? grams : 0, fixed: role === 'veg' })), target, removed);
+      // Vegetables and the meal's fruit keep their serving; the rest grows.
+      const set = (it) => it.role === 'veg' || it.slot === 'fruit';
+      items = solveWithout(items.map(({ slot, role, foodId, grams }) => ({ slot, role, foodId, grams: set({ slot, role }) ? grams : 0, fixed: set({ slot, role }) })), target, removed);
     }
     items = items.map(itemWithMacros);
     const t = totals(items);

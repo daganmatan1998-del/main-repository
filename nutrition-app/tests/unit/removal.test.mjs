@@ -60,7 +60,7 @@ test('a removed group is gone from the meal and the meal keeps its calories', ()
           // carb picked for this meal comes back.)
           const before = base[m.index].items;
           const leftover = before.filter((i) => slotGroup(i.slot) !== g);
-          const onlyFat = !leftover.some((i) => ['protein', 'carb', 'fruit'].includes(i.role));
+          const onlyFat = !leftover.some((i) => i.role === 'protein' || (i.role === 'carb' && i.slot === 'carb'));
           const added = m.items.filter((i) => !before.some((b) => b.foodId === i.foodId));
           if (onlyFat) assert.ok(added.every((i) => i.role === 'carb'), `${prefs.diet} ${m.name}`);
           else assert.deepEqual(added.map((i) => i.foodId), [], `${prefs.diet} ${m.name} without ${g}`);
@@ -68,8 +68,7 @@ test('a removed group is gone from the meal and the meal keeps its calories', ()
           assert.equal(new Set(m.items.map((i) => i.foodId)).size, m.items.length, 'no food twice in a meal');
           errs.push(Math.abs(m.totals.kcal - m.target.kcal) / m.target.kcal);
         }
-        const baseKcal = base.reduce((s, m) => s + m.totals.kcal, 0);
-        assert.ok(Math.abs(dayKcal - baseKcal) / baseKcal < 0.12, `${prefs.diet} without ${g}: ${dayKcal} vs ${baseKcal}`);
+        assert.ok(Math.abs(dayKcal - T.calories) / T.calories < 0.12, `${prefs.diet} without ${g}: ${dayKcal} vs ${T.calories}`);
       }
     }
   }
@@ -89,9 +88,13 @@ test('removals only touch their own meal, and survive "another meal"', () => {
   }
 });
 
-test('breakfast comes with a fruit, which can be taken out like any group', () => {
+test('every meal comes with a fruit, which can be taken out like any group', () => {
   for (const prefs of PREFS) {
     for (let d = 0; d < 7; d++) {
+      for (const m of generateDay(addDays('2026-11-01', d), T, prefs, {}, 3, plan(d))) {
+        assert.equal(m.items.filter((i) => i.slot === 'fruit').length, 1, `${prefs.diet} ${m.name}`);
+        assert.ok(m.removable.includes('fruit'));
+      }
       const [b] = generateDay(addDays('2026-11-01', d), T, prefs, {}, 3, plan(d));
       const fruit = b.items.find((i) => i.slot === 'fruit');
       assert.ok(fruit && FOOD_BY_ID[fruit.foodId].role === 'fruit', `${prefs.diet} breakfast has no fruit`);
@@ -144,9 +147,11 @@ test('meals stick to foods that belong in them, with one protein where one is en
     for (const t of [{ calories: 1600, protein: 125, carbs: 160, fat: 52 }, T, { calories: 3000, protein: 190, carbs: 360, fat: 90 }]) {
       for (let d = 0; d < 14; d++) {
         for (const m of generateDay(addDays('2026-11-01', d), t, prefs, {}, 3, { week: d > 6 ? 1 : 0, dayIndex: d % 7 })) {
-          if (prefs.diet === 'omni') meals++;
-          // Legume meals (vegetarian) still get a top-up; omnivores rarely need one.
-          if (prefs.diet === 'omni' && m.items.filter((i) => i.role === 'protein').length > 1) doubles++;
+          meals++;
+          // One protein per meal, always.
+          if (m.items.filter((i) => i.role === 'protein').length > 1) doubles++;
+          // And one fruit per meal (never two, e.g. a fruit carb plus the fruit).
+          assert.equal(m.items.filter((i) => i.role === 'fruit').length, 1, `${prefs.diet} ${m.name}: fruit`);
           for (const it of m.items) {
             const f = FOOD_BY_ID[it.foodId];
             // No steak, chicken or fish dinner for breakfast, no rice or potatoes either.
@@ -157,5 +162,5 @@ test('meals stick to foods that belong in them, with one protein where one is en
       }
     }
   }
-  assert.ok(doubles / meals < 0.07, `${doubles}/${meals} omnivore meals with two proteins`);
+  assert.equal(doubles, 0, `${doubles}/${meals} meals with two proteins`);
 });

@@ -146,7 +146,7 @@ Then make three changes:
 
 ### Taking a food group out of a meal
 
-- Under every meal: **בלי חלבון / בלי פחמימה / בלי שומן / בלי ירקות**, plus **בלי פרי** at breakfast. Tap once to remove, tap again to bring it back. The choice applies to that meal on that day, and stays when you tap "another meal".
+- Under every meal: **בלי חלבון / בלי פחמימה / בלי שומן / בלי ירקות / בלי פרי**. Tap once to remove, tap again to bring it back. The choice applies to that meal on that day, and stays when you tap "another meal".
 - **Nothing is added in its place.** The meal keeps the same foods it had, minus the removed group, in bigger portions. One exception: if the removal would leave only seeds or oil and salad, the carb that was picked for that meal comes back. A removal never changes any other meal.
 - **Where the calories go:** the removed macro's calories are shared among the remaining macros, in proportion to how many calories each already had. For example, a lunch without carbs gives the carb calories to protein and fat, with more going to fat if fat was the bigger share. Portions are then re-solved, and the remaining foods may go up to 1.8× their usual portion so the meal keeps its calories. A note on the card says how many calories moved and where.
 - **Limits:**
@@ -155,10 +155,6 @@ Then make three changes:
   - Never in a way that leaves only fat (e.g. keto without protein), because a meal of oil and nuts isn't a meal.
 - Measured over ~4,000 meals: the median meal lands within ~1% of its calories. The exceptions are tiny snacks, where one food's minimum portion is already above the snack's calories.
 - The shopping list, recipes and the assistant all follow the removals. Meals without protein get carb-based recipes: stir-fries, grain salads, baked potatoes, wraps, porridge, fruit bowls, smoothies.
-
-### Fruit at breakfast
-
-Breakfast now has a fruit as its own category: a normal serving next to the bread or oats, rotated through the week like the other sides. It can be swapped like any item, or taken out with **בלי פרי**. Keto and carnivore breakfasts have no fruit.
 
 ### Replacing an item: every option
 
@@ -174,11 +170,18 @@ The replace sheet shows the 6 closest matches first. **לראות את כל הא
 - **Fruit:** mango, watermelon, melon, peach, pineapple, plums, pomegranate, clementines, strawberries
 - **More fruit (v1.4.2):** persimmon, figs, apricot, cherries, nectarine, grapefruit, pomelo, lychee, passion fruit, guava, papaya, blueberries, raspberries, loquat, raisins, dried apricots, prunes
 
-### One protein per meal where one is enough (v1.4.2)
+### One protein per meal, always (v1.4.3)
 
-A meal gets a second protein only when its main protein can't reach the meal's protein target. Before adding one, the generator first tries growing the main protein (solved again with protein weighted up). Main proteins are also chosen from those that can carry about 85% of the meal's protein alone. Keto and carnivore keep the looser 60% bar, because their fats carry the calories. Result: omnivore meals with two proteins fell from ~13% to ~5%. Vegan and vegetarian meals built on legumes still get a top-up, since lentils can't carry the protein without far too many carbs. Daily protein stays at 90%+ of target.
+A meal never gets a second protein.
+- **Choosing the main:** it's picked among proteins that can carry ~85% of the meal's protein alone (keto/carnivore: 60%). That means enough in a sensible serving, and lean enough to do it within ~¾ of the meal's calories, so no entrecôte for a cutting dinner.
+- **When a main still falls short:** the weekly planner swaps a weak main (lentils for a big lunch) for a strong one this meal doesn't use on any other day. On the day itself, the main may grow up to 1.5× its usual portion. As a last resort it is replaced by a protein no meal has that week. Daily variety always wins over the last few grams of protein.
+- **Where protein can fall short:** omnivores, keto and carnivore stay at 92%+ of the protein target, and pescatarian at ~88%. Vegetarian (~80%) and vegan (~60–70%, especially without soy and gluten) can come in lower, because legumes can't carry a large meal's protein alone. The profile assessment and the assistant can suggest a protein shake or a lower target there.
 
-Meals also stick to foods that belong in them. Breakfast and snacks only borrow proteins from each other, and lunch and dinner likewise, so there's no steak or salmon at breakfast. A meal only borrows carbs from other meals when restrictions leave it fewer than two options. A needed second protein prefers a dense one that fits the meal (tuna at breakfast). Eggs now count as a snack; feta, mozzarella, hard cheese and butter count as lunch foods.
+Meals also stick to foods that belong in them. Breakfast and snacks only borrow proteins from each other, and lunch and dinner likewise. A meal only borrows carbs from other meals when restrictions leave it fewer than two options.
+
+### Fruit in every meal (v1.4.3)
+
+Every meal comes with one fruit, a normal serving: breakfast, lunch, dinner and snacks. It's never two; snacks no longer use a fruit as their carb. Each fruit can be swapped, or taken out with **בלי פרי**. Keto and carnivore have no fruit.
 
 ### Weekly-gate rules (what "can't be bypassed" means here)
 
@@ -196,7 +199,7 @@ Meals also stick to foods that belong in them. Breakfast and snacks only borrow 
 
 ```bash
 npm test              # 40 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
-npm run test:e2e      # 161 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm run test:e2e      # 162 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 ```
 
 The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.
