@@ -7,6 +7,7 @@ import { state, setOverride, excludeFood } from './store.js';
 import { validBf } from './nutrition.js';
 import { openBodyFatEstimator } from './screens/bodyfat.js';
 import { openRecipes } from './screens/recipes.js';
+import { validRemoval } from './mealplan.js';
 
 export function ring(value, target, label, sub) {
   const pct = target > 0 ? Math.min(1, value / target) : 0;
@@ -72,6 +73,7 @@ export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {
     list.appendChild(li);
   }
   card.appendChild(list);
+  if (day && swaps && meal.removable) card.appendChild(removalBar(meal, day));
   if (day) {
     card.appendChild(h('button', {
       class: 'btn btn-block rc-open',
@@ -79,6 +81,63 @@ export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {
     }, h('span', { 'aria-hidden': 'true' }, '🍳'), 'מתכונים לארוחה'));
   }
   return card;
+}
+
+const REMOVE_LABEL = { protein: 'בלי חלבון', carb: 'בלי פחמימה', fat: 'בלי שומן', veg: 'בלי ירקות' };
+const REMOVED_TEXT = { protein: 'החלבון הוסר', carb: 'הפחמימה הוסרה', fat: 'השומן הוסר' };
+const BACK_TEXT = { protein: 'החלבון חזר לארוחה', carb: 'הפחמימה חזרה לארוחה', fat: 'השומן חזר לארוחה', veg: 'הירקות חזרו לארוחה' };
+const MACRO_NAME = { protein: 'חלבון', carb: 'פחמימות', fat: 'שומן' };
+
+// What the meal's removals become when the user taps group g. Protein, carbs
+// and fat go one at a time, so picking a second one swaps it for the first.
+export function nextRemoval(meal, g) {
+  const cur = meal.removed || [];
+  if (cur.includes(g)) return cur.filter((x) => x !== g);
+  let want = [...cur, g];
+  if (!validRemoval(meal.removable, want).includes(g)) want = [...cur.filter((x) => x === 'veg'), g];
+  return validRemoval(meal.removable, want).includes(g) ? want : null;
+}
+
+// "Without carbs / protein / fat / vegetables" toggles under a meal. The
+// removed group's calories are shared among the remaining macros.
+function removalBar(meal, day) {
+  const removed = meal.removed || [];
+  const chips = h('div', { class: 'rm-chips', role: 'group', 'aria-label': 'להוריד מהארוחה' });
+  for (const g of meal.removable) {
+    const on = removed.includes(g);
+    const next = nextRemoval(meal, g);
+    chips.appendChild(h('button', {
+      type: 'button',
+      class: 'rm-chip' + (on ? ' on' : '') + (next ? '' : ' blocked'),
+      'data-group': g,
+      'aria-pressed': on ? 'true' : 'false',
+      'aria-disabled': next ? null : 'true',
+      onclick: async () => {
+        if (!next) {
+          toast(g === 'protein'
+            ? 'אי אפשר להוריד את החלבון כאן — הארוחה הייתה נשארת רק עם שומן.'
+            : 'אי אפשר להוריד את זה מהארוחה הזאת.');
+          return;
+        }
+        await setOverride(day, meal.index, { removed: next });
+        if (on) toast(BACK_TEXT[g]);
+        else toast(`${meal.name} בלי ${MACRO_NAME[g] || 'ירקות'} — הקלוריות חולקו מחדש`);
+      },
+    }, on ? icon('check', 14) : null, REMOVE_LABEL[g]));
+  }
+  const wrap = h('div', { class: 'rm-bar' },
+    h('div', { class: 'rm-title muted small' }, 'להוריד מהארוחה:'),
+    chips);
+  if (removed.length) {
+    const macros = removed.filter((g) => g !== 'veg');
+    const rest = ['protein', 'carb', 'fat'].filter((g) => meal.removable.includes(g) && !macros.includes(g)).map((g) => MACRO_NAME[g]);
+    const to = rest.length > 1 ? `חולקו בין ה${rest[0]} ל${rest[1]}` : `עברו ל${rest[0]}`;
+    const text = macros.length
+      ? `${REMOVED_TEXT[macros[0]]}${removed.includes('veg') ? ' וגם הירקות' : ''} — ${fmt(meal.freedKcal)} קק״ל ${to}, והארוחה נשארת על אותן קלוריות.`
+      : 'הירקות הוסרו — שאר הארוחה הוגדלה לאותן קלוריות.';
+    wrap.appendChild(h('p', { class: 'rm-note small' }, icon('info', 16), h('span', null, text)));
+  }
+  return wrap;
 }
 
 export function openSwapSheet(item, meal, day, onAsk) {

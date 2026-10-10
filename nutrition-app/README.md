@@ -12,7 +12,7 @@ nutrition-app/
 │   │   ├── nutrition.js     BMR/TDEE, safe pacing, calories & macros (pure)
 │   │   ├── mealplan.js      daily menu generator + portion solver (pure)
 │   │   ├── substitutions.js equivalent swaps (pure)
-│   │   ├── foods.js         food database (76 foods), diet/allergy/kosher rules
+│   │   ├── foods.js         food database (126 foods), diet/allergy/kosher rules
 │   │   ├── schedule.js      week math from the registration date (pure)
 │   │   ├── store.js  db.js  state + IndexedDB, clock-rollback guard
 │   │   ├── image.js         client-side photo compression
@@ -142,7 +142,29 @@ Then make three changes:
   - ❤ favourites, and free-text search
 - **Using a recipe with a substitute:** one tap updates the menu (and so the shopping list).
 - **"Brand-new idea from the assistant"** asks Claude for a recipe from the same ingredients and amounts.
-- **Quality checks:** a scan of ~325,000 generated recipes across 7 diets × 7 days checks the Hebrew constructions (articles, ב-prefix merging, doubled words, units) and finds no issues. Unit tests check the amounts, restrictions and filters.
+- **Quality checks:** a scan of ~1,000,000 generated recipes checks the Hebrew constructions (articles, ב-prefix merging, doubled words, units) and finds no issues. It covers 7 diets × 7 days, with and without each food group removed. Unit tests check the amounts, restrictions and filters.
+
+### Taking a food group out of a meal
+
+- Under every meal: **בלי חלבון / בלי פחמימה / בלי שומן / בלי ירקות**. Tap once to remove, tap again to bring it back. The choice applies to that meal on that day, and stays when you tap "another meal".
+- **Where the calories go:** the removed macro's calories are shared among the remaining macros, in proportion to how many calories each already had. For example, a lunch without carbs gives the carb calories to protein and fat, with more going to fat if fat was the bigger share. The meal is then re-solved, so it keeps its calories. A note on the card says how many calories moved and where.
+- When the remaining foods hit their sensible maximum portion, the meal gets a second food from the group that is furthest behind (a second carb, another fat).
+- The engine also avoids foods made mostly of the removed macro: no chickpeas as the protein of a carb-free meal, no salmon in a fat-free one.
+- **Limits:**
+  - Vegetables can always go, together with anything.
+  - Of protein, carbs and fat, only one goes at a time. Picking a second swaps it for the first.
+  - Never in a way that leaves only fat (e.g. keto without protein), because a meal of oil and nuts isn't a meal.
+- Measured over ~4,000 meals: the median meal lands within ~4% of its calories. That matches or beats the normal menus.
+- The shopping list, recipes and the assistant all follow the removals. Meals without protein get carb-based recipes: stir-fries, grain salads, baked potatoes, wraps, porridge, fruit bowls, smoothies.
+
+### More food options (v1.4)
+
+126 foods, up from 76 (38 protein, 27 carb, 25 fat, 19 vegetable, 17 fruit). Each has shopping-list info, recipe support and correct Hebrew forms.
+- **Protein:** ground chicken and turkey, sirloin, trout, hake, Bulgarian cheese, skyr, protein pudding, soy chunks, white beans
+- **Carbs:** barley, millet, ptitim, whole-wheat / gluten-free pasta, rice noodles, peas, whole-wheat bun, crispbread
+- **Fats:** pistachios, hazelnuts, peanuts, sunflower and sesame seeds, almond butter, canola oil, hummus, mozzarella, feta, cream cheese, ghee
+- **Vegetables:** cucumber, tomato, peppers, zucchini, eggplant, cabbage, asparagus, Brussels sprouts, pumpkin, beets
+- **Fruit:** mango, watermelon, melon, peach, pineapple, plums, pomegranate, clementines, strawberries
 
 ### Weekly-gate rules (what "can't be bypassed" means here)
 
@@ -159,8 +181,8 @@ Then make three changes:
 ## Tests
 
 ```bash
-npm test              # 32 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, proxy
-npm run test:e2e      # 147 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm test              # 38 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
+npm run test:e2e      # 157 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 ```
 
 The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.

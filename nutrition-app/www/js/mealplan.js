@@ -64,8 +64,9 @@ function pick(list, rand, avoid) {
 }
 
 // Slot names are unique per meal (overrides are keyed by them); 'fat2' is a
-// second fat slot used by the high-fat diets.
-const slotRole = (slot) => (slot === 'fat2' ? 'fat' : slot);
+// second fat slot used by the high-fat diets, 'protein2' a protein top-up, and
+// 'carb2' / 'fat3' fill a meal the user took a food group out of.
+const slotRole = (slot) => slot.replace(/\d+$/, '');
 
 function poolFor(slot, type, allowed) {
   let roles = [slotRole(slot)];
@@ -89,7 +90,7 @@ function totals(items) {
   return t;
 }
 
-function descend(items, target, iterations = 80) {
+function descend(items, target, iterations = 80, keys = KEYS) {
   for (let i = 0; i < iterations; i++) {
     for (const it of items) {
       if (it.fixed) continue;
@@ -97,7 +98,7 @@ function descend(items, target, iterations = 80) {
       const t = totals(items);
       let num = 0;
       let den = 0;
-      for (const k of KEYS) {
+      for (const k of keys) {
         const d = food[k] / 100;
         num += W[k] * d * (target[k] - t[k]);
         den += W[k] * d * d;
@@ -117,21 +118,24 @@ function roundGrams(food, g) {
   return g < 40 ? Math.max(1, Math.round(g)) : Math.round(g / 5) * 5;
 }
 
-export function solvePortions(items, target) {
+// keys: the macros to aim at. A meal the user took a macro group out of aims
+// only at the remaining ones (whatever the other foods incidentally bring of
+// the removed macro isn't chased down to zero).
+export function solvePortions(items, target, keys = KEYS) {
   for (const it of items) {
     const food = FOOD_BY_ID[it.foodId];
     if (it.fixed) continue;
     it.lo = it.role === 'protein' ? food.min : 0;
     it.grams = it.grams || (food.min + food.max) / 3;
   }
-  descend(items, target);
+  descend(items, target, 80, keys);
 
   // Drop carbs/fats the meal doesn't need (e.g. salmon already brings the fat).
   let kept = items.filter((it) => it.fixed || it.role === 'protein' || it.grams >= FOOD_BY_ID[it.foodId].min * 0.5);
   for (const it of kept) {
     if (!it.fixed) it.lo = FOOD_BY_ID[it.foodId].min;
   }
-  descend(kept, target);
+  descend(kept, target, 80, keys);
 
   // Whole eggs, whole slices: round, freeze, and re-solve the rest around them.
   for (const it of kept) {
@@ -141,7 +145,7 @@ export function solvePortions(items, target) {
       it.fixed = true;
     }
   }
-  descend(kept, target);
+  descend(kept, target, 80, keys);
   for (const it of kept) it.grams = roundGrams(FOOD_BY_ID[it.foodId], it.grams);
   return kept.map(({ lo, fixed, ...rest }) => rest);
 }
@@ -165,9 +169,11 @@ const fitScore = (f, type) => f.p / f.kcal + (f.meals.includes(type) ? 0.03 : 0)
 //    within a day (same protein at lunch and dinner) step on to the next option.
 function chooser({ rand, week, dayIndex, mealIdx, reseed, userSeed, roleFoods, weekPlan }) {
   if (week === undefined || week === null) {
-    return (slot, eligible, avoid) => pick(eligible, rand, avoid);
+    const choose = (slot, eligible, avoid) => pick(eligible, rand, avoid);
+    choose.any = choose;
+    return choose;
   }
-  return (slot, eligible, avoid, all) => {
+  const choose = (slot, eligible, avoid, all) => {
     if (!eligible.length) return null;
     if (slot === 'protein') {
       // "Another meal" steps along this meal's rotation from the planned main.
@@ -205,6 +211,9 @@ function chooser({ rand, week, dayIndex, mealIdx, reseed, userSeed, roleFoods, w
     // Nothing in the rotation fits this meal (kosher, capacity): any eligible food.
     return fallback || pick(eligible, rand, avoid);
   };
+  // A seeded draw outside the weekly rotation (a main that doesn't suit a removal).
+  choose.any = (slot, eligible, avoid) => pick(eligible, rand, avoid);
+  return choose;
 }
 
 // Proteins a meal may be built on: ones that can carry most of the meal's
@@ -276,14 +285,79 @@ function planWeekMains({ tmpl, mealTargets, allowed, week, userSeed, groups }) {
 // How many different sides each week rotates through.
 const SIDE_CYCLE = { carb: 5, fat: 3, veg: 4, fruit: 3 };
 
-export function buildMeal(type, target, allowed, choose, usedToday, slots = SLOTS) {
+// The food groups a user can take out of a meal, and the slots each covers.
+export const GROUPS = ['protein', 'carb', 'fat', 'veg'];
+export const slotGroup = (slot) => slot.replace(/\d+$/, '');
+const GROUP_MACRO = { protein: 'p', carb: 'c', fat: 'f' };
+const KCAL_PER_G = { p: 4, c: 4, f: 9 };
+const kcalOf = (t, keys) => keys.reduce((s, k) => s + t[k] * KCAL_PER_G[k], 0);
+
+// The meal's macro target with some groups taken out: the calories the removed
+// macros carried are shared among the remaining ones in proportion to their
+// own calories, so the meal keeps its calories (e.g. no carbs at lunch: the
+// carb calories go to protein and fat, more to whichever already had more).
+export function retarget(target, removed = []) {
+  const gone = removed.map((g) => GROUP_MACRO[g]).filter(Boolean);
+  if (!gone.length) return { ...target };
+  const rest = KEYS.filter((k) => !gone.includes(k));
+  const freed = kcalOf(target, gone);
+  const restKcal = kcalOf(target, rest);
+  const out = { ...target };
+  for (const k of gone) out[k] = 0;
+  for (const k of rest) {
+    const share = restKcal > 0 ? (target[k] * KCAL_PER_G[k]) / restKcal : 1 / rest.length;
+    out[k] = target[k] + (freed * share) / KCAL_PER_G[k];
+  }
+  return out;
+}
+
+const keysFor = (removed) => KEYS.filter((k) => !removed.some((g) => GROUP_MACRO[g] === k));
+
+// Portions for a meal with some groups taken out: aim at the retargeted
+// macros only, then correct for what the remaining foods still bring of the
+// removed macro (fat in chicken, carbs in yogurt) so the meal lands on its
+// calories rather than above them.
+function solveWithout(items, target, removed) {
+  const keys = keysFor(removed);
+  const aim = retarget(target, removed);
+  const fresh = () => items.map((it) => ({ ...it }));
+  let out = solvePortions(fresh(), aim, keys);
+  if (keys.length === KEYS.length) return out;
+  const incidental = kcalOf(totals(out), KEYS.filter((k) => !keys.includes(k)));
+  const restKcal = kcalOf(aim, keys);
+  if (incidental > 0 && restKcal > 0) {
+    const scale = Math.max(0.85, (restKcal - incidental) / restKcal);
+    const aim2 = { ...aim };
+    for (const k of keys) aim2[k] = aim[k] * scale;
+    out = solvePortions(fresh(), aim2, keys);
+  }
+  return out;
+}
+
+export function buildMeal(type, target, allowed, choose, usedToday, slots = SLOTS, removed = []) {
   const chosen = [];
+  // With a macro removed, prefer foods that aren't mostly that macro
+  // (no chickpeas as the protein of a carb-free meal, no salmon in a fat-free one).
+  const gone = removed.map((g) => GROUP_MACRO[g]).filter(Boolean);
+  const suits = (f) => gone.every((k) => (f[k] * KCAL_PER_G[k]) / f.kcal <= 0.45);
+  const suited = (list) => {
+    const ok = list.filter(suits);
+    return ok.length ? ok : list;
+  };
   for (const slot of slots[type]) {
+    if (removed.includes(slotGroup(slot))) continue;
     const all = poolFor(slot, type, allowed);
     let pool = all.filter((f) => kosherCompatible(f, chosen.map((c) => c.food)));
     if (slot === 'protein') pool = proteinPool(type, target, allowed);
+    if (gone.length) pool = suited(pool);
     const avoid = new Set([...usedToday, ...chosen.map((c) => c.food.id)]);
-    const food = choose(slot, pool, avoid, all);
+    let food = choose(slot, pool, avoid, all);
+    if (food && gone.length && !pool.includes(food) && choose.any) food = choose.any(slot, pool, avoid);
+    // Never the same food twice in one meal (olive oil as both fats).
+    if (food && chosen.some((c) => c.food.id === food.id)) {
+      const rest = pool.filter((f) => !chosen.some((c) => c.food.id === f.id));
+      food = rest.length ? choose.any(slot, rest, avoid) : null;
+    }
     if (!food) continue;
     usedToday.add(food.id);
     chosen.push({ slot, food });
@@ -295,25 +369,81 @@ export function buildMeal(type, target, allowed, choose, usedToday, slots = SLOT
     grams: food.portion || 0,
     fixed: food.role === 'veg',
   });
-  let items = solvePortions(chosen.map(toItem), target);
+  const keys = keysFor(removed);
+  const aim = retarget(target, removed);
+  const solve = () => solveWithout(chosen.map(toItem), target, removed);
+  let items = solve();
 
   // Still short on protein (e.g. a vegan meal built on lentils)? Add the
   // densest compatible second protein and solve again.
   const got = totals(items).p;
-  if (got < target.p * 0.85) {
+  if (!removed.includes('protein') && got < aim.p * 0.85) {
     const inMeal = chosen.map((c) => c.food);
-    const extra = allowed
-      .filter((f) => f.role === 'protein' && !inMeal.some((x) => x.id === f.id) && kosherCompatible(f, inMeal))
+    const extra = suited(allowed
+      .filter((f) => f.role === 'protein' && !inMeal.some((x) => x.id === f.id) && kosherCompatible(f, inMeal)))
       .sort((a, b) => fitScore(b, type) - fitScore(a, type))[0];
     if (extra) {
       chosen.push({ slot: 'protein2', food: extra });
-      items = solvePortions(chosen.map(toItem), target);
+      items = solve();
     }
+  }
+
+  // With a group taken out, the remaining foods can hit their sensible maximum
+  // before the meal reaches its calories. Add a second food from the remaining
+  // group that is furthest behind (a second carb, another fat) and solve again.
+  for (let round = 0; removed.length && round < 3; round++) {
+    const t = totals(items);
+    if (t.kcal >= target.kcal * 0.93) break;
+    const gaps = keys
+      .map((k) => ({ k, gap: (aim[k] - t[k]) * KCAL_PER_G[k] }))
+      .filter((g) => g.gap > 0)
+      .sort((a, b) => b.gap - a.gap);
+    let added = false;
+    for (const { k } of gaps) {
+      const group = Object.keys(GROUP_MACRO).find((g) => GROUP_MACRO[g] === k);
+      const inMeal = chosen.map((c) => c.food);
+      const dense = (f) => f[k] / f.kcal + (f.meals.includes(type) ? 0.03 : 0);
+      const extra = suited(poolFor(group, type, allowed)
+        .filter((f) => !inMeal.some((x) => x.id === f.id) && kosherCompatible(f, inMeal)))
+        .sort((a, b) => dense(b) - dense(a) || (a.id < b.id ? -1 : 1))[0];
+      if (!extra) continue;
+      let n = 2;
+      while (chosen.some((c) => c.slot === group + n)) n++;
+      chosen.push({ slot: group + n, food: extra });
+      added = true;
+      break;
+    }
+    if (!added) break;
+    items = solve();
   }
   return items;
 }
 
-// overrides: { [mealIndex]: { reseed?: number, swaps?: { [slot]: { foodId, grams } } } }
+// The groups that can be taken out of a meal built from these slots.
+export function removableGroups(mealSlots) {
+  return GROUPS.filter((g) => mealSlots.some((s) => slotGroup(s) === g));
+}
+
+// Which of the requested removals apply. Vegetables can always go. Of protein,
+// carbs and fat only one goes at a time, and never so that fat alone is left:
+// a meal that is all oil and nuts isn't a meal. Kept in request order so the
+// latest choice wins.
+export function validRemoval(offered, requested = []) {
+  const out = [];
+  for (const g of requested || []) {
+    if (!offered.includes(g) || out.includes(g)) continue;
+    if (g !== 'veg') {
+      const macros = out.filter((x) => x !== 'veg');
+      if (macros.length) continue;
+      const left = offered.filter((x) => x !== 'veg' && x !== g);
+      if (!left.includes('protein') && !left.includes('carb')) continue;
+    }
+    out.push(g);
+  }
+  return out;
+}
+
+// overrides: { [mealIndex]: { reseed?: number, swaps?: { [slot]: { foodId, grams } }, removed?: [group] } }
 // plan: { week, dayIndex } — the menu week and the day within it (0–6). With it,
 // the whole week is planned together so no two days look alike; without it,
 // each day is drawn on its own.
@@ -347,9 +477,13 @@ export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 
       userSeed,
     });
     const target = mealTargets[idx];
-    let items = buildMeal(m.type, target, allowed, choose, used, slots);
+    const offered = removableGroups(slots[m.type]);
+    const removed = validRemoval(offered, ov.removed);
+    let items = buildMeal(m.type, target, allowed, choose, used, slots, removed);
+    let swapped = false;
     if (ov.swaps) {
       for (const [slot, sw] of Object.entries(ov.swaps)) {
+        if (removed.includes(slotGroup(slot))) continue;
         const food = FOOD_BY_ID[sw.foodId];
         // A swap to a food the user has since excluded is dropped.
         if (!food || !isAllowed(food, prefs)) continue;
@@ -357,15 +491,26 @@ export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 
         const at = items.findIndex((i) => i.slot === slot);
         if (at >= 0) items[at] = replacement;
         else items.push(replacement);
+        swapped = true;
       }
+    }
+    // A swap's grams were fitted to the full meal; with a group taken out,
+    // keep the swapped foods but fit the portions again.
+    if (swapped && removed.length) {
+      items = solveWithout(items.map(({ slot, role, foodId, grams }) => ({ slot, role, foodId, grams: role === 'veg' ? grams : 0, fixed: role === 'veg' })), target, removed);
     }
     items = items.map(itemWithMacros);
     const t = totals(items);
+    const aim = retarget(target, removed);
     return {
       index: idx,
       type: m.type,
       name: m.name,
-      target: { kcal: Math.round(target.kcal), p: Math.round(target.p), c: Math.round(target.c), f: Math.round(target.f) },
+      removable: offered,
+      removed,
+      // Calories the removed macros carried, now shared among the others.
+      freedKcal: Math.round(kcalOf(target, removed.map((g) => GROUP_MACRO[g]).filter(Boolean))),
+      target: { kcal: Math.round(target.kcal), p: Math.round(aim.p), c: Math.round(aim.c), f: Math.round(aim.f) },
       items,
       totals: { kcal: Math.round(t.kcal), p: round1(t.p), c: round1(t.c), f: round1(t.f) },
     };

@@ -24,6 +24,12 @@ const NAME = {
   wholewheat_bread: 'לחם מלא', rye_bread: 'לחם שיפון', gf_bread: 'לחם ללא גלוטן', pita: 'פיתה',
   tortilla: 'טורטייה', oats: 'שיבולת שועל', rice_cakes: 'פריכיות אורז', corn: 'תירס',
   banana: 'בננה', apple: 'תפוח', berries: 'פירות יער', orange: 'תפוז', dates: 'תמרים', grapes: 'ענבים', pear: 'אגס', kiwi: 'קיווי',
+  ground_chicken: 'עוף טחון', ground_turkey: 'הודו טחון', sirloin: 'סינטה', trout: 'פורל', hake: 'הייק',
+  bulgarian: 'גבינה בולגרית', skyr: 'סקייר', pro_pudding: 'מעדן חלבון', soy_chunks: 'גרגירי סויה', white_beans: 'שעועית לבנה',
+  barley: 'גריסים', millet: 'דוחן', ptitim: 'פתיתים', whole_pasta: 'פסטה מלאה', gf_pasta: 'פסטה ללא גלוטן',
+  rice_noodles: 'אטריות אורז', green_peas: 'אפונה', whole_bun: 'לחמנייה מלאה', crispbread: 'פת פריכה',
+  mango: 'מנגו', watermelon: 'אבטיח', melon: 'מלון', peach: 'אפרסק', pineapple: 'אננס', plums: 'שזיפים',
+  pomegranate: 'גרגרי רימון', clementine: 'קלמנטינות', strawberries: 'תותים',
 };
 const nm = (id) => NAME[id] || FOOD_BY_ID[id].name;
 
@@ -42,6 +48,12 @@ const DEF = {
   wholewheat_bread: 'הלחם', rye_bread: 'הלחם', gf_bread: 'הלחם', pita: 'הפיתה', tortilla: 'הטורטייה',
   oats: 'שיבולת השועל', rice_cakes: 'הפריכיות', corn: 'התירס', banana: 'הבננה', apple: 'התפוח',
   berries: 'פירות היער', orange: 'התפוז', dates: 'התמרים', grapes: 'הענבים', pear: 'האגס', kiwi: 'הקיווי',
+  ground_chicken: 'העוף הטחון', ground_turkey: 'ההודו הטחון', sirloin: 'הסינטה', trout: 'הפורל', hake: 'ההייק',
+  bulgarian: 'הגבינה הבולגרית', skyr: 'הסקייר', pro_pudding: 'מעדן החלבון', soy_chunks: 'גרגירי הסויה', white_beans: 'השעועית',
+  barley: 'הגריסים', millet: 'הדוחן', ptitim: 'הפתיתים', whole_pasta: 'הפסטה', gf_pasta: 'הפסטה',
+  rice_noodles: 'אטריות האורז', green_peas: 'האפונה', whole_bun: 'הלחמנייה', crispbread: 'הפת הפריכה',
+  mango: 'המנגו', watermelon: 'האבטיח', melon: 'המלון', peach: 'האפרסק', pineapple: 'האננס', plums: 'השזיפים',
+  pomegranate: 'גרגרי הרימון', clementine: 'הקלמנטינות', strawberries: 'התותים',
 };
 const def = (id) => DEF[id] || `ה${nm(id)}`;
 // ב / ל + the article merge: "בפסטרמה", not "בהפסטרמה".
@@ -67,7 +79,15 @@ const KIND = {
   pasta: 'pasta', sweet_potato: 'tuber', potato: 'tuber', corn: 'corn', oats: 'oats',
   wholewheat_bread: 'bread', rye_bread: 'bread', gf_bread: 'bread', rice_cakes: 'crackers', pita: 'pita', tortilla: 'tortilla',
   banana: 'fruit', apple: 'fruit', berries: 'fruit', orange: 'fruit', dates: 'fruit', grapes: 'fruit', pear: 'fruit', kiwi: 'fruit',
+  ground_chicken: 'ground', ground_turkey: 'ground', soy_chunks: 'ground', sirloin: 'steak', trout: 'fish', hake: 'fish',
+  bulgarian: 'saltycheese', skyr: 'yogurt', pro_pudding: 'yogurt', white_beans: 'legume',
+  barley: 'grain', millet: 'grain', ptitim: 'grain', whole_pasta: 'pasta', gf_pasta: 'pasta', rice_noodles: 'pasta',
+  green_peas: 'corn', whole_bun: 'bread', crispbread: 'crackers',
+  mango: 'fruit', watermelon: 'fruit', melon: 'fruit', peach: 'fruit', pineapple: 'fruit', plums: 'fruit',
+  pomegranate: 'fruit', clementine: 'fruit', strawberries: 'fruit',
 };
+// Carb kinds that can carry a dish on their own (a meal without protein).
+const CARB_KINDS = ['grain', 'pasta', 'tuber', 'corn', 'oats', 'bread', 'pita', 'tortilla', 'crackers', 'fruit'];
 const COOKED_CARBS = ['grain', 'pasta', 'tuber', 'corn'];
 
 // ---------- flavour profiles ----------
@@ -134,12 +154,15 @@ function carbPrep(id, grams, inOven) {
   const info = SHOP[id] || {};
   const dry = info.raw && info.raw < 1 ? Math.round(grams * info.raw / 5) * 5 : null;
   const n = nm(id);
-  if (k === 'grain') return `מבשלים כ-${dry} ג׳ ${n} יבש${n.endsWith('ה') ? 'ה' : ''} לפי ההוראות (יוצא ${grams} ג׳ מבושל)`;
-  if (k === 'pasta') return `מבשלים כ-${dry} ג׳ פסטה יבשה במים רותחים ומלוחים לפי ההוראות, ומסננים`;
+  if (k === 'grain') return `מבשלים כ-${dry} ג׳ ${n} יבש${n.endsWith('ים') ? 'ים' : n.endsWith('ה') ? 'ה' : ''} לפי ההוראות (יוצא ${grams} ג׳ מבושל)`;
+  if (id === 'rice_noodles') return `משרים או מבשלים כ-${dry} ג׳ אטריות אורז יבשות לפי ההוראות, ומסננים`;
+  if (k === 'pasta') return `מבשלים כ-${dry} ג׳ ${n} יבשה במים רותחים ומלוחים לפי ההוראות, ומסננים`;
   if (k === 'tuber') return inOven ? `חותכים ${grams} ג׳ ${n} לפלחים, ואופים על אותה תבנית כ-25 דקות` : `חותכים ${grams} ג׳ ${n} לקוביות ומבשלים במים מלוחים כ-15 דקות`;
+  if (id === 'green_peas') return `מחממים ${grams} ג׳ אפונה ירוקה (קפואה) 3–4 דקות`;
   if (k === 'corn') return `מסננים ${grams} ג׳ תירס`;
   if (k === 'oats') return `מבשלים ${grams} ג׳ שיבולת שועל עם כוס מים כ-3 דקות, עד שמסמיך`;
-  if (k === 'crackers') return `מגישים לצד ${household(FOOD_BY_ID[id], grams)} אורז`;
+  if (k === 'crackers') return `מגישים לצד ${household(FOOD_BY_ID[id], grams)}${id === 'rice_cakes' ? ' אורז' : ''}`;
+  if (id === 'whole_bun') return `חוצים וקולים ${household(FOOD_BY_ID[id], grams)} מקמח מלא`;
   if (k === 'bread') return `קולים ${household(FOOD_BY_ID[id], grams)} ${n}`;
   if (k === 'pita') return `מחממים ${household(FOOD_BY_ID[id], grams)} במחבת יבשה או בטוסטר`;
   if (k === 'tortilla') return `מחממים ${household(FOOD_BY_ID[id], grams)} במחבת יבשה 20 שניות מכל צד`;
@@ -154,7 +177,13 @@ function vegPrep(id, grams, inOven) {
   if (id === 'carrot') return `קולפים ${grams} ג׳ גזר וחותכים למקלות`;
   if (id === 'spinach') return `מאדים ${grams} ג׳ תרד 2–3 דקות, עד שמצטמק`;
   if (id === 'mushrooms') return `פורסים ${grams} ג׳ פטריות ומקפיצים 5 דקות במחבת`;
-  const name = { broccoli: 'ברוקולי', green_beans: 'שעועית ירוקה', cauliflower: 'כרובית', roasted_veg: 'קישוא, פלפל ובצל' }[id] || FOOD_BY_ID[id].name;
+  if (id === 'cucumber') return `חותכים ${grams} ג׳ מלפפון לפרוסות או למקלות`;
+  if (id === 'tomato') return `פורסים ${grams} ג׳ עגבניות`;
+  if (id === 'peppers') return `חותכים ${grams} ג׳ פלפלים צבעוניים לרצועות`;
+  if (id === 'cabbage') return `קוצצים דק ${grams} ג׳ כרוב ומתבלים בלימון ומלח`;
+  if (id === 'beets') return `חותכים ${grams} ג׳ סלק מבושל לקוביות`;
+  if (id === 'eggplant') return inOven ? `חוצים חציל (${grams} ג׳) ואופים על אותה תבנית עד שמתרכך` : `קולים חציל (${grams} ג׳) על הגז או בתנור, וקוצצים את הבשר`;
+  const name = { broccoli: 'ברוקולי', green_beans: 'שעועית ירוקה', cauliflower: 'כרובית', roasted_veg: 'קישוא, פלפל ובצל', zucchini: 'קישואים', asparagus: 'אספרגוס', brussels: 'כרוב ניצנים', pumpkin: 'דלעת' }[id] || FOOD_BY_ID[id].name;
   return inOven ? `מניחים ${grams} ג׳ ${name} על התבנית ואופים יחד` : `מאדים או מקפיצים ${grams} ג׳ ${name} 6–8 דקות`;
 }
 
@@ -163,13 +192,20 @@ function fatUse(id, grams, cooking) {
   const f = FOOD_BY_ID[id];
   const hh = household(f, grams);
   if (id === 'olive_oil') return cooking ? `משמנים במעט מתוך ${hh} שמן זית, ואת השאר מזליפים מעל בהגשה` : `מזליפים מעל ${hh} שמן זית`;
+  if (id === 'canola_oil') return cooking ? `משמנים את המחבת או התבנית במעט מתוך ${hh} שמן קנולה, ואת השאר מוסיפים בבישול` : `מזליפים מעל ${hh} שמן קנולה`;
   if (id === 'butter') return cooking ? `ממיסים ${hh} חמאה במחבת` : `מורחים ${hh} חמאה`;
+  if (id === 'ghee') return cooking ? `ממיסים ${hh} גהי במחבת` : `מזליפים מעל ${hh} גהי מומס`;
+  if (id === 'almond_butter') return `מוסיפים ${hh} חמאת שקדים`;
+  if (id === 'hummus_spread') return `מגישים לצד ${hh} ממרח חומוס`;
+  if (id === 'cream_cheese') return `מורחים או מערבבים פנימה ${hh} גבינת שמנת`;
+  if (id === 'feta') return `מפוררים מעל ${grams} ג׳ גבינת פטה`;
+  if (id === 'mozzarella') return cooking ? `מניחים מעל ${grams} ג׳ מוצרלה קרועה ומניחים לה להימס` : `קורעים ${grams} ג׳ מוצרלה ומוסיפים`;
   if (id === 'tahini') return `מערבבים ${hh} טחינה גולמית עם מים ומעט לימון לרוטב, ומזליפים מעל`;
   if (id === 'peanut_butter') return `מוסיפים ${hh} חמאת בוטנים`;
   if (id === 'avocado') return `פורסים או מועכים ${hh} ומניחים בצד`;
   if (id === 'olives') return `מוסיפים ${hh}`;
   if (id === 'hard_cheese') return `מגררים מעל ${grams} ג׳ גבינה קשה`;
-  if (['chia', 'flaxseed'].includes(id)) return `מערבבים פנימה ${hh} ${f.name}`;
+  if (['chia', 'flaxseed', 'sesame_seeds'].includes(id)) return `מערבבים פנימה ${hh} ${f.name}`;
   return `קולים קלות ${grams} ג׳ ${f.name} ומפזרים מעל`;
 }
 
@@ -220,10 +256,10 @@ const METHODS = [
   T({ id: 'papillote', kinds: ['fish', 'shrimp'], meals: 'ld', tool: 'oven', time: 25, cooking: true, oven: true,
     title: (c) => `${c.P} בנייר אפייה ${c.flavor.phrase}`,
     steps: (c) => [`מניחים ${c.amtP} על נייר אפייה`, `מתבלים ב${c.flavor.rub}`, c.fatStep, `סוגרים לחבילה ואופים ב-200° כ-15 דקות`] }),
-  T({ id: 'canfish_salad', excludeFoods: ['egg_whites'], flavors: FRESH, kinds: ['canfish', 'eggs', 'legume', 'tofu'], meals: 'blds', tool: 'nocook', time: 10,
+  T({ id: 'canfish_salad', excludeFoods: ['egg_whites'], flavors: FRESH, kinds: ['canfish', 'eggs', 'legume', 'tofu', 'saltycheese'], meals: 'blds', tool: 'nocook', time: 10,
     title: (c) => `סלט ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [c.kind === 'eggs' ? `מבשלים ${c.amtP} 9 דקות, מקררים וקוצצים` : `מסננים ${c.amtP}`, `מערבבים עם הירקות הקצוצים ו${c.flavor.rub}`, c.fatStep] }),
-  T({ id: 'sandwich', flavors: FRESH, kinds: ['canfish', 'slices', 'softcheese', 'eggs', 'poultry', 'tofu', 'legume'], meals: 'bls', tool: 'nocook', time: 10, carbs: ['bread', 'pita', 'crackers', 'tortilla'], absorbs: true,
+    steps: (c) => [c.kind === 'eggs' ? `מבשלים ${c.amtP} 9 דקות, מקררים וקוצצים` : c.kind === 'saltycheese' ? `מפוררים ${c.amtP} לקוביות קטנות` : `מסננים ${c.amtP}`, `מערבבים עם הירקות הקצוצים ו${c.flavor.rub}`, c.fatStep] }),
+  T({ id: 'sandwich', flavors: FRESH, kinds: ['canfish', 'slices', 'softcheese', 'saltycheese', 'eggs', 'poultry', 'tofu', 'legume'], meals: 'bls', tool: 'nocook', time: 10, carbs: ['bread', 'pita', 'crackers', 'tortilla'], absorbs: true,
     title: (c) => `${{ pita: 'פיתה', tortilla: 'רול', crackers: 'פריכיות', bread: 'כריך' }[c.carbKind]} ${c.P} ${c.flavor.phrase}`,
     steps: (c) => [c.carbStep, c.kind === 'eggs' ? (c.pid === 'egg_whites' ? `מכינים חביתה מ-${c.amtP}` : `מכינים ${c.amtP} (חביתה או קשות)`) : c.kind === 'canfish' ? `מסננים ${c.amtP} ומתבלים ב${c.flavor.rub}` : `מתבלים ${c.amtP} ב${c.flavor.rub}`, c.fatStep, `ממלאים ${c.inPd} ובירקות`] }),
   // eggs
@@ -240,10 +276,10 @@ const METHODS = [
     title: (c) => `מאפינס ביצים ${c.flavor.phrase}`,
     steps: (c) => [`טורפים ${c.amtP} עם ירקות קצוצים ו${c.flavor.rub}`, `יוצקים לתבנית מאפינס משומנת`, `אופים ב-180° כ-18 דקות. מחזיק במקרר 3 ימים`] }),
   // dairy & powders
-  T({ id: 'savory_bowl', flavors: FRESH, kinds: ['softcheese', 'yogurt'], meals: 'bsd', tool: 'nocook', time: 5,
+  T({ id: 'savory_bowl', excludeFoods: ['pro_pudding'], flavors: FRESH, kinds: ['softcheese', 'yogurt'], meals: 'bsd', tool: 'nocook', time: 5,
     title: (c) => `קערת ${c.P} מלוחה ${c.flavor.phrase}`,
     steps: (c) => [`מניחים בקערה ${c.amtP}`, `מתבלים ב${c.flavor.rub}`, `מוסיפים את הירקות הקצוצים`, c.fatStep] }),
-  T({ id: 'spread', flavors: FRESH, kinds: ['softcheese'], meals: 'bsd', tool: 'nocook', time: 5, carbs: ['bread', 'pita', 'crackers', 'tortilla'], absorbs: true,
+  T({ id: 'spread', flavors: FRESH, kinds: ['softcheese', 'saltycheese'], meals: 'bsd', tool: 'nocook', time: 5, carbs: ['bread', 'pita', 'crackers', 'tortilla'], absorbs: true,
     title: (c) => `${c.C} עם ממרח ${c.P} ${c.flavor.phrase}`,
     steps: (c) => [c.carbStep, `מערבבים ${c.amtP} עם ${c.flavor.rub}`, `מורחים ומניחים מעל את הירקות`, c.fatStep] }),
   T({ id: 'parfait', carbsAllowed: ['fruit', 'oats'], kinds: ['yogurt', 'softcheese'], meals: 'bs', tool: 'nocook', time: 5, taste: 'sweet',
@@ -258,7 +294,7 @@ const METHODS = [
   T({ id: 'overnight', kinds: ['powder', 'yogurt', 'softcheese'], meals: 'bs', tool: 'nocook', time: 5, taste: 'sweet', carbs: ['oats'], absorbs: true,
     title: (c) => `שיבולת שועל של לילה עם ${c.P} ${c.flavor.phrase}`,
     steps: (c) => [`מערבבים בצנצנת ${c.carbGrams} ג׳ שיבולת שועל, ${c.amtP} וחצי כוס מים`, `מוסיפים ${c.flavor.rub}`, c.fatStep, `מכסים ומשאירים במקרר לילה`] }),
-  T({ id: 'pancakes', kinds: ['powder', 'eggs', 'softcheese', 'yogurt'], meals: 'bs', tool: 'pan', time: 15, cooking: true, taste: 'sweet', carbs: ['oats', 'fruit'], absorbs: true,
+  T({ id: 'pancakes', excludeFoods: ['pro_pudding'], kinds: ['powder', 'eggs', 'softcheese', 'yogurt'], meals: 'bs', tool: 'pan', time: 15, cooking: true, taste: 'sweet', carbs: ['oats', 'fruit'], absorbs: true,
     title: (c) => `פנקייק ${c.P} ${c.flavor.phrase}`,
     steps: (c) => [`טוחנים לבלילה ${c.amtP} עם ${c.Cd} ועם ${c.flavor.rub}${c.kind !== 'eggs' ? ' ומעט מים' : ''}`, c.fatStep, `מטגנים פנקייקים קטנים במחבת 2 דקות מכל צד`] }),
   // plant
@@ -287,9 +323,44 @@ const METHODS = [
   T({ id: 'rolls', flavors: FRESH, kinds: ['slices'], meals: 'bls', tool: 'nocook', time: 5,
     title: (c) => `רולים של ${c.P} ${c.flavor.phrase}`,
     steps: (c) => [`פורשים ${c.amtP}`, `מתבלים ב${c.flavor.rub}`, `מגלגלים עם הירקות`, c.fatStep] }),
-  T({ id: 'toast', kinds: ['slices', 'softcheese', 'eggs', 'canfish'], meals: 'bls', tool: 'oven', time: 10, cooking: true, carbs: ['bread', 'pita', 'tortilla'], absorbs: true,
+  T({ id: 'toast', kinds: ['slices', 'softcheese', 'saltycheese', 'eggs', 'canfish'], meals: 'bls', tool: 'oven', time: 10, cooking: true, carbs: ['bread', 'pita', 'tortilla'], absorbs: true,
     title: (c) => `טוסט ${c.P} ${c.flavor.phrase}`,
     steps: (c) => [`ממלאים את ${c.Cd} ${c.inAmt} ומתבלים ב${c.flavor.rub}`, c.fatStep, `קולים בטוסטר או במחבת עד שזהוב`] }),
+
+  // ---- built on the carb: for a meal the user took the protein out of ----
+  T({ id: 'carb_stirfry', kinds: ['grain', 'pasta'], meals: 'ld', tool: 'pan', time: 25, cooking: true,
+    title: (c) => `מוקפץ ${c.P} וירקות ${c.flavor.phrase}`,
+    steps: (c) => [c.mainPrep, c.fatStep, `מקפיצים את הירקות 5 דקות עם ${c.flavor.rub}`, `מוסיפים את ${c.Pd} ומערבבים על האש עוד 2 דקות`] }),
+  T({ id: 'carb_salad', flavors: FRESH, kinds: ['grain', 'pasta', 'corn'], meals: 'blds', tool: 'nocook', time: 20,
+    title: (c) => `סלט ${c.P} ${c.flavor.phrase}`,
+    steps: (c) => [c.mainPrep, `מקררים ומערבבים עם הירקות הקצוצים ו${c.flavor.rub}`, c.fatStep] }),
+  T({ id: 'carb_sauce', kinds: ['pasta', 'grain'], meals: 'ld', tool: 'pot', time: 25, cooking: true, needsSauce: true,
+    title: (c) => `${c.P} ${c.flavor.phrase}`,
+    steps: (c) => [c.mainPrep, c.fatStep, `מבשלים 10 דקות חצי פחית עגבניות מרוסקות עם ${c.flavor.rub}`, `מערבבים פנימה את ${c.Pd} ומחממים יחד`] }),
+  T({ id: 'baked_tuber', kinds: ['tuber'], meals: 'ld', tool: 'oven', time: 40, cooking: true, oven: true,
+    title: (c) => `${c.P} אפוי ${c.flavor.phrase}`,
+    steps: (c) => [`מחממים תנור ל-200°`, `חותכים ${c.amtP} לפלחים ומתבלים ב${c.flavor.rub}`, c.fatStep, `אופים 30–35 דקות, עד שזהוב ורך`] }),
+  T({ id: 'tuber_mash', kinds: ['tuber'], meals: 'ld', tool: 'pot', time: 25, cooking: true,
+    title: (c) => `פירה ${c.P} ${c.flavor.phrase}`,
+    steps: (c) => [c.mainPrep, `מסננים ומועכים עם ${c.flavor.rub}`, c.fatStep] }),
+  T({ id: 'veg_wrap', flavors: FRESH, kinds: ['bread', 'pita', 'tortilla', 'crackers'], meals: 'bls', tool: 'nocook', time: 10,
+    title: (c) => `${{ pita: 'פיתה', tortilla: 'רול', crackers: 'פריכיות', bread: 'כריך' }[c.kind]} עם ירקות ${c.flavor.phrase}`,
+    steps: (c) => [c.mainPrep, `מתבלים את הירקות ב${c.flavor.rub}`, c.fatStep, `ממלאים או מניחים מעל את הירקות`] }),
+  T({ id: 'veg_toast', kinds: ['bread', 'pita', 'tortilla'], meals: 'bls', tool: 'oven', time: 15, cooking: true,
+    title: (c) => `טוסט ירקות ${c.flavor.phrase}`,
+    steps: (c) => [`ממלאים את ${c.Pd} בירקות פרוסים דק ומתבלים ב${c.flavor.rub}`, c.fatStep, `קולים בטוסטר או במחבת עד שזהוב`] }),
+  T({ id: 'porridge', kinds: ['oats'], meals: 'bs', tool: 'pot', time: 10, taste: 'sweet',
+    title: (c) => `דייסת שיבולת שועל ${c.flavor.phrase}`,
+    steps: (c) => [c.mainPrep, `מתבלים ב${c.flavor.rub}`, c.fatStep] }),
+  T({ id: 'oat_jar', kinds: ['oats'], meals: 'bs', tool: 'nocook', time: 5, taste: 'sweet',
+    title: (c) => `צנצנת שיבולת שועל של לילה ${c.flavor.phrase}`,
+    steps: (c) => [`מערבבים בצנצנת ${c.amtP} עם חצי כוס מים או משקה צמחי`, `מוסיפים ${c.flavor.rub}`, c.fatStep, `מכסים ומשאירים במקרר לילה`] }),
+  T({ id: 'fruit_bowl', kinds: ['fruit'], meals: 'bs', tool: 'nocook', time: 5, taste: 'sweet',
+    title: (c) => `קערת ${c.P} ${c.flavor.phrase}`,
+    steps: (c) => [c.mainPrep, `מתבלים ב${c.flavor.rub}`, c.fatStep] }),
+  T({ id: 'smoothie', kinds: ['fruit', 'oats'], meals: 'bs', tool: 'blender', time: 5, taste: 'sweet',
+    title: (c) => `סמוטי ${c.P} ${c.flavor.phrase}`,
+    steps: (c) => [`טוחנים בבלנדר ${c.amtP} עם כוס מים קרים וקרח`, `מוסיפים ${c.flavor.rub}`, c.fatStep] }),
 ];
 
 // ---------- building recipes ----------
@@ -315,12 +386,21 @@ function flavorOk(flavor, prefs) {
 
 // All recipes for a meal. Returns plain objects, deterministic for (meal, day).
 export function recipesForMeal(meal, prefs, { day = '', withSubs = true } = {}) {
-  const pItem = meal.items.find((i) => i.slot === 'protein') || itemOf(meal, 'protein');
+  let pItem = meal.items.find((i) => i.slot === 'protein') || itemOf(meal, 'protein');
+  let cItem = meal.items.find((i) => i.slot === 'carb') || itemOf(meal, 'carb');
+  // No protein in the meal (the user took it out): the carb carries the dish.
+  if (!pItem) {
+    pItem = cItem;
+    cItem = null;
+  }
   if (!pItem) return [];
-  const cItem = meal.items.find((i) => i.slot === 'carb') || itemOf(meal, 'carb');
   const fItem = meal.items.find((i) => i.role === 'fat');
   const vItem = meal.items.find((i) => i.role === 'veg');
   const extra = meal.items.find((i) => i.slot === 'protein2');
+  // Anything else on the plate (a second carb or fat that fills a meal the
+  // user took a group out of, keto's second fat) is served alongside.
+  const used = new Set([pItem, cItem, fItem, vItem, extra].filter(Boolean));
+  const sides = meal.items.filter((i) => !used.has(i));
 
   const proteins = optionsFor(meal, pItem, prefs, withSubs ? 6 : 0);
   const carbs = optionsFor(meal, cItem, prefs, withSubs ? 4 : 0);
@@ -346,7 +426,7 @@ export function recipesForMeal(meal, prefs, { day = '', withSubs = true } = {}) 
           if (flavor.taste === 'sweet' && !sweetMeal) continue;
           if (m.needsSauce && !flavor.sauce && !['curry', 'moroccan', 'hawaij', 'harissa', 'thai'].includes(flavor.id)) continue;
           if (!m.needsSauce && flavor.sauce && !['oven', 'bowl', 'meatballs', 'pan'].includes(m.id)) continue;
-          out.push(makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, carbKind, absorbed, kind }));
+          out.push(makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, sides, carbKind, absorbed, kind }));
         }
       }
     }
@@ -360,12 +440,13 @@ export function recipesForMeal(meal, prefs, { day = '', withSubs = true } = {}) 
   return keyed.map((k) => k.x).filter((x) => (seen.has(x.title) ? false : seen.add(x.title)));
 }
 
-function makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, carbKind, absorbed, kind }) {
+function makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, sides = [], carbKind, absorbed, kind }) {
   const P = nm(p.foodId);
   const C = c ? nm(c.foodId) : '';
   const pFood = FOOD_BY_ID[p.foodId];
   const amt = pFood.discrete ? household(pFood, p.grams) : `${p.grams} ג׳`;
-  const amtP = SELF_UNIT.has(p.foodId) ? amt : `${amt} ${P}`;
+  // "2 תמרים", not "2 תמרים תמרים": some units already name the food.
+  const amtP = SELF_UNIT.has(p.foodId) || amt.includes(P) ? amt : `${amt} ${P}`;
   const carbStep = c ? carbPrep(c.foodId, c.grams, !!m.oven) : null;
   const ctx = {
     P, C, kind, flavor, amt, amtP,
@@ -378,6 +459,7 @@ function makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, carbKind, abso
     carbKind,
     carbGrams: c ? c.grams : 0,
     carbStep,
+    mainPrep: CARB_KINDS.includes(kind) ? carbPrep(p.foodId, p.grams, !!m.oven) : null,
     absorbed,
     absorbedCarb: absorbed && c ? ` עם ${C}` : '',
     veg: vItem ? vItem.foodId : null,
@@ -398,14 +480,18 @@ function makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, carbKind, abso
   for (const s of m.steps(ctx)) if (s) steps.push(s);
   if (extra) {
     const hh = household(FOOD_BY_ID[extra.foodId], extra.grams);
-    steps.push(`מוסיפים לצד ${SELF_UNIT.has(extra.foodId) ? hh : `${hh} ${nm(extra.foodId)}`} להשלמת החלבון`);
+    steps.push(`מוסיפים לצד ${SELF_UNIT.has(extra.foodId) || hh.includes(nm(extra.foodId)) ? hh : `${hh} ${nm(extra.foodId)}`} להשלמת החלבון`);
   }
-  steps.push(flavor.finish.startsWith('מגישים') ? flavor.finish : `${flavor.finish}, ומגישים`);
+  for (const sd of sides) steps.push(sideStep(sd));
+  // A shake or an overnight jar isn't served hot, whatever the flavour says.
+  const finish = flavor.finish === 'מגישים חם' && ['blender', 'nocook'].includes(m.tool) ? 'מגישים קר' : flavor.finish;
+  steps.push(finish.startsWith('מגישים') ? finish : `${finish}, ומגישים`);
   if (fruitDessert) steps.push(`לקינוח: ${c.grams} ג׳ ${nm(c.foodId)}`);
 
   const ingredients = [{ foodId: p.foodId, grams: p.grams }];
   if (c) ingredients.push({ foodId: c.foodId, grams: c.grams });
   if (extra) ingredients.push({ foodId: extra.foodId, grams: extra.grams });
+  for (const sd of sides) ingredients.push({ foodId: sd.foodId, grams: sd.grams });
   if (fItem) ingredients.push({ foodId: fItem.foodId, grams: fItem.grams });
   if (vItem) ingredients.push({ foodId: vItem.foodId, grams: vItem.grams });
 
@@ -426,6 +512,17 @@ function makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, carbKind, abso
     steps,
     swaps,
   };
+}
+
+// One extra item on the plate, in a sentence.
+function sideStep(it) {
+  const f = FOOD_BY_ID[it.foodId];
+  if (f.role === 'fat') return fatUse(it.foodId, it.grams, false);
+  if (f.role === 'veg') return vegPrep(it.foodId, it.grams, false);
+  const prep = KIND[it.foodId] && CARB_KINDS.includes(KIND[it.foodId]) ? carbPrep(it.foodId, it.grams, false) : null;
+  if (prep) return `${prep}, ומגישים לצד`;
+  const hh = household(f, it.grams);
+  return `מגישים לצד ${SELF_UNIT.has(it.foodId) || hh.includes(nm(it.foodId)) ? hh : `${hh} ${nm(it.foodId)}`}`;
 }
 
 // filters: { cuisines: [], tools: [], maxTime: 0|10|20|40, pantryOnly: bool,

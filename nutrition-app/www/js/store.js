@@ -207,6 +207,8 @@ export async function setOverride(day, mealIdx, patch) {
   const m = { ...(d[mealIdx] || {}) };
   if (patch.reseed !== undefined) { m.reseed = patch.reseed; m.swaps = {}; }
   if (patch.swap) m.swaps = { ...(m.swaps || {}), [patch.swap.slot]: { foodId: patch.swap.foodId, grams: patch.swap.grams } };
+  // removed: the food groups taken out of this meal (survives "another meal").
+  if (patch.removed !== undefined) m.removed = [...patch.removed];
   d[mealIdx] = m;
   state.overrides[day] = d;
   // Keep only the recent past and the future.

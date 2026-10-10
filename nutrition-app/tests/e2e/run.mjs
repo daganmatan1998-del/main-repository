@@ -303,6 +303,44 @@ try {
   await page.locator('.day-strip .day').first().click();
   await wait(200);
 
+  // =============== take a food group out of a meal ===============
+  const meal0 = () => page.locator('.meal').first();
+  const kcalOf = async () => Number((await meal0().locator('.meal-sub').innerText()).replace(/,/g, '').match(/\d+/)[0]);
+  const mealKcal0 = await kcalOf();
+  check('every meal offers to take out protein / carbs / fat / vegetables',
+    (await meal0().locator('.rm-chip').count()) === 4 && (await page.locator('.meal').count()) === (await page.locator('.rm-bar').count()));
+  await meal0().locator('.rm-chip[data-group="carb"]').click();
+  await wait(500);
+  const kcalNoCarb = await kcalOf();
+  check('removing the carb takes it off the meal', (await meal0().locator('.item.role-carb').count()) === 0
+    && (await meal0().locator('.rm-chip[data-group="carb"]').getAttribute('aria-pressed')) === 'true');
+  check(`the carb calories move to protein and fat (${mealKcal0} → ${kcalNoCarb} kcal)`, Math.abs(kcalNoCarb - mealKcal0) / mealKcal0 < 0.15);
+  check('the meal explains where the calories went', /קק״ל (חולקו|עברו)/.test(await meal0().locator('.rm-note').innerText()));
+  await shot('08b-remove-carb');
+  await page.reload();
+  await page.waitForSelector('.page-plan .meal');
+  check('a removal survives a reload', (await meal0().locator('.item.role-carb').count()) === 0);
+  await meal0().locator('.rm-chip[data-group="fat"]').click();
+  await wait(400);
+  check('removing a second macro swaps it for the first (carb back, fat out)',
+    (await meal0().locator('.item.role-carb').count()) > 0 && (await meal0().locator('.item.role-fat').count()) === 0);
+  await meal0().locator('.rm-chip[data-group="veg"]').click();
+  await wait(400);
+  check('vegetables can go together with a macro', (await meal0().locator('.item.role-veg').count()) === 0 && (await meal0().locator('.item.role-fat').count()) === 0);
+  await meal0().locator('.rm-chip[data-group="protein"]').click();
+  await wait(400);
+  check('a meal without protein is still a full meal', (await meal0().locator('.item.role-protein').count()) === 0
+    && Math.abs((await kcalOf()) - mealKcal0) / mealKcal0 < 0.15, `${await kcalOf()} vs ${mealKcal0}: ${await meal0().locator('.items').innerText()}`);
+  await meal0().locator('.rc-open').click();
+  await page.waitForSelector('.overlay.recipes .rc-card');
+  check('recipes still come for a meal without protein', Number((await page.locator('#rc-count').innerText()).replace(/[^\d]/g, '')) >= 20);
+  await page.locator('.overlay.recipes .icon-btn[aria-label="סגירה"]').click();
+  for (const g of ['protein', 'veg']) {
+    await meal0().locator(`.rm-chip[data-group="${g}"]`).click();
+    await wait(300);
+  }
+  check('tapping again puts everything back', (await meal0().locator('.rm-note').count()) === 0 && (await meal0().locator('.item.role-protein').count()) > 0);
+
   // =============== weekly shopping list ===============
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
   await page.click('#btn-shopping');

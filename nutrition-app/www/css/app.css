@@ -202,7 +202,7 @@ small.muted { font-size: .8rem; }
   font-weight: 500; font-size: .9rem; padding: 6px 8px; transition: background .2s, color .2s;
 }
 .segmented button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
-.segmented.small button { min-height: 34px; font-size: .8rem; white-space: nowrap; }
+.segmented.small button { min-height: 36px; font-size: .8rem; white-space: nowrap; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
@@ -602,3 +602,20 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .rc-ingr, .rc-steps { margin: 0; padding-inline-start: 20px; display: grid; gap: 6px; font-size: .92rem; }
 .rc-steps li::marker { color: var(--primary); font-weight: 700; }
 .rc-open { margin: 8px 0 6px; min-height: 44px; background: var(--primary-weak); border-color: transparent; color: var(--primary); }
+
+/* ============ remove a food group from a meal ============ */
+.rm-bar { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.rm-title { margin-bottom: 6px; }
+.rm-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rm-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-height: 36px; padding: 4px 12px; border-radius: 999px; font-size: .8rem; font-weight: 500;
+  border: 1px dashed var(--border); background: transparent; color: var(--muted);
+}
+.rm-chip.on { border-style: solid; border-color: var(--primary); background: var(--primary-weak); color: var(--primary); }
+.rm-chip.blocked { opacity: .45; }
+.rm-note {
+  display: flex; gap: 6px; align-items: flex-start; margin: 8px 0 0;
+  padding: 8px 10px; border-radius: 12px; background: var(--warn-bg); color: var(--warn-text);
+}
+.rm-note svg { flex-shrink: 0; margin-top: 2px; }

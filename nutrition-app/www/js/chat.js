@@ -48,6 +48,8 @@ export function buildContext(extra = {}) {
     todayPlan: plan.map((m) => ({
       meal: m.name,
       items: m.items.map((i) => `${FOODS.find((f) => f.id === i.foodId).name} ${i.grams} ג׳ (${ROLE_LABEL[i.role]}, ${i.kcal} קק״ל, ח${i.p}/פ${i.c}/ש${i.f})`),
+      // Groups the user chose to leave out of this meal (calories moved to the rest).
+      ...(m.removed && m.removed.length ? { removedByUser: m.removed.map((g) => ROLE_LABEL[g]) } : {}),
     })),
     ...extra,
   };
