@@ -476,6 +476,8 @@ await test('a reading counts while the child is still speaking (partial result)'
   await page.waitForFunction(() => window.__live === 1);
   const name = await page.evaluate(() => window.__rd.session.state.enemies.find((x) => x.status === 'walking').items[0].accepted[0]);
   await page.evaluate((t) => { window.__sayPartial.push(t); }, name); // never finalised
+  // the words appear on screen live, while still being said
+  await page.waitForFunction((t) => { const c = document.querySelector('[data-testid=live-caption]'); return c?.classList.contains('show') && c.textContent.includes(t); }, name, { timeout: 2000 });
   await page.waitForFunction(() => window.__rd.session.state.correct >= 1, null, { timeout: 3000 });
   await page.context().close();
 });

@@ -152,7 +152,7 @@ simulator. Text input never counts as reading.
   2. *Exact* — unpointed or plene spelling equal to the target, or a spelling whose possible readings (a regular expression over consonants + vowel letters) include the target's pronunciation (כיתה = כִּתָּה, תל = טַל).
   3. *Phonetic similarity* — letters are mapped to sound classes (ט=ת, א=ע, כ≈ק, ב≈ו…) and compared with a weighted edit distance in which acoustically close consonants (b/p, d/t, m/n, g/k…) cost a little, vowel letters (ו י) and a final ה cost a full edit (kara ≠ kora, gadol ≠ gdola), and only the silent א/ע are cheap.
   4. *Per-kind thresholds* — `config.ts` holds `accept` and `floor` for letters, syllables, words and sentence words, plus the near/flex costs. Similarity ≥ `accept` is correct; between `floor` and `accept` is **"try again"** (never marked wrong); below, wrong.
-  - **Letters** are the most forgiving. The name is matched by sound, not spelling; letters that sound alike (ט/ת, א/ע, final forms) share their names; a short word that starts with the right consonant ("מה" for מ) is recovered using the known target; a name cut off or swallowed by the engine ("למ", "למה" for למד) or a drawn-out/doubled sound ("לל", "שש", "shhh") counts as the letter; and an unexpected word is "try again". A letter is only called **wrong** when the engine clearly returned a *different* letter.
+  - **Letters** are the most forgiving. The name is matched by sound, not spelling; letters that sound alike (ט/ת, א/ע, final forms) share their names; a short word that starts with the right consonant ("מה" for מ) is recovered using the known target; for ש ל מ נ the first two letters of the name ("שי", "לא", "מה", "נו") are accepted spellings, so they count even in a fast run of letters - but inside a longer utterance only when everything said was a reading ("מה זה" is a question, not the letter); a name cut off or swallowed by the engine ("למ", "למה" for למד) or a drawn-out/doubled sound ("לל", "שש", "shhh") counts as the letter; and an unexpected word is "try again". A letter is only called **wrong** when the engine clearly returned a *different* letter.
   - **Syllables**: consonant by sound, vowel strictly (ba vs bi is wrong; a vs e cannot be told apart in spelling, so both pass).
   - **Words** keep a high bar; one close-consonant slip is tolerated only in words of four or more letters.
   - A **Hebrew letter-listening setting** (Settings → for grown-ups: Exact / Forgiving / Very forgiving) switches the preset without code changes. *Forgiving* is the default.
@@ -353,11 +353,11 @@ from scratch. After changing the game just run the script again.
 
 How voice works inside the app: the WebView has no Web Speech API, so
 `main.ts` loads the native plugin (only there) and `nativeProvider.ts` drives it
-as a loop of short listening turns (`speech/continuous.ts`). Hebrew needs the
+live: partial results arrive while the child is still speaking, each turn ends
+on a pause with its final words, and the next turn starts at once. Hebrew needs the
 Google speech services on the phone (most Android phones have them). Honest
 limits: Android's recogniser restarts between turns, so there is a very short
-gap and, on some phones, a system sound; the cut-off/partial-word guessing of
-the web version is therefore weaker in the app (no live partial results). Test
+gap and, on some phones, a system sound; live words still arrive during a turn. Test
 both languages on a real phone.
 
 - **iOS** (on a Mac): `npm i -D @capacitor/ios@6 && npx cap add ios`, add

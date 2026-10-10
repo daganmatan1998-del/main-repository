@@ -64,6 +64,19 @@ describe('the room is not the reader', () => {
     expect(matchUtterance(say('מה זה'), enemies, { lang: 'he', final: true, cfg })).toEqual([]);
     // …but on its own, "מה" is how engines often write the letter מ
     expect(matchUtterance(say('מה'), enemies, { lang: 'he', final: true, cfg })).toHaveLength(1);
+    expect(matchUtterance(say('לא רוצה'), road([letter('ל')]), { lang: 'he', final: true, cfg })).toEqual([]);
+  });
+
+  it('the first two letters of שין, למד, מם, נון are enough - also in a fast run of letters', () => {
+    for (const [l, short] of [['שׁ', 'שי'], ['ל', 'לא'], ['ל', 'לה'], ['מ', 'מה'], ['מ', 'מי'], ['נ', 'נו'], ['נ', 'נא']]) {
+      expect(matchUtterance(say(short), road([letter(l)]), { lang: 'he', final: true, cfg }), short).toHaveLength(1);
+    }
+    // four letters read quickly, each cut short
+    const four = road([letter('שׁ'), letter('ל'), letter('מ'), letter('נ')]);
+    expect(matchUtterance(say('שי לא מה נו'), four, { lang: 'he', final: true, cfg })).toHaveLength(4);
+    // a short form never stands in for a different letter
+    expect(matchUtterance(say('נו'), road([letter('מ')]), { lang: 'he', final: true, cfg })).toEqual([]);
+    expect(matchUtterance(say('לא'), road([letter('נ')]), { lang: 'he', final: true, cfg })).toEqual([]);
   });
 
   it('wrong readings credit nothing', () => {

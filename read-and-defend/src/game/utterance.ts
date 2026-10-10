@@ -2,6 +2,10 @@ import type { LanguageCode, LearningItem } from '../content/types';
 import type { EvalConfig } from '../evaluation/config';
 import { evaluate, prefixCoverage, type RecognitionAlternative } from '../evaluation/evaluator';
 import { HE_FILLERS, normalizeEnglish, normalizeHebrew } from '../evaluation/normalize';
+import { SHORT_NAMES } from '../content/hebrew/data';
+
+/** Cut-short letter names ("מה", "לא", "נו", "שי"): also everyday words. */
+const SHORT_NAME_SPELLINGS = new Set(Object.values(SHORT_NAMES).flat().map((w) => normalizeHebrew(w)));
 import type { Enemy } from './levelState';
 
 /**
@@ -44,6 +48,8 @@ export interface MatchOptions {
 export const MIN_READING_SHARE = 0.5;
 const EN_HESITATIONS = new Set(['um', 'uh', 'er', 'erm', 'hmm', 'oh', 'okay', 'ok']);
 const MAX_WINDOW = 3;
+/** Pure hesitation sounds: never a reading, never a real word either. */
+const HE_HESITATIONS = new Set(['אה', 'אמ', 'אממ', 'אהה', 'הממ']);
 
 /**
  * The words of an utterance, as said (vowel marks kept: a recogniser that
@@ -99,6 +105,7 @@ function matchAlternative(alt: RecognitionAlternative, enemies: Enemy[], opts: M
     const strictCfg: EvalConfig = { ...opts.cfg, he: { ...opts.cfg.he, letterRecoveryMax: 0 } };
     let i = 0;
     let consumed = 0;
+    let shortHits = 0;
     while (i < tokens.length) {
       let matched = false;
       // Shortest window first: one token is one reading unless it takes two
@@ -106,11 +113,20 @@ function matchAlternative(alt: RecognitionAlternative, enemies: Enemy[], opts: M
       for (let w = 1; w <= Math.min(MAX_WINDOW, tokens.length - i) && !matched; w++) {
         const text = tokens.slice(i, i + w).join(' ');
         const c = cands.find((x) => itemOf(x).kind !== 'sentence' && evaluate(itemOf(x), say(text), strictCfg).outcome === 'correct');
-        if (c) { credit(c, 'match'); i += w; consumed += w; matched = true; lastEnd = i; }
+        if (c) {
+          if (itemOf(c).kind === 'letter' && SHORT_NAME_SPELLINGS.has(normalizeHebrew(text))) shortHits++;
+          credit(c, 'match'); i += w; consumed += w; matched = true; lastEnd = i;
+        }
       }
       if (!matched) i += 1;
     }
     if (tokens.length >= 3 && consumed / tokens.length < MIN_READING_SHARE) return [];
+    // A cut-short name is also an everyday word ("מה זה", "לא רוצה"): inside
+    // a longer utterance it counts only when everything said was a reading.
+    const realWords = opts.lang === 'he'
+      ? alt.transcript.split(/\s+/).map(normalizeHebrew).filter((w) => w && !HE_HESITATIONS.has(w)).length
+      : tokens.length;
+    if (shortHits > 0 && consumed < Math.max(tokens.length, realWords)) return [];
   }
 
   // The last word may still be being said (or was cut off): guess from its start,

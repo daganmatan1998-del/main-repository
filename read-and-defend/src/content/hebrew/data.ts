@@ -16,6 +16,19 @@ export interface HebrewLetterInfo {
   example: string;
 }
 
+/**
+ * Letters whose name is recognised from its first two letters alone - the
+ * engines often cut these names short ("שי" for שין, "לא" for למד, "מה" for
+ * מם, "נו" for נון). They are accepted spellings, so they count even inside
+ * a fast run of letters, not only when said on their own.
+ */
+export const SHORT_NAMES: Record<'ש' | 'ל' | 'מ' | 'נ', string[]> = {
+  'ש': ['שי', 'שה', 'שיי', 'שא'],
+  'ל': ['לא', 'לה', 'לי', 'למ', 'לם'],
+  'מ': ['מה', 'מי', 'מע', 'מא', 'מאי'],
+  'נ': ['נו', 'נא', 'נוו', 'נה'],
+};
+
 export const LETTERS: HebrewLetterInfo[] = [
   { form: 'א', name: 'אָלֶף', heard: ['אלף', 'אלפ'], example: 'אַבָּא' },
   { form: 'בּ', name: 'בֵּית', heard: ['בית', 'בת', 'בייט'], example: 'בַּיִת' },
@@ -30,9 +43,9 @@ export const LETTERS: HebrewLetterInfo[] = [
   { form: 'י', name: 'יוֹד', heard: ['יוד', 'יוט', 'יוּד'], example: 'יָם' },
   { form: 'כּ', name: 'כַּף', heard: ['כף', 'קף', 'כאף'], example: 'כַּד' },
   { form: 'כ', name: 'כָף', heard: ['חף', 'כף', 'חאף'], example: 'אָכַל' },
-  { form: 'ל', name: 'לָמֶד', heard: ['למד', 'לאמד'], example: 'לֵב' },
-  { form: 'מ', name: 'מֵם', heard: ['מם', 'מים', 'מאם'], example: 'מַיִם' },
-  { form: 'נ', name: 'נוּן', heard: ['נון', 'נונ'], example: 'נֵר' },
+  { form: 'ל', name: 'לָמֶד', heard: ['למד', 'לאמד', ...SHORT_NAMES['ל']], example: 'לֵב' },
+  { form: 'מ', name: 'מֵם', heard: ['מם', 'מים', 'מאם', ...SHORT_NAMES['מ']], example: 'מַיִם' },
+  { form: 'נ', name: 'נוּן', heard: ['נון', 'נונ', ...SHORT_NAMES['נ']], example: 'נֵר' },
   { form: 'ס', name: 'סָמֶךְ', heard: ['סמך', 'סמח', 'סאמך'], example: 'סוּס' },
   { form: 'ע', name: 'עַיִן', heard: ['עין', 'עיין', 'איין', 'אין'], example: 'עֵץ' },
   { form: 'פּ', name: 'פֵּא', heard: ['פא', 'פה', 'פי', 'פיי', 'פ'], example: 'פִּיל' },
@@ -40,12 +53,12 @@ export const LETTERS: HebrewLetterInfo[] = [
   { form: 'צ', name: 'צָדִי', heard: ['צדי', 'צאדי', 'צדיק'], example: 'צָב' },
   { form: 'ק', name: 'קוֹף', heard: ['קוף', 'כוף'], example: 'קוֹף' },
   { form: 'ר', name: 'רֵישׁ', heard: ['ריש', 'רש', 'רייש'], example: 'רַךְ' },
-  { form: 'שׁ', name: 'שִׁין', heard: ['שין', 'שן'], example: 'שֶׁמֶשׁ' },
+  { form: 'שׁ', name: 'שִׁין', heard: ['שין', 'שן', ...SHORT_NAMES['ש']], example: 'שֶׁמֶשׁ' },
   { form: 'שׂ', name: 'שִׂין', heard: ['סין', 'שין', 'שׂין'], example: 'שָׂדֶה' },
   { form: 'ת', name: 'תָּו', heard: ['תו', 'טו', 'תאו', 'תיו'], example: 'תּוּת' },
   { form: 'ך', name: 'כָף סוֹפִית', heard: ['כף סופית', 'חף סופית'], example: 'מֶלֶךְ' },
-  { form: 'ם', name: 'מֵם סוֹפִית', heard: ['מם סופית', 'מים סופית'], example: 'יָם' },
-  { form: 'ן', name: 'נוּן סוֹפִית', heard: ['נון סופית'], example: 'גַּן' },
+  { form: 'ם', name: 'מֵם סוֹפִית', heard: ['מם סופית', 'מים סופית', ...SHORT_NAMES['מ']], example: 'יָם' },
+  { form: 'ן', name: 'נוּן סוֹפִית', heard: ['נון סופית', ...SHORT_NAMES['נ']], example: 'גַּן' },
   { form: 'ף', name: 'פֵא סוֹפִית', heard: ['פא סופית', 'פה סופית', 'פי סופית'], example: 'כַּף' },
   { form: 'ץ', name: 'צָדִי סוֹפִית', heard: ['צדי סופית', 'צדיק סופית'], example: 'עֵץ' },
 ];

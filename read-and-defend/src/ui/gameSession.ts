@@ -66,6 +66,9 @@ export class GameSession {
   private ear!: HTMLElement;
   private bottom!: HTMLElement;
   private hints!: HTMLElement;
+  /** What the microphone is hearing right now, word by word. */
+  private caption!: HTMLElement;
+  private captionTimer: ReturnType<typeof setTimeout> | undefined;
   private feedback!: HTMLElement;
   private srTarget!: HTMLElement;
   private overlay: HTMLElement | null = null;
@@ -232,7 +235,8 @@ export class GameSession {
     this.bottom = el('div', { class: 'game-bottom' });
     this.feedback = el('div', { class: 'feedback-bubble', 'aria-live': 'polite', 'data-testid': 'feedback' });
     this.hints = el('div', { class: 'hints' });
-    this.bottom.append(this.feedback, this.hints);
+    this.caption = el('div', { class: 'live-caption', dir: 'auto', 'data-testid': 'live-caption', 'aria-hidden': 'true' });
+    this.bottom.append(this.caption, this.feedback, this.hints);
     if (this.app.profile.settings.devMode) {
       const dev = el('div', { class: 'dev-panel', 'aria-label': 'Development simulator' });
       const add = (label: string, a: SimulatedAnswer) => {
@@ -394,6 +398,7 @@ export class GameSession {
     if (this.ended || this.state.status !== 'playing' || this.state.intro > 0) return;
     // The game's own voice (the Listen button, spoken instructions) is not the child.
     if (speaker.isBusy()) return;
+    this.showCaption(alts[0]?.transcript ?? '', final);
     if (!final) this.speakingUntil = performance.now() + 1200;
     else this.speakingUntil = 0;
 
@@ -446,6 +451,17 @@ export class GameSession {
       sound.play('unclear');
       this.say(`${t('unclear')} ${this.heardNote(ev.heard)}`.trim(), 'info');
     }
+  }
+
+  /** Live: the words appear on screen while the child is still saying them. */
+  private showCaption(text: string, final: boolean): void {
+    const words = text.trim();
+    if (!words || words === '…') return;
+    this.caption.textContent = words.length > 48 ? `…${words.slice(-46)}` : words;
+    this.caption.classList.add('show');
+    this.caption.classList.toggle('final', final);
+    if (this.captionTimer) clearTimeout(this.captionTimer);
+    this.captionTimer = setTimeout(() => this.caption.classList.remove('show'), final ? 1400 : 2500);
   }
 
   /** What the engine returned, shown with a miss, so it is clear the game did listen. */

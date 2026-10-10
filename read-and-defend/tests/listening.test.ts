@@ -154,3 +154,47 @@ describe('always-on listening', () => {
     expect(got).toEqual(['מ', 'מכונית']);
   });
 });
+
+describe('live listening in the Android app (native plugin with partial results)', () => {
+  it('delivers words while they are said, then the final words, then listens again', async () => {
+    const { listenLive } = await import('../src/speech/nativeProvider');
+    let partial: ((d: { matches?: string[] }) => void) | null = null;
+    let listening = false;
+    let starts = 0;
+    const plugin = {
+      available: async () => ({ available: true }),
+      requestPermissions: async () => ({ speechRecognition: 'granted' }),
+      start: async () => { starts++; listening = true; return {}; },
+      stop: async () => { listening = false; },
+      isListening: async () => ({ listening }),
+      addListener: async (_e: 'partialResults', fn: (d: { matches?: string[] }) => void) => { partial = fn; return { remove: () => undefined }; },
+    };
+    const got: Array<[string, boolean]> = [];
+    const session = listenLive(plugin, { lang: 'he-IL', onResult: (a, final) => got.push([a[0].transcript, final]), onError: () => undefined });
+    await new Promise((r) => setTimeout(r, 30));
+    partial!({ matches: ['מם'] });                 // live, mid-utterance
+    expect(got).toEqual([['מם', false]]);
+    partial!({ matches: ['מם למד'] });
+    listening = false;                             // the child paused
+    await new Promise((r) => setTimeout(r, 900));
+    expect(got.at(-1)).toEqual(['מם למד', true]);  // final words delivered
+    expect(starts).toBeGreaterThanOrEqual(2);      // and it is listening again
+    session.stop();
+  });
+
+  it('a blocked microphone stops live listening and is reported', async () => {
+    const { listenLive } = await import('../src/speech/nativeProvider');
+    const errors: Array<[string, boolean]> = [];
+    const plugin = {
+      available: async () => ({ available: true }),
+      requestPermissions: async () => ({ speechRecognition: 'denied' }),
+      start: async () => { throw new Error('Missing permission'); },
+      stop: async () => undefined,
+      isListening: async () => ({ listening: false }),
+      addListener: async () => ({ remove: () => undefined }),
+    };
+    listenLive(plugin, { lang: 'he-IL', onResult: () => undefined, onError: (e, fatal) => errors.push([e.code, fatal]) });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(errors).toEqual([['permission-denied', true]]);
+  });
+});
