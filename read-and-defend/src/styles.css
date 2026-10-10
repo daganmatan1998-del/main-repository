@@ -122,6 +122,10 @@ button:focus-visible, [tabindex]:focus-visible { outline: 4px solid var(--info);
 .home-actions { display: flex; flex-direction: column; gap: 14px; align-items: center; margin-top: auto; margin-bottom: 2vh; }
 .home-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .home-row .btn { min-width: 150px; }
+.btn-install { align-self: center; min-width: 200px; background: linear-gradient(180deg, #4ad0a0, #1f9d76); color: #04281d; }
+.btn-install svg { width: 22px; height: 22px; }
+.install-steps { margin: 0; padding-inline-start: 1.4em; display: grid; gap: 10px; text-align: start; font-size: 1.1rem; line-height: 1.4; color: var(--ink-soft); }
+
 .home-top { display: flex; justify-content: space-between; gap: 8px; }
 
 .daily { display: flex; gap: 12px; align-items: center; background: rgba(255, 250, 240, 0.95); border-radius: 18px; padding: 10px 14px; max-width: 520px; width: 100%; box-shadow: var(--soft-shadow); }
@@ -564,3 +568,15 @@ html[data-reduced-motion='1'] *, html[data-reduced-motion='1'] *::before, html[d
   .ear { width: 40px; height: 40px; }
   .home-row .btn { min-width: 0; }
 }
+
+/* New version available: a pill under the top bar of the menus. */
+.update-bar {
+  position: fixed; z-index: 60; left: 0; right: 0; margin-inline: auto; width: max-content;
+  top: calc(78px + var(--safe-t));
+  display: flex; align-items: center; gap: 12px; padding-block: 6px; padding-inline: 16px 6px;
+  max-width: calc(100vw - 24px); border-radius: 999px; white-space: nowrap;
+  background: rgba(20, 12, 48, 0.92); color: #fff; font-weight: 700;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.update-bar .btn { min-height: 44px; padding: 6px 18px; }
+.update-bar svg { width: 20px; height: 20px; }

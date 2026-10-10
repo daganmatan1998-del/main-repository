@@ -307,6 +307,25 @@ microphone on `https://` or `localhost`. Deploy `server/stt-proxy.mjs` (any
 Node 18+ host) only if you want the server engine, and route `/api/stt` to it
 or set its URL in Settings.
 
+## Install button (web version)
+
+The home screen has an **Install the app** button (hidden once the game runs as
+an installed app). On Chrome/Edge/Samsung Internet it triggers the browser's own
+install prompt in one tap (`platform/install.ts` keeps the `beforeinstallprompt`
+event). Safari on iPhone/iPad has no install API - Apple only allows Share → Add
+to Home Screen - so there the button shows those steps (in Hebrew or English).
+
+## Update button
+
+Every build writes `dist/version.json` (the commit id on GitHub) and carries the
+same id inside the page. While the game is open it checks `version.json` on
+start, whenever it comes back to the foreground and every five minutes; when a
+newer version is online an **Update** button appears on the menus (never in the
+middle of a level). Pressing it clears the offline copy and reloads - no
+reinstalling, and progress is kept. The service worker never caches
+`version.json`. The Capacitor Android app carries its files inside the APK, so
+it is updated by installing a new APK instead.
+
 ## Mobile apps (Android on Windows; iOS on a Mac)
 
 The game is wrapped with Capacitor 6 and the native speech plugin

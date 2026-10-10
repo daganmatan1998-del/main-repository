@@ -1,4 +1,7 @@
 import './styles.css';
+import { initInstall } from './platform/install';
+import { applyUpdate, onUpdateAvailable, startUpdateChecks, updateAvailable } from './platform/update';
+import { el, icon } from './ui/dom';
 import { registerServiceWorker } from './platform/platform';
 import { App } from './ui/app';
 import { GameSession } from './ui/gameSession';
@@ -22,6 +25,16 @@ function boot(): void {
       app.show('home');
     });
   };
+  // "New version - Update": shown on the menus, never in the middle of a level.
+  const updateBar = () => {
+    document.getElementById('updateBar')?.remove();
+    if (!updateAvailable() || app.sessionActive) return;
+    const btn = el('button', { class: 'btn btn-gold', 'data-testid': 'update' }, icon('download'), t('updateNow'));
+    btn.addEventListener('click', () => { btn.setAttribute('disabled', ''); void applyUpdate(); });
+    app.layer.append(el('div', { id: 'updateBar', class: 'update-bar', role: 'status' }, el('span', {}, t('updateReady')), btn));
+  };
+  app.afterShow = updateBar;
+  onUpdateAvailable(updateBar);
   app.show(app.profile.lang ? 'home' : 'language');
   // Hooks for automated browser tests only; they expose no secrets.
   (window as unknown as { __rd: unknown }).__rd = { app };
@@ -44,9 +57,11 @@ async function prepareNative(): Promise<void> {
 }
 
 async function start(): Promise<void> {
+  initInstall(); // catches the browser's install offer before the home screen asks for it
   await prepareNative();
   boot();
   registerServiceWorker();
+  startUpdateChecks();
 }
 
 start().catch((e) => {

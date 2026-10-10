@@ -28,7 +28,7 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.pathname.includes('/api/')) return;
+  if (url.pathname.includes('/api/') || url.pathname.endsWith('/version.json')) return;
 
   if (req.mode === 'navigate') {
     e.respondWith(

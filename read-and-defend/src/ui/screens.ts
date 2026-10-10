@@ -10,6 +10,7 @@ import type { App } from './app';
 import { SceneRenderer } from '../game/renderer';
 import { createLevelState, type LevelState } from '../game/levelState';
 import { el, icon, starsRow, toast } from './dom';
+import { installMode, isInstalled, promptInstall } from '../platform/install';
 
 /* ================================================================ helpers */
 
@@ -115,6 +116,22 @@ export function homeScreen(app: App): void {
   nav(t('castle'), 'castle', 'shop', 'open-shop');
   nav(t('progress'), 'chart', 'progress', 'open-progress');
   actions.append(play, row, dailyBox);
+  if (!isInstalled()) {
+    const inst = el('button', { class: 'btn btn-install', 'data-testid': 'install' }, icon('download'), t('installApp'));
+    inst.addEventListener('click', async () => {
+      sound.play('tap');
+      if (installMode() === 'prompt') {
+        const r = await promptInstall();
+        if (r === 'accepted') { toast(t('installDone'), 'good'); inst.remove(); }
+        return;
+      }
+      const steps = el('ol', { class: 'install-steps' }, ...(installMode() === 'ios' ? t('installIos') : t('installOther')).map((x) => el('li', {}, x)));
+      const close = el('button', { class: 'btn btn-gold' }, t('close'));
+      const m = modal(app, el('h2', {}, t('installTitle')), steps, close);
+      close.addEventListener('click', m.close);
+    });
+    actions.append(inst);
+  }
   s.append(actions);
   app.layer.append(s);
   if (app.profile.settings.voiceHints && !lp.tutorialDone) speaker.speak(t('tagline'), app.pack.speechLang, 0.95);

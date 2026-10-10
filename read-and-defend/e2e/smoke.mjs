@@ -26,7 +26,7 @@ catch { pw = await import('/opt/node22/lib/node_modules/playwright/index.mjs'); 
 const { chromium } = pw;
 
 /* ---------------------------------------------------------- static server */
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.map': 'application/json' };
+const types = { '.json': 'application/json', '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.map': 'application/json' };
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname.startsWith('/api/')) { res.writeHead(404); res.end(); return; }
@@ -521,6 +521,87 @@ await test('weapons shop: buy, equip and the game uses it', async () => {
   assert(p.coins === 30 && p.weapon === 'weapon-fire' && p.owned.includes('weapon-fire'), 'purchase failed: ' + JSON.stringify(p));
   const rendererWeapon = await page.evaluate(() => window.__rd.app.renderer.opts.weapon);
   assert(rendererWeapon === 'weapon-fire', 'the game renderer is not using the equipped weapon');
+  assert(page.errors.length === 0, 'page errors: ' + page.errors.join('; '));
+  await page.context().close();
+});
+
+await test('tutorial: a monster that reaches the castle hurts it and goes back, it does not just stop', async () => {
+  const page = await newPage();
+  await setup(page, 'en');
+  await page.click('[data-testid=play]');
+  for (let i = 0; i < 3; i++) await page.click('[data-testid=tut-next]');
+  await page.waitForFunction(() => window.__rd.session?.state?.enemies.some((e) => e.status === 'walking'));
+  const before = await page.evaluate(() => { const st = window.__rd.session.state; st.enemies.find((e) => e.status === 'walking').progress = 0.985; return st.castleHp; });
+  await page.waitForTimeout(1200);
+  const after = await page.evaluate(() => { const st = window.__rd.session.state; const e = st.enemies.find((x) => x.status === 'walking'); return { hp: st.castleHp, progress: e?.progress, status: st.status }; });
+  assert(after.hp < before, `the castle should lose a heart (${before} → ${after.hp})`);
+  assert(after.progress !== undefined && after.progress < 0.5 && after.status === 'playing', 'the monster should walk again from the start: ' + JSON.stringify(after));
+  assert(page.errors.length === 0, 'page errors: ' + page.errors.join('; '));
+  await page.context().close();
+});
+
+await test('install button: one tap with the browser prompt, or the steps when there is none', async () => {
+  // Chrome/Edge: the browser offers installation, the button uses it.
+  let page = await newPage({ init: () => {
+    window.__installCalls = 0;
+    window.addEventListener('DOMContentLoaded', () => setTimeout(() => {
+      const e = new Event('beforeinstallprompt', { cancelable: true });
+      e.prompt = async () => { window.__installCalls++; };
+      e.userChoice = Promise.resolve({ outcome: 'accepted' });
+      window.dispatchEvent(e);
+    }, 100));
+  } });
+  await page.click('[data-testid=lang-en]');
+  await page.waitForTimeout(300);
+  await page.click('[data-testid=install]');
+  await page.waitForTimeout(200);
+  assert(await page.evaluate(() => window.__installCalls) === 1, 'the browser install prompt was not used');
+  assert(await page.locator('[data-testid=install]').count() === 0, 'the button should disappear once installed');
+  await page.context().close();
+
+  // iPhone Safari: no prompt exists, so the two taps are explained (in Hebrew too).
+  page = await newPage({ context: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' } });
+  await page.click('[data-testid=lang-he]');
+  await page.click('[data-testid=install]');
+  const steps = await page.locator('.install-steps li').allTextContents();
+  assert(steps.length === 3 && steps[0].includes('שיתוף'), 'iPhone steps missing: ' + JSON.stringify(steps));
+  assert(page.errors.length === 0, 'page errors: ' + page.errors.join('; '));
+  await page.context().close();
+
+  // Already installed (standalone): no button.
+  page = await newPage({ init: () => { const m = window.matchMedia.bind(window); window.matchMedia = (q) => q.includes('standalone') ? { matches: true, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} } : m(q); } });
+  await page.click('[data-testid=lang-en]');
+  assert(await page.locator('[data-testid=install]').count() === 0, 'no install button inside the installed app');
+  await page.context().close();
+});
+
+await test('update button: appears only when a newer version is online, and loads it', async () => {
+  // Same version online: no button.
+  let page = await newPage();
+  await page.click('[data-testid=lang-en]');
+  await page.waitForTimeout(1500);
+  assert(await page.locator('[data-testid=update]').count() === 0, 'no update button when the site has this version');
+  const served = await page.evaluate(() => fetch('./version.json', { cache: 'no-store' }).then((r) => r.json()));
+  assert(typeof served.version === 'string' && served.version.length > 0, 'dist/version.json missing: ' + JSON.stringify(served));
+  await page.context().close();
+
+  // A newer version is published: the button appears on the menus.
+  page = await newPage({ init: () => {} });
+  await page.context().route(/version\.json/, (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ version: 'newer-build' }) }));
+  await page.reload();
+  await page.click('[data-testid=lang-he]');
+  await page.waitForSelector('[data-testid=update]', { timeout: 5000 });
+  const text = await page.locator('#updateBar').textContent();
+  assert(text.includes('עדכון'), 'update bar should be in Hebrew: ' + text);
+  // Not in the middle of a level.
+  await page.evaluate(() => { window.__rd.app.sessionActive = true; window.__rd.app.afterShow(); });
+  assert(await page.locator('[data-testid=update]').count() === 0, 'the update button must not interrupt a level');
+  await page.evaluate(() => { window.__rd.app.sessionActive = false; window.__rd.app.show('home'); });
+  await page.waitForSelector('[data-testid=update]');
+  // Pressing it reloads the game; progress (language choice) survives.
+  await Promise.all([page.waitForEvent('load'), page.click('[data-testid=update]')]);
+  await page.waitForSelector('[data-testid=screen-home]');
+  assert(await page.evaluate(() => document.documentElement.lang) === 'he', 'progress/settings should survive the update');
   assert(page.errors.length === 0, 'page errors: ' + page.errors.join('; '));
   await page.context().close();
 });

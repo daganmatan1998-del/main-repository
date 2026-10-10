@@ -17,6 +17,39 @@ export const LETTER_NAMES: Record<string, string[]> = {
   x: ['x', 'ex', 'ax'], y: ['y', 'why', 'wye'], z: ['z', 'zee', 'zed'],
 };
 
+/**
+ * Words a recogniser commonly returns when a child says a letter's SOUND
+ * ("sss", "mmm", "buh") instead of its name. Each spelling belongs to exactly
+ * one letter (tests/evaluator.test.ts checks), so a sound is never credited to
+ * the wrong letter.
+ */
+const LETTER_MISHEARD: Record<string, string[]> = {
+  a: ['hey', 'at', 'apple', 'aah'], b: ['bay'], c: [], d: ['the', 'day'], e: ['ea', 'hee', 'he'],
+  f: ['if', 'of', 'off'], g: ['go', 'ghee'], h: ['ha', 'hah', 'each'], i: ['it', 'ai', 'ih'],
+  j: ['jaye', 'jey'], k: [], l: ['hell', 'all', 'la'], m: ['him', 'am', 'um', 'hmm', 'mum'],
+  n: ['an', 'and', 'in'], o: ['on', 'aw', 'awe'], p: ['pa'], q: ['kew'],
+  r: ['our', 'arr', 'or'], s: ['yes', 'us', 'is', 'as', 'ass'], t: ['to', 'too', 'two'],
+  u: ['uh', 'up', 'ew'], v: ['vie'], w: ['dub', 'dubya', 'double'], x: ['eggs', 'ecks', 'ks'],
+  y: [], z: ['zi', 'zeh'],
+};
+const SOUND_ONSET: Record<string, string[]> = { c: ['k', 'c'], k: ['k', 'c'], q: ['kw', 'qu'] };
+const VOWEL_LETTERS = new Set(['a', 'e', 'i', 'o', 'u']);
+
+/**
+ * Every spelling accepted for a letter said aloud: its name, a drawn-out or
+ * doubled sound ("sss", "mm"), the sound with a vowel on the end ("buh",
+ * "tuh"), and the curated mishearings above.
+ */
+export function letterSpellings(letter: string): Set<string> {
+  const l = letter.toLowerCase();
+  const out = new Set<string>([...(LETTER_NAMES[l] ?? []), ...(LETTER_MISHEARD[l] ?? [])]);
+  for (let n = 2; n <= 6; n++) out.add(l.repeat(n));
+  if (!VOWEL_LETTERS.has(l)) {
+    for (const onset of SOUND_ONSET[l] ?? [l]) for (const v of ['uh', 'er', 'ah']) out.add(onset + v);
+  }
+  return out;
+}
+
 /** A word that shows each sound, for "s as in sun" hints. */
 export const KEYWORDS: Record<string, string> = {
   s: 'sun', a: 'ant', t: 'top', p: 'pig', i: 'insect', n: 'net', m: 'map', d: 'dog',

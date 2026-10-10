@@ -36,6 +36,7 @@ export const ICONS = {
   speaker: S('<path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4Zm11.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4Zm-2.5-8.7v2.1a7 7 0 0 1 0 13.2v2.1a9 9 0 0 0 0-17.4Z"/>'),
   puzzle: S('<path fill="currentColor" d="M10 3a2 2 0 0 1 2 2v1h3a1 1 0 0 1 1 1v3h1a2 2 0 1 1 0 4h-1v3a1 1 0 0 1-1 1h-3v-1a2 2 0 1 0-4 0v1H5a1 1 0 0 1-1-1v-3h1a2 2 0 1 0 0-4H4V7a1 1 0 0 1 1-1h3V5a2 2 0 0 1 2-2Z"/>'),
   pause: S('<path fill="currentColor" d="M7 5h3v14H7zM14 5h3v14h-3z"/>'),
+  download: S('<path fill="currentColor" d="M5 20h14v-2H5v2Zm7-3 6-6-1.4-1.4L13 13.2V4h-2v9.2L7.4 9.6 6 11l6 6Z"/>'),
   play: S('<path fill="currentColor" d="M8 5v14l11-7z"/>'),
   heart: S('<path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2 0 3.5 1.1 4.3 2.4.8-1.3 2.3-2.4 4.3-2.4 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21Z"/>'),
   heartEmpty: S('<path fill="none" stroke="currentColor" stroke-width="2" d="M12 19.8s-6.8-4.2-8.7-8.3C2 8.6 3.8 5.5 6.8 5.5c1.9 0 3.2 1.2 3.9 2.4L12 9.6l1.3-1.7c.7-1.2 2-2.4 3.9-2.4 3 0 4.8 3.1 3.5 6-1.9 4.1-8.7 8.3-8.7 8.3Z"/>'),

@@ -113,13 +113,23 @@ describe('level state', () => {
     expect(e.progress).toBeGreaterThan(p);
   });
 
-  it('practice mode never damages the castle', () => {
+  it('practice mode: the castle is really hit, never falls, and the monster comes back', () => {
     const s = createLevelState(specs('cat'), { practice: true });
     for (let i = 0; i < 1000; i++) tick(s, 0.1);
-    expect(s.castleHp).toBe(s.castleMax);
+    expect(s.castleHp).toBe(1);               // lost hearts, but never the last one
     expect(s.status).toBe('playing');
+    const e = currentTarget(s)!;
+    expect(e.status).toBe('walking');          // not stuck at the gate: it walks again
+    expect(e.progress).toBeLessThan(1);
     readTarget(s);
     expect(s.status).toBe('won');
+  });
+
+  it('a monster is never held at the castle by speech, however long it lasts', () => {
+    const s = createLevelState(specs('cat'));
+    s.listening = true;                        // a permanently noisy room
+    for (let i = 0; i < 60 * 14; i++) { s.listening = true; tick(s, 1 / 60); }
+    expect(s.castleHp).toBeLessThan(s.castleMax);
   });
 
   it('three wrong readings freeze the enemy (no time pressure)', () => {
