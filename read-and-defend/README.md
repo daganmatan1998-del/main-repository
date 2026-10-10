@@ -17,7 +17,7 @@ npm run build        # typecheck + production build into dist/
 npm run test:e2e     # browser tests against dist/ (needs Playwright + Chromium)
 ```
 
-Node 18+ (developed on 22). No runtime dependencies; dev dependencies are
+Node 18+ (developed on 22). The browser build has no runtime dependencies (Capacitor is only loaded inside the Android app); dev dependencies are
 Vite, Vitest, TypeScript and `@types/node`.
 
 ---
@@ -307,32 +307,46 @@ microphone on `https://` or `localhost`. Deploy `server/stt-proxy.mjs` (any
 Node 18+ host) only if you want the server engine, and route `/api/stt` to it
 or set its URL in Settings.
 
-## Mobile apps (iOS / Android) — the path, not a claim
+## Mobile apps (Android on Windows; iOS on a Mac)
 
-The game is not published in any store. To package it:
+The game is wrapped with Capacitor 6 and the native speech plugin
+(`@capacitor-community/speech-recognition`, Android `SpeechRecognizer`). It is
+not published in any store. **On Windows you can build the Android app with one
+command**; iOS needs a Mac with Xcode (Apple does not allow it elsewhere).
 
-```bash
-npm i -D @capacitor/cli@6 && npm i @capacitor/core@6 @capacitor/ios@6 @capacitor/android@6 \
-  @capacitor-community/speech-recognition @capacitor/haptics
-npm run build
-npx cap add ios && npx cap add android
+You need once: **Node.js 18+** and **Android Studio** (open it once so it
+installs the Android SDK; it also brings Java 17/21). Then, in PowerShell, in
+this folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-android.ps1
 ```
 
-In `src/main.ts` of the native build, expose the plugin:
-`import { SpeechRecognition } from '@capacitor-community/speech-recognition'; window.__nativeSpeech = SpeechRecognition;`
-(`nativeProvider.ts` also finds it on `Capacitor.Plugins`).
+It installs the packages, builds the game, creates the `android/` project (first
+run), adds the microphone permission (`scripts/patch-android.mjs`), generates the
+icon from `assets/`, copies the game in and runs Gradle. The result is
+`ReadAndDefend-debug.apk` next to the script. Copy it to the phone and open it
+(allow "install unknown apps"), or plug the phone in with USB debugging on and
+add `-Install`. `-Open` opens the project in Android Studio instead (press Run
+to start it on a phone or an emulator); `-Clean` rebuilds the android folder
+from scratch. After changing the game just run the script again.
 
-- **iOS** `Info.plist`: `NSMicrophoneUsageDescription` and
-  `NSSpeechRecognitionUsageDescription` (child-friendly reasons). WKWebView
-  does not offer the Web Speech recogniser, so the native plugin is required.
-- **Android** `AndroidManifest.xml`: `RECORD_AUDIO`; Hebrew recognition needs
-  the Google speech services on the device (most phones have them).
-- Then `npx cap sync` and build in Xcode / Android Studio. Test both
-  languages on real devices; recogniser behaviour differs per OS and
-  manufacturer.
-- Store review: both stores have kids-category rules (no third-party
-  analytics/ads, parental gate for external links and purchases — the
-  settings gate already exists).
+How voice works inside the app: the WebView has no Web Speech API, so
+`main.ts` loads the native plugin (only there) and `nativeProvider.ts` drives it
+as a loop of short listening turns (`speech/continuous.ts`). Hebrew needs the
+Google speech services on the phone (most Android phones have them). Honest
+limits: Android's recogniser restarts between turns, so there is a very short
+gap and, on some phones, a system sound; the cut-off/partial-word guessing of
+the web version is therefore weaker in the app (no live partial results). Test
+both languages on a real phone.
+
+- **iOS** (on a Mac): `npm i -D @capacitor/ios@6 && npx cap add ios`, add
+  `NSMicrophoneUsageDescription` and `NSSpeechRecognitionUsageDescription` to
+  `Info.plist` (child-friendly reasons), build in Xcode.
+- A **release** build for the Play Store needs a signing key and an
+  Android App Bundle (`gradlew bundleRelease`); the debug APK is for your own
+  devices. Kids-category rules apply (no third-party analytics/ads, parental
+  gate for external links and purchases - the settings gate already exists).
 
 The service worker is not registered inside the native shell (assets are
 bundled there).
