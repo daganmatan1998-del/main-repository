@@ -83,9 +83,10 @@ export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {
   return card;
 }
 
-const REMOVE_LABEL = { protein: 'בלי חלבון', carb: 'בלי פחמימה', fat: 'בלי שומן', veg: 'בלי ירקות' };
+const REMOVE_LABEL = { protein: 'בלי חלבון', carb: 'בלי פחמימה', fat: 'בלי שומן', veg: 'בלי ירקות', fruit: 'בלי פרי' };
+const SIDE_NAME = { veg: 'הירקות', fruit: 'הפרי' };
 const REMOVED_TEXT = { protein: 'החלבון הוסר', carb: 'הפחמימה הוסרה', fat: 'השומן הוסר' };
-const BACK_TEXT = { protein: 'החלבון חזר לארוחה', carb: 'הפחמימה חזרה לארוחה', fat: 'השומן חזר לארוחה', veg: 'הירקות חזרו לארוחה' };
+const BACK_TEXT = { protein: 'החלבון חזר לארוחה', carb: 'הפחמימה חזרה לארוחה', fat: 'השומן חזר לארוחה', veg: 'הירקות חזרו לארוחה', fruit: 'הפרי חזר לארוחה' };
 const MACRO_NAME = { protein: 'חלבון', carb: 'פחמימות', fat: 'שומן' };
 
 // What the meal's removals become when the user taps group g. Protein, carbs
@@ -94,7 +95,7 @@ export function nextRemoval(meal, g) {
   const cur = meal.removed || [];
   if (cur.includes(g)) return cur.filter((x) => x !== g);
   let want = [...cur, g];
-  if (!validRemoval(meal.removable, want).includes(g)) want = [...cur.filter((x) => x === 'veg'), g];
+  if (!validRemoval(meal.removable, want).includes(g)) want = [...cur.filter((x) => !MACRO_NAME[x]), g];
   return validRemoval(meal.removable, want).includes(g) ? want : null;
 }
 
@@ -121,7 +122,7 @@ function removalBar(meal, day) {
         }
         await setOverride(day, meal.index, { removed: next });
         if (on) toast(BACK_TEXT[g]);
-        else toast(`${meal.name} בלי ${MACRO_NAME[g] || 'ירקות'} — הקלוריות חולקו מחדש`);
+        else toast(`${meal.name} בלי ${MACRO_NAME[g] || { veg: 'ירקות', fruit: 'פרי' }[g]} — הקלוריות חולקו מחדש`);
       },
     }, on ? icon('check', 14) : null, REMOVE_LABEL[g]));
   }
@@ -129,19 +130,21 @@ function removalBar(meal, day) {
     h('div', { class: 'rm-title muted small' }, 'להוריד מהארוחה:'),
     chips);
   if (removed.length) {
-    const macros = removed.filter((g) => g !== 'veg');
+    const macros = removed.filter((g) => MACRO_NAME[g]);
+    const sides = removed.filter((g) => SIDE_NAME[g]).map((g) => SIDE_NAME[g]);
     const rest = ['protein', 'carb', 'fat'].filter((g) => meal.removable.includes(g) && !macros.includes(g)).map((g) => MACRO_NAME[g]);
     const to = rest.length > 1 ? `חולקו בין ה${rest[0]} ל${rest[1]}` : `עברו ל${rest[0]}`;
     const text = macros.length
-      ? `${REMOVED_TEXT[macros[0]]}${removed.includes('veg') ? ' וגם הירקות' : ''} — ${fmt(meal.freedKcal)} קק״ל ${to}, והארוחה נשארת על אותן קלוריות.`
-      : 'הירקות הוסרו — שאר הארוחה הוגדלה לאותן קלוריות.';
+      ? `${REMOVED_TEXT[macros[0]]}${sides.length ? ` וגם ${sides.join(' ו')}` : ''} — ${fmt(meal.freedKcal)} קק״ל ${to}, והארוחה נשארת על אותן קלוריות.`
+      : `${sides.join(' ו')} ${sides.length > 1 || removed[0] === 'veg' ? 'הוסרו' : 'הוסר'} — שאר הארוחה הוגדלה לאותן קלוריות.`;
     wrap.appendChild(h('p', { class: 'rm-note small' }, icon('info', 16), h('span', null, text)));
   }
   return wrap;
 }
 
 export function openSwapSheet(item, meal, day, onAsk) {
-  const res = alternatives(item, meal, state.profile.prefs, 6);
+  const SHOWN = 6;
+  const res = alternatives(item, meal, state.profile.prefs, Infinity, { all: true });
   const keyName = { p: 'חלבון', c: 'פחמימות', f: 'שומן', kcal: 'קלוריות' }[res.matchedOn];
   const s = sheet(`${SWAP_LABEL[item.role]}: ${res.source.name}`, (close) => {
     const body = h('div', null,
@@ -151,23 +154,35 @@ export function openSwapSheet(item, meal, day, onAsk) {
       body.appendChild(h('p', { class: 'empty' }, 'אין תחליפים מתאימים במאגר עבור ההגבלות שלך. אפשר לשאול את העוזר.'));
     }
     const list = h('ul', { class: 'alt-list' });
-    for (const o of res.options) {
-      list.appendChild(h('li', { class: 'alt' },
-        h('div', { class: 'alt-text' },
-          h('div', { class: 'alt-name' }, o.name),
-          h('div', { class: 'alt-amt' }, h('b', { class: 'num' }, `${o.grams} ג׳`), ` · ${o.household}`),
-          h('div', { class: 'muted small num' },
-            `${o.kcal} קק״ל `, ltr(`(${o.dKcal > 0 ? '+' : ''}${o.dKcal})`), ` · ח ${fmt(o.p, 1)} · פ ${fmt(o.c, 1)} · ש ${fmt(o.f, 1)}`)),
-        h('button', {
-          class: 'btn btn-small btn-primary',
-          onclick: async () => {
-            await setOverride(day, meal.index, { swap: { slot: item.slot, foodId: o.foodId, grams: o.grams } });
-            close();
-            toast(`הוחלף ל${o.name}`);
-          },
-        }, 'החלף')));
-    }
+    const row = (o) => h('li', { class: 'alt' },
+      h('div', { class: 'alt-text' },
+        h('div', { class: 'alt-name' }, o.name),
+        h('div', { class: 'alt-amt' }, h('b', { class: 'num' }, `${o.grams} ג׳`), ` · ${o.household}`),
+        h('div', { class: 'muted small num' },
+          `${o.kcal} קק״ל `, ltr(`(${o.dKcal > 0 ? '+' : ''}${o.dKcal})`), ` · ח ${fmt(o.p, 1)} · פ ${fmt(o.c, 1)} · ש ${fmt(o.f, 1)}`)),
+      h('button', {
+        class: 'btn btn-small btn-primary',
+        onclick: async () => {
+          await setOverride(day, meal.index, { swap: { slot: item.slot, foodId: o.foodId, grams: o.grams } });
+          close();
+          toast(`הוחלף ל${o.name}`);
+        },
+      }, 'החלף'));
+    for (const o of res.options.slice(0, SHOWN)) list.appendChild(row(o));
     body.appendChild(list);
+    // Every other food of the same kind, in one scrolling list.
+    if (res.options.length > SHOWN) {
+      const more = h('button', {
+        class: 'btn btn-block alt-all',
+        id: 'btn-all-alts',
+        onclick: () => {
+          for (const o of res.options.slice(SHOWN)) list.appendChild(row(o));
+          more.remove();
+          list.children[SHOWN]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        },
+      }, `לראות את כל האפשרויות (${res.options.length})`);
+      body.appendChild(more);
+    }
     body.appendChild(h('button', {
       class: 'btn btn-ghost btn-block danger-text',
       id: 'btn-never',
@@ -184,7 +199,7 @@ export function openSwapSheet(item, meal, day, onAsk) {
     if (onAsk) {
       body.appendChild(h('button', {
         class: 'btn btn-ghost btn-block',
-        onclick: () => { close(); onAsk(item, meal, res); },
+        onclick: () => { close(); onAsk(item, meal, { ...res, options: res.options.slice(0, SHOWN) }); },
       }, icon('chat', 18), 'שאל את העוזר על תחליפים נוספים'));
     }
     return body;

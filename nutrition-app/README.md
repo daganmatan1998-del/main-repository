@@ -146,16 +146,23 @@ Then make three changes:
 
 ### Taking a food group out of a meal
 
-- Under every meal: **בלי חלבון / בלי פחמימה / בלי שומן / בלי ירקות**. Tap once to remove, tap again to bring it back. The choice applies to that meal on that day, and stays when you tap "another meal".
-- **Where the calories go:** the removed macro's calories are shared among the remaining macros, in proportion to how many calories each already had. For example, a lunch without carbs gives the carb calories to protein and fat, with more going to fat if fat was the bigger share. The meal is then re-solved, so it keeps its calories. A note on the card says how many calories moved and where.
-- When the remaining foods hit their sensible maximum portion, the meal gets a second food from the group that is furthest behind (a second carb, another fat).
-- The engine also avoids foods made mostly of the removed macro: no chickpeas as the protein of a carb-free meal, no salmon in a fat-free one.
+- Under every meal: **בלי חלבון / בלי פחמימה / בלי שומן / בלי ירקות**, plus **בלי פרי** at breakfast. Tap once to remove, tap again to bring it back. The choice applies to that meal on that day, and stays when you tap "another meal".
+- **Nothing is added in its place.** The meal keeps the same foods it had, minus the removed group, in bigger portions. One exception: if the removal would leave only seeds or oil and salad, the carb that was picked for that meal comes back. A removal never changes any other meal.
+- **Where the calories go:** the removed macro's calories are shared among the remaining macros, in proportion to how many calories each already had. For example, a lunch without carbs gives the carb calories to protein and fat, with more going to fat if fat was the bigger share. Portions are then re-solved, and the remaining foods may go up to 1.8× their usual portion so the meal keeps its calories. A note on the card says how many calories moved and where.
 - **Limits:**
-  - Vegetables can always go, together with anything.
+  - Vegetables and fruit can always go, together with anything.
   - Of protein, carbs and fat, only one goes at a time. Picking a second swaps it for the first.
   - Never in a way that leaves only fat (e.g. keto without protein), because a meal of oil and nuts isn't a meal.
-- Measured over ~4,000 meals: the median meal lands within ~4% of its calories. That matches or beats the normal menus.
+- Measured over ~4,000 meals: the median meal lands within ~1% of its calories. The exceptions are tiny snacks, where one food's minimum portion is already above the snack's calories.
 - The shopping list, recipes and the assistant all follow the removals. Meals without protein get carb-based recipes: stir-fries, grain salads, baked potatoes, wraps, porridge, fruit bowls, smoothies.
+
+### Fruit at breakfast
+
+Breakfast now has a fruit as its own category: a normal serving next to the bread or oats, rotated through the week like the other sides. It can be swapped like any item, or taken out with **בלי פרי**. Keto and carnivore breakfasts have no fruit.
+
+### Replacing an item: every option
+
+The replace sheet shows the 6 closest matches first. **לראות את כל האפשרויות (N)** then lists every food of that kind the user can eat, each scaled to the same amount of protein, carbs or fat, in one scrolling list. Foods that would need an unrealistic amount are capped at a sensible portion and listed last.
 
 ### More food options (v1.4)
 
@@ -181,8 +188,8 @@ Then make three changes:
 ## Tests
 
 ```bash
-npm test              # 38 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
-npm run test:e2e      # 157 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm test              # 39 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
+npm run test:e2e      # 161 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 ```
 
 The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.

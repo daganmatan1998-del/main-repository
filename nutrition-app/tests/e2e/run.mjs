@@ -271,6 +271,12 @@ try {
   await firstMeal.getByRole('button', { name: /החלף פחמימה/ }).first().click();
   await page.waitForSelector('.sheet .alt');
   await shot('08-swap-sheet');
+  const shownAlts = await page.locator('.sheet .alt').count();
+  await page.click('#btn-all-alts');
+  await wait(400);
+  const allAlts = await page.locator('.sheet .alt').count();
+  check(`"see all options" lists every food of the kind (${shownAlts} → ${allAlts})`, shownAlts === 6 && allAlts > 10 && (await page.locator('#btn-all-alts').count()) === 0);
+  await shot('08a-swap-all');
   const altName = await page.locator('.sheet .alt .alt-name').first().innerText();
   await page.locator('.sheet .alt button').first().click();
   await wait(500);
@@ -307,14 +313,21 @@ try {
   const meal0 = () => page.locator('.meal').first();
   const kcalOf = async () => Number((await meal0().locator('.meal-sub').innerText()).replace(/,/g, '').match(/\d+/)[0]);
   const mealKcal0 = await kcalOf();
-  check('every meal offers to take out protein / carbs / fat / vegetables',
-    (await meal0().locator('.rm-chip').count()) === 4 && (await page.locator('.meal').count()) === (await page.locator('.rm-bar').count()));
+  check('every meal offers to take out protein / carbs / fat / vegetables (and fruit at breakfast)',
+    (await meal0().locator('.rm-chip').count()) === 5 && (await meal0().locator('.rm-chip[data-group="fruit"]').count()) === 1
+    && (await page.locator('.meal').count()) === (await page.locator('.rm-bar').count()));
+  check('breakfast comes with a fruit', (await meal0().locator('.item.role-fruit').count()) === 1);
+  const namesOf = async () => (await meal0().locator('.item-name').allInnerTexts()).map((t) => t.trim());
+  const namesBefore = await namesOf();
   await meal0().locator('.rm-chip[data-group="carb"]').click();
   await wait(500);
   const kcalNoCarb = await kcalOf();
+  const namesNoCarb = await namesOf();
   check('removing the carb takes it off the meal', (await meal0().locator('.item.role-carb').count()) === 0
     && (await meal0().locator('.rm-chip[data-group="carb"]').getAttribute('aria-pressed')) === 'true');
-  check(`the carb calories move to protein and fat (${mealKcal0} → ${kcalNoCarb} kcal)`, Math.abs(kcalNoCarb - mealKcal0) / mealKcal0 < 0.15);
+  check('nothing is added in its place: the same foods, in bigger portions',
+    namesNoCarb.length === namesBefore.length - 1 && namesNoCarb.every((n) => namesBefore.includes(n)), `${namesBefore} → ${namesNoCarb}`);
+  check(`the carb calories move to the rest of the meal (${mealKcal0} → ${kcalNoCarb} kcal)`, Math.abs(kcalNoCarb - mealKcal0) / mealKcal0 < 0.08);
   check('the meal explains where the calories went', /קק״ל (חולקו|עברו)/.test(await meal0().locator('.rm-note').innerText()));
   await shot('08b-remove-carb');
   await page.reload();
@@ -339,6 +352,11 @@ try {
     await meal0().locator(`.rm-chip[data-group="${g}"]`).click();
     await wait(300);
   }
+  await meal0().locator('.rm-chip[data-group="fruit"]').click();
+  await wait(300);
+  check('the breakfast fruit can be taken out too', (await meal0().locator('.item.role-fruit').count()) === 0);
+  await meal0().locator('.rm-chip[data-group="fruit"]').click();
+  await wait(300);
   check('tapping again puts everything back', (await meal0().locator('.rm-note').count()) === 0 && (await meal0().locator('.item.role-protein').count()) > 0);
 
   // =============== weekly shopping list ===============

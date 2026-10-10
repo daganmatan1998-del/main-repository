@@ -6,7 +6,7 @@
 // cached — the assistant needs a live connection, and its answers are personal.
 // All user data lives in IndexedDB, which is unaffected by cache updates.
 
-const VERSION = 'nutri-v1.4.0';
+const VERSION = 'nutri-v1.4.1';
 const SHELL = [
   './',
   'index.html',

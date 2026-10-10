@@ -20,7 +20,9 @@ function roundFor(food, g) {
   return g < 40 ? Math.max(1, Math.round(g)) : Math.round(g / 5) * 5;
 }
 
-export function alternatives(item, meal, prefs, limit = 5) {
+// all: every allowed food of the same kind, not only the close matches —
+// the realistic ones first, then the rest with their portion capped.
+export function alternatives(item, meal, prefs, limit = 5, { all = false } = {}) {
   const src = FOOD_BY_ID[item.foodId];
   const key = KEY[src.role];
   const srcM = macrosFor(src, item.grams);
@@ -65,8 +67,11 @@ export function alternatives(item, meal, prefs, limit = 5) {
     return out;
   };
   let options = build(true);
-  if (!options.length) options = build(false);
   options.sort((a, b) => a.score - b.score);
+  if (!options.length || all) {
+    const have = new Set(options.map((o) => o.foodId));
+    options = options.concat(build(false).filter((o) => !have.has(o.foodId)).sort((a, b) => a.score - b.score));
+  }
   return {
     source: {
       foodId: src.id,

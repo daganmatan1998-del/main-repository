@@ -619,3 +619,4 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
   padding: 8px 10px; border-radius: 12px; background: var(--warn-bg); color: var(--warn-text);
 }
 .rm-note svg { flex-shrink: 0; margin-top: 2px; }
+.alt-all { margin: 4px 0 8px; background: var(--primary-weak); border-color: transparent; color: var(--primary); }

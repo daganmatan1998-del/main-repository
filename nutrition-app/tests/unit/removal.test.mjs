@@ -34,6 +34,7 @@ test('removal rules: one macro at a time, vegetables any time, never fat alone',
   assert.deepEqual(validRemoval(['protein', 'fat', 'veg'], ['protein']), [], 'keto without protein would be fat only');
   assert.deepEqual(validRemoval(['protein', 'fat', 'veg'], ['fat', 'veg']), ['fat', 'veg']);
   assert.deepEqual(validRemoval(full, ['bread']), []);
+  assert.deepEqual(validRemoval([...full, 'fruit'], ['carb', 'fruit', 'veg']), ['carb', 'fruit', 'veg']);
 });
 
 test('a removed group is gone from the meal and the meal keeps its calories', () => {
@@ -53,7 +54,17 @@ test('a removed group is gone from the meal and the meal keeps its calories', ()
             assert.notEqual(slotGroup(it.slot), g, `${m.name} still has ${it.slot}`);
             assert.ok(isAllowed(FOOD_BY_ID[it.foodId], prefs), it.foodId);
           }
-          if (g === 'carb') assert.ok(!m.items.some((i) => i.role === 'carb' || i.role === 'fruit'));
+          // Nothing is added in place of what was removed: the meal keeps
+          // only foods that were already on the full plate.
+          // (The one exception: if only seeds and salad would be left, the
+          // carb picked for this meal comes back.)
+          const before = base[m.index].items;
+          const leftover = before.filter((i) => slotGroup(i.slot) !== g);
+          const onlyFat = !leftover.some((i) => ['protein', 'carb', 'fruit'].includes(i.role));
+          const added = m.items.filter((i) => !before.some((b) => b.foodId === i.foodId));
+          if (onlyFat) assert.ok(added.every((i) => i.role === 'carb'), `${prefs.diet} ${m.name}`);
+          else assert.deepEqual(added.map((i) => i.foodId), [], `${prefs.diet} ${m.name} without ${g}`);
+          assert.ok(m.items.length < base[m.index].items.length + 1);
           assert.equal(new Set(m.items.map((i) => i.foodId)).size, m.items.length, 'no food twice in a meal');
           errs.push(Math.abs(m.totals.kcal - m.target.kcal) / m.target.kcal);
         }
@@ -63,17 +74,37 @@ test('a removed group is gone from the meal and the meal keeps its calories', ()
     }
   }
   errs.sort((a, b) => a - b);
-  assert.ok(errs[Math.floor(errs.length / 2)] < 0.06, `median meal error ${errs[Math.floor(errs.length / 2)]}`);
+  assert.ok(errs[Math.floor(errs.length / 2)] < 0.03, `median meal error ${errs[Math.floor(errs.length / 2)]}`);
+  assert.ok(errs[Math.floor(errs.length * 0.9)] < 0.1, `p90 meal error ${errs[Math.floor(errs.length * 0.9)]}`);
 });
 
 test('removals only touch their own meal, and survive "another meal"', () => {
-  const prefs = PREFS[0];
-  const base = generateDay('2026-11-03', T, prefs, {}, 3, plan(2));
-  const ov = { 1: { removed: ['carb'], reseed: 2 } };
-  const meals = generateDay('2026-11-03', T, prefs, ov, 3, plan(2));
-  assert.deepEqual(meals[0], base[0]);
-  assert.deepEqual(meals[1].removed, ['carb']);
-  assert.ok(!meals[1].items.some((i) => i.role === 'carb'));
+  for (const prefs of PREFS) {
+    for (const g of GROUPS) {
+      const base = generateDay('2026-11-03', T, prefs, { 0: { reseed: 2 } }, 3, plan(2));
+      const meals = generateDay('2026-11-03', T, prefs, { 0: { removed: [g], reseed: 2 } }, 3, plan(2));
+      for (let i = 1; i < meals.length; i++) assert.deepEqual(meals[i], base[i], `${prefs.diet}: removing ${g} at breakfast changed ${meals[i].name}`);
+      if (meals[0].removable.includes(g)) assert.deepEqual(meals[0].removed, [g]);
+    }
+  }
+});
+
+test('breakfast comes with a fruit, which can be taken out like any group', () => {
+  for (const prefs of PREFS) {
+    for (let d = 0; d < 7; d++) {
+      const [b] = generateDay(addDays('2026-11-01', d), T, prefs, {}, 3, plan(d));
+      const fruit = b.items.find((i) => i.slot === 'fruit');
+      assert.ok(fruit && FOOD_BY_ID[fruit.foodId].role === 'fruit', `${prefs.diet} breakfast has no fruit`);
+      assert.ok(b.removable.includes('fruit'));
+      const [nb] = generateDay(addDays('2026-11-01', d), T, prefs, { 0: { removed: ['fruit'] } }, 3, plan(d));
+      assert.ok(!nb.items.some((i) => i.slot === 'fruit'));
+      assert.ok(Math.abs(nb.totals.kcal - nb.target.kcal) / nb.target.kcal < 0.08);
+    }
+  }
+  for (const diet of ['keto', 'carnivore']) {
+    const [b] = generateDay('2026-11-02', { calories: 2000, protein: 150, carbs: 30, fat: 135 }, { ...PREFS[0], diet }, {}, 3, plan(1));
+    assert.ok(!b.items.some((i) => FOOD_BY_ID[i.foodId].role === 'fruit'), diet);
+  }
 });
 
 test('a swap made before a removal is re-fitted to the new meal', () => {
