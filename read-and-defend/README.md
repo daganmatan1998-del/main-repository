@@ -314,9 +314,10 @@ The game is wrapped with Capacitor 6 and the native speech plugin
 not published in any store. **On Windows you can build the Android app with one
 command**; iOS needs a Mac with Xcode (Apple does not allow it elsewhere).
 
-You need once: **Node.js 18+** and **Android Studio** (open it once so it
-installs the Android SDK; it also brings Java 17/21). Then, in PowerShell, in
-this folder:
+**Easiest: double-click `Build-Android.bat`.** Nothing needs to be installed
+beforehand - the script installs Node.js and Java 17 (via winget) and the Android
+SDK command-line tools if they are missing (Android Studio is optional). The
+first run takes 10-20 minutes. Or, in PowerShell, in this folder:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build-android.ps1
