@@ -30,6 +30,8 @@ export class App {
   private lastFrame = 0;
   /** While a game session runs, it drives the renderer itself. */
   sessionActive = false;
+  /** Called after every menu screen is drawn (the update button lives here). */
+  afterShow: (() => void) | null = null;
   /** Registered screen builders (filled by screens.ts to avoid import cycles). */
   screens: Partial<Record<ScreenName, (app: App) => void>> = {};
   startLevel: (level: LevelDef, opts?: { tutorial?: boolean }) => void = () => undefined;
@@ -114,6 +116,7 @@ export class App {
     speaker.cancel();
     const build = this.screens[name];
     if (build) build(this);
+    this.afterShow?.();
     this.ensureIdleScene();
   }
 

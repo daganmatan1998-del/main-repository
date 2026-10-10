@@ -26,7 +26,7 @@ catch { pw = await import('/opt/node22/lib/node_modules/playwright/index.mjs'); 
 const { chromium } = pw;
 
 /* ---------------------------------------------------------- static server */
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.map': 'application/json' };
+const types = { '.json': 'application/json', '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.map': 'application/json' };
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname.startsWith('/api/')) { res.writeHead(404); res.end(); return; }
@@ -572,6 +572,37 @@ await test('install button: one tap with the browser prompt, or the steps when t
   page = await newPage({ init: () => { const m = window.matchMedia.bind(window); window.matchMedia = (q) => q.includes('standalone') ? { matches: true, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} } : m(q); } });
   await page.click('[data-testid=lang-en]');
   assert(await page.locator('[data-testid=install]').count() === 0, 'no install button inside the installed app');
+  await page.context().close();
+});
+
+await test('update button: appears only when a newer version is online, and loads it', async () => {
+  // Same version online: no button.
+  let page = await newPage();
+  await page.click('[data-testid=lang-en]');
+  await page.waitForTimeout(1500);
+  assert(await page.locator('[data-testid=update]').count() === 0, 'no update button when the site has this version');
+  const served = await page.evaluate(() => fetch('./version.json', { cache: 'no-store' }).then((r) => r.json()));
+  assert(typeof served.version === 'string' && served.version.length > 0, 'dist/version.json missing: ' + JSON.stringify(served));
+  await page.context().close();
+
+  // A newer version is published: the button appears on the menus.
+  page = await newPage({ init: () => {} });
+  await page.context().route(/version\.json/, (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ version: 'newer-build' }) }));
+  await page.reload();
+  await page.click('[data-testid=lang-he]');
+  await page.waitForSelector('[data-testid=update]', { timeout: 5000 });
+  const text = await page.locator('#updateBar').textContent();
+  assert(text.includes('עדכון'), 'update bar should be in Hebrew: ' + text);
+  // Not in the middle of a level.
+  await page.evaluate(() => { window.__rd.app.sessionActive = true; window.__rd.app.afterShow(); });
+  assert(await page.locator('[data-testid=update]').count() === 0, 'the update button must not interrupt a level');
+  await page.evaluate(() => { window.__rd.app.sessionActive = false; window.__rd.app.show('home'); });
+  await page.waitForSelector('[data-testid=update]');
+  // Pressing it reloads the game; progress (language choice) survives.
+  await Promise.all([page.waitForEvent('load'), page.click('[data-testid=update]')]);
+  await page.waitForSelector('[data-testid=screen-home]');
+  assert(await page.evaluate(() => document.documentElement.lang) === 'he', 'progress/settings should survive the update');
+  assert(page.errors.length === 0, 'page errors: ' + page.errors.join('; '));
   await page.context().close();
 });
 

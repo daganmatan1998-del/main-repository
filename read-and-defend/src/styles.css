@@ -568,3 +568,15 @@ html[data-reduced-motion='1'] *, html[data-reduced-motion='1'] *::before, html[d
   .ear { width: 40px; height: 40px; }
   .home-row .btn { min-width: 0; }
 }
+
+/* New version available: a pill under the top bar of the menus. */
+.update-bar {
+  position: fixed; z-index: 60; left: 0; right: 0; margin-inline: auto; width: max-content;
+  top: calc(78px + var(--safe-t));
+  display: flex; align-items: center; gap: 12px; padding-block: 6px; padding-inline: 16px 6px;
+  max-width: calc(100vw - 24px); border-radius: 999px; white-space: nowrap;
+  background: rgba(20, 12, 48, 0.92); color: #fff; font-weight: 700;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.update-bar .btn { min-height: 44px; padding: 6px 18px; }
+.update-bar svg { width: 20px; height: 20px; }
