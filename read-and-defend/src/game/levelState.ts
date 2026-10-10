@@ -17,6 +17,9 @@ export interface EnemySpec {
   assist?: boolean;
 }
 
+/** Monsters only slow down for speech on the first 80 % of the road. */
+const LISTENING_SLOW_UNTIL = 0.8;
+
 export type EnemyStatus = 'waiting' | 'walking' | 'defeated' | 'breached';
 
 export interface Enemy {
@@ -113,7 +116,7 @@ export const DAMAGE: Record<EnemyType, number> = {
 export const BOSS_KNOCKBACK = 0.2;
 
 export const DEFAULT_CONFIG: LevelConfig = {
-  castleHp: 5, spawnInterval: 6, maxAlive: 3, durationFactor: 1, listeningSlow: 0.2, bossIntroSeconds: 2.4,
+  castleHp: 5, spawnInterval: 6, maxAlive: 3, durationFactor: 1, listeningSlow: 0.5, bossIntroSeconds: 2.4,
 };
 
 /** Default road length until the renderer reports the real one. */
@@ -206,9 +209,11 @@ export function tick(s: LevelState, dt: number): void {
 
   const target = currentTarget(s);
   if (target) target.targetTime += dt;
-  const slow = s.listening ? s.config.listeningSlow : 1;
   for (const e of alive(s)) {
     if (e.frozen) continue;
+    // While the child speaks, monsters slow down - but only on the first part
+    // of the road, so a noisy room can never hold one at the castle gate.
+    const slow = s.listening && e.progress < LISTENING_SLOW_UNTIL ? s.config.listeningSlow : 1;
     // distance = speed × time, as a fraction of the road
     e.progress = Math.min(1, e.progress + (speedOf(s, e) * dt * slow) / s.pathLength);
     if (e.progress >= 1) breach(s, e);
@@ -217,13 +222,16 @@ export function tick(s: LevelState, dt: number): void {
 }
 
 function breach(s: LevelState, e: Enemy): void {
+  const damage = DAMAGE[e.type];
   if (s.config.practice) {
-    // In practice the enemy waits at the gate; nothing is lost.
-    e.progress = 0.999;
-    e.frozen = true;
+    // In practice the castle really is hit (the child sees it lose a heart),
+    // but it never falls, and the monster goes back to try again.
+    s.castleHp = Math.max(1, s.castleHp - 1);
+    e.progress = 0;
+    e.wrong = 0;
+    s.events.push({ type: 'breach', enemy: e, damage: 1, returns: true });
     return;
   }
-  const damage = DAMAGE[e.type];
   s.castleHp = Math.max(0, s.castleHp - damage);
   s.breaches += 1;
   s.combo = 0;

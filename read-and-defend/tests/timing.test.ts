@@ -106,6 +106,6 @@ describe('enemy movement timing', () => {
     tick(s, 0.1);
     s.listening = true;
     for (let i = 0; i < 300; i++) tick(s, 1 / 60); // 5 s of reading
-    expect(currentTarget(s)!.progress).toBeLessThan(0.25); // 5 s × 20 % of a 7 s walk ≈ 14 %
+    expect(currentTarget(s)!.progress).toBeLessThan(0.4); // 5 s at half speed of a 7 s walk ≈ 36 %
   });
 });

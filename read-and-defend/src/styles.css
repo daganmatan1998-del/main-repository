@@ -122,6 +122,10 @@ button:focus-visible, [tabindex]:focus-visible { outline: 4px solid var(--info);
 .home-actions { display: flex; flex-direction: column; gap: 14px; align-items: center; margin-top: auto; margin-bottom: 2vh; }
 .home-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .home-row .btn { min-width: 150px; }
+.btn-install { align-self: center; min-width: 200px; background: linear-gradient(180deg, #4ad0a0, #1f9d76); color: #04281d; }
+.btn-install svg { width: 22px; height: 22px; }
+.install-steps { margin: 0; padding-inline-start: 1.4em; display: grid; gap: 10px; text-align: start; font-size: 1.1rem; line-height: 1.4; color: var(--ink-soft); }
+
 .home-top { display: flex; justify-content: space-between; gap: 8px; }
 
 .daily { display: flex; gap: 12px; align-items: center; background: rgba(255, 250, 240, 0.95); border-radius: 18px; padding: 10px 14px; max-width: 520px; width: 100%; box-shadow: var(--soft-shadow); }

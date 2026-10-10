@@ -36,7 +36,9 @@ export class Speaker {
    * the word aloud — it must never count as the child's reading.
    */
   isBusy(): boolean {
-    return performance.now() < this.busyUntil || (this.supported && speechSynthesis.speaking);
+    // Not speechSynthesis.speaking: some phones leave it stuck at true, which
+    // would make the game deaf. busyUntil is bounded (see speak()).
+    return performance.now() < this.busyUntil;
   }
 
   speak(text: string, lang: string, rate = 0.8): Promise<void> {

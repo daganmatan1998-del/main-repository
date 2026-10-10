@@ -1,4 +1,5 @@
 import './styles.css';
+import { initInstall } from './platform/install';
 import { registerServiceWorker } from './platform/platform';
 import { App } from './ui/app';
 import { GameSession } from './ui/gameSession';
@@ -44,6 +45,7 @@ async function prepareNative(): Promise<void> {
 }
 
 async function start(): Promise<void> {
+  initInstall(); // catches the browser's install offer before the home screen asks for it
   await prepareNative();
   boot();
   registerServiceWorker();

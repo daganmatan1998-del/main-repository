@@ -525,6 +525,56 @@ await test('weapons shop: buy, equip and the game uses it', async () => {
   await page.context().close();
 });
 
+await test('tutorial: a monster that reaches the castle hurts it and goes back, it does not just stop', async () => {
+  const page = await newPage();
+  await setup(page, 'en');
+  await page.click('[data-testid=play]');
+  for (let i = 0; i < 3; i++) await page.click('[data-testid=tut-next]');
+  await page.waitForFunction(() => window.__rd.session?.state?.enemies.some((e) => e.status === 'walking'));
+  const before = await page.evaluate(() => { const st = window.__rd.session.state; st.enemies.find((e) => e.status === 'walking').progress = 0.985; return st.castleHp; });
+  await page.waitForTimeout(1200);
+  const after = await page.evaluate(() => { const st = window.__rd.session.state; const e = st.enemies.find((x) => x.status === 'walking'); return { hp: st.castleHp, progress: e?.progress, status: st.status }; });
+  assert(after.hp < before, `the castle should lose a heart (${before} → ${after.hp})`);
+  assert(after.progress !== undefined && after.progress < 0.5 && after.status === 'playing', 'the monster should walk again from the start: ' + JSON.stringify(after));
+  assert(page.errors.length === 0, 'page errors: ' + page.errors.join('; '));
+  await page.context().close();
+});
+
+await test('install button: one tap with the browser prompt, or the steps when there is none', async () => {
+  // Chrome/Edge: the browser offers installation, the button uses it.
+  let page = await newPage({ init: () => {
+    window.__installCalls = 0;
+    window.addEventListener('DOMContentLoaded', () => setTimeout(() => {
+      const e = new Event('beforeinstallprompt', { cancelable: true });
+      e.prompt = async () => { window.__installCalls++; };
+      e.userChoice = Promise.resolve({ outcome: 'accepted' });
+      window.dispatchEvent(e);
+    }, 100));
+  } });
+  await page.click('[data-testid=lang-en]');
+  await page.waitForTimeout(300);
+  await page.click('[data-testid=install]');
+  await page.waitForTimeout(200);
+  assert(await page.evaluate(() => window.__installCalls) === 1, 'the browser install prompt was not used');
+  assert(await page.locator('[data-testid=install]').count() === 0, 'the button should disappear once installed');
+  await page.context().close();
+
+  // iPhone Safari: no prompt exists, so the two taps are explained (in Hebrew too).
+  page = await newPage({ context: { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' } });
+  await page.click('[data-testid=lang-he]');
+  await page.click('[data-testid=install]');
+  const steps = await page.locator('.install-steps li').allTextContents();
+  assert(steps.length === 3 && steps[0].includes('שיתוף'), 'iPhone steps missing: ' + JSON.stringify(steps));
+  assert(page.errors.length === 0, 'page errors: ' + page.errors.join('; '));
+  await page.context().close();
+
+  // Already installed (standalone): no button.
+  page = await newPage({ init: () => { const m = window.matchMedia.bind(window); window.matchMedia = (q) => q.includes('standalone') ? { matches: true, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} } : m(q); } });
+  await page.click('[data-testid=lang-en]');
+  assert(await page.locator('[data-testid=install]').count() === 0, 'no install button inside the installed app');
+  await page.context().close();
+});
+
 await browser.close();
 server.close();
 console.log(results.join('\n'));

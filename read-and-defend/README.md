@@ -307,6 +307,14 @@ microphone on `https://` or `localhost`. Deploy `server/stt-proxy.mjs` (any
 Node 18+ host) only if you want the server engine, and route `/api/stt` to it
 or set its URL in Settings.
 
+## Install button (web version)
+
+The home screen has an **Install the app** button (hidden once the game runs as
+an installed app). On Chrome/Edge/Samsung Internet it triggers the browser's own
+install prompt in one tap (`platform/install.ts` keeps the `beforeinstallprompt`
+event). Safari on iPhone/iPad has no install API - Apple only allows Share → Add
+to Home Screen - so there the button shows those steps (in Hebrew or English).
+
 ## Mobile apps (Android on Windows; iOS on a Mac)
 
 The game is wrapped with Capacitor 6 and the native speech plugin

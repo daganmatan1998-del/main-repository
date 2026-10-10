@@ -1,6 +1,7 @@
 import type { LearningItem } from '../content/types';
 import { phonetic } from '../content/hebrew/script';
 import { getPack } from '../content/registry';
+import { letterSpellings } from '../content/english/data';
 import { getEvalConfig, type EvalConfig, type HebrewEvalConfig } from './config';
 import {
   bestSimilarity, latinToSyms, letterCandidates, similarity, strong, syllableVowel, toSyms, vowelEvidence, type Sym,
@@ -45,6 +46,8 @@ function englishSingleMatch(item: LearningItem, transcript: string): boolean {
   if (!norm) return false;
   const accepted = new Set<string>();
   for (const a of item.accepted) englishSoundAlikes(a).forEach((x) => accepted.add(x));
+  // A letter said as its sound ("sss", "buh") or misheard in the usual ways.
+  if (item.kind === 'letter') letterSpellings(item.display).forEach((x) => accepted.add(x));
   if (accepted.has(norm)) return true;
   const tokens = norm.split(' ');
   // Strip filler words; keep the target itself even if it is a filler ("a", "is").

@@ -4,6 +4,7 @@ import { evaluate } from '../src/evaluation/evaluator';
 import type { LearningItem } from '../src/content/types';
 import { configForMode, HEBREW_PRESETS, type EvalConfig } from '../src/evaluation/config';
 import { stripNiqqud } from '../src/content/hebrew/script';
+import { letterSpellings } from '../src/content/english/data';
 
 const en = getPack('en');
 const he = getPack('he');
@@ -127,6 +128,33 @@ describe('self-consistency over the whole bank', () => {
   });
 });
 
+
+describe('English letters said as sounds', () => {
+  const letter = (l: string) => en.items.find((i) => i.kind === 'letter' && i.display === l)!;
+  const ok = (l: string, said: string) => evaluate(letter(l), say(said)).outcome === 'correct';
+
+  it('accepts drawn-out, doubled and schwa-ended sounds, and the usual mishearings', () => {
+    for (const [l, said] of [['s', 'sss'], ['s', 'yes'], ['s', 'us'], ['m', 'mm'], ['m', 'hmm'], ['m', 'him'], ['f', 'fff'], ['l', 'lll'], ['l', 'hell'],
+      ['n', 'nn'], ['z', 'zzz'], ['b', 'buh'], ['d', 'duh'], ['t', 'tuh'], ['k', 'kuh'], ['c', 'kuh'], ['g', 'guh'], ['p', 'puh'], ['r', 'ruh'], ['h', 'huh'],
+      ['u', 'uh'], ['o', 'on'], ['i', 'it'], ['a', 'at'], ['v', 'vvv'], ['j', 'juh'], ['w', 'wuh'], ['y', 'yuh'], ['x', 'eggs'], ['q', 'kwuh']]) {
+      expect(ok(l, said), `${l} heard as "${said}"`).toBe(true);
+    }
+  });
+
+  it('a sound is never credited to the wrong letter', () => {
+    const letters = 'abcdefghijklmnopqrstuvwxyz'.split('');
+    const seen = new Map<string, string>();
+    for (const l of letters) {
+      for (const w of letterSpellings(l)) {
+        const owner = seen.get(w);
+        // c and k are the same sound, so they may share it ("kuh").
+        const sameSound = !!owner && ['c', 'k'].includes(owner) && ['c', 'k'].includes(l);
+        expect(owner === undefined || owner === l || sameSound, `"${w}" belongs to both ${owner} and ${l}`).toBe(true);
+        seen.set(w, l);
+      }
+    }
+  });
+});
 
 describe('Hebrew phonetic layer — isolated letters', () => {
   const letter = (l: string) => he.items.find((i) => i.kind === 'letter' && i.display === l)!;

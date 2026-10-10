@@ -441,11 +441,17 @@ export class GameSession {
     if (ev.outcome === 'incorrect') {
       applyEvaluation(this.state, target.id, ev);
       sound.play('tryAgain');
-      this.say(item.kind === 'sentence' ? t('almostSentence') : t('almost'), 'soft');
+      this.say(`${item.kind === 'sentence' ? t('almostSentence') : t('almost')} ${this.heardNote(ev.heard)}`.trim(), 'soft');
     } else if (ev.outcome === 'uncertain' && ev.reason !== 'too-long') {
       sound.play('unclear');
-      this.say(t('unclear'), 'info');
+      this.say(`${t('unclear')} ${this.heardNote(ev.heard)}`.trim(), 'info');
     }
+  }
+
+  /** What the engine returned, shown with a miss, so it is clear the game did listen. */
+  private heardNote(heard: string): string {
+    const text = (heard ?? '').trim();
+    return text && text !== '…' ? t('heard', { t: text.slice(0, 40) }) : '';
   }
 
   private onSpeechError(err: SpeechError, fatal: boolean): void {
