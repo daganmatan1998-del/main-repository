@@ -1,0 +1,31 @@
+# Cloudflare Worker: serves the PWA (www/) and the /api/chat proxy from one origin.
+#   npx wrangler secret put GOOGLE_API_KEY        (and any of the others below)
+#   npx wrangler deploy
+# Keys (all optional, one per provider; see .env.example): GOOGLE_API_KEY,
+# MISTRAL_API_KEY, GITHUB_MODELS_TOKEN, GROQ_API_KEY, NVIDIA_API_KEY,
+# CEREBRAS_API_KEY, OPENROUTER_API_KEY, XAI_API_KEY, ANTHROPIC_API_KEY.
+name = "nutri"
+main = "server/worker.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Cloudflare's own free models (a small daily allowance, text only). Used by the
+# assistant as one more engine in the chain; remove this block if you don't want it.
+[ai]
+binding = "AI"
+
+[assets]
+directory = "./www"
+binding = "ASSETS"
+
+[vars]
+# Comma-separated extra origins allowed to call /api/chat (same-origin always works).
+# For a Capacitor build add: "capacitor://localhost,https://localhost"
+ALLOWED_ORIGINS = ""
+
+# Recommended in production: Cloudflare's rate limiter (20 requests / minute per IP).
+# Uncomment after creating it; api.js uses it automatically when bound.
+# [[ratelimits]]
+# name = "RATE_LIMITER"
+# namespace_id = "1001"
+# simple = { limit = 20, period = 60 }

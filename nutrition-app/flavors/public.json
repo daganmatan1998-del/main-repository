@@ -1,0 +1,10 @@
+{
+  "name": "public",
+  "appId": "app.nutri.planner",
+  "appName": "נוטרי",
+  "title": "נוטרי — תוכנית תזונה אישית",
+  "workerName": "nutri-public",
+  "apiBase": "",
+  "allowedOrigins": "capacitor://localhost,https://localhost",
+  "themeColor": "#2b7a67"
+}
