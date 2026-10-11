@@ -111,11 +111,33 @@ function ensureDrinkNames() {
   document.body.appendChild(dl);
 }
 
+// Open/closed state of each meal's drinks heading, kept across redraws.
+const drinksOpen = new Set();
+
 function drinksBlock(meal, day) {
   ensureDrinkNames();
   const list = (state.logs[day] && state.logs[day].drinks && state.logs[day].drinks[meal.index]) || [];
-  const wrap = h('div', { class: 'drinks', 'data-meal': meal.index });
-  wrap.appendChild(h('div', { class: 'drinks-title' }, h('span', { 'aria-hidden': 'true' }, '🥤'), 'שתייה'));
+  const id = `${day}|${meal.index}`;
+  const open = drinksOpen.has(id);
+  const total = list.reduce((s, d) => s + drinkTotals(d).kcal, 0);
+  const wrap = h('div', { class: 'drinks' + (open ? ' open' : ''), 'data-meal': meal.index });
+  // A heading like the food groups: closed it shows what was logged, open it asks.
+  const body = h('div', { class: 'drinks-body', hidden: !open });
+  wrap.appendChild(h('button', {
+    type: 'button', class: 'drinks-head', 'aria-expanded': open ? 'true' : 'false',
+    onclick: (e) => {
+      const nowOpen = body.hidden;
+      body.hidden = !nowOpen;
+      wrap.classList.toggle('open', nowOpen);
+      e.currentTarget.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+      if (nowOpen) { drinksOpen.add(id); body.querySelector('.drink-name')?.focus(); } else drinksOpen.delete(id);
+    },
+  },
+    h('span', { class: 'role-dot role-drink' }),
+    h('span', { class: 'drinks-title' }, 'שתייה'),
+    list.length ? h('span', { class: 'drinks-sum muted num' }, `${list.length === 1 ? list[0].name : `${list.length} משקאות`} · ${total} קק״ל`) : h('span', { class: 'drinks-sum muted' }, 'מה שתיתם?'),
+    h('span', { class: 'drinks-chev', 'aria-hidden': 'true' }, icon('forward', 16))));
+  wrap.appendChild(body);
   list.forEach((d, at) => {
     const t = drinkTotals(d);
     const detail = [d.count !== 1 ? `${fmt(d.count)} כוסות` : null, d.sugar ? `${fmt(d.sugar)} כפיות סוכר` : null].filter(Boolean).join(' · ');
@@ -125,12 +147,12 @@ function drinksBlock(meal, day) {
         detail ? h('span', { class: 'muted' }, ` · ${detail}`) : null),
       h('span', { class: 'drink-kcal num' }, `${t.kcal} קק״ל`),
       h('button', { type: 'button', class: 'icon-btn drink-del', 'aria-label': `הסרת ${d.name}`, onclick: () => removeDrink(day, meal.index, at) }, icon('close', 16)));
-    wrap.appendChild(row);
+    body.appendChild(row);
     if (d.unknown) {
       // Not in the table: the person can say how many calories a cup has.
       const kc = h('input', { class: 'drink-kcal-in', type: 'text', inputmode: 'numeric', placeholder: '0', value: d.kcalCup || '', 'aria-label': 'קלוריות לכוס' });
       kc.addEventListener('change', () => updateDrink(day, meal.index, at, { kcalCup: Math.max(0, parseNum(kc.value) || 0) }));
-      wrap.appendChild(h('label', { class: 'drink-unknown small muted' }, 'לא זיהיתי את המשקה. כמה קק״ל יש בכוס אחת? ', kc));
+      body.appendChild(h('label', { class: 'drink-unknown small muted' }, 'לא זיהיתי את המשקה. כמה קק״ל יש בכוס אחת? ', kc));
     }
   });
   const name = h('input', { class: 'drink-name', type: 'text', list: 'drink-names', maxlength: 40, autocomplete: 'off', placeholder: 'מה שתיתם? (קפה, שוקו, קולה…)', 'aria-label': 'מה שתיתם' });
@@ -143,7 +165,7 @@ function drinksBlock(meal, day) {
     toast(drink.unknown ? 'נוסף. לא זיהיתי את המשקה — אפשר להזין את הקלוריות שלו.' : `נוסף: ${drinkTotals(drink).kcal} קק״ל`);
   };
   name.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
-  wrap.appendChild(h('div', { class: 'drink-form' },
+  body.appendChild(h('div', { class: 'drink-form' },
     name,
     h('div', { class: 'drink-opts' },
       h('label', null, h('span', null, 'סוכר (כפיות)'), sugar),

@@ -7,6 +7,7 @@
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
+import { memoryKV } from './push.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleApi } from './api.js';
@@ -61,6 +62,8 @@ async function toRequest(req) {
 // overrides: { '/js/config.js': (text) => text } lets the e2e tests serve a
 // file with different settings without touching www/.
 export function createServer({ env = process.env, fetchImpl, overrides = {} } = {}) {
+  // No KV locally: keep push subscriptions in memory so the flow can be tried.
+  if (!env.PUSH && !env.NO_PUSH) env = Object.assign(Object.create(null), env, { PUSH: memoryKV() });
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');

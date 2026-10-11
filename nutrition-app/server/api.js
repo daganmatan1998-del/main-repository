@@ -9,6 +9,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { SYSTEM_PROMPT, BODYFAT_PROMPT, MEAL_PHOTO_PROMPT } from './system-prompt.js';
 import { complete, hasEngine, engineList, EngineError } from './engines.js';
+import { handlePush } from './push.js';
 
 const MODEL = 'claude-opus-5-5';
 const MAX_BODY = 64 * 1024;
@@ -404,6 +405,7 @@ export async function handleApi(request, env, opts) {
   if (pathname === '/api/chat') return handleChat(request, env, opts);
   if (pathname === '/api/bodyfat') return handleBodyFat(request, env, opts);
   if (pathname === '/api/meal-photo') return handleMealPhoto(request, env, opts);
+  if (pathname.startsWith('/api/push/')) return handlePush(request, env);
   if (pathname === '/api/health') {
     // Engine ids only, never keys. 'configured' is true when chat can be answered at all.
     const engines = engineList(env).map((e) => e.id);

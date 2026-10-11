@@ -11,6 +11,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from '../../server/dev-server.mjs';
+import { memoryKV } from '../../server/push.js';
+import { REMINDERS } from '../../server/push.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -65,7 +67,8 @@ async function fakeAnthropic(url, init) {
 }
 
 // Chat uses the Anthropic stub; the calorie camera uses a stubbed free engine (Groq).
-const server = createServer({ env: { ANTHROPIC_API_KEY: 'sk-ant-e2e-fake', GROQ_API_KEY: 'gsk_e2e_fake', ENGINES_CHAT: 'anthropic', ENGINES_MEALPHOTO: 'groq' }, fetchImpl: fakeAnthropic,
+const pushKV = memoryKV();
+const server = createServer({ env: { PUSH: pushKV, ANTHROPIC_API_KEY: 'sk-ant-e2e-fake', GROQ_API_KEY: 'gsk_e2e_fake', ENGINES_CHAT: 'anthropic', ENGINES_MEALPHOTO: 'groq' }, fetchImpl: fakeAnthropic,
   // The flows below exercise the AI during a 7-day trial, whatever www/ ships with.
   overrides: { '/js/config.js': (t) => t.replace(/trialDays: \d+/, 'trialDays: 7').replace(/url: 'https:[^']*',/, "url: '',").replace(/anonKey: '[^']*',/, "anonKey: '',") } });
 await new Promise((r) => server.listen(0, r));
@@ -84,7 +87,14 @@ const ctx = await browser.newContext({
   locale: 'he-IL', timezoneId: 'Asia/Jerusalem', acceptDownloads: true,
 });
 await ctx.clock.setFixedTime(at(0));
-await ctx.grantPermissions(['camera']);
+await ctx.grantPermissions(['camera', 'notifications']);
+// There is no push service in the test browser: a stand-in that behaves like one subscription.
+await ctx.addInitScript(() => {
+  const sub = { endpoint: 'https://fcm.googleapis.com/fcm/send/e2e-device', unsubscribe: async () => { window.__pushUnsubscribed = true; return true; } };
+  let current = null;
+  PushManager.prototype.getSubscription = async () => current;
+  PushManager.prototype.subscribe = async function (opts) { window.__pushKeyLen = opts.applicationServerKey.length; current = sub; window.__pushUnsubscribed = false; return sub; };
+});
 const page = await ctx.newPage();
 const pageErrors = [];
 page.on('pageerror', (e) => pageErrors.push(e.message));
@@ -259,6 +269,37 @@ try {
   await page.waitForSelector('.page-today');
   check('finishing onboarding opens Today with the tab bar', await visible('#tabbar .tab.on'));
 
+  // =============== daily reminders: asked once, right after setup ===============
+  await page.waitForSelector('#push-yes', { timeout: 8000 });
+  const askText = await page.locator('#reminders-sheet').innerText();
+  check('after setup the app asks one plain question, approve or not, and doesn\'t say what it will send',
+    askText.includes('מאשרים לנוטרי לשלוח לכם הודעות') && (await page.locator('#reminders-sheet button').allInnerTexts()).join('|') === 'מאשר|לא מאשר' && !/\d\d:\d\d/.test(askText));
+  await shot('40-reminders-ask');
+  check('nothing is subscribed before the person agrees', [...pushKV._dump().keys()].filter((k) => k.startsWith('sub:')).length === 0);
+  await page.click('#push-yes');
+  await page.waitForSelector('#reminders-sheet', { state: 'detached' });
+  const subKeys = () => [...pushKV._dump().keys()].filter((k) => k.startsWith('sub:'));
+  check('"approve" subscribes the device with the Worker, with its time zone', subKeys().length === 1 && subKeys()[0].startsWith('sub:Asia/Jerusalem:'));
+  check('the Worker\'s public key (65 bytes) was used to subscribe', (await page.evaluate(() => window.__pushKeyLen)) === 65);
+  const rec = () => JSON.parse(pushKV._dump().get(subKeys()[0]));
+  check('only meal flags are stored, no food or personal data', JSON.stringify(Object.keys(rec()).sort()) === JSON.stringify(['created', 'endpoint', 'sent', 'state', 'tz']) && !JSON.stringify(rec()).includes('דנה'));
+  // marking lunch reaches the server, so it won't remind about it
+  const lunchCard = page.locator('.meal', { hasText: 'ארוחת צהריים' }).first();
+  await lunchCard.locator('.check-btn').click();
+  await wait(2800);
+  check('marking lunch eaten tells the server (so the 13:00 reminder is skipped)', rec().state.done.l === true && rec().state.any === true);
+  await lunchCard.locator('.check-btn').click();
+  await wait(2800);
+  check('un-marking it tells the server too', rec().state.done.l === false);
+  // the service worker turns an (empty) push into a notification
+  const sw = ctx.serviceWorkers()[0];
+  if (sw) {
+    await sw.evaluate(() => self.dispatchEvent(new PushEvent('push')));
+    await wait(500);
+    const shown = await sw.evaluate(async () => (await self.registration.getNotifications()).map((n) => `${n.title}|${n.body}|${n.tag}`));
+    check(`a push shows a Hebrew reminder notification (${shown[0]})`, shown.length >= 1 && /אל תשכחו|התפריט/.test(shown[0]) && shown[0].includes('nutri-'));
+  } else check('service worker available for the push check', false);
+
   // =============== Today ===============
   const todayText = await text();
   check('5 meals generated', (await page.locator('.meal').count()) === 5);
@@ -273,16 +314,20 @@ try {
   // =============== drinks under every meal ===============
   const ringKcal = async () => Number((await page.locator('.ring-label strong').innerText()).replace(/,/g, ''));
   const mealA = () => page.locator('.meal').first();
-  check('every meal card has a "שתייה" box with a name field and the two optional fields', (await page.locator('.meal .drinks').count()) === 5
-    && (await mealA().locator('.drinks-title').innerText()).includes('שתייה')
-    && (await mealA().locator('.drink-opts').innerText()).includes('סוכר') && (await mealA().locator('.drink-opts').innerText()).includes('כמה כוסות'));
+  check('every meal has a collapsed "שתייה" heading that asks "מה שתיתם?"', (await page.locator('.meal .drinks').count()) === 5
+    && (await mealA().locator('.drinks-title').innerText()).includes('שתייה') && (await mealA().locator('.drinks-sum').innerText()).includes('מה שתיתם')
+    && !(await mealA().locator('.drink-name').isVisible()));
+  await mealA().locator('.drinks-head').click();
+  check('opening it shows the name field and the two optional fields (sugar, cups)', await mealA().locator('.drink-name').isVisible()
+    && (await mealA().locator('.drink-opts').innerText()).includes('סוכר') && (await mealA().locator('.drink-opts').innerText()).includes('כמה כוסות')
+    && (await mealA().locator('.drinks-head').getAttribute('aria-expanded')) === 'true');
   const k0 = await ringKcal();
   await mealA().locator('.drink-name').fill('שוקו');
   await mealA().locator('.drink-sugar').fill('2');
   await mealA().locator('.drink-count').fill('2');
   await mealA().locator('.drink-add').click();
   await wait(500);
-  check('chocolate milk ×2 with 2 sugars is 404 kcal, shown on the card', (await mealA().locator('.drink-row').innerText()).includes('404'));
+  check('chocolate milk ×2 with 2 sugars is 404 kcal, shown on the card', (await mealA().locator('.drink-row').innerText()).includes('404') && (await mealA().locator('.drinks-sum').innerText()).includes('404'));
   check('drinks count toward the day\'s calories', (await ringKcal()) - k0 === 404, `${k0} -> ${await ringKcal()}`);
   await mealA().locator('.drink-name').fill('מרק פטריות מוזר');
   await mealA().locator('.drink-add').click();
@@ -295,6 +340,8 @@ try {
   await mealA().screenshot({ path: path.join(SHOTS, '37-drinks.png') });
   while (await mealA().locator('.drink-del').count()) { await mealA().locator('.drink-del').first().click(); await wait(300); }
   check('removing the drinks takes their calories back off', (await ringKcal()) === k0);
+  await mealA().locator('.drinks-head').click();
+  check('the heading closes again', !(await mealA().locator('.drink-name').isVisible()));
 
   // =============== sauces and cheese: calories come off the rest of the meal ===============
   const mealKcal = async () => Number((await mealA().locator('.meal-sub').innerText()).match(/([\d,]+)\s*קק/)[1].replace(/,/g, ''));
@@ -527,7 +574,8 @@ try {
   void lunchName;
 
   // =============== weekly shopping list ===============
-  await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
+  // (granting replaces the set, so notifications and camera are listed again)
+  await ctx.grantPermissions(['clipboard-read', 'clipboard-write', 'notifications', 'camera'], { origin: BASE });
   await page.click('#btn-shopping');
   await page.waitForSelector('.page-shopping .shop-item');
   const products = await page.locator('.shop-item').count();
@@ -918,6 +966,16 @@ try {
   // =============== paid plan for the AI features (the trial is over by now) ===============
   await page.click('a[href="#/profile"]');
   await page.waitForSelector('#plan-card');
+  // messages switch in Profile
+  check('Profile has the messages switch, on, with no list of what is sent', await page.locator('#push-toggle').isChecked() && (await page.locator('.switch-row', { has: page.locator('#push-toggle') }).innerText()).includes('הודעות מנוטרי') && !/\d\d:\d\d/.test(await page.locator('.switch-row', { has: page.locator('#push-toggle') }).innerText()));
+  await page.locator('#push-toggle').evaluate((el) => el.click());
+  await wait(600);
+  check('turning it off unsubscribes the device and removes it from the server', (await page.evaluate(() => window.__pushUnsubscribed)) === true && [...pushKV._dump().keys()].filter((k) => k.startsWith('sub:')).length === 0);
+  await page.locator('#push-toggle').evaluate((el) => el.click());
+  await page.waitForSelector('#push-yes');
+  await page.click('#push-yes');
+  await page.waitForSelector('#reminders-sheet', { state: 'detached' });
+  check('turning it back on asks again and subscribes', [...pushKV._dump().keys()].filter((k) => k.startsWith('sub:')).length === 1);
   check('without a cloud project the account card is shown as "coming soon"', (await page.locator('#account-card').innerText()).includes('בקרוב'));
   await page.click('#account-card #btn-google');
   await wait(300);

@@ -261,6 +261,25 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
   - **Accounts and a server record of who paid.** The provider's webhook should reach the Worker, and the AI endpoints should check the subscription. Today the check runs on the device only, so it is easy to bypass.
   - **Store builds:** an App Store build must sell the plan through Apple's in-app purchase instead.
 
+### Messages (v1.12)
+
+- **Asking:** once, on the first visit to Today after setup, one plain question: "מאשרים לנוטרי לשלוח לכם הודעות?", with "מאשר" and "לא מאשר". It deliberately doesn't say what will be sent. Either answer, or closing the sheet, counts as asked. The switch in Profile ("הודעות מנוטרי") turns it on or off any time.
+- **What is sent** (not shown to the person):
+  - **13:00:** "אל תשכחו לעדכן את ארוחת הצהריים שלכם", only if lunch isn't marked eaten.
+  - **20:00:** the same for dinner.
+  - **09:00 and 17:00:** two light nudges so the app isn't forgotten. The morning one is skipped if something is already marked; the afternoon one if dinner is done. Neither is sent within 90 minutes of the app being opened.
+  - Times are the device's own time zone, so 13:00 stays 13:00 across the clock change.
+- **How it works (real Web Push, no third-party service):**
+  - The device subscribes, and sends the Worker its push address, its time zone and four booleans (which meals are marked today).
+  - A cron trigger (`wrangler.toml`, every 15 minutes) runs `runReminders()` in `server/push.js`. It sends an **empty** push to each device whose local time just reached a reminder, and the service worker shows the text.
+  - The VAPID key pair is made on first use and stored in KV, so there is no secret to set up. The Worker only talks to the browser makers' push services.
+  - The KV namespace `PUSH` is created by `wrangler deploy` the first time. If messages don't appear after deploying, run `npx wrangler kv namespace create PUSH` and put the id in `wrangler.toml`.
+- **Limits:**
+  - **iPhone:** only for an installed app (Share, then Add to Home Screen), iOS 16.4 or later. Before that the sheet explains it.
+  - **Not tested against a real push service.** The tests cover the server logic (including the VAPID signature), the subscription flow with a stand-in browser push service, and the notification text.
+  - **Scale:** the free KV plan covers about a thousand devices at a 15-minute cron.
+  - The weekly photo reminder is separate (Periodic Background Sync and the calendar file).
+
 ### Search, drinks and sauces (v1.11)
 
 - **Search in "replace an item":** a search bar on top of the swap sheet. Typing a name searches every food of that kind (names and aliases), not just the short list.
@@ -338,8 +357,8 @@ Accounts are on once `CLOUD.url` and `CLOUD.anonKey` are set (they are, for the 
 ## Tests
 
 ```bash
-npm test              # 82 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy, PKCE
-npm run test:e2e      # 202 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm test              # 97 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy, PKCE
+npm run test:e2e      # 214 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 npm run test:cloud    # 37 browser checks: the first screen, Google sign-in, sync across devices, photo backup, conflicts, sign-out, delete; profile picture and nickname
 ```
 

@@ -735,3 +735,16 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .extras-add { min-height: 40px; }
 .extra-group { margin: 14px 0 6px; font-size: .85rem; color: var(--muted); }
 .extra-opts { max-height: 55vh; overflow: auto; padding-bottom: 8px; }
+
+/* drinks as a collapsible heading, like the food groups */
+.drinks { padding: 0; background: none; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; margin: 10px 0 4px; }
+.drinks-head { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 8px 2px; background: none; border: 0; text-align: start; font: inherit; color: inherit; cursor: pointer; }
+.drinks-head:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; border-radius: 8px; }
+.drinks-title { font-weight: 600; margin: 0; display: inline; }
+.drinks-sum { flex: 1; text-align: start; font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drinks-chev { display: inline-flex; transition: transform .2s; }
+.drinks.open .drinks-chev { transform: rotate(-90deg); }
+.drinks-body { padding: 4px 2px 12px; }
+.role-dot.role-drink { background: #4aa3c7; }
+.item.role-drink .role-dot { background: #4aa3c7; }
+@media (prefers-reduced-motion: reduce) { .drinks-chev { transition: none; } }

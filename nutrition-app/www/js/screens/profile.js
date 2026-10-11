@@ -8,6 +8,8 @@ import { openFoodPicker, pickerLabel } from './food-picker.js';
 import { state, targets, activePeriod, currentMetrics, addMetrics, updateProfile, saveSettings, wipe, currentWeek, setAvatar } from '../store.js';
 import { openPeriodReview } from './period.js';
 import { enableReminders, disableReminders, downloadCalendar, supported as notifSupported } from '../notify.js';
+import { disablePush, pushSupported, needsInstall } from '../push.js';
+import { openRemindersSheet } from './reminders.js';
 import { canInstall, isStandalone, promptInstall } from '../install.js';
 import { applyTheme } from '../theme.js';
 import { APP_VERSION, BILLING } from '../config.js';
@@ -105,11 +107,27 @@ export function renderProfile(root) {
       }
     },
   });
+  // Daily meal reminders (Web Push; see push.js). Turning on opens the sheet that asks permission.
+  const pushToggle = h('input', {
+    type: 'checkbox', role: 'switch', id: 'push-toggle', checked: !!state.settings.push, disabled: !pushSupported() && !needsInstall(),
+    onchange: async (e) => {
+      if (e.target.checked) {
+        e.target.checked = false;
+        openRemindersSheet({ onDone: () => window.dispatchEvent(new Event('app:rerender')) });
+      } else {
+        await disablePush();
+        toast('ההודעות כובו');
+      }
+    },
+  });
   root.appendChild(h('section', { class: 'card' },
     h('h2', null, 'הגדרות'),
     h('div', { class: 'field' }, h('span', null, 'מראה'),
       segmented([{ id: 'system', label: 'לפי המכשיר' }, { id: 'light', label: 'בהיר' }, { id: 'dark', label: 'כהה' }], state.settings.theme,
         async (v) => { await saveSettings({ theme: v }); applyTheme(v); }, 'ערכת צבעים')),
+    h('label', { class: 'switch-row' },
+      h('span', null, h('strong', null, 'הודעות מנוטרי'), !pushSupported() && needsInstall() ? h('small', { class: 'muted' }, 'באייפון: קודם מוסיפים את האפליקציה למסך הבית') : !pushSupported() ? h('small', { class: 'muted' }, 'המכשיר הזה לא תומך בהודעות') : null),
+      pushToggle),
     h('label', { class: 'switch-row' },
       h('span', null, h('strong', null, 'תזכורת שבועית לצילום'), h('small', { class: 'muted' }, notifSupported() ? 'התראה ביום הצילום (כשהדפדפן תומך)' : 'הדפדפן הזה לא תומך בהתראות — השתמשו ביומן')),
       remindersToggle),
