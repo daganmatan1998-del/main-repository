@@ -1,11 +1,14 @@
 // /api/chat — the only server endpoint. Runs unchanged on Cloudflare Workers
 // (server/worker.js) and on Node (server/dev-server.mjs).
 //
-// The Anthropic API key exists only here, as the ANTHROPIC_API_KEY secret.
-// The browser never sees it.
+// API keys exist only here, as Worker secrets. The browser never sees them.
+// Chat and the calorie camera go through the engine chain (engines.js): free
+// providers first, Anthropic only where it is allowed. The body-fat estimate
+// is Anthropic only.
 
 import Anthropic from '@anthropic-ai/sdk';
 import { SYSTEM_PROMPT, BODYFAT_PROMPT, MEAL_PHOTO_PROMPT } from './system-prompt.js';
+import { complete, hasEngine, engineList, EngineError } from './engines.js';
 
 const MODEL = 'claude-opus-5-5';
 const MAX_BODY = 64 * 1024;
@@ -90,14 +93,15 @@ export function normalizeMessages(raw) {
 // Shared front door for every endpoint: CORS, method, origin, key, rate
 // limit, size limit and JSON parsing. Returns { res } to send back as-is, or
 // { body, cors } to continue with.
-async function admit(request, env, maxBody) {
+async function admit(request, env, maxBody, task = 'bodyfat', spec = {}) {
   const cors = corsHeaders(request, env);
   if (request.method === 'OPTIONS') return { res: new Response(null, { status: 204, headers: cors }) };
   if (request.method !== 'POST') return { res: json(405, { error: 'method_not_allowed' }, cors) };
   if (!originAllowed(request, env)) return { res: json(403, { error: 'forbidden_origin' }) };
 
-  if (!env.ANTHROPIC_API_KEY) {
-    return { res: json(503, { error: 'not_configured', message: 'ANTHROPIC_API_KEY is not set on the server.' }, cors) };
+  const served = task === 'bodyfat' ? !!env.ANTHROPIC_API_KEY : hasEngine(env, task, spec);
+  if (!served) {
+    return { res: json(503, { error: 'not_configured', message: task === 'bodyfat' ? 'ANTHROPIC_API_KEY is not set on the server.' : 'No AI engine is configured for this feature on the server.' }, cors) };
   }
 
   const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'local';
@@ -124,6 +128,10 @@ function clientFor(env, fetchImpl) {
 }
 
 function upstreamError(e, cors) {
+  if (e instanceof EngineError) {
+    if (e.code === 'not_configured') return json(503, { error: 'not_configured' }, cors);
+    return json(e.status === 429 || e.status === 402 ? 429 : 503, { error: e.status === 429 || e.status === 402 ? 'rate_limited' : 'all_engines_busy' }, cors);
+  }
   if (e instanceof Anthropic.RateLimitError) return json(429, { error: 'rate_limited' }, cors);
   if (e instanceof Anthropic.AuthenticationError) {
     console.error('Anthropic auth failed — check ANTHROPIC_API_KEY');
@@ -143,7 +151,7 @@ function upstreamError(e, cors) {
 }
 
 export async function handleChat(request, env, { fetchImpl } = {}) {
-  const gate = await admit(request, env, MAX_BODY);
+  const gate = await admit(request, env, MAX_BODY, 'chat');
   if (gate.res) return gate.res;
   const { body, cors } = gate;
 
@@ -152,31 +160,38 @@ export async function handleChat(request, env, { fetchImpl } = {}) {
   const context = JSON.stringify(body.context ?? {});
   if (context.length > MAX_CONTEXT_CHARS) return json(413, { error: 'context_too_large' }, cors);
 
-  const client = clientFor(env, fetchImpl);
-
   try {
-    const response = await client.beta.messages.create({
-      model: env.CLAUDE_MODEL || MODEL,
-      max_tokens: 4000,
-      // Chat replies are short and routine: low effort keeps them fast and cheap.
-      output_config: { effort: 'low' },
-      // If a request is declined by a safety classifier, the API retries it on
-      // Anthropic's recommended fallback model instead of failing.
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      system: [
-        { type: 'text', text: SYSTEM_PROMPT },
-        { type: 'text', text: `USER CONTEXT (JSON, from the app):\n${context}` },
-      ],
+    const r = await complete(env, 'chat', {
+      system: `${SYSTEM_PROMPT}\n\nUSER CONTEXT (JSON, from the app):\n${context}`,
       messages,
-    });
+      maxTokens: 4000,
+      // Only runs when the chain reaches Anthropic (the paid engine, last).
+      anthropic: async () => {
+        const response = await clientFor(env, fetchImpl).beta.messages.create({
+          model: env.CLAUDE_MODEL || MODEL,
+          max_tokens: 4000,
+          // Chat replies are short and routine: low effort keeps them fast and cheap.
+          output_config: { effort: 'low' },
+          // If a request is declined by a safety classifier, the API retries it on
+          // Anthropic's recommended fallback model instead of failing.
+          betas: ['server-side-fallback-2026-07-01'],
+          fallbacks: 'default',
+          system: [
+            { type: 'text', text: SYSTEM_PROMPT },
+            { type: 'text', text: `USER CONTEXT (JSON, from the app):\n${context}` },
+          ],
+          messages,
+        });
+        if (response.stop_reason === 'refusal') return { refusal: true, text: '' };
+        return { text: response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim(), truncated: response.stop_reason === 'max_tokens' };
+      },
+    }, { fetchImpl });
 
-    if (response.stop_reason === 'refusal') {
+    if (r.refusal) {
       return json(200, { text: 'לא אוכל לעזור בשאלה הזו. אפשר לשאול על התפריט, תחליפים ומזון.', refusal: true }, cors);
     }
-    const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
-    if (!text) return json(502, { error: 'empty_reply' }, cors);
-    return json(200, { text, truncated: response.stop_reason === 'max_tokens' }, cors);
+    if (!r.text) return json(502, { error: 'empty_reply' }, cors);
+    return json(200, { text: r.text, truncated: !!r.truncated, engine: r.engine }, cors);
   } catch (e) {
     return upstreamError(e, cors);
   }
@@ -295,7 +310,7 @@ const MAX_MEAL_BODY = 1.5 * 1024 * 1024; // one photo plus the food list
 // as an editable list of items with grams and macros. The photo is forwarded
 // to Claude and never stored here.
 export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
-  const gate = await admit(request, env, MAX_MEAL_BODY);
+  const gate = await admit(request, env, MAX_MEAL_BODY, 'mealphoto', { image: true });
   if (gate.res) return gate.res;
   const { body, cors } = gate;
 
@@ -312,27 +327,39 @@ export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
     .filter((i) => i.name);
   const mealName = str(body.meal, 40);
 
-  const content = [
-    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: photo } },
-    { type: 'text', text: `Meal: ${mealName || 'unknown'}\nPlanned (context only): ${JSON.stringify(planned)}\nApp food list: ${JSON.stringify(foods)}\nList everything on the plate. Reply with the JSON object only.` },
-  ];
+  const ask = `Meal: ${mealName || 'unknown'}\nPlanned (context only): ${JSON.stringify(planned)}\nApp food list: ${JSON.stringify(foods)}\nList everything on the plate. Reply with the JSON object only.`;
 
   try {
-    const response = await clientFor(env, fetchImpl).beta.messages.create({
-      model: env.CLAUDE_MODEL || MODEL,
-      max_tokens: 4000,
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: MEAL_PHOTO_SCHEMA } },
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
+    const r = await complete(env, 'mealphoto', {
       system: MEAL_PHOTO_PROMPT,
-      messages: [{ role: 'user', content }],
-    });
-    if (response.stop_reason === 'refusal') {
+      messages: [{ role: 'user', content: ask }],
+      image: photo,
+      json: true,
+      schema: MEAL_PHOTO_SCHEMA,
+      maxTokens: 4000,
+      // Only when MEALPHOTO_ALLOW_ANTHROPIC=1: by default the calorie camera never spends Anthropic credits.
+      anthropic: async () => {
+        const response = await clientFor(env, fetchImpl).beta.messages.create({
+          model: env.CLAUDE_MODEL || MODEL,
+          max_tokens: 4000,
+          output_config: { effort: 'medium', format: { type: 'json_schema', schema: MEAL_PHOTO_SCHEMA } },
+          betas: ['server-side-fallback-2026-07-01'],
+          fallbacks: 'default',
+          system: MEAL_PHOTO_PROMPT,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: photo } },
+            { type: 'text', text: ask },
+          ] }],
+        });
+        if (response.stop_reason === 'refusal') return { refusal: true, text: '' };
+        return { text: response.content.filter((b) => b.type === 'text').map((b) => b.text).join('') };
+      },
+    }, { fetchImpl });
+    if (r.refusal) {
       return json(200, { ok: false, issue: 'לא ניתן לנתח את התמונה הזאת. נסו לצלם שוב.' }, cors);
     }
-    const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
     let out;
-    try { out = JSON.parse(text); } catch { return json(502, { error: 'bad_model_output' }, cors); }
+    try { out = JSON.parse(r.text); } catch { return json(502, { error: 'bad_model_output' }, cors); }
     if (!out.ok) return json(200, { ok: false, issue: str(out.issue, 300) || 'לא זוהה אוכל בתמונה.' }, cors);
     const known = new Set(foods.map((f) => f.id));
     const num = (v, hi) => Math.round(Math.min(hi, Math.max(0, Number(v) || 0)) * 10) / 10;
@@ -348,9 +375,20 @@ export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
         foodId: known.has(i.foodId) ? i.foodId : '',
         confidence: conf(i.confidence),
       }))
-      .filter((i) => i.name && i.grams > 0);
+      .filter((i) => i.name && i.grams > 0)
+      // Smaller free models sometimes give calories that don't match their own
+      // macros: meet in the middle and flag the item for the user to check.
+      .map((i) => {
+        const fromMacros = i.p * 4 + i.c * 4 + i.f * 9;
+        if (fromMacros >= 10 && i.kcal > 0 && Math.abs(i.kcal - fromMacros) / Math.max(i.kcal, fromMacros) > 0.4) {
+          return { ...i, kcal: Math.round((i.kcal + fromMacros) / 2), confidence: 'low' };
+        }
+        return i;
+      });
     if (!items.length) return json(200, { ok: false, issue: 'לא זוהה אוכל בתמונה. צלמו את כל הצלחת מלמעלה.' }, cors);
-    return json(200, { ok: true, items, confidence: conf(out.confidence), notes: str(out.notes, 400) }, cors);
+    // Free engines never report better than "medium".
+    const overall = r.engine !== 'anthropic' && conf(out.confidence) === 'high' ? 'medium' : conf(out.confidence);
+    return json(200, { ok: true, items, confidence: overall, notes: str(out.notes, 400), engine: r.engine }, cors);
   } catch (e) {
     return upstreamError(e, cors);
   }
@@ -361,6 +399,10 @@ export async function handleApi(request, env, opts) {
   if (pathname === '/api/chat') return handleChat(request, env, opts);
   if (pathname === '/api/bodyfat') return handleBodyFat(request, env, opts);
   if (pathname === '/api/meal-photo') return handleMealPhoto(request, env, opts);
-  if (pathname === '/api/health') return json(200, { ok: true, configured: !!env.ANTHROPIC_API_KEY });
+  if (pathname === '/api/health') {
+    // Engine ids only, never keys. 'configured' is true when chat can be answered at all.
+    const engines = engineList(env).map((e) => e.id);
+    return json(200, { ok: true, configured: engines.length > 0, engines });
+  }
   return json(404, { error: 'not_found' });
 }

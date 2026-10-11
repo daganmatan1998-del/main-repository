@@ -39,7 +39,7 @@ Install Node.js (LTS, from nodejs.org), then double-click **`UPLOAD-APP.bat`** i
 ```bash
 cd nutrition-app
 npm install
-cp .env.example .env          # put your Anthropic API key in .env
+cp .env.example .env          # put your AI keys in .env (every one is optional; see "AI engines" below)
 npm run dev                   # → http://localhost:8787
 ```
 
@@ -54,7 +54,7 @@ Open it on a phone on the same network, or use Chrome DevTools' device mode. Eve
    npx wrangler secret put ANTHROPIC_API_KEY
    ```
 
-The browser never sees the key. The app calls `/api/chat` on its own origin, and `server/api.js` adds the key and calls Claude. The e2e test checks that no client file contains a key or calls Anthropic directly.
+The browser never sees a key. The app calls `/api/...` on its own origin, and `server/api.js` adds the right key and calls the AI engine. The e2e test checks that no client file contains a key or calls Anthropic directly.
 
 The proxy uses `claude-opus-5-5` with low effort, since chat answers are short, and server-side refusal fallbacks (`fallbacks: "default"`). Set the `CLAUDE_MODEL` variable to change the model.
 
@@ -188,7 +188,7 @@ Every meal comes with one fruit, a normal serving: breakfast, lunch, dinner and 
 Every meal card on today and past days has **מצלמת קלוריות — צלמו את הצלחת** at the top.
 
 1. **Photo:** the back camera opens with a round guide ("the whole plate inside the circle, from above"). There are tips to include side plates, sauces, bread and drinks, and to put a fork next to the plate for scale. An existing photo can be uploaded instead. The first use asks for consent to send the photo for analysis.
-2. **Analysis** (`/api/meal-photo`): one call to Claude Opus 5.5 with vision and a strict JSON schema, using the same safety setup as the body-fat estimate. Claude gets the photo, the planned meal (context only, never assumed) and the app's food list.
+2. **Analysis** (`/api/meal-photo`): one call to a free AI engine that can see images (see "AI engines"), with the JSON schema in the prompt. It gets the photo, the planned meal (context only, never assumed) and the app's food list. **Never Anthropic by default**, to save credits.
    - **What it's told to list:** every item in the frame, including cooking oil, dressings, sauces, spreads and toppings; people under-count these most.
    - **How it estimates:** cooked weights in grams, using the plate, cutlery and standard portions for scale.
    - **What it returns per item:** kcal, protein, carbs, fat, a confidence level, and a matching food id when the item is one the app knows.
@@ -207,6 +207,40 @@ Every meal card on today and past days has **מצלמת קלוריות — צל�
 
 Closing the camera at any point logs nothing. The photo is never saved: it lives in memory, goes to the server once for analysis, and is discarded. The shopping list keeps using the planned meal. The assistant sees what was actually eaten.
 
+### AI engines: free providers first (v1.6)
+
+`server/engines.js` puts many providers behind one call. Every key is optional; set the ones you have, each as a Worker secret (`npx wrangler secret put GOOGLE_API_KEY`) or let `UPLOAD-APP.bat` ask for them.
+
+| Engine | Env | Sees images |
+|---|---|---|
+| Google (Gemini) | `GOOGLE_API_KEY` | yes |
+| Mistral | `MISTRAL_API_KEY` | yes |
+| GitHub Models | `GITHUB_MODELS_TOKEN` | yes |
+| Groq | `GROQ_API_KEY` | yes |
+| NVIDIA | `NVIDIA_API_KEY` | yes |
+| OpenRouter (`:free` models) | `OPENROUTER_API_KEY` | yes |
+| xAI | `XAI_API_KEY` | yes |
+| Cerebras | `CEREBRAS_API_KEY` | no |
+| Cloudflare Workers AI | the `[ai]` binding in `wrangler.toml`, no key (a small daily allowance) | no, text only |
+| Anthropic | `ANTHROPIC_API_KEY` | yes |
+
+**Who may do what**
+
+| Task | Engines |
+|---|---|
+| Assistant chat and recipe ideas | all of them: free ones first, in rotation; Anthropic only as the last resort when every free engine failed |
+| Calorie camera | free engines that can see images. **Never Anthropic**, unless `MEALPHOTO_ALLOW_ANTHROPIC=1` |
+| Body-fat estimate | **Anthropic only**, so body photos never reach a free provider |
+
+**How it behaves**
+- **Rotation:** requests rotate across the free engines, so each provider's allowance is used evenly.
+- **Resting:** a provider that answers 429/402 rests for 5 minutes, a rejected key for 30, an outage for 1. The request moves on to the next engine. A request too big for one provider (413/400) doesn't make it rest. State is per Worker instance, like the rate limiter.
+- **Structured output (calorie camera):** the JSON schema goes in the prompt, with `response_format: json_object` where the provider accepts it (retried without it otherwise). Fenced or chatty replies are cleaned, and an answer of the wrong shape moves on to the next engine.
+- **Free engines are weaker:** the calorie camera never reports "high" confidence from one, calories that contradict an item's own macros are pulled toward them and the item is flagged, and the result screen says it came from a free model. The user edits the list anyway.
+- **One key per provider.** Several accounts at one provider to get around its limit breaks its terms and can get every key blocked.
+- **Free-tier model names change.** Override any with `<VENDOR>_MODEL` / `<VENDOR>_VISION_MODEL`, and limit a task with `ENGINES_CHAT=google,groq` / `ENGINES_MEALPHOTO=...`.
+- `/api/health` lists which engines are configured (ids only, never keys).
+
 ### Weekly-gate rules (what "can't be bypassed" means here)
 
 - The gate decision is made in one function, `render()` in `app.js`. It runs on every route change, return from the background, focus, bfcache restore, and every 30 seconds.
@@ -222,8 +256,8 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
 ## Tests
 
 ```bash
-npm test              # 46 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
-npm run test:e2e      # 175 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm test              # 60 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
+npm run test:e2e      # 176 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 ```
 
 The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.
@@ -231,7 +265,9 @@ The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. It 
 ## Privacy
 
 - **On the device only:** your profile, every weigh-in, every photo and the chat history. There is no account and no analytics.
-- **Sent to the assistant:** age, sex, height, current metrics, goal, daily targets, restrictions and today's menu. Never your name, photos or registration date. The request goes to Anthropic through your Worker.
+- **Sent to the assistant:** age, sex, height, current metrics, goal, daily targets, restrictions and today's menu. Never your name, photos or registration date. The request goes through your Worker to whichever AI engine answers, a free provider or Anthropic. Free plans of some providers may use content to improve their models.
+- **Sent to the calorie camera:** the plate photo, which the Worker forwards once to a free vision provider. It is not stored by the app, but free-plan providers may use it for training. The consent screen says so.
+- **Body-fat photos go to Anthropic only**, never to a free provider.
 - **Delete all data** (Profile, then type "מחק" to confirm) erases the database, settings and chat from the device.
 
 The app shows that it is not medical advice, during onboarding, in the chat and in Profile.

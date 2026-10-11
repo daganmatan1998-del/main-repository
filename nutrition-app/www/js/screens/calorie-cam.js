@@ -60,7 +60,7 @@ export function openCalorieCamera(meal, day) {
       h('p', { class: 'lead' }, 'מצלמים את הצלחת מלמעלה, וה-AI מזהה כל מה שעליה — כולל רטבים ושמן — עם כמות וקלוריות לכל פריט. אחר כך אפשר לתקן כל כמות או מרכיב.'),
       h('div', { class: 'notice warn small' }, 'זו הערכה מתמונה: הכמויות עלולות לסטות, במיוחד ברטבים ובשמן. בדקו ותקנו לפני האישור.'),
       h('label', { class: 'bf-consent' }, consent,
-        h('span', null, 'אני מסכים/ה שהתמונה תישלח לניתוח AI (Anthropic) דרך השרת של האפליקציה. היא לא נשמרת בשרת ולא באפליקציה.')),
+        h('span', null, 'אני מסכים/ה שהתמונה תישלח לניתוח AI אצל ספקי AI חיצוניים (למשל Google, Mistral, Groq) דרך השרת של האפליקציה. האפליקציה לא שומרת אותה, אבל ספקים בתוכניות חינמיות עשויים להשתמש בתוכן לשיפור המודלים שלהם. אל תצלמו מסמכים או פרטים מזהים.')),
       start);
   }
 
@@ -177,13 +177,14 @@ export function openCalorieCamera(meal, day) {
         return;
       }
       items = data.items.map(fromEstimate);
-      estimate = { confidence: data.confidence, notes: data.notes };
+      estimate = { confidence: data.confidence, notes: data.notes, engine: data.engine };
       edit();
       return;
     } catch (e) {
       problem = e.message === 'offline' ? 'אין חיבור לאינטרנט — הניתוח צריך חיבור.'
         : e.message === 'not_configured' ? 'שירות הניתוח עוד לא הוגדר בשרת.'
         : e.message === 'rate_limited' ? 'יותר מדי בקשות ברגע זה. נסו שוב בעוד דקה.'
+        : e.message === 'all_engines_busy' ? 'כל שירותי הניתוח עמוסים כרגע (המכסה היומית החינמית נגמרה או שיש תקלה). נסו שוב בעוד כמה דקות.'
         : 'שירות הניתוח לא זמין כרגע.';
     }
     if (done) return;
@@ -266,7 +267,8 @@ export function openCalorieCamera(meal, day) {
         h('img', { src: shot.url, alt: 'הצלחת שצולמה', class: 'mc-thumb' }),
         h('div', null,
           h('p', { class: 'small' }, 'זה מה שזוהה. אפשר לשנות כמות (גרם) או מרכיב, למחוק ולהוסיף.'),
-          h('p', { class: 'muted small' }, `רמת ביטחון: ${CONFIDENCE[estimate.confidence] || '—'}`))),
+          h('p', { class: 'muted small' }, `רמת ביטחון: ${CONFIDENCE[estimate.confidence] || '—'}`),
+          h('p', { class: 'muted small', id: 'mc-engine' }, 'הוערך במודל חינמי — כדאי לבדוק כמויות ורטבים.'))),
       estimate.notes ? h('p', { class: 'notice small' }, estimate.notes) : null,
       list,
       h('button', { class: 'btn btn-ghost btn-block', id: 'mc-add', onclick: add }, icon('plus', 18), 'הוספת מרכיב'),

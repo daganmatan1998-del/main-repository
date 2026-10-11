@@ -35,8 +35,10 @@ let mealPhotoMode = 'sauce';
 async function fakeAnthropic(url, init) {
   const body = JSON.parse(init.body);
   upstream.push({ url: String(url), headers: new Headers(init.headers), body });
-  if (typeof body.system === 'string' && body.system.includes('on a plate')) {
-    const ctx = body.messages[0].content.find((b) => b.type === 'text').text;
+  // The calorie camera goes to a free engine (Groq here), in OpenAI chat format.
+  if (String(url).includes('api.groq.com')) {
+    const user = body.messages[1].content;
+    const ctx = user.find((b) => b.type === 'text').text;
     const planned = JSON.parse(ctx.match(/Planned \(context only\): (.*)/)[1]);
     const foods = JSON.parse(ctx.match(/App food list: (.*)/)[1]);
     const items = planned.map((p) => {
@@ -46,8 +48,7 @@ async function fakeAnthropic(url, init) {
     if (mealPhotoMode === 'sauce') items.push({ name: 'רוטב שום', grams: 30, kcal: 150, p: 0.5, c: 2, f: 16, foodId: '', confidence: 'low' });
     const out = { ok: true, items, confidence: 'medium', notes: 'כמות הרוטב משוערת.', issue: '' };
     return new Response(JSON.stringify({
-      id: 'msg_mp', type: 'message', role: 'assistant', model: body.model, stop_reason: 'end_turn',
-      usage: { input_tokens: 10, output_tokens: 10 }, content: [{ type: 'text', text: JSON.stringify(out) }],
+      choices: [{ message: { role: 'assistant', content: '```json\n' + JSON.stringify(out) + '\n```' }, finish_reason: 'stop' }],
     }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
   if (typeof body.system === 'string' && body.system.includes('body fat')) {
@@ -67,7 +68,8 @@ async function fakeAnthropic(url, init) {
   }), { status: 200, headers: { 'content-type': 'application/json' } });
 }
 
-const server = createServer({ env: { ANTHROPIC_API_KEY: 'sk-ant-e2e-fake' }, fetchImpl: fakeAnthropic });
+// Chat uses the Anthropic stub; the calorie camera uses a stubbed free engine (Groq).
+const server = createServer({ env: { ANTHROPIC_API_KEY: 'sk-ant-e2e-fake', GROQ_API_KEY: 'gsk_e2e_fake', ENGINES_CHAT: 'anthropic', ENGINES_MEALPHOTO: 'groq' }, fetchImpl: fakeAnthropic });
 await new Promise((r) => server.listen(0, r));
 const PORT = server.address().port;
 const BASE = `http://localhost:${PORT}`;
@@ -399,9 +401,13 @@ try {
     await page.waitForSelector('#mc-items .mc-item');
   };
   await shootAndAnalyze();
-  const mpReq = upstream.filter((u) => typeof u.body.system === 'string' && u.body.system.includes('on a plate')).at(-1)?.body;
-  check('the photo goes to Claude as an image with the planned meal and food list', mpReq && mpReq.messages[0].content[0].type === 'image'
-    && mpReq.messages[0].content[1].text.includes('Planned') && mpReq.output_config.format.type === 'json_schema');
+  const mpCall = upstream.filter((u) => u.url.includes('api.groq.com')).at(-1);
+  const mpReq = mpCall && mpCall.body;
+  check('the photo goes to a free engine, not Anthropic, as an image with the planned meal and food list', mpReq
+    && mpReq.messages[1].content[0].type === 'image_url' && mpReq.messages[1].content[1].text.includes('Planned')
+    && mpCall.headers.get('authorization') === 'Bearer gsk_e2e_fake'
+    && !upstream.some((u) => u.url.includes('anthropic') && JSON.stringify(u.body).includes('data:image')));
+  check('the result says it came from a free engine', (await page.locator('#mc-engine').count()) === 1);
   const names = await page.locator('#mc-items .mc-name').evaluateAll((els) => els.map((e) => e.value));
   check(`every item on the plate is listed, sauce included (${names.length})`, names.includes('רוטב שום'), names.join(', '));
   const total0 = Number((await page.innerText('#mc-total')).replace(/[^\d]/g, ''));

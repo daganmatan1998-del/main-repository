@@ -1,4 +1,4 @@
-// Client side of the nutrition assistant. The Anthropic API key lives only on
+// Client side of the nutrition assistant. API keys live only on
 // the server (server/worker.js); the app talks to /api/chat on that proxy.
 //
 // Privacy: the context sent with each question is the minimum the assistant

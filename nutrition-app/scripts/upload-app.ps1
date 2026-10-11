@@ -214,7 +214,7 @@ while ($askKey) {
 להדבקה: לחץ בתיבה ואז Ctrl+V.
 
 אין לך מפתח עדיין? לחץ "פתח את האתר", היכנס ל-API Keys ולחץ Create Key.
-(רק לעוזר התזונה. כל השאר עובד גם בלי.)
+(משמש להערכת אחוז שומן, ולעוזר רק כשכל המנועים החינמיים נכשלו. אפשר לדלג.)
 "@
   $key = Ask-Text $prompt 'שמירת המפתח' 'פתח את האתר / דלג'
   if ($null -eq $key) {
@@ -231,6 +231,52 @@ while ($askKey) {
   $key = $null
   if ($s.Code -eq 0) { break }
   if ((Show-Message "שמירת המפתח נכשלה. לנסות שוב?" 'Warning' 'YesNo') -ne 'Yes') { break }
+}
+
+# ---------------- 5b. free AI keys ----------------
+# Each free provider is one more engine for the assistant and the calorie camera.
+# Every one is optional; use one key per provider.
+
+Step 'Free AI keys (optional)'
+$free = @(
+  @{ Name = 'GOOGLE_API_KEY';       Label = 'Google (Gemini)';  Url = 'https://aistudio.google.com/apikey';   Note = 'מזהה גם תמונות. הכי מומלץ.' },
+  @{ Name = 'MISTRAL_API_KEY';      Label = 'Mistral';          Url = 'https://console.mistral.ai/api-keys';  Note = 'מזהה גם תמונות.' },
+  @{ Name = 'GROQ_API_KEY';         Label = 'Groq';             Url = 'https://console.groq.com/keys';        Note = 'מזהה גם תמונות. מהיר.' },
+  @{ Name = 'GITHUB_MODELS_TOKEN';  Label = 'GitHub Models';    Url = 'https://github.com/settings/tokens';   Note = 'טוקן עם הרשאת models:read. מזהה גם תמונות.' },
+  @{ Name = 'NVIDIA_API_KEY';       Label = 'NVIDIA';           Url = 'https://build.nvidia.com/';            Note = 'מזהה גם תמונות.' },
+  @{ Name = 'OPENROUTER_API_KEY';   Label = 'OpenRouter';       Url = 'https://openrouter.ai/keys';           Note = 'מודלים חינמיים (עם :free).' },
+  @{ Name = 'CEREBRAS_API_KEY';     Label = 'Cerebras';         Url = 'https://cloud.cerebras.ai/';           Note = 'טקסט בלבד, מהיר מאוד.' }
+)
+$ans = Show-Message "להוסיף מפתחות AI חינמיים?`n`nכל מפתח הוא מכסה חינמית נוספת. העוזר ומצלמת הקלוריות מתחלפים ביניהם, וכך כמעט לא משלמים על Claude.`n`nמפתח אחד לכל ספק. מי שכבר הוגדר בשרת לא יישאל שוב. אפשר לדלג על כל ספק." 'Question' 'YesNo'
+if ($ans -eq 'Yes') {
+  $secrets = Run 'npx.cmd' @('wrangler', 'secret', 'list')
+  foreach ($f in $free) {
+    if ($secrets.Text -match $f.Name) { continue }
+    $prompt = @"
+הדבק כאן את המפתח של $($f.Label).
+$($f.Note)
+
+אין לך? לחץ "פתח את האתר", צור מפתח והדבק.
+לדילוג על הספק הזה — לחץ "דלג".
+"@
+    while ($true) {
+      $key = Ask-Text $prompt 'שמירה' 'פתח את האתר / דלג'
+      if ($null -eq $key) {
+        $o = Show-Message "לפתוח את האתר של $($f.Label) כדי ליצור מפתח?`n`n'כן' — נפתח ואחזור לשאול.`n'לא' — נדלג על הספק הזה." 'Question' 'YesNo'
+        if ($o -eq 'Yes') { Start-Process $f.Url; continue }
+        break
+      }
+      $key = $key.Trim()
+      if ($key.Length -lt 20 -or $key -match '\s') {
+        Show-Message "זה לא נראה כמו מפתח. נסה להעתיק שוב." 'Warning' | Out-Null
+        continue
+      }
+      $s = Run 'npx.cmd' @('wrangler', 'secret', 'put', $f.Name) $key
+      $key = $null
+      if ($s.Code -eq 0) { break }
+      if ((Show-Message "שמירת המפתח נכשלה. לנסות שוב?" 'Warning' 'YesNo') -ne 'Yes') { break }
+    }
+  }
 }
 
 # ---------------- 6. done ----------------

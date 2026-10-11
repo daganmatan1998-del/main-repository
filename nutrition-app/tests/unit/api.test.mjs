@@ -94,7 +94,7 @@ test('worker routes /api to the handler and the rest to static assets', async ()
   const env = { ...ENV, ASSETS: { fetch: async () => new Response('asset') } };
   assert.equal(await (await worker.fetch(new Request('https://nutri.example/index.html'), env)).text(), 'asset');
   const health = await worker.fetch(new Request('https://nutri.example/api/health'), env);
-  assert.deepEqual(await health.json(), { ok: true, configured: true });
+  assert.deepEqual(await health.json(), { ok: true, configured: true, engines: ['anthropic'] });
 });
 
 // ---------- /api/bodyfat ----------
@@ -158,47 +158,91 @@ const mpBody = {
 };
 const mpItem = (o) => ({ name: 'x', grams: 100, kcal: 100, p: 1, c: 1, f: 1, foodId: '', confidence: 'medium', ...o });
 
-test('meal-photo: sends the photo with the plan and food list, and returns cleaned items', async () => {
+// Free engines speak the OpenAI chat format. `replies` is a list (one per call) of
+// a JSON object (answered as the model's text), a number (an HTTP error) or a function.
+function stubFree(replies) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    calls.push({ url: String(url), headers: new Headers(init.headers), body });
+    let r = replies[Math.min(calls.length - 1, replies.length - 1)];
+    if (typeof r === 'function') r = r(body, String(url));
+    if (typeof r === 'number') return new Response(JSON.stringify({ error: { message: 'nope' } }), { status: r, headers: { 'content-type': 'application/json' } });
+    const text = typeof r === 'string' ? r : JSON.stringify(r);
+    return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: text }, finish_reason: 'stop' }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  return { calls, fetchImpl };
+}
+const FREE_ENV = { ANTHROPIC_API_KEY: 'sk-ant-test-key', GROQ_API_KEY: 'gsk_test' };
+
+test('meal-photo: sends the photo with the plan and food list to a free engine and returns cleaned items', async () => {
   const out = {
-    ok: true, confidence: 'medium', notes: 'השמן בטיגון מוערך.', issue: '',
+    ok: true, confidence: 'high', notes: 'השמן בטיגון מוערך.', issue: '',
     items: [
       mpItem({ name: 'חזה עוף', grams: 160, kcal: 264, p: 49.6, c: 0, f: 5.8, foodId: 'chicken_breast', confidence: 'high' }),
-      mpItem({ name: 'רוטב טחינה', grams: 30, kcal: 180, foodId: 'made_up_id' }),
+      mpItem({ name: 'רוטב טחינה', grams: 30, kcal: 180, p: 5, c: 6, f: 16, foodId: 'made_up_id' }),
       mpItem({ name: 'שמן (בבישול)', grams: 99999, kcal: 99999 }),
+      mpItem({ name: 'קלוריות לא תואמות', grams: 50, kcal: 900, p: 1, c: 1, f: 1 }),
       mpItem({ name: '', grams: 50 }),
       mpItem({ name: 'אוויר', grams: 0 }),
     ],
   };
-  const { calls, fetchImpl } = stubAnthropic({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(out) }] });
-  const res = await handleApi(mpReq(mpBody), ENV, { fetchImpl });
+  const { calls, fetchImpl } = stubFree([out]);
+  const res = await handleApi(mpReq(mpBody), FREE_ENV, { fetchImpl });
   const j = await res.json();
   assert.equal(res.status, 200);
   assert.equal(j.ok, true);
-  assert.deepEqual(j.items.map((i) => i.name), ['חזה עוף', 'רוטב טחינה', 'שמן (בבישול)']);
+  assert.equal(j.engine, 'groq');
+  assert.equal(j.confidence, 'medium', 'a free engine never reports "high"');
+  assert.deepEqual(j.items.map((i) => i.name), ['חזה עוף', 'רוטב טחינה', 'שמן (בבישול)', 'קלוריות לא תואמות']);
   assert.equal(j.items[0].foodId, 'chicken_breast');
   assert.equal(j.items[1].foodId, '', 'unknown ids are dropped');
   assert.ok(j.items[2].grams <= 3000 && j.items[2].kcal <= 5000, 'values are clamped');
-  const body = calls[0].body;
-  assert.equal(body.model, 'claude-opus-5-5');
-  assert.equal(body.output_config.format.type, 'json_schema');
-  assert.equal(body.fallbacks, 'default');
-  assert.equal(body.messages[0].content[0].type, 'image');
-  assert.match(body.system, /sauces|oil/i);
-  const ctx = body.messages[0].content[1].text;
-  assert.match(ctx, /חזה עוף צלוי/);
-  assert.ok(!ctx.includes('bad id!'), 'invalid food ids never reach the model');
+  assert.ok(j.items[3].kcal < 900 && j.items[3].confidence === 'low', 'calories that contradict the macros are pulled toward them and flagged');
+  const c = calls[0];
+  assert.match(c.url, /api\.groq\.com/);
+  assert.equal(c.headers.get('authorization'), 'Bearer gsk_test');
+  assert.match(c.body.model, /llama-4|scout/i, 'the vision model, not the text model');
+  assert.equal(c.body.response_format.type, 'json_object');
+  assert.equal(c.body.messages[0].role, 'system');
+  assert.match(c.body.messages[0].content, /JSON Schema/);
+  const user = c.body.messages[1].content;
+  assert.equal(user[0].type, 'image_url');
+  assert.match(user[0].image_url.url, /^data:image\/jpeg;base64,/);
+  assert.match(user[1].text, /חזה עוף צלוי/);
+  assert.ok(!user[1].text.includes('bad id!'), 'invalid food ids never reach the model');
+});
+
+test('meal-photo: never uses Anthropic unless explicitly allowed', async () => {
+  const anth = stubAnthropic({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ ok: true, confidence: 'high', notes: '', issue: '', items: [mpItem({ name: 'עוף', grams: 100 })] }) }] });
+  // Only an Anthropic key: the camera is simply not available.
+  let res = await handleApi(mpReq(mpBody), { ANTHROPIC_API_KEY: 'sk-ant-x' }, { fetchImpl: anth.fetchImpl });
+  assert.equal(res.status, 503);
+  assert.equal(anth.calls.length, 0);
+  // Free engines all down: it fails rather than falling back to the paid engine.
+  const free = stubFree([503]);
+  const both = async (url, init) => (String(url).includes('anthropic') ? anth.fetchImpl(url, init) : free.fetchImpl(url, init));
+  res = await handleApi(mpReq(mpBody), FREE_ENV, { fetchImpl: both });
+  assert.equal(res.status, 503);
+  assert.equal(anth.calls.length, 0, 'no Anthropic credits spent');
+  // The opt-in switch.
+  res = await handleApi(mpReq(mpBody), { ...FREE_ENV, MEALPHOTO_ALLOW_ANTHROPIC: '1' }, { fetchImpl: both });
+  const j = await res.json();
+  assert.equal(j.ok, true);
+  assert.equal(j.engine, 'anthropic');
+  assert.equal(anth.calls.length, 1);
 });
 
 test('meal-photo: no food, refusals and bad input', async () => {
-  let { fetchImpl } = stubAnthropic({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ ok: false, items: [], confidence: 'low', notes: '', issue: 'התמונה חשוכה מדי.' }) }] });
-  let j = await (await handleApi(mpReq(mpBody), ENV, { fetchImpl })).json();
+  let { fetchImpl } = stubFree([{ ok: false, items: [], confidence: 'low', notes: '', issue: 'התמונה חשוכה מדי.' }]);
+  let j = await (await handleApi(mpReq(mpBody), FREE_ENV, { fetchImpl })).json();
   assert.deepEqual([j.ok, j.issue], [false, 'התמונה חשוכה מדי.']);
-  ({ fetchImpl } = stubAnthropic({ stop_reason: 'refusal', content: [] }));
-  j = await (await handleApi(mpReq(mpBody), ENV, { fetchImpl })).json();
+  ({ fetchImpl } = stubFree([{ ok: true, items: [], confidence: 'low', notes: '', issue: '' }]));
+  j = await (await handleApi(mpReq(mpBody), FREE_ENV, { fetchImpl })).json();
   assert.equal(j.ok, false);
-  const stub = stubAnthropic();
+  const stub = stubFree(['{}']);
   for (const body of [{}, { photo: '<img>' }, { photo: 'A'.repeat(1000 * 1024) }]) {
-    assert.equal((await handleApi(mpReq(body), ENV, { fetchImpl: stub.fetchImpl })).status, 400);
+    assert.equal((await handleApi(mpReq(body), FREE_ENV, { fetchImpl: stub.fetchImpl })).status, 400);
   }
   assert.equal(stub.calls.length, 0);
 });

@@ -109,6 +109,7 @@ export function renderAssistant(root) {
         const why = e.code === 'offline' ? 'אין חיבור לאינטרנט — העוזר זמין רק אונליין. התפריט וההחלפות בכפתורי "החלף" עובדים גם בלי חיבור.'
           : e.code === 'not_configured' ? 'העוזר עוד לא הוגדר בשרת (חסר מפתח API). ראו הוראות התקנה ב-README.'
             : e.code === 'rate_limited' ? 'יותר מדי בקשות. נסו שוב בעוד דקה.'
+              : e.code === 'all_engines_busy' ? 'כל מנועי ה-AI עמוסים כרגע. נסו שוב בעוד כמה דקות.'
               : 'העוזר לא זמין כרגע. נסו שוב בעוד רגע.';
         messages.push({ role: 'assistant', content: why, at: Date.now(), error: true });
       }
