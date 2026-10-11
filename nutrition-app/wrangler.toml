@@ -18,6 +18,15 @@ binding = "AI"
 directory = "./www"
 binding = "ASSETS"
 
+# Daily reminders (Web Push, see server/push.js): one KV namespace for the
+# subscriptions, and a cron that checks every 15 minutes. Wrangler creates the
+# namespace on the first deploy.
+[[kv_namespaces]]
+binding = "PUSH"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
 [vars]
 # Comma-separated extra origins allowed to call /api/chat (same-origin always works).
 # For a Capacitor build add: "capacitor://localhost,https://localhost"

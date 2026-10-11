@@ -19,7 +19,7 @@ const ANGLES = [
 
 const CONFIDENCE = { low: 'נמוכה', medium: 'בינונית', high: 'גבוהה' };
 const METHOD = {
-  ai: 'ניתוח תמונות (AI)',
+  ai: 'ניתוח תמונות',
   'ai+tape': 'ניתוח תמונות + מדידות סרט',
   tape: 'מדידות סרט (שיטת הצי האמריקאי)',
   bmi: 'נוסחה לפי BMI וגיל (הערכה גסה)',
@@ -131,7 +131,7 @@ export function openBodyFatEstimator(person) {
           h('li', null, 'יש טיימר — יש זמן להתרחק ולעמוד בתנוחה')),
         h('div', { class: 'notice warn small' }, DISCLAIMER),
         h('label', { class: 'bf-consent' }, consent,
-          h('span', null, 'אני מסכים/ה שהתמונות יישלחו לניתוח AI (Anthropic) דרך השרת של האפליקציה. הן לא נשמרות בשרת ולא באפליקציה.')),
+          h('span', null, 'אני מסכים/ה שהתמונות יישלחו לניתוח דרך השרת של האפליקציה. הן לא נשמרות בשרת ולא באפליקציה. אם שירות הניתוח הראשי לא זמין, הן עשויות להישלח לשירות ניתוח חיצוני אחר, וחלק מהשירותים האלה עשויים להשתמש בהן לשיפור השירות שלהם.')),
         start,
         h('button', { class: 'btn btn-ghost btn-block', id: 'bf-no-photos', onclick: () => measurements(false) }, 'אין לי איך לצלם — הערכה לפי מדידות / משקל וגובה'));
     }
@@ -307,6 +307,7 @@ export function openBodyFatEstimator(person) {
         header('ההערכה שלך'),
         issue ? h('div', { class: 'notice warn' }, h('p', null, `לא הצלחנו לנתח את התמונות: ${issue}`),
           h('button', { class: 'btn btn-small', onclick: () => capture(0) }, 'צילום מחדש')) : null,
+        ai && ai.alt ? h('div', { class: 'notice small', id: 'bf-alt' }, 'ההערכה נעשתה בשירות חלופי, ולכן הדיוק שלה עשוי להיות נמוך יותר.') : null,
         failure && withPhotos ? h('div', { class: 'notice warn' }, h('p', null, `${failure} — לכן מוצגת הערכה ${r.method === 'tape' ? 'לפי המדידות' : 'גסה לפי משקל, גובה וגיל'}.`),
           h('button', { class: 'btn btn-small', onclick: () => analyze(true, tape) }, 'ניסיון חוזר')) : null,
         h('div', { class: 'bf-result card' },

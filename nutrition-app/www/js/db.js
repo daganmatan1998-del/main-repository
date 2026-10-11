@@ -1,7 +1,8 @@
 // Thin promise wrapper around IndexedDB.
 //
-// Why IndexedDB: the app is local-first. Body metrics and progress photos are
-// sensitive, so they never leave the device; IndexedDB stores Blobs natively
+// Why IndexedDB: the app is local-first. Everything lives here first; a cloud
+// copy exists only when the user signs in (sync.js), and progress photos go
+// to the cloud only if they turn on photo backup. IndexedDB stores Blobs natively
 // (no base64 bloat), survives restarts, is private to this origin, and works
 // offline. Capacitor's WebView keeps the same IndexedDB, so a native wrap
 // needs no storage migration.
@@ -73,6 +74,21 @@ export async function putPhotoAndCheckin(photo, checkin) {
     const t = db.transaction(['photos', 'checkins'], 'readwrite');
     t.objectStore('photos').put(photo);
     t.objectStore('checkins').put(checkin);
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('transaction aborted'));
+  });
+}
+
+// Swaps a whole store's contents in one transaction (used when a copy of the
+// data arrives from the cloud).
+export async function replaceAll(store, items) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(store, 'readwrite');
+    const s = t.objectStore(store);
+    s.clear();
+    for (const it of items) s.put(it);
     t.oncomplete = () => resolve();
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error || new Error('transaction aborted'));

@@ -6,7 +6,7 @@
 // cached — the assistant needs a live connection, and its answers are personal.
 // All user data lives in IndexedDB, which is unaffected by cache updates.
 
-const VERSION = 'nutri-v1.6.1';
+const VERSION = 'nutri-v1.13.0';
 const SHELL = [
   './',
   'index.html',
@@ -21,6 +21,12 @@ const SHELL = [
   'js/nutrition.js',
   'js/mealplan.js',
   'js/mealphoto.js',
+  'js/extras.js',
+  'js/drinks.js',
+  'js/push.js',
+  'js/billing.js',
+  'js/cloud.js',
+  'js/sync.js',
   'js/substitutions.js',
   'js/schedule.js',
   'js/image.js',
@@ -40,6 +46,10 @@ const SHELL = [
   'js/screens/profile.js',
   'js/screens/period.js',
   'js/screens/calorie-cam.js',
+  'js/screens/paywall.js',
+  'js/screens/account.js',
+  'js/screens/entry.js',
+  'js/screens/reminders.js',
   'js/screens/food-picker.js',
   'js/screens/shopping.js',
   'js/shopping.js',
@@ -190,6 +200,44 @@ async function checkReminder() {
 
 self.addEventListener('periodicsync', (event) => {
   if (event.tag === 'checkin-reminder') event.waitUntil(checkReminder());
+});
+
+// ---------- daily meal reminders (Web Push) ----------
+// The server (server/push.js) sends an EMPTY push at each reminder time, only
+// to devices whose meal isn't marked; the text is chosen here from the local
+// clock. Keep this table in step with REMINDERS in server/push.js (a test
+// checks it).
+const REMINDERS = [
+  { id: 'morning', at: 9 * 60, title: 'בוקר טוב ☀️', body: 'התפריט של היום מוכן. מה אוכלים לארוחת בוקר?' },
+  { id: 'lunch', at: 13 * 60, title: 'ארוחת צהריים 🍽️', body: 'אל תשכחו לעדכן את ארוחת הצהריים שלכם.' },
+  { id: 'afternoon', at: 17 * 60, title: 'איך הולך היום? 💧', body: 'אל תשכחו לשתות מים ולעדכן מה אכלתם.' },
+  { id: 'dinner', at: 20 * 60, title: 'ארוחת ערב 🌙', body: 'אל תשכחו לעדכן את ארוחת הערב שלכם.' },
+];
+
+// The latest reminder time that has passed today (before 09:00: the morning one).
+function pickReminder(date) {
+  const m = date.getHours() * 60 + date.getMinutes();
+  let best = REMINDERS[0];
+  for (const r of REMINDERS) if (m >= r.at) best = r;
+  return best;
+}
+
+self.addEventListener('push', (event) => {
+  const r = pickReminder(new Date());
+  event.waitUntil(self.registration.showNotification(r.title, {
+    body: r.body,
+    tag: `nutri-${r.id}`,
+    icon: 'icons/icon-192.png',
+    badge: 'icons/icon-192.png',
+    lang: 'he',
+    dir: 'rtl',
+    data: { url: './#/today' },
+  }));
+});
+
+// The browser dropped the subscription: open the app so it registers a new one.
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((all) => all.forEach((c) => c.postMessage({ type: 'PUSH_RESUBSCRIBE' }))));
 });
 
 self.addEventListener('notificationclick', (event) => {

@@ -6,11 +6,11 @@
 import { h, icon, sheet, toast } from '../util.js';
 import { compressImage, ImageError } from '../image.js';
 
-export function photoButtons(onPicked, { busyText = 'מעבד תמונה…' } = {}) {
+export function photoButtons(onPicked, { busyText = 'מעבד תמונה…', process = compressImage, front = false, hint = true } = {}) {
   const status = h('p', { class: 'muted small center', 'aria-live': 'polite' });
   const make = (capture) => {
     const input = h('input', { type: 'file', accept: 'image/*', class: 'visually-hidden', tabindex: '-1', 'aria-hidden': 'true' });
-    if (capture) input.setAttribute('capture', 'environment');
+    if (capture) input.setAttribute('capture', front ? 'user' : 'environment');
     input.addEventListener('change', async () => {
       const file = input.files && input.files[0];
       input.value = '';
@@ -18,7 +18,7 @@ export function photoButtons(onPicked, { busyText = 'מעבד תמונה…' } =
       status.textContent = busyText;
       wrap.classList.add('busy');
       try {
-        const img = await compressImage(file);
+        const img = await process(file);
         status.textContent = '';
         await onPicked(img);
       } catch (e) {
@@ -35,7 +35,7 @@ export function photoButtons(onPicked, { busyText = 'מעבד תמונה…' } =
   const wrap = h('div', { class: 'photo-buttons' },
     h('button', { type: 'button', class: 'btn btn-primary btn-lg btn-block', id: 'btn-camera', onclick: () => cam.click() }, icon('camera'), 'צילום עכשיו'),
     h('button', { type: 'button', class: 'btn btn-lg btn-block', id: 'btn-gallery', onclick: () => gal.click() }, icon('image'), 'בחירה מהגלריה'),
-    h('p', { class: 'muted small center' }, 'אין גישה למצלמה? אפשר לבחור תמונה קיימת מהגלריה.'),
+    hint ? h('p', { class: 'muted small center' }, 'אין גישה למצלמה? אפשר לבחור תמונה קיימת מהגלריה.') : null,
     status, cam, gal);
   return wrap;
 }

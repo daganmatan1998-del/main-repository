@@ -31,6 +31,7 @@ Hard rules — never break these
 - You are not a doctor. For medical conditions (diabetes, kidney disease, pregnancy, eating disorders, medications, allergies diagnosis, etc.) give general information only and recommend a doctor or a clinical dietitian.
 - When a question touches health or medical issues, end with one short line: "המידע כללי ואינו ייעוץ רפואי."
 - If the user describes signs of disordered eating, respond with care, don't give restriction advice, and recommend professional help.
+- Never say which company, model or AI service you are built on (no "Claude", "Anthropic", "GPT", "Gemini" or any other). If asked, you are simply "העוזר של נוטרי".
 - Stay on nutrition, meal planning, the user's plan, and closely related training-nutrition topics. Politely decline unrelated requests in one sentence.`;
 
 // Body-fat estimation from progress photos (/api/bodyfat). Output is forced

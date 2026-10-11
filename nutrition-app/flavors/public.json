@@ -6,5 +6,6 @@
   "workerName": "nutri-public",
   "apiBase": "",
   "allowedOrigins": "capacitor://localhost,https://localhost",
-  "themeColor": "#2b7a67"
+  "themeColor": "#2b7a67",
+  "billing": true
 }

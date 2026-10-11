@@ -229,8 +229,10 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
 | Task | Engines |
 |---|---|
 | Assistant chat and recipe ideas | all of them: free ones first, in rotation; Anthropic only as the last resort when every free engine failed |
-| Calorie camera | free engines that can see images. **Never Anthropic**, unless `MEALPHOTO_ALLOW_ANTHROPIC=1` |
-| Body-fat estimate | **Anthropic only**, so body photos never reach a free provider |
+| Calorie camera | the free engines that can see images, in rotation; Anthropic only as the last resort when every free engine failed |
+| Body-fat estimate | the other way round: **Anthropic first** (accuracy sets the starting calories), and the free vision engines take over when it is out of credits or down. An empty Anthropic balance rests it for 30 minutes, so the next requests go straight to the free engines |
+
+Set `CHAT_ALLOW_ANTHROPIC=0`, `MEALPHOTO_ALLOW_ANTHROPIC=0` or `BODYFAT_ALLOW_ANTHROPIC=0` on the server to keep a task off Anthropic.
 
 **How it behaves**
 - **Rotation:** requests rotate across the free engines, so each provider's allowance is used evenly.
@@ -247,6 +249,101 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
 - **Free-tier model names change.** Override any with `<VENDOR>_MODEL` / `<VENDOR>_VISION_MODEL`, and limit a task with `ENGINES_CHAT=google,groq` / `ENGINES_MEALPHOTO=...`.
 - `/api/health` lists which engines are configured (ids only, never keys).
 
+### Paid plan for the AI features (v1.7, payments not connected yet)
+
+- **Paid** ("נוטרי פלוס"): the assistant (chat, substitution questions, recipe ideas) and the calorie camera, the features that spend AI quota.
+- **Free:** everything else, including the body-fat estimate, the menu, recipes, shopping and swaps.
+- **Trial:** every user gets `BILLING.trialDays` days (currently 0: no trial while testing; set it back to 7 to restore it) of the AI features from registration. Then the assistant and the camera open the payment screen instead. A substitution question still gets the equivalents computed on the device.
+- **Payment screen:**
+  - two plans (prices are placeholders in `config.js`)
+  - payment buttons for the device: **Apple Pay** on iPhone/iPad, **Google Pay** on Android, **card** and **PayPal** everywhere
+  - the VAT and auto-renewal line
+- **Connecting a provider:** set `BILLING.provider` and `BILLING.checkoutUrl` (the provider's hosted checkout). `checkoutLink()` in `billing.js` is the one place that sends the buyer there, so card details never pass through the app. Until then, every button says payments aren't connected yet. The subscription is read from `settings.subscription` (`{ plan, until, method }`).
+- **Before charging real money:**
+  - **Accounts and a server record of who paid.** The provider's webhook should reach the Worker, and the AI endpoints should check the subscription. Today the check runs on the device only, so it is easy to bypass.
+  - **Store builds:** an App Store build must sell the plan through Apple's in-app purchase instead.
+
+### Messages (v1.12)
+
+- **Asking:** once, on the first visit to Today after setup, one plain question: "מאשרים לנוטרי לשלוח לכם הודעות?", with "מאשר" and "לא מאשר". It deliberately doesn't say what will be sent. Either answer, or closing the sheet, counts as asked. The switch in Profile ("הודעות מנוטרי") turns it on or off any time.
+- **What is sent** (not shown to the person):
+  - **13:00:** "אל תשכחו לעדכן את ארוחת הצהריים שלכם", only if lunch isn't marked eaten.
+  - **20:00:** the same for dinner.
+  - **09:00 and 17:00:** two light nudges so the app isn't forgotten. The morning one is skipped if something is already marked; the afternoon one if dinner is done. Neither is sent within 90 minutes of the app being opened.
+  - Times are the device's own time zone, so 13:00 stays 13:00 across the clock change.
+- **How it works (real Web Push, no third-party service):**
+  - The device subscribes, and sends the Worker its push address, its time zone and four booleans (which meals are marked today).
+  - A cron trigger (`wrangler.toml`, every 15 minutes) runs `runReminders()` in `server/push.js`. It sends an **empty** push to each device whose local time just reached a reminder, and the service worker shows the text.
+  - The VAPID key pair is made on first use and stored in KV, so there is no secret to set up. The Worker only talks to the browser makers' push services.
+  - The KV namespace `PUSH` is created by `wrangler deploy` the first time. If messages don't appear after deploying, run `npx wrangler kv namespace create PUSH` and put the id in `wrangler.toml`.
+- **Limits:**
+  - **iPhone:** only for an installed app (Share, then Add to Home Screen), iOS 16.4 or later. Before that the sheet explains it.
+  - **Not tested against a real push service.** The tests cover the server logic (including the VAPID signature), the subscription flow with a stand-in browser push service, and the notification text.
+  - **Scale:** the free KV plan covers about a thousand devices at a 15-minute cron.
+  - The weekly photo reminder is separate (Periodic Background Sync and the calendar file).
+
+### Search, drinks and sauces (v1.11)
+
+- **Search in "replace an item":** a search bar on top of the swap sheet. Typing a name searches every food of that kind (names and aliases), not just the short list.
+- **Drinks ("שתייה") under every meal** of today and past days:
+  - a free-text field ("מה שתיתם?") with suggestions, plus two optional fields: **sugar (teaspoons per cup)** and **how many cups**
+  - the text is matched against a table of about 25 common drinks (`drinks.js`, per cup) to get calories; the longest match wins, so "קפה עם חלב" beats "קפה"
+  - a drink the table doesn't know is saved with 0 calories and the person types the calories of one cup
+  - drinks count toward the day's calories and macros as soon as they're added (ring and bars on Today), whether or not the meal is marked eaten
+  - one teaspoon of sugar is 16 kcal and 4 g carbs
+- **Sauces and cheese ("הוספת רוטב או גבינה") on every meal:**
+  - the list (`extras.js`) has about 25 sauces and 5 cheeses, filtered by diet, allergies, kosher (no dairy beside meat) and keto (at most 3 g carbs a serving)
+  - low-calorie sauces (25 kcal or less a serving) come first, lowest first, then the rest, then cheeses
+  - the **calories come off the rest of the meal**: the other foods shrink (down to half their usual minimum if they must) so the meal stays on its budget. Meals with a removed group work the same way
+  - up to 4 per meal; each can be made smaller or bigger, or removed
+  - they are kept apart from the food table, so they never appear in generated menus, swaps, recipes or the weekly shopping list
+- **Not done yet:** the assistant doesn't know about the drinks or the added sauces, and the shopping list doesn't include the sauces.
+
+### Cloud accounts: sign in with Google (v1.8)
+
+Accounts are on once `CLOUD.url` and `CLOUD.anonKey` are set (they are, for the project in config.js) in `www/js/config.js`. Until then the app has no sign-in button and works exactly as before, on the device only.
+
+**What the user gets**
+
+- **First screen (v1.10):** a new person sees three choices, and nothing else until they pick:
+  - **התחברות:** Google sign-in, expecting data in the account. It restores the plan, or says no account with data was found and starts a new plan.
+  - **יצירת חשבון:** Google sign-in for a new account, then the registration. If the account turns out to have data already, it is loaded instead.
+  - **המשך ללא חשבון:** guest mode, everything on this device only. The choice is remembered, and the welcome screen has a way back to the choices.
+  - Google doesn't ask whether you meant to sign in or sign up, so the first two buttons share one sign-in. They differ only in what happens afterward.
+  - The screen shows only when `CLOUD` is set, nobody is signed in and the person hasn't chosen guest. After "delete all data" it comes back.
+
+- **Profile → "גיבוי וחשבון" → "התחברות עם Google".** The data on the device is uploaded to their account.
+- **On a new phone:** the welcome screen has "יש לי חשבון — התחברות עם Google". After sign-in the plan, logs, weigh-ins, chat, settings and profile picture come back and the app opens on Today.
+- **Sync:** every change goes up a moment later; opening the app pulls the newer copy. The whole state is one document and the newest copy wins. Two devices edited offline at the same moment keep the later one.
+- **Both sides have data** (a device with its own plan signs in to an account that has one too): nothing is overwritten. The user picks "load from the account" or "keep this device's data".
+- **Progress photos stay on the device** unless the user turns on "גיבוי תמונות ההתקדמות". Turning it off deletes the cloud copies. The profile picture always syncs.
+- **Sign-out** keeps the data on the device, or deletes it from the device (for a phone that isn't yours). The account keeps its copy.
+- **Delete all data,** while signed in, also deletes the cloud files, the data row and the account itself.
+
+**How it works**
+
+- **Supabase:** Auth (Google), Postgres and Storage, called over plain HTTPS from `cloud.js`. There is no SDK, because the app has no build step.
+- **Sign-in:** OAuth with PKCE, so there is no client secret anywhere.
+- **Data:** `sync.js` decides what goes up and what comes down; `store.snapshot()` and `store.applySnapshot()` are the data in and out.
+- **Protection:** the anon key in `config.js` is public by design. Row-level security in `supabase/setup.sql` limits each signed-in user to their own row and their own folder, `<user id>/…`, in a private bucket.
+
+**Setting it up (about 20 minutes, free tier)**
+
+1. **Create a project** at supabase.com.
+2. **Run the setup SQL:** open SQL Editor → New query, paste `supabase/setup.sql`, and click Run.
+3. **Create the Google credentials** in Google Cloud Console:
+   - APIs & Services → Credentials → Create OAuth client ID → Web application.
+   - Authorized redirect URI: `https://<project>.supabase.co/auth/v1/callback`.
+4. **Turn on Google in Supabase:** Authentication → Sign In / Providers → Google. Paste the client ID and secret. The secret lives in Supabase only, never in the app.
+5. **Set the app's address in Supabase:** Authentication → URL Configuration. Set Site URL to the app's address and add it under Redirect URLs (for example `https://nutri.<you>.workers.dev/`).
+6. **Fill in `www/js/config.js`:** under `CLOUD`, set `url` (Project Settings → API → Project URL) and `anonKey` (the anon / publishable key).
+7. **Upload the app again** with `UPLOAD-APP.bat`. The CSP in `www/_headers` already allows `https://*.supabase.co`.
+
+**Still open**
+
+- **App Store builds:** an App Store build that offers Google sign-in must also offer Sign in with Apple. Supabase supports it; it's not wired yet.
+- **Server-side paid plan:** the Worker can now know who is calling. Checking the paid plan on the server, once payments are connected, is the next step.
+
 ### Weekly-gate rules (what "can't be bypassed" means here)
 
 - The gate decision is made in one function, `render()` in `app.js`. It runs on every route change, return from the background, focus, bfcache restore, and every 30 seconds.
@@ -262,18 +359,23 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
 ## Tests
 
 ```bash
-npm test              # 62 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
-npm run test:e2e      # 176 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm test              # 100 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy, PKCE
+npm run test:e2e      # 216 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm run test:cloud    # 37 browser checks: the first screen, Google sign-in, sync across devices, photo backup, conflicts, sign-out, delete; profile picture and nickname
 ```
 
-The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.
+The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. The cloud run uses an in-memory fake of the Supabase APIs. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.
 
 ## Privacy
 
-- **On the device only:** your profile, every weigh-in, every photo and the chat history. There is no account and no analytics.
+- **On the device, and in your account only if you sign in:**
+  - your profile, every weigh-in and the chat history
+  - progress photos, which go to the account only with photo backup on
+  - there are no analytics
 - **Sent to the assistant:** age, sex, height, current metrics, goal, daily targets, restrictions and today's menu. Never your name, photos or registration date. The request goes through your Worker to whichever AI engine answers, a free provider or Anthropic. Free plans of some providers may use content to improve their models.
-- **Sent to the calorie camera:** the plate photo, which the Worker forwards once to a free vision provider. It is not stored by the app, but free-plan providers may use it for training. The consent screen says so.
-- **Body-fat photos go to Anthropic only**, never to a free provider.
-- **Delete all data** (Profile, then type "מחק" to confirm) erases the database, settings and chat from the device.
+- **Sent to the calorie camera:** the plate photo, which the Worker forwards once to a free vision provider (Anthropic only if every free one failed). It is not stored by the app, but free-plan providers may use it for training. The consent screen says so.
+- **Body-fat photos go to Anthropic first.** If it is out of credits or down, they go to a free vision provider, which may use them for training; the consent screen says so, and the result says when a fallback service made the estimate (and never reports high confidence from one). This changed in v1.13: before, they never reached a free provider.
+- **Delete all data** (Profile, then type "מחק" to confirm) erases the database, settings and chat from the device. While signed in it also erases the cloud copy and the account.
+- **No AI vendor names in the app.** The consent texts say the photos go to external analysis services without naming them, and the assistant is told not to say which model it runs on.
 
 The app shows that it is not medical advice, during onboarding, in the chat and in Profile.

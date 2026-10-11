@@ -5,6 +5,9 @@ import { disclaimer } from '../components.js';
 import { state, saveChat } from '../store.js';
 import { ask, buildContext } from '../chat.js';
 import { ROLE_LABEL } from '../foods.js';
+import { aiStatus } from '../store.js';
+import { canUseAI } from '../billing.js';
+import { openPaywall } from './paywall.js';
 
 let pendingAsk = null; // { text, extra, local } queued by a "replace" button elsewhere
 let inFlight = false;
@@ -94,6 +97,17 @@ export function renderAssistant(root) {
   async function send(text, extra = {}, local = null) {
     text = text.trim();
     if (!text || inFlight) return;
+    // The assistant is a paid feature after the trial. A substitution question
+    // still gets the answer computed on the device (no AI involved).
+    if (!canUseAI(aiStatus())) {
+      if (local) {
+        messages.push({ role: 'user', content: text, at: Date.now() }, { role: 'assistant', content: localAnswer(local), at: Date.now(), local: true });
+        await saveChat(messages.filter((m) => !m.error));
+        drawLog();
+      }
+      openPaywall('chat');
+      return;
+    }
     messages.push({ role: 'user', content: text, at: Date.now() });
     inFlight = true;
     sendBtn.disabled = true;
@@ -107,9 +121,9 @@ export function renderAssistant(root) {
         messages.push({ role: 'assistant', content: localAnswer(local), at: Date.now(), local: true });
       } else {
         const why = e.code === 'offline' ? 'אין חיבור לאינטרנט — העוזר זמין רק אונליין. התפריט וההחלפות בכפתורי "החלף" עובדים גם בלי חיבור.'
-          : e.code === 'not_configured' ? 'העוזר עוד לא הוגדר בשרת (חסר מפתח API). ראו הוראות התקנה ב-README.'
+          : e.code === 'not_configured' ? 'העוזר עוד לא זמין. נסו שוב מאוחר יותר.'
             : e.code === 'rate_limited' ? 'יותר מדי בקשות. נסו שוב בעוד דקה.'
-              : e.code === 'all_engines_busy' ? 'כל מנועי ה-AI עמוסים כרגע. נסו שוב בעוד כמה דקות.'
+              : e.code === 'all_engines_busy' ? 'העוזר עמוס כרגע. נסו שוב בעוד כמה דקות.'
               : 'העוזר לא זמין כרגע. נסו שוב בעוד רגע.';
         messages.push({ role: 'assistant', content: why, at: Date.now(), error: true });
       }
@@ -143,6 +157,13 @@ export function renderAssistant(root) {
       },
     }, icon('trash'))));
   root.appendChild(disclaimer());
+  const access = aiStatus();
+  if (access.state !== 'active') {
+    root.appendChild(h('div', { class: `notice ${access.state === 'locked' ? 'warn' : 'ok'} small ai-plan`, id: 'ai-plan' },
+      icon(access.state === 'locked' ? 'lock' : 'sparkle', 16),
+      h('span', null, access.state === 'locked' ? 'העוזר החכם זמין במנוי נוטרי פלוס.' : `תקופת ניסיון: עוד ${access.daysLeft} ימים של עוזר חכם בחינם.`),
+      h('button', { class: 'btn btn-small', onclick: () => openPaywall('chat') }, access.state === 'locked' ? 'פתיחה' : 'פרטים')));
+  }
   root.appendChild(log);
   root.appendChild(h('div', { class: 'quick-row' },
     ...QUICK.map((q) => h('button', { class: 'chip', onclick: () => send(q) }, q))));

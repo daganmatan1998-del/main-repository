@@ -18,6 +18,10 @@ import { renderProfile } from './screens/profile.js';
 import { renderShopping } from './screens/shopping.js';
 import { applyTheme } from './theme.js';
 import { onInstallChange } from './install.js';
+import { startSync, syncNow } from './sync.js';
+import { startPush } from './push.js';
+import { maybeAskReminders } from './screens/reminders.js';
+import { openConflict } from './screens/account.js';
 
 const ROUTES = {
   today: { label: 'היום', icon: 'today', render: renderToday },
@@ -137,6 +141,7 @@ export function render(force = false) {
     page.appendChild(h('div', { class: 'card notice warn' }, 'אירעה שגיאה בטעינת המסך. נסו לרענן.'));
   }
   page.classList.add('enter');
+  if (name === 'today') setTimeout(() => { if (lastKey === 'route:today') window.dispatchEvent(new Event('app:ready-for-reminders')); }, 1500);
 }
 
 function runCleanup() {
@@ -195,9 +200,33 @@ async function boot() {
   updateOnline();
   onInstallChange(() => { if (lastKey === 'route:today' || lastKey === 'route:profile') rerender(); });
 
+  // Cloud account: finish a Google sign-in that just returned, then sync.
+  // Coming back from sign-in waits for the data, so a new device opens on
+  // the restored plan instead of flashing the registration screens.
+  let signIn = null;
+  try { signIn = await startSync(); } catch (e) { console.warn('sync start failed', e); }
+  let first = null;
+  if (signIn && signIn.ok) {
+    first = await Promise.race([syncNow(), new Promise((r) => setTimeout(() => r({ slow: true }), 20000))]);
+  }
+
   document.getElementById('splash')?.remove();
   render(true);
   registerSW();
+  startPush();
+  // After setup is finished: offer daily reminders once, from the Today screen
+  // (not over the weekly photo, the summary or a half-finished form).
+  window.addEventListener('app:ready-for-reminders', () => maybeAskReminders());
+
+  if (signIn && signIn.error) toast(signIn.error === 'denied' ? 'ההתחברות בוטלה.' : 'ההתחברות נכשלה. נסו שוב.');
+  if (signIn && signIn.ok) {
+    if (first && first.conflict) openConflict();
+    else if (first && first.restored) toast(signIn.intent === 'signup' ? 'כבר היה לך חשבון — הנתונים נטענו.' : 'הנתונים שלך נטענו מהחשבון');
+    else if (!store.isOnboarded()) toast(signIn.intent === 'signup' ? 'החשבון נוצר! בואו נבנה את התוכנית שלך.' : 'לא נמצא חשבון עם נתונים — נתחיל ביצירת תוכנית חדשה.');
+    else toast('התחברת — הנתונים מגובים בחשבון');
+  } else {
+    syncNow().then((r) => { if (r && r.conflict) openConflict(); });
+  }
 }
 
 function registerSW() {

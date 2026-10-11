@@ -96,16 +96,41 @@ test('a provider that rejects response_format is asked again without it', async 
   assert.equal(r.engine, 'groq');
 });
 
-test('images only go to engines that can see them, and never to Anthropic by default', async () => {
+test('images only go to engines that can see them; for plates Anthropic is the last resort', async () => {
   const env = { ...KEYS, ANTHROPIC_API_KEY: 'k' };
   const order = __test.ordered(env, 'mealphoto', { image: true });
   assert.ok(!order.includes('cerebras'), 'text-only provider');
-  assert.ok(!order.includes('anthropic'));
+  assert.equal(order.at(-1), 'anthropic', 'tried only after every free engine');
   assert.ok(order.includes('google') && order.includes('groq'));
-  assert.equal(hasEngine({ ANTHROPIC_API_KEY: 'k' }, 'mealphoto', { image: true }), false);
+  assert.equal(hasEngine({ ANTHROPIC_API_KEY: 'k' }, 'mealphoto', { image: true }), true, 'Anthropic alone can serve it');
   assert.equal(hasEngine({ CEREBRAS_API_KEY: 'k' }, 'mealphoto', { image: true }), false);
-  assert.equal(hasEngine({ ANTHROPIC_API_KEY: 'k', MEALPHOTO_ALLOW_ANTHROPIC: '1' }, 'mealphoto', { image: true }), true);
+  assert.equal(hasEngine({ ANTHROPIC_API_KEY: 'k', MEALPHOTO_ALLOW_ANTHROPIC: '0' }, 'mealphoto', { image: true }), false, 'the opt-out switch');
   assert.equal(hasEngine({ ANTHROPIC_API_KEY: 'k' }, 'chat'), true);
+});
+
+test('body fat is the other way round: Anthropic first, the free vision engines after', async () => {
+  const env = { ...KEYS, ANTHROPIC_API_KEY: 'k' };
+  const order = __test.ordered(env, 'bodyfat', { image: true });
+  assert.equal(order[0], 'anthropic');
+  assert.ok(order.includes('google') && order.includes('groq') && !order.includes('cerebras'));
+  assert.deepEqual(__test.ordered({ GROQ_API_KEY: 'g' }, 'bodyfat', { image: true }), ['groq'], 'free engines alone can serve it');
+  assert.equal(hasEngine({}, 'bodyfat', { image: true }), false);
+});
+
+test('an empty Anthropic balance sends the next requests straight to the free engines', async () => {
+  const env = { GROQ_API_KEY: 'g', ANTHROPIC_API_KEY: 'k' };
+  let anthropicCalls = 0;
+  const spec = { system: 's', messages: [{ role: 'user', content: 'x' }], images: [{ label: 'front', data: 'QQ==' }], json: true, schema: { type: 'object' },
+    anthropic: async () => { anthropicCalls += 1; const e = new Error('400 {"type":"error","error":{"message":"Your credit balance is too low to access the Anthropic API."}}'); e.status = 400; throw e; } };
+  const t = net({ 'api.groq.com': '{"ok":true}' });
+  const first = await complete(env, 'bodyfat', spec, { fetchImpl: t.fetchImpl });
+  assert.equal(first.engine, 'groq');
+  assert.equal(anthropicCalls, 1);
+  const sent = t.calls[0].body.messages.at(-1).content;
+  assert.deepEqual(sent.map((p) => p.type), ['text', 'image_url', 'text'], 'the photo, with its label, goes to the free engine');
+  await complete(env, 'bodyfat', spec, { fetchImpl: t.fetchImpl });
+  assert.equal(anthropicCalls, 1, 'Anthropic is resting, not asked again');
+  assert.deepEqual(__test.ordered(env, 'bodyfat', { image: true }), ['groq', 'anthropic']);
 });
 
 test('ENGINES_<TASK> restricts which engines a task may use, in the order given', async () => {
@@ -144,13 +169,33 @@ test('chat works with no Anthropic key at all, and never leaks a key', async () 
   assert.deepEqual(health, { ok: true, configured: true, engines: ['groq'] });
 });
 
-test('body-fat photos go to Anthropic only, whatever free keys exist', async () => {
-  const t = net({ 'api.groq.com': '{}' });
-  const photos = ['front'].map((angle) => ({ angle, data: Buffer.from('x').toString('base64') }));
-  const req = () => new Request('https://nutri.example/api/bodyfat', { method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': '198.51.100.99' }, body: JSON.stringify({ photos, profile: {} }) });
+test('body fat: with only free keys the estimate still works, marked as an alternative service with lower confidence', async () => {
+  const out = { ok: true, estimate: 22.4, low: 19, high: 26, confidence: 'high', notes: 'x', issue: '' };
+  const t = net({ 'api.groq.com': JSON.stringify(out) });
+  const photos = ['front', 'left'].map((angle) => ({ angle, data: Buffer.from('x').toString('base64') }));
+  const req = () => new Request('https://nutri.example/api/bodyfat', { method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': '198.51.100.99' }, body: JSON.stringify({ photos, profile: { sex: 'male', bmiPriorPct: 19.6 } }) });
   const res = await handleApi(req(), { GROQ_API_KEY: 'gsk_x' }, { fetchImpl: t.fetchImpl });
-  assert.equal(res.status, 503, 'without an Anthropic key the estimate is unavailable');
-  assert.equal(t.calls.length, 0, 'the photos were not sent to any free provider');
+  const j = await res.json();
+  assert.equal(res.status, 200);
+  assert.deepEqual([j.ok, j.estimate, j.confidence, j.alt], [true, 22.4, 'medium', true], 'a free engine is never "high"');
+  const msg = t.calls[0].body.messages;
+  assert.ok(!JSON.stringify(msg).includes('22.4') && !/"estimate":\s*\d/.test(msg[0].content), 'no example number in the prompt');
+});
+
+test('body fat: Anthropic out of credits falls back to the free engines in the same request', async () => {
+  const out = { ok: true, estimate: 17.1, low: 14, high: 20, confidence: 'medium', notes: '', issue: '' };
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push(host(url));
+    if (host(url) === 'api.anthropic.com') return new Response(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'Your credit balance is too low to access the Anthropic API.' } }), { status: 400, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(out) }, finish_reason: 'stop' }] }), { status: 200 });
+  };
+  const photos = ['front'].map((angle) => ({ angle, data: Buffer.from('x').toString('base64') }));
+  const req = () => new Request('https://nutri.example/api/bodyfat', { method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': '198.51.100.98' }, body: JSON.stringify({ photos, profile: {} }) });
+  const j = await (await handleApi(req(), { ANTHROPIC_API_KEY: 'sk-ant-x', GROQ_API_KEY: 'gsk_x' }, { fetchImpl })).json();
+  assert.deepEqual([j.ok, j.estimate, j.alt], [true, 17.1, true]);
+  assert.equal(calls[0], 'api.anthropic.com', 'Anthropic was asked first');
+  assert.ok(calls.includes('api.groq.com'));
 });
 
 test('a provider that rejects reasoning_effort is asked again without it, and not asked again later', async () => {

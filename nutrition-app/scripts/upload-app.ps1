@@ -1,10 +1,11 @@
 ﻿# One-click upload for Windows: installs, signs in to Cloudflare, deploys,
 # stores the Claude key as a server secret, and hands back the app link.
-# Started by UPLOAD-APP.bat (double-click). Safe to run again to update the app.
+# Started by UPLOAD-PUBLIC.bat and UPLOAD-FRIENDS.bat (double-click). Safe to run again to update the app.
 #
 # Talks to the user through Hebrew dialog windows; the console only shows
 # progress. Saved as UTF-8 with BOM so Windows PowerShell 5.1 reads the Hebrew.
 
+param([string]$Flavor = '')
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -13,7 +14,9 @@ Add-Type -AssemblyName System.Drawing
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 $env:WRANGLER_SEND_METRICS = 'false'
-$Title = 'נוטרי — העלאת האפליקציה'
+$Names = @{ public = 'נוטרי (לקהל)'; friends = 'נוטרי חברים' }
+$Label = if ($Flavor -and $Names[$Flavor]) { $Names[$Flavor] } else { '' }
+$Title = 'נוטרי — העלאת האפליקציה' + $(if ($Label) { " — $Label" } else { '' })
 
 # ---------------- dialogs ----------------
 
@@ -109,7 +112,7 @@ function Run([string]$Exe, [string[]]$CmdArgs, $InputText = $null) {
 # ---------------- 0. welcome ----------------
 
 $welcome = @"
-שלום! הקובץ הזה יעלה את האפליקציה לאינטרנט כדי שתוכל להתקין אותה בטלפון.
+שלום! הקובץ הזה יעלה את האפליקציה $Label לאינטרנט כדי שתוכל להתקין אותה בטלפון.
 
 מה יקרה עכשיו (בערך 5 דקות):
 1. התקנת רכיבים — אוטומטי.
@@ -127,10 +130,24 @@ if ((Show-Message $welcome 'Information' 'OKCancel') -ne 'OK') { exit 0 }
 Step 'Checking Node.js'
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
   Start-Process 'https://nodejs.org'
-  Fail "לא מצאתי את Node.js במחשב.`n`nנפתח לך האתר nodejs.org — הורד את הגרסה LTS, התקן, ואז לחץ שוב פעמיים על UPLOAD-APP."
+  Fail "לא מצאתי את Node.js במחשב.`n`nנפתח לך האתר nodejs.org — הורד את הגרסה LTS, התקן, ואז לחץ שוב פעמיים על קובץ ההעלאה."
 }
 if (-not (Test-Path (Join-Path $Root 'package.json'))) {
-  Fail "הקובץ UPLOAD-APP צריך להיות בתוך תיקיית nutrition-app (ליד הקובץ package.json).`n`nחלץ את כל קובץ ה-zip ונסה שוב."
+  Fail "הקובץ קובץ ההעלאה צריך להיות בתוך תיקיית nutrition-app (ליד הקובץ package.json).`n`nחלץ את כל קובץ ה-zip ונסה שוב."
+}
+
+# ---------------- 1b. flavor (public / friends) ----------------
+# Each flavor is its own project with its own Worker name, so the two apps get
+# two different addresses and never share a server, a quota or a key.
+$LinkFile = 'APP-LINK.txt'
+if ($Flavor) {
+  if ($Flavor -notin @('public', 'friends')) { Fail "גרסה לא מוכרת: $Flavor" }
+  Step "Preparing the $Flavor app"
+  $b = Run 'node' @((Join-Path $Root 'scripts\make-flavor.mjs'), $Flavor)
+  if ($b.Code -ne 0) { Fail "הכנת הגרסה נכשלה. צלם את החלון השחור ושלח לי." }
+  $Root = Join-Path $Root "build\$Flavor"
+  Set-Location $Root
+  $LinkFile = "APP-LINK-$Flavor.txt"
 }
 
 # ---------------- 2. install ----------------
@@ -161,7 +178,7 @@ if ($who.Text -match 'not authenticated' -or $who.Code -ne 0) {
   & npx.cmd wrangler login
   $who = Run 'npx.cmd' @('wrangler', 'whoami')
   if ($who.Text -match 'not authenticated' -or $who.Code -ne 0) {
-    Fail "ההתחברות ל-Cloudflare לא הושלמה.`n`nלחץ שוב פעמיים על UPLOAD-APP ונסה שוב — והפעם לחץ Allow בדפדפן."
+    Fail "ההתחברות ל-Cloudflare לא הושלמה.`n`nלחץ שוב פעמיים על קובץ ההעלאה ונסה שוב — והפעם לחץ Allow בדפדפן."
   }
 }
 
@@ -218,7 +235,7 @@ while ($askKey) {
 "@
   $key = Ask-Text $prompt 'שמירת המפתח' 'פתח את האתר / דלג'
   if ($null -eq $key) {
-    $ans = Show-Message "לפתוח עכשיו את console.anthropic.com כדי ליצור מפתח?`n`n'כן' — נפתח האתר ואחזור לשאול.`n'לא' — נדלג. העוזר לא יעבוד עד שתריץ את UPLOAD-APP שוב עם מפתח." 'Question' 'YesNo'
+    $ans = Show-Message "לפתוח עכשיו את console.anthropic.com כדי ליצור מפתח?`n`n'כן' — נפתח האתר ואחזור לשאול.`n'לא' — נדלג. העוזר לא יעבוד עד שתריץ את קובץ ההעלאה שוב עם מפתח." 'Question' 'YesNo'
     if ($ans -eq 'Yes') { Start-Process 'https://console.anthropic.com/settings/keys'; continue }
     break
   }
@@ -281,7 +298,7 @@ $($f.Note)
 
 # ---------------- 6. done ----------------
 
-Set-Content -Path (Join-Path $Root 'APP-LINK.txt') -Value $url -Encoding UTF8
+Set-Content -Path (Join-Path $Root $LinkFile) -Value $url -Encoding UTF8
 try { Set-Clipboard -Value $url } catch { }
 Step "Done: $url"
 
@@ -291,7 +308,7 @@ $done = @"
 הקישור שלך:
 $url
 
-(הקישור הועתק, ונשמר גם בקובץ APP-LINK.txt בתיקייה.)
+(הקישור הועתק, ונשמר גם בקובץ $LinkFile בתיקייה.)
 
 איך מתקינים בטלפון:
 • אייפון: פתח את הקישור ב-Safari ← כפתור השיתוף ⬆ ← "הוספה למסך הבית".

@@ -1,16 +1,24 @@
 // Profile & settings.
 
 import { h, icon, sheet, toast, fmt, fmtDate, parseNum, ltr, signed } from '../util.js';
-import { metricsForm, segmented, stepper, disclaimer, dietNoteBox } from '../components.js';
+import { metricsForm, segmented, stepper, disclaimer, dietNoteBox, avatar } from '../components.js';
 import { GOALS, ACTIVITY } from '../nutrition.js';
 import { ALLERGENS, DIETS, FOODS, FOOD_BY_ID, parseDislikes, dislikeMatches } from '../foods.js';
 import { openFoodPicker, pickerLabel } from './food-picker.js';
-import { state, targets, activePeriod, currentMetrics, addMetrics, updateProfile, saveSettings, wipe, currentWeek } from '../store.js';
+import { state, targets, activePeriod, currentMetrics, addMetrics, updateProfile, saveSettings, wipe, currentWeek, setAvatar } from '../store.js';
 import { openPeriodReview } from './period.js';
 import { enableReminders, disableReminders, downloadCalendar, supported as notifSupported } from '../notify.js';
+import { disablePush, pushSupported, needsInstall } from '../push.js';
+import { openRemindersSheet } from './reminders.js';
 import { canInstall, isStandalone, promptInstall } from '../install.js';
 import { applyTheme } from '../theme.js';
-import { APP_VERSION } from '../config.js';
+import { APP_VERSION, BILLING } from '../config.js';
+import { openPaywall } from './paywall.js';
+import { aiStatus } from '../store.js';
+import { photoButtons } from './photo-picker.js';
+import { squareImage } from '../image.js';
+import { accountCard } from './account.js';
+import * as cloud from '../cloud.js';
 
 export function renderProfile(root) {
   const p = state.profile;
@@ -18,8 +26,38 @@ export function renderProfile(root) {
   const cur = currentMetrics();
   const t = targets();
 
-  root.appendChild(h('header', { class: 'page-head' },
-    h('div', null, h('h1', null, p.name), h('p', { class: 'muted' }, `נרשמת ב-${fmtDate(p.regDay, true)} · שבוע ${currentWeek()}`))));
+  root.appendChild(h('header', { class: 'profile-head' },
+    h('button', { class: 'avatar-btn', id: 'btn-avatar', 'aria-label': 'החלפת תמונת הפרופיל', onclick: editAvatar },
+      avatar(84), h('span', { class: 'avatar-badge' }, icon('camera', 16))),
+    h('div', { class: 'profile-id' },
+      h('h1', null, p.nickname || p.name),
+      p.nickname ? h('p', { class: 'muted' }, p.name) : null,
+      h('p', { class: 'muted small' }, `נרשמת ב-${fmtDate(p.regDay, true)} · שבוע ${currentWeek()}`))));
+
+  // ---- personal details (first: who this profile is) ----
+  root.appendChild(h('section', { class: 'card', id: 'details-card' },
+    h('div', { class: 'row space' }, h('h2', null, 'פרטים אישיים'), h('button', { class: 'btn btn-small btn-ghost', id: 'btn-edit-details', onclick: editDetails }, icon('edit', 16), 'עריכה')),
+    h('div', { class: 'kv' },
+      h('span', null, 'שם'), h('b', null, p.name),
+      h('span', null, 'כינוי'), h('b', { id: 'kv-nickname' }, p.nickname || '—'),
+      h('span', null, 'מין, גיל, גובה'), h('b', null, `${p.sex === 'female' ? 'אישה' : 'גבר'}, ${p.age}, ${p.height} ס״מ`),
+      h('span', null, 'פעילות'), h('b', null, `${ACTIVITY[p.activity].label} · ${p.workouts} אימונים בשבוע`))));
+
+  // ---- cloud account ----
+  root.appendChild(accountCard());
+
+  // ---- plan for the AI features ----
+  if (BILLING.enabled) {
+    const a = aiStatus();
+    root.appendChild(h('section', { class: 'card', id: 'plan-card' },
+      h('div', { class: 'row space' },
+        h('h2', null, 'נוטרי פלוס'),
+        h('span', { class: `badge ${a.state}` }, a.state === 'active' ? 'פעיל' : a.state === 'trial' ? 'ניסיון' : 'לא פעיל')),
+      h('p', { class: 'muted small' }, a.state === 'active' ? `המנוי פעיל עד ${fmtDate(new Date(a.until).toISOString().slice(0, 10))}.`
+        : a.state === 'trial' ? `עוד ${a.daysLeft} ימי ניסיון לעוזר החכם ולמצלמת הקלוריות.`
+          : 'העוזר החכם ומצלמת הקלוריות זמינים במנוי. כל השאר חינמי.'),
+      h('button', { class: 'btn btn-block btn-primary', id: 'btn-plan', onclick: () => openPaywall('') }, a.state === 'active' ? 'פרטי המנוי' : 'לשדרוג')));
+  }
 
   // ---- metrics ----
   root.appendChild(h('section', { class: 'card' },
@@ -50,11 +88,6 @@ export function renderProfile(root) {
   const diet = DIETS.find((x) => x.id === p.prefs.diet)?.label;
   const allergies = (p.prefs.allergies || []).map((a) => ALLERGENS.find((x) => x.id === a)?.label).join(', ') || 'אין';
   root.appendChild(h('section', { class: 'card' },
-    h('div', { class: 'row space' }, h('h2', null, 'פרטים אישיים'), h('button', { class: 'btn btn-small btn-ghost', onclick: editDetails }, icon('edit', 16), 'עריכה')),
-    h('div', { class: 'kv' },
-      h('span', null, 'מין, גיל, גובה'), h('b', null, `${p.sex === 'female' ? 'אישה' : 'גבר'}, ${p.age}, ${p.height} ס״מ`),
-      h('span', null, 'פעילות'), h('b', null, `${ACTIVITY[p.activity].label} · ${p.workouts} אימונים בשבוע`))));
-  root.appendChild(h('section', { class: 'card' },
     h('div', { class: 'row space' }, h('h2', null, 'העדפות תזונה'), h('button', { class: 'btn btn-small btn-ghost', onclick: editPrefs }, icon('edit', 16), 'עריכה')),
     h('div', { class: 'kv' },
       h('span', null, 'תזונה'), h('b', null, `${diet}${p.prefs.kosher ? ' · כשר' : ''}`),
@@ -74,11 +107,27 @@ export function renderProfile(root) {
       }
     },
   });
+  // Daily meal reminders (Web Push; see push.js). Turning on opens the sheet that asks permission.
+  const pushToggle = h('input', {
+    type: 'checkbox', role: 'switch', id: 'push-toggle', checked: !!state.settings.push, disabled: !pushSupported() && !needsInstall(),
+    onchange: async (e) => {
+      if (e.target.checked) {
+        e.target.checked = false;
+        openRemindersSheet({ onDone: () => window.dispatchEvent(new Event('app:rerender')) });
+      } else {
+        await disablePush();
+        toast('ההודעות כובו');
+      }
+    },
+  });
   root.appendChild(h('section', { class: 'card' },
     h('h2', null, 'הגדרות'),
     h('div', { class: 'field' }, h('span', null, 'מראה'),
       segmented([{ id: 'system', label: 'לפי המכשיר' }, { id: 'light', label: 'בהיר' }, { id: 'dark', label: 'כהה' }], state.settings.theme,
         async (v) => { await saveSettings({ theme: v }); applyTheme(v); }, 'ערכת צבעים')),
+    h('label', { class: 'switch-row' },
+      h('span', null, h('strong', null, 'הודעות מנוטרי'), !pushSupported() && needsInstall() ? h('small', { class: 'muted' }, 'באייפון: קודם מוסיפים את האפליקציה למסך הבית') : !pushSupported() ? h('small', { class: 'muted' }, 'המכשיר הזה לא תומך בהודעות') : null),
+      pushToggle),
     h('label', { class: 'switch-row' },
       h('span', null, h('strong', null, 'תזכורת שבועית לצילום'), h('small', { class: 'muted' }, notifSupported() ? 'התראה ביום הצילום (כשהדפדפן תומך)' : 'הדפדפן הזה לא תומך בהתראות — השתמשו ביומן')),
       remindersToggle),
@@ -99,9 +148,11 @@ export function renderProfile(root) {
   root.appendChild(h('section', { class: 'card' },
     h('h2', null, 'פרטיות'),
     h('ul', { class: 'bullets small' },
-      h('li', null, icon('lock', 16), 'כל הנתונים — כולל תמונות ומדדי גוף — נשמרים רק במכשיר הזה (IndexedDB). אין חשבון ואין שרת שמחזיק אותם.'),
+      cloud.signedIn()
+        ? h('li', null, icon('lock', 16), `הנתונים נשמרים במכשיר ובחשבון שלך בענן, שרק לך יש אליו גישה. תמונות ההתקדמות ${state.settings.photoBackup ? 'מגובות גם הן בחשבון.' : 'נשמרות רק במכשיר (גיבוי התמונות כבוי).'}`)
+        : h('li', null, icon('lock', 16), 'כל הנתונים — כולל תמונות ומדדי גוף — נשמרים רק במכשיר הזה. התחברות לחשבון שומרת עותק שלהם גם בענן.'),
       h('li', null, icon('chat', 16), 'בשאלה לעוזר נשלחים רק נתוני התזונה הנחוצים (גיל, מדדים, יעד, תפריט והגבלות) — בלי שם ובלי תמונות.'),
-      h('li', null, icon('info', 16), 'מחיקת האפליקציה או ניקוי נתוני האתר בדפדפן מוחקים גם את הנתונים.')),
+      h('li', null, icon('info', 16), cloud.signedIn() ? 'מחיקת כל הנתונים למטה מוחקת אותם גם מהחשבון בענן, כולל החשבון עצמו.' : 'מחיקת האפליקציה או ניקוי נתוני האתר בדפדפן מוחקים גם את הנתונים.')),
     storageInfo,
     h('button', { class: 'btn btn-danger btn-block', id: 'btn-delete-all', onclick: deleteAll }, icon('trash', 18), 'מחיקת כל הנתונים')));
 
@@ -111,10 +162,13 @@ export function renderProfile(root) {
 
 function editDetails() {
   const p = state.profile;
-  const d = { age: String(p.age), height: String(p.height), activity: p.activity, workouts: p.workouts, sex: p.sex };
+  const d = { name: p.name, nickname: p.nickname || '', age: String(p.age), height: String(p.height), activity: p.activity, workouts: p.workouts, sex: p.sex };
   sheet('עריכת פרטים', (close) => {
     const err = h('p', { class: 'field-err', role: 'alert' });
     return h('div', { class: 'form' },
+      h('div', { class: 'grid2' },
+        h('label', { class: 'field' }, h('span', null, 'שם'), h('input', { id: 'ed-name', autocomplete: 'given-name', value: d.name, oninput: (e) => { d.name = e.target.value; } })),
+        h('label', { class: 'field' }, h('span', null, 'כינוי'), h('input', { id: 'ed-nickname', placeholder: 'איך לפנות אליך?', maxlength: 20, value: d.nickname, oninput: (e) => { d.nickname = e.target.value; } }))),
       h('div', { class: 'field' }, h('span', null, 'מין'), segmented([{ id: 'male', label: 'גבר' }, { id: 'female', label: 'אישה' }], d.sex, (v) => { d.sex = v; }, 'מין')),
       h('div', { class: 'grid2' },
         h('label', { class: 'field' }, h('span', null, 'גיל'), h('input', { inputmode: 'numeric', value: d.age, oninput: (e) => { d.age = e.target.value; } })),
@@ -128,13 +182,29 @@ function editDetails() {
         onclick: async () => {
           const age = parseNum(d.age);
           const height = parseNum(d.height);
+          const name = d.name.trim();
+          if (name.length < 2) { err.textContent = 'יש להזין שם (לפחות 2 תווים).'; return; }
           if (!(age >= 16 && age <= 90) || !(height >= 120 && height <= 230)) { err.textContent = 'גיל 16–90, גובה 120–230 ס״מ.'; return; }
-          await updateProfile({ age, height, activity: d.activity, workouts: d.workouts, sex: d.sex });
+          await updateProfile({ name, nickname: d.nickname.trim().slice(0, 20), age, height, activity: d.activity, workouts: d.workouts, sex: d.sex });
           close();
           toast('הפרטים עודכנו והתוכנית חושבה מחדש');
         },
       }, 'שמירה'));
   });
+}
+
+function editAvatar() {
+  sheet('תמונת פרופיל', (close) => h('div', { class: 'form', id: 'avatar-sheet' },
+    h('div', { class: 'center' }, avatar(120)),
+    photoButtons(async (img) => {
+      await setAvatar(img);
+      close();
+      toast('תמונת הפרופיל עודכנה');
+    }, { process: squareImage, front: true, hint: false, busyText: 'מכין את התמונה…' }),
+    state.avatar ? h('button', {
+      class: 'btn btn-ghost btn-block', id: 'btn-avatar-remove',
+      onclick: async () => { await setAvatar(null); close(); toast('תמונת הפרופיל הוסרה'); },
+    }, icon('trash', 18), 'הסרת התמונה') : null));
 }
 
 function editPrefs() {
@@ -188,8 +258,18 @@ function deleteAll() {
     const input = h('input', { id: 'confirm-delete', placeholder: 'הקלידו: מחק', autocomplete: 'off' });
     const btn = h('button', { class: 'btn btn-danger btn-block', id: 'confirm-delete-btn', disabled: true }, 'מחיקה לצמיתות');
     input.addEventListener('input', () => { btn.disabled = input.value.trim() !== 'מחק'; });
+    const withCloud = cloud.signedIn();
     btn.addEventListener('click', async () => {
       btn.disabled = true;
+      if (withCloud) {
+        try {
+          await cloud.deleteAccount();
+        } catch {
+          btn.disabled = false;
+          toast('לא הצלחנו למחוק מהחשבון בענן (צריך חיבור לאינטרנט). שום דבר לא נמחק.');
+          return;
+        }
+      }
       try {
         await wipe();
       } catch {
@@ -202,7 +282,9 @@ function deleteAll() {
       location.reload();
     });
     return h('div', { class: 'form' },
-      h('p', null, 'הפעולה תמחק מהמכשיר את הפרופיל, התוכנית, כל המדדים, כל התמונות והשיחות. אי אפשר לשחזר.'),
+      h('p', null, withCloud
+        ? 'הפעולה תמחק מהמכשיר ומהחשבון בענן את הפרופיל, התוכנית, כל המדדים, כל התמונות והשיחות, ותסגור את החשבון. אי אפשר לשחזר.'
+        : 'הפעולה תמחק מהמכשיר את הפרופיל, התוכנית, כל המדדים, כל התמונות והשיחות. אי אפשר לשחזר.'),
       h('label', { class: 'field' }, h('span', null, 'לאישור הקלידו "מחק"'), input),
       btn);
   });

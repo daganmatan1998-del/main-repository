@@ -9,6 +9,8 @@ import { completeOnboarding } from '../store.js';
 import { pickPhoto } from './photo-picker.js';
 import { openBodyFatEstimator } from './bodyfat.js';
 import { openFoodPicker, pickerLabel } from './food-picker.js';
+import { cloudReady, currentUser } from '../cloud.js';
+import { entryNeeded, renderEntry, backToEntry } from './entry.js';
 
 const DRAFT_KEY = 'nutri-onboarding-draft';
 
@@ -33,7 +35,12 @@ function saveDraft(d) {
 const STEPS = 8;
 
 export function renderOnboarding(root) {
+  // First screen: sign in / create an account / guest (see entry.js).
+  if (entryNeeded()) { renderEntry(root); return; }
   const d = loadDraft();
+  // Signed in with Google but nothing to restore: start from their first name.
+  const u = currentUser();
+  if (!d.name && u && u.name) d.name = u.name.split(' ')[0];
   let baseline = null; // compressed image, kept in memory only
 
   const go = (n) => { d.step = n; saveDraft(d); draw(); window.scrollTo(0, 0); };
@@ -173,9 +180,10 @@ export function renderOnboarding(root) {
           h('h1', null, 'ברוכים הבאים לנוטרי'),
           h('p', { class: 'lead' }, 'תוכנית תזונה אישית לפי המטרה שלך — חיטוב, שמירה או מסה — עם תפריט יומי, עוזר תזונה חכם ומעקב התקדמות שבועי.'),
           h('ul', { class: 'bullets' },
-            h('li', null, icon('lock', 18), 'כל הנתונים והתמונות נשמרים רק במכשיר שלך.'),
+            h('li', null, icon('lock', 18), 'הנתונים שלך נשמרים במכשיר, ואם תרצו — גם בחשבון פרטי בענן.'),
             h('li', null, icon('camera', 18), 'פעם בשבוע: תמונת התקדמות ושקילה — זו חובה, וזה מה שעושה את ההבדל.'),
             h('li', null, icon('chat', 18), 'עוזר תזונה שמכיר את התפריט וההגבלות שלך.')),
+          cloudReady() && !currentUser() ? h('button', { type: 'button', class: 'btn btn-ghost', id: 'entry-back', onclick: backToEntry }, 'יש לי חשבון, או רוצה ליצור אחד') : null,
           disclaimer());
       case 1:
         return h('div', null,

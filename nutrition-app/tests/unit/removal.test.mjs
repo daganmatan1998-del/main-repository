@@ -164,3 +164,25 @@ test('meals stick to foods that belong in them, with one protein where one is en
   }
   assert.equal(doubles, 0, `${doubles}/${meals} meals with two proteins`);
 });
+
+test('a meal never repeats its main within the week, whatever the user\'s random seed', () => {
+  const plans = [
+    { diet: 'vegetarian', kosher: true, allergies: ['treenut'], dislikes: 'טונה, בטטה', excluded: [], mealsPerDay: 5 },
+    { diet: 'pescatarian', kosher: true, allergies: ['dairy'], dislikes: '', excluded: [], mealsPerDay: 5 },
+    { diet: 'omni', kosher: true, allergies: [], dislikes: '', excluded: [], mealsPerDay: 6 },
+  ];
+  const t = { calories: 1600, protein: 120, carbs: 160, fat: 55 };
+  for (const prefs of plans) {
+    for (let seed = 0; seed < 40; seed++) {
+      const days = [...Array(7)].map((_, d) => generateDay(addDays('2026-11-08', d), t, prefs, {}, seed, { week: 1, dayIndex: d }));
+      for (let mi = 0; mi < prefs.mealsPerDay; mi++) {
+        const mains = days.map((d) => d[mi].items.find((i) => i.slot === 'protein').foodId);
+        assert.equal(new Set(mains).size, 7, `${prefs.diet} seed ${seed} ${days[0][mi].name}: ${mains}`);
+      }
+      for (const d of days) {
+        const mains = d.map((m) => m.items.find((i) => i.slot === 'protein').foodId);
+        assert.equal(new Set(mains).size, mains.length, `${prefs.diet} seed ${seed}: one main twice in a day`);
+      }
+    }
+  }
+});

@@ -69,3 +69,31 @@ export async function compressImage(file) {
   }
   throw new ImageError('דחיסת התמונה נכשלה.');
 }
+
+// Profile picture: centre-cropped square, small enough to sync in a moment.
+export async function squareImage(file, side = 320) {
+  if (!file) throw new ImageError('לא נבחר קובץ.');
+  if (file.type && !file.type.startsWith('image/')) throw new ImageError('הקובץ שנבחר אינו תמונה.');
+  let src;
+  try {
+    src = await decode(file);
+  } catch {
+    throw new ImageError('לא ניתן לפתוח את התמונה. נסו תמונה אחרת.');
+  }
+  const w0 = src.width || src.naturalWidth;
+  const h0 = src.height || src.naturalHeight;
+  if (!w0 || !h0) throw new ImageError('התמונה ריקה או פגומה.');
+  const crop = Math.min(w0, h0);
+  const out = Math.min(side, crop);
+  const canvas = document.createElement('canvas');
+  canvas.width = out;
+  canvas.height = out;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, out, out);
+  ctx.drawImage(src, (w0 - crop) / 2, (h0 - crop) / 2, crop, crop, 0, 0, out, out);
+  if (src.close) src.close();
+  const blob = await toBlob(canvas, 0.85);
+  if (!blob) throw new ImageError('עיבוד התמונה נכשל.');
+  return { blob, width: out, height: out };
+}

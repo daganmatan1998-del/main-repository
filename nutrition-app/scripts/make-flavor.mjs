@@ -30,13 +30,22 @@ function build(name) {
     rmSync(join(out, d), { recursive: true, force: true });
     cpSync(join(ROOT, d), join(out, d), { recursive: true });
   }
-  for (const file of ['.env.example', '.gitignore']) cpSync(join(ROOT, file), join(out, file));
+  for (const file of ['.env.example', '.gitignore', 'README.md', 'UPLOAD-APP.bat', 'scripts/upload-app.ps1']) {
+    mkdirSync(dirname(join(out, file)), { recursive: true });
+    cpSync(join(ROOT, file), join(out, file));
+  }
+  rmSync(join(out, 'supabase'), { recursive: true, force: true });
+  cpSync(join(ROOT, 'supabase'), join(out, 'supabase'), { recursive: true });
 
   const www = join(out, 'www');
   const apiBase = String(f.apiBase || '').replace(/\/+$/, '');
 
   // Runtime config: which backend, which flavor.
   patch(join(www, 'js/config.js'), "export const API_BASE = '';", `export const API_BASE = ${JSON.stringify(apiBase)};\nexport const APP_FLAVOR = ${JSON.stringify(f.name)};`);
+
+  // Paid plan on/off. Off = every AI feature is open, no plan card, no paywall
+  // (aiAccess() returns active when BILLING.enabled is false).
+  if (f.billing === false) patch(join(www, 'js/config.js'), '  enabled: true,', '  enabled: false,');
 
   // Names the user sees.
   patch(join(www, 'index.html'), '<title>נוטרי — תוכנית תזונה אישית</title>', `<title>${f.title}</title>`);

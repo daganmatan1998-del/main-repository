@@ -8,6 +8,7 @@
     "dev": "node server/dev-server.mjs",
     "test": "node --test tests/unit/*.test.mjs",
     "test:e2e": "node tests/e2e/run.mjs",
+    "test:cloud": "node tests/e2e/cloud.mjs",
     "deploy": "wrangler deploy",
     "flavors": "node scripts/make-flavor.mjs all"
   },

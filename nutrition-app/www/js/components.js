@@ -1,14 +1,18 @@
 // Reusable UI pieces: macro rings/bars, meal cards, the swap sheet, metric forms.
 
-import { h, icon, sheet, toast, fmt, parseNum, ltr } from './util.js';
+import { h, icon, sheet, toast, fmt, parseNum, ltr, clear, normText } from './util.js';
 import { FOOD_BY_ID, household, ROLE_LABEL, canExclude, DIET_NOTES } from './foods.js';
 import { alternatives } from './substitutions.js';
-import { state, setOverride, excludeFood, today, clearPhotoMeal } from './store.js';
+import { state, setOverride, excludeFood, today, clearPhotoMeal, aiStatus, addDrink, updateDrink, removeDrink } from './store.js';
+import { extraFood, extraOptions, MAX_EXTRAS } from './extras.js';
+import { makeDrink, drinkTotals, DRINK_NAMES, SUGAR_TSP_KCAL } from './drinks.js';
 import { validBf } from './nutrition.js';
 import { openBodyFatEstimator } from './screens/bodyfat.js';
 import { openRecipes } from './screens/recipes.js';
 import { validRemoval } from './mealplan.js';
 import { openCalorieCamera } from './screens/calorie-cam.js';
+import { openPaywall } from './screens/paywall.js';
+import { canUseAI } from './billing.js';
 
 export function ring(value, target, label, sub) {
   const pct = target > 0 ? Math.min(1, value / target) : 0;
@@ -40,7 +44,7 @@ export function macroBar(name, cls, value, target) {
 const SWAP_LABEL = { protein: 'החלף חלבון', carb: 'החלף פחמימה', fat: 'החלף שומן', fruit: 'החלף פרי', veg: 'החלף ירק' };
 
 export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {}) {
-  const card = h('section', { class: 'card meal' + (eaten ? ' eaten' : '') });
+  const card = h('section', { class: 'card meal' + (eaten ? ' eaten' : ''), 'data-target-kcal': meal.target.kcal });
   const head = h('div', { class: 'meal-head' },
     h('div', null,
       h('h3', null, meal.name),
@@ -58,9 +62,11 @@ export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {
   if (camOk) {
     card.appendChild(h('button', {
       class: 'btn btn-block mc-open',
-      onclick: () => openCalorieCamera(meal, day),
-    }, icon('camera', 18), meal.eaten ? 'צילום מחדש במצלמת הקלוריות' : 'מצלמת קלוריות — צלמו את הצלחת'));
+      // A paid feature after the trial: locked shows the plan screen instead.
+      onclick: () => (canUseAI(aiStatus()) ? openCalorieCamera(meal, day) : openPaywall('camera')),
+    }, icon(canUseAI(aiStatus()) ? 'camera' : 'lock', 18), meal.eaten ? 'צילום מחדש במצלמת הקלוריות' : 'מצלמת קלוריות — צלמו את הצלחת'));
   }
+  if (camOk) card.appendChild(drinksBlock(meal, day));
   if (meal.eaten) return photoMealBody(card, meal, day);
 
   const list = h('ul', { class: 'items' });
@@ -84,6 +90,7 @@ export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {
     list.appendChild(li);
   }
   card.appendChild(list);
+  if (day && swaps) card.appendChild(extrasBlock(meal, day));
   if (day && swaps && meal.removable) card.appendChild(removalBar(meal, day));
   if (day) {
     card.appendChild(h('button', {
@@ -92,6 +99,155 @@ export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {
     }, h('span', { 'aria-hidden': 'true' }, '🍳'), 'מתכונים לארוחה'));
   }
   return card;
+}
+
+// ---------- drinks ----------
+// "What did you drink?" under every meal (today and past days). Free text,
+// plus two optional numbers: teaspoons of sugar per cup, and how many cups.
+// Drinks count toward the day's calories as soon as they're added.
+function ensureDrinkNames() {
+  if (document.getElementById('drink-names')) return;
+  const dl = h('datalist', { id: 'drink-names' }, ...DRINK_NAMES.map((n) => h('option', { value: n })));
+  document.body.appendChild(dl);
+}
+
+// Open/closed state of each meal's drinks heading, kept across redraws.
+const drinksOpen = new Set();
+
+function drinksBlock(meal, day) {
+  ensureDrinkNames();
+  const list = (state.logs[day] && state.logs[day].drinks && state.logs[day].drinks[meal.index]) || [];
+  const id = `${day}|${meal.index}`;
+  const open = drinksOpen.has(id);
+  const total = list.reduce((s, d) => s + drinkTotals(d).kcal, 0);
+  const wrap = h('div', { class: 'drinks' + (open ? ' open' : ''), 'data-meal': meal.index });
+  // A heading like the food groups: closed it shows what was logged, open it asks.
+  const body = h('div', { class: 'drinks-body', hidden: !open });
+  wrap.appendChild(h('button', {
+    type: 'button', class: 'drinks-head', 'aria-expanded': open ? 'true' : 'false',
+    onclick: (e) => {
+      const nowOpen = body.hidden;
+      body.hidden = !nowOpen;
+      wrap.classList.toggle('open', nowOpen);
+      e.currentTarget.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+      if (nowOpen) { drinksOpen.add(id); body.querySelector('.drink-name')?.focus(); } else drinksOpen.delete(id);
+    },
+  },
+    h('span', { class: 'role-dot role-drink' }),
+    h('span', { class: 'drinks-title' }, 'שתייה'),
+    list.length ? h('span', { class: 'drinks-sum muted num' }, `${list.length === 1 ? list[0].name : `${list.length} משקאות`} · ${total} קק״ל`) : h('span', { class: 'drinks-sum muted' }, 'מה שתיתם?'),
+    h('span', { class: 'drinks-chev', 'aria-hidden': 'true' }, icon('forward', 16))));
+  wrap.appendChild(body);
+  list.forEach((d, at) => {
+    const t = drinkTotals(d);
+    const detail = [d.count !== 1 ? `${fmt(d.count)} כוסות` : null, d.sugar ? `${fmt(d.sugar)} כפיות סוכר` : null].filter(Boolean).join(' · ');
+    const row = h('div', { class: 'drink-row' },
+      h('div', { class: 'drink-text' },
+        h('b', null, d.name),
+        detail ? h('span', { class: 'muted' }, ` · ${detail}`) : null),
+      h('span', { class: 'drink-kcal num' }, `${t.kcal} קק״ל`),
+      h('button', { type: 'button', class: 'icon-btn drink-del', 'aria-label': `הסרת ${d.name}`, onclick: () => removeDrink(day, meal.index, at) }, icon('close', 16)));
+    body.appendChild(row);
+    if (d.unknown) {
+      // Not in the table: the person can say how many calories a cup has.
+      const kc = h('input', { class: 'drink-kcal-in', type: 'text', inputmode: 'numeric', placeholder: '0', value: d.kcalCup || '', 'aria-label': 'קלוריות לכוס' });
+      kc.addEventListener('change', () => updateDrink(day, meal.index, at, { kcalCup: Math.max(0, parseNum(kc.value) || 0) }));
+      body.appendChild(h('label', { class: 'drink-unknown small muted' }, 'לא זיהיתי את המשקה. כמה קק״ל יש בכוס אחת? ', kc));
+    }
+  });
+  const name = h('input', { class: 'drink-name', type: 'text', list: 'drink-names', maxlength: 40, autocomplete: 'off', placeholder: 'מה שתיתם? (קפה, שוקו, קולה…)', 'aria-label': 'מה שתיתם' });
+  const sugar = h('input', { class: 'drink-sugar', type: 'text', inputmode: 'decimal', placeholder: '0', 'aria-label': 'כפיות סוכר' });
+  const count = h('input', { class: 'drink-count', type: 'text', inputmode: 'decimal', placeholder: '1', 'aria-label': 'כמה כוסות' });
+  const add = async () => {
+    if (!name.value.trim()) { toast('כתבו מה שתיתם'); name.focus(); return; }
+    const drink = makeDrink({ text: name.value, sugar: parseNum(sugar.value) || 0, count: parseNum(count.value) || 1 });
+    await addDrink(day, meal.index, drink);
+    toast(drink.unknown ? 'נוסף. לא זיהיתי את המשקה — אפשר להזין את הקלוריות שלו.' : `נוסף: ${drinkTotals(drink).kcal} קק״ל`);
+  };
+  name.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  body.appendChild(h('div', { class: 'drink-form' },
+    name,
+    h('div', { class: 'drink-opts' },
+      h('label', null, h('span', null, 'סוכר (כפיות)'), sugar),
+      h('label', null, h('span', null, 'כמה כוסות'), count),
+      h('button', { type: 'button', class: 'btn btn-small drink-add', onclick: add }, icon('plus', 16), 'הוספה'))));
+  return wrap;
+}
+
+// ---------- sauces and cheese ----------
+// Added by the person; their calories come off the rest of the meal.
+function extrasBlock(meal, day) {
+  const wrap = h('div', { class: 'extras' });
+  const cur = (meal.extras || []).map(({ foodId, grams }) => ({ foodId, grams }));
+  if (cur.length) {
+    const ul = h('ul', { class: 'extras-list' });
+    meal.extras.forEach((e, at) => {
+      const f = extraFood(e.foodId);
+      const half = Math.max(1, Math.round((f.serving || e.grams) / 2));
+      const set = (grams) => setOverride(day, meal.index, { extras: cur.map((x, i) => (i === at ? { ...x, grams } : x)).filter((x) => x.grams > 0) });
+      ul.appendChild(h('li', { class: 'extra' },
+        h('div', { class: 'extra-text' },
+          h('div', { class: 'item-name' }, f.name),
+          h('div', { class: 'item-amt' },
+            h('b', { class: 'num' }, `${fmt(e.grams)} ג׳`),
+            h('span', null, ` · ${household(f, e.grams)}`),
+            h('span', { class: 'muted num' }, ` · ${e.kcal} קק״ל`))),
+        h('div', { class: 'extra-ctl' },
+          h('button', { type: 'button', class: 'icon-btn extra-minus', 'aria-label': 'פחות', onclick: () => set(e.grams - half) }, icon('minus', 16)),
+          h('button', { type: 'button', class: 'icon-btn extra-plus', 'aria-label': 'יותר', onclick: () => set(e.grams + half) }, icon('plus', 16)),
+          h('button', { type: 'button', class: 'icon-btn extra-del', 'aria-label': `הסרת ${f.name}`, onclick: () => set(0) }, icon('close', 16)))));
+    });
+    wrap.appendChild(ul);
+    const kcal = meal.extras.reduce((s, e) => s + e.kcal, 0);
+    wrap.appendChild(h('p', { class: 'extras-note small' }, icon('info', 16), h('span', null, `${fmt(kcal)} קק״ל מהתוספות הופחתו משאר הארוחה, והארוחה נשארת על אותן קלוריות.`)));
+  }
+  wrap.appendChild(h('button', {
+    type: 'button', class: 'btn btn-block btn-ghost extras-add',
+    onclick: () => (cur.length >= MAX_EXTRAS ? toast(`אפשר להוסיף עד ${MAX_EXTRAS} תוספות לארוחה`) : openExtrasSheet(meal, day)),
+  }, icon('plus', 18), 'הוספת רוטב או גבינה'));
+  return wrap;
+}
+
+function openExtrasSheet(meal, day) {
+  const mealFoods = meal.items.map((i) => FOOD_BY_ID[i.foodId]);
+  const opts = extraOptions(state.profile.prefs, mealFoods);
+  const have = new Set((meal.extras || []).map((e) => e.foodId));
+  sheet('הוספת רוטב או גבינה', (close) => {
+    const search = h('input', { class: 'search', id: 'extra-search', type: 'search', placeholder: 'חיפוש: חרדל, טחינה, קוטג׳…', autocomplete: 'off', 'aria-label': 'חיפוש' });
+    const list = h('div', { class: 'extra-opts' });
+    const draw = () => {
+      clear(list);
+      const q = normText(search.value);
+      const hit = opts.filter((o) => !q || normText(`${o.food.name} ${(o.food.aliases || []).join(' ')}`).includes(q));
+      if (!hit.length) { list.appendChild(h('p', { class: 'empty' }, 'לא נמצא. נסו מילה אחרת.')); return; }
+      let lastGroup = '';
+      for (const o of hit) {
+        const g = o.light ? 'light' : o.group;
+        if (g !== lastGroup) {
+          lastGroup = g;
+          list.appendChild(h('h4', { class: 'extra-group' }, { light: 'דלי קלוריות', sauce: 'רטבים נוספים', cheese: 'גבינות' }[g]));
+        }
+        list.appendChild(h('div', { class: 'alt extra-opt' },
+          h('div', { class: 'alt-text' },
+            h('div', { class: 'alt-name' }, o.food.name),
+            h('div', { class: 'muted small num' }, `${household(o.food, o.serving)} · ${o.serving} ג׳ · ${o.kcal} קק״ל`)),
+          h('button', {
+            type: 'button', class: 'btn btn-small btn-primary', disabled: have.has(o.food.id),
+            onclick: async () => {
+              const next = [...(meal.extras || []).map(({ foodId, grams }) => ({ foodId, grams })), { foodId: o.food.id, grams: o.serving }];
+              await setOverride(day, meal.index, { extras: next });
+              close();
+              toast(`${o.food.name} נוסף — ${o.kcal} קק״ל הופחתו משאר הארוחה`);
+            },
+          }, have.has(o.food.id) ? 'נוסף' : 'הוספה')));
+      }
+    };
+    search.addEventListener('input', draw);
+    draw();
+    return h('div', null,
+      h('p', { class: 'muted small' }, 'הקלוריות של התוספת יורדות משאר הארוחה, כך שהארוחה נשארת על אותו תקציב. הדלי קלוריות מופיעים ראשונים.'),
+      search, list);
+  });
 }
 
 // A meal replaced by what the calorie camera saw: those items, read-only, with
@@ -193,7 +349,7 @@ export function openSwapSheet(item, meal, day, onAsk) {
       body.appendChild(h('p', { class: 'empty' }, 'אין תחליפים מתאימים במאגר עבור ההגבלות שלך. אפשר לשאול את העוזר.'));
     }
     const list = h('ul', { class: 'alt-list' });
-    const row = (o) => h('li', { class: 'alt' },
+    const row = (o) => h('li', { class: 'alt', 'data-food': o.foodId },
       h('div', { class: 'alt-text' },
         h('div', { class: 'alt-name' }, o.name),
         h('div', { class: 'alt-amt' }, h('b', { class: 'num' }, `${o.grams} ג׳`), ` · ${o.household}`),
@@ -207,21 +363,34 @@ export function openSwapSheet(item, meal, day, onAsk) {
           toast(`הוחלף ל${o.name}`);
         },
       }, 'החלף'));
-    for (const o of res.options.slice(0, SHOWN)) list.appendChild(row(o));
+    // Search: typing a name shows every matching food (all of the kind, not
+    // just the first few); empty shows the usual short list.
+    const search = h('input', { class: 'search', id: 'alt-search', type: 'search', placeholder: 'חיפוש מאכל…', autocomplete: 'off', 'aria-label': 'חיפוש מאכל' });
+    body.insertBefore(search, body.firstChild);
     body.appendChild(list);
-    // Every other food of the same kind, in one scrolling list.
-    if (res.options.length > SHOWN) {
-      const more = h('button', {
-        class: 'btn btn-block alt-all',
-        id: 'btn-all-alts',
-        onclick: () => {
-          for (const o of res.options.slice(SHOWN)) list.appendChild(row(o));
-          more.remove();
-          list.children[SHOWN]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        },
-      }, `לראות את כל האפשרויות (${res.options.length})`);
-      body.appendChild(more);
-    }
+    let expanded = false;
+    const more = h('button', {
+      class: 'btn btn-block alt-all',
+      id: 'btn-all-alts',
+      onclick: () => {
+        expanded = true;
+        draw();
+        list.children[SHOWN]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      },
+    }, `לראות את כל האפשרויות (${res.options.length})`);
+    const draw = () => {
+      clear(list);
+      const q = normText(search.value);
+      const names = (o) => normText(`${o.name} ${(FOOD_BY_ID[o.foodId] && FOOD_BY_ID[o.foodId].aliases || []).join(' ')}`);
+      const hit = q ? res.options.filter((o) => names(o).includes(q)) : expanded ? res.options : res.options.slice(0, SHOWN);
+      for (const o of hit) list.appendChild(row(o));
+      if (!hit.length) list.appendChild(h('li', { class: 'empty' }, 'לא נמצא מאכל כזה בין התחליפים. נסו מילה אחרת.'));
+      if (expanded) more.remove();
+      more.hidden = !!q || res.options.length <= SHOWN;
+    };
+    search.addEventListener('input', draw);
+    draw();
+    body.appendChild(more);
     body.appendChild(h('button', {
       class: 'btn btn-ghost btn-block danger-text',
       id: 'btn-never',
@@ -360,4 +529,19 @@ export function dietNoteBox(diet) {
   };
   update(diet);
   return { el, update };
+}
+
+// The profile picture, or the first letter of the nickname / name on a tinted
+// circle when there is none. Object URLs are freed once the image has loaded.
+export function avatar(size = 40) {
+  const p = state.profile || {};
+  const label = (p.nickname || p.name || '').trim();
+  const el = h('span', { class: 'avatar', style: { width: `${size}px`, height: `${size}px`, fontSize: `${Math.round(size * 0.42)}px` } });
+  if (state.avatar && state.avatar.blob) {
+    const url = URL.createObjectURL(state.avatar.blob);
+    el.appendChild(h('img', { src: url, alt: '', onload: () => setTimeout(() => URL.revokeObjectURL(url), 1000) }));
+  } else {
+    el.appendChild(h('span', { 'aria-hidden': 'true' }, label ? [...label][0] : '🙂'));
+  }
+  return el;
 }
