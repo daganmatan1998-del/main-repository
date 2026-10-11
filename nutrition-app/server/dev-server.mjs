@@ -58,7 +58,9 @@ async function toRequest(req) {
   return new Request(`http://${req.headers.host || 'localhost'}${req.url}`, { method: req.method, headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : body });
 }
 
-export function createServer({ env = process.env, fetchImpl } = {}) {
+// overrides: { '/js/config.js': (text) => text } lets the e2e tests serve a
+// file with different settings without touching www/.
+export function createServer({ env = process.env, fetchImpl, overrides = {} } = {}) {
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
@@ -79,7 +81,9 @@ export function createServer({ env = process.env, fetchImpl } = {}) {
         'content-type': TYPES[ext] || 'application/octet-stream',
         'cache-control': ext === '.html' || file.endsWith('sw.js') ? 'no-cache' : 'public, max-age=0',
       });
-      res.end(await readFile(file));
+      const body = await readFile(file);
+      const over = overrides[url.pathname];
+      res.end(over ? over(body.toString('utf8')) : body);
     } catch (e) {
       console.error(e);
       res.writeHead(500).end('server error');

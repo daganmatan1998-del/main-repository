@@ -251,7 +251,7 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
 
 - **Paid** ("נוטרי פלוס"): the assistant (chat, substitution questions, recipe ideas) and the calorie camera, the features that spend AI quota.
 - **Free:** everything else, including the body-fat estimate, the menu, recipes, shopping and swaps.
-- **Trial:** every user gets `BILLING.trialDays` (7) days of the AI features from registration. Then the assistant and the camera open the payment screen instead. A substitution question still gets the equivalents computed on the device.
+- **Trial:** every user gets `BILLING.trialDays` days (currently 0: no trial while testing; set it back to 7 to restore it) of the AI features from registration. Then the assistant and the camera open the payment screen instead. A substitution question still gets the equivalents computed on the device.
 - **Payment screen:**
   - two plans (prices are placeholders in `config.js`)
   - payment buttons for the device: **Apple Pay** on iPhone/iPad, **Google Pay** on Android, **card** and **PayPal** everywhere

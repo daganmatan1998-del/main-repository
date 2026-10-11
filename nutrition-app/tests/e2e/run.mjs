@@ -65,7 +65,9 @@ async function fakeAnthropic(url, init) {
 }
 
 // Chat uses the Anthropic stub; the calorie camera uses a stubbed free engine (Groq).
-const server = createServer({ env: { ANTHROPIC_API_KEY: 'sk-ant-e2e-fake', GROQ_API_KEY: 'gsk_e2e_fake', ENGINES_CHAT: 'anthropic', ENGINES_MEALPHOTO: 'groq' }, fetchImpl: fakeAnthropic });
+const server = createServer({ env: { ANTHROPIC_API_KEY: 'sk-ant-e2e-fake', GROQ_API_KEY: 'gsk_e2e_fake', ENGINES_CHAT: 'anthropic', ENGINES_MEALPHOTO: 'groq' }, fetchImpl: fakeAnthropic,
+  // The flows below exercise the AI during a 7-day trial, whatever www/ ships with.
+  overrides: { '/js/config.js': (t) => t.replace(/trialDays: \d+/, 'trialDays: 7') } });
 await new Promise((r) => server.listen(0, r));
 const PORT = server.address().port;
 const BASE = `http://localhost:${PORT}`;

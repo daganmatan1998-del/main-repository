@@ -7,7 +7,7 @@
 //          or wrapped with Capacitor (native apps have no same-origin server).
 export const API_BASE = '';
 
-export const APP_VERSION = '1.7.0';
+export const APP_VERSION = '1.7.1';
 
 // Paid plan for the AI features (assistant, recipe ideas, calorie camera).
 // The body-fat estimate and everything that runs on the device stay free.
@@ -15,7 +15,7 @@ export const APP_VERSION = '1.7.0';
 // until then the payment screen shows the options but cannot take payment.
 export const BILLING = {
   enabled: true,
-  trialDays: 7, // free AI days from registration; 0 = no trial
+  trialDays: 0, // free AI days from registration; 0 = no trial (off while testing; was 7)
   currency: '₪',
   plans: [
     { id: 'monthly', label: 'חודשי', price: 29.9, per: 'לחודש' },

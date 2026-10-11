@@ -69,7 +69,7 @@ export function openPaywall(feature = '') {
       : 'הכלים החכמים של נוטרי במנוי אחד.';
     const trialLine = access.state === 'trial'
       ? `נשארו ${access.daysLeft} ימים בתקופת הניסיון החינמית.`
-      : access.state === 'locked' ? 'תקופת הניסיון החינמית הסתיימה.' : 'המנוי שלך פעיל.';
+      : access.state === 'locked' ? (BILLING.trialDays ? 'תקופת הניסיון החינמית הסתיימה.' : 'העוזר החכם ומצלמת הקלוריות זמינים במנוי.') : 'המנוי שלך פעיל.';
 
     return h('div', { class: 'paywall', id: 'paywall' },
       h('p', { class: 'lead' }, intro),
