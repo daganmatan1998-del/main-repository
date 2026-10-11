@@ -15,7 +15,7 @@
 // good enough to spread load, not a global quota counter.
 
 const REST_MS = { quota: 5 * 60 * 1000, auth: 30 * 60 * 1000, down: 60 * 1000 };
-const TIMEOUT_MS = { text: 40_000, image: 60_000 };
+const TIMEOUT_MS = { text: 40_000, image: 45_000 };
 
 // Free OpenAI-compatible providers, best-quality first. Every model can be
 // overridden with <ENV>_MODEL / <ENV>_VISION_MODEL, because free-tier model
@@ -37,6 +37,10 @@ const POLICY = {
 };
 
 const rest = new Map(); // engine id -> time it may be tried again
+const slow = new Map(); // engine id -> until when it counts as slow
+const refuses = new Set(); // 'engine|param' the provider answered 400 to; not sent again
+const SLOW_MS = 25_000; // an answer slower than this sends the engine to the back for a while
+const SLOW_FOR = 10 * 60 * 1000;
 const turn = {}; // task -> rotation counter
 
 export class EngineError extends Error {
@@ -102,7 +106,13 @@ function ordered(env, task, spec) {
   }
   const now = Date.now();
   const awake = (e) => (rest.get(e.id) || 0) <= now;
-  return rotated.filter(awake).concat(paid.filter(awake), rotated.filter((e) => !awake(e)), paid.filter((e) => !awake(e)));
+  const quick = (e) => (slow.get(e.id) || 0) <= now;
+  // Awake and quick first; then awake but slow; engines that are resting last.
+  return rotated.filter((e) => awake(e) && quick(e)).concat(
+    paid.filter(awake),
+    rotated.filter((e) => awake(e) && !quick(e)),
+    rotated.filter((e) => !awake(e)),
+    paid.filter((e) => !awake(e)));
 }
 
 // ---- parsing and checking structured output ----
@@ -138,9 +148,10 @@ export function matchesSchema(v, schema) {
 // ---- one call ----
 
 function openAIMessages(spec, engine) {
-  const sys = spec.json && spec.schema
-    ? `${spec.system}\n\nReply with ONE JSON object only, no prose and no code fences, matching this JSON Schema exactly:\n${JSON.stringify(spec.schema)}`
-    : spec.system;
+  const shape = spec.example
+    ? `Reply with ONE JSON object only, no prose, no code fences, shaped exactly like this example:\n${spec.example}`
+    : spec.schema ? `Reply with ONE JSON object only, no prose, no code fences, matching this JSON Schema exactly:\n${JSON.stringify(spec.schema)}` : '';
+  const sys = spec.json && shape ? `${spec.system}\n\n${shape}` : spec.system;
   const messages = [{ role: 'system', content: sys }];
   spec.messages.forEach((m, i) => {
     const last = i === spec.messages.length - 1;
@@ -156,7 +167,7 @@ function openAIMessages(spec, engine) {
 
 async function viaOpenAI(engine, spec, fetchImpl) {
   const doFetch = fetchImpl || fetch;
-  const send = async (withFormat) => {
+  const send = async (withFormat, withEffort = !refuses.has(`${engine.id}|reasoning_effort`)) => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), spec.image ? TIMEOUT_MS.image : TIMEOUT_MS.text);
     try {
@@ -169,6 +180,8 @@ async function viaOpenAI(engine, spec, fetchImpl) {
           messages: openAIMessages(spec, engine),
           max_tokens: spec.maxTokens || 3000,
           ...(spec.json ? { temperature: 0.2 } : {}),
+          // A quick look at a plate needs no long reasoning: models that think first are the slow ones.
+          ...(spec.fast && withEffort ? { reasoning_effort: 'low' } : {}),
           ...(withFormat ? { response_format: { type: 'json_object' } } : {}),
         }),
       });
@@ -176,9 +189,17 @@ async function viaOpenAI(engine, spec, fetchImpl) {
       clearTimeout(timer);
     }
   };
-  let res = await send(!!spec.json);
-  // Some providers don't take response_format: ask again without it.
-  if (res.status === 400 && spec.json) res = await send(false);
+  let res = await send(!!spec.json && !refuses.has(`${engine.id}|response_format`));
+  // A 400 usually means the provider doesn't take one of the optional
+  // parameters. Drop them one at a time, and remember so it isn't asked again.
+  if (res.status === 400 && spec.fast && !refuses.has(`${engine.id}|reasoning_effort`)) {
+    refuses.add(`${engine.id}|reasoning_effort`);
+    res = await send(!!spec.json && !refuses.has(`${engine.id}|response_format`), false);
+  }
+  if (res.status === 400 && spec.json && !refuses.has(`${engine.id}|response_format`)) {
+    refuses.add(`${engine.id}|response_format`);
+    res = await send(false, false);
+  }
   if (!res.ok) {
     const detail = (await res.text().catch(() => '')).slice(0, 200);
     throw new EngineError(res.status, `http_${res.status}`, detail);
@@ -219,6 +240,7 @@ export async function complete(env, task, spec, { fetchImpl } = {}) {
   if (!chain.length) throw new EngineError(503, 'not_configured');
   let last = null;
   for (const engine of chain) {
+    const started = Date.now();
     try {
       let r;
       if (engine.kind === 'anthropic') {
@@ -235,6 +257,8 @@ export async function complete(env, task, spec, { fetchImpl } = {}) {
         r.text = JSON.stringify(parsed);
       }
       rest.delete(engine.id);
+      if (Date.now() - started > SLOW_MS) slow.set(engine.id, Date.now() + SLOW_FOR);
+      else slow.delete(engine.id);
       return { ...r, engine: engine.id };
     } catch (e) {
       last = e;
@@ -248,7 +272,7 @@ export async function complete(env, task, spec, { fetchImpl } = {}) {
 }
 
 export const __test = {
-  reset() { rest.clear(); for (const k of Object.keys(turn)) delete turn[k]; },
+  reset() { rest.clear(); slow.clear(); refuses.clear(); for (const k of Object.keys(turn)) delete turn[k]; },
   resting: () => [...rest.keys()],
   ordered: (env, task, spec = {}) => ordered(env, task, spec).map((e) => e.id),
 };

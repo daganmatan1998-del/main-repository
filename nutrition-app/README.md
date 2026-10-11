@@ -236,6 +236,12 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
 - **Rotation:** requests rotate across the free engines, so each provider's allowance is used evenly.
 - **Resting:** a provider that answers 429/402 rests for 5 minutes, a rejected key for 30, an outage for 1. The request moves on to the next engine. A request too big for one provider (413/400) doesn't make it rest. State is per Worker instance, like the rate limiter.
 - **Structured output (calorie camera):** the JSON schema goes in the prompt, with `response_format: json_object` where the provider accepts it (retried without it otherwise). Fenced or chatty replies are cleaned, and an answer of the wrong shape moves on to the next engine.
+- **Light on quota and fast (calorie camera):**
+  - **Image:** 768 px at JPEG quality 0.65, a fraction of the size of the first version (1280 px, 0.8).
+  - **Request text:** the app's foods go as ids only (not Hebrew names), and the prompt is short, with a one-line example in place of the full JSON schema. About 65% fewer text characters per request.
+  - **Output:** capped at 1,500 tokens and 12 items.
+  - **Reasoning:** `reasoning_effort: low`, since a quick look at a plate needs no long reasoning. A provider that answers 400 to it (or to `response_format`) is asked again without it and remembered.
+  - **Slow engines:** an engine that takes over 25 s goes to the back of the rotation for 10 minutes, and the per-engine timeout for images is 45 s.
 - **Free engines are weaker:** the calorie camera never reports "high" confidence from one, calories that contradict an item's own macros are pulled toward them and the item is flagged, and the result screen says it came from a free model. The user edits the list anyway.
 - **One key per provider.** Several accounts at one provider to get around its limit breaks its terms and can get every key blocked.
 - **Free-tier model names change.** Override any with `<VENDOR>_MODEL` / `<VENDOR>_VISION_MODEL`, and limit a task with `ENGINES_CHAT=google,groq` / `ENGINES_MEALPHOTO=...`.
@@ -256,7 +262,7 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
 ## Tests
 
 ```bash
-npm test              # 60 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
+npm test              # 62 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
 npm run test:e2e      # 176 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 ```
 

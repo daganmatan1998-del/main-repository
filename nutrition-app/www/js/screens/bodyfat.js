@@ -40,28 +40,28 @@ function silhouette(angle) {
 }
 
 // Downscales a frame (video, image or bitmap) to a JPEG and returns base64.
-export async function toJpeg(source, w, h, maxSide = 1024) {
+export async function toJpeg(source, w, h, maxSide = 1024, quality = 0.8) {
   const scale = Math.min(1, maxSide / Math.max(w, h));
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(w * scale);
   canvas.height = Math.round(h * scale);
   canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.8));
+  const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', quality));
   const buf = new Uint8Array(await blob.arrayBuffer());
   let s = '';
   for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000));
   return { b64: btoa(s), url: URL.createObjectURL(blob) };
 }
 
-export async function fileToJpeg(file, maxSide = 1024) {
+export async function fileToJpeg(file, maxSide = 1024, quality = 0.8) {
   const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => null);
-  if (bmp) return toJpeg(bmp, bmp.width, bmp.height, maxSide);
+  if (bmp) return toJpeg(bmp, bmp.width, bmp.height, maxSide, quality);
   const url = URL.createObjectURL(file);
   try {
     const img = new Image();
     img.src = url;
     await img.decode();
-    return toJpeg(img, img.naturalWidth, img.naturalHeight, maxSide);
+    return toJpeg(img, img.naturalWidth, img.naturalHeight, maxSide, quality);
   } finally {
     URL.revokeObjectURL(url);
   }

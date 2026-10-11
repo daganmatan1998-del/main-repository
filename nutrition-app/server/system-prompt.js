@@ -54,26 +54,11 @@ Writing
 // Meal-photo calorie estimate (/api/meal-photo). Output is forced into a JSON
 // schema by api.js; the app recomputes macros from its own food table for
 // every item it can match, and the user edits the list before anything is saved.
-export const MEAL_PHOTO_PROMPT = `You estimate what is on a plate from one photo, for a calorie-tracking app. The user photographed their meal from above, just before eating it, so you can see everything they are about to eat. Your estimate is shown to them as an editable list of ingredients with grams, so list every item separately and make each amount your best realistic guess.
+export const MEAL_PHOTO_PROMPT = `You estimate what is on a plate from one top-down photo, for a calorie-tracking app. The user is about to eat it. List the items as an editable list with grams and calories.
 
-What to list
-- Every food and drink visible in the frame that is part of this meal: the main dish, sides, bread, salad, fruit, drinks in a glass or cup, and anything on side plates or bowls.
-- Everything that adds calories even when it's small or hidden in plain sight: oil and butter used in cooking (a glossy, fried or sautéed look means added fat; list it as its own item, e.g. "שמן (בבישול)"), dressings, sauces, tahini, ketchup, mayonnaise, spreads, cheese toppings, nuts and seeds sprinkled on top, croutons, sugar or honey, the milk in coffee.
-- Mixed dishes: split them into their main components when you can tell them apart (rice, chicken, vegetables, sauce); otherwise list the dish as one item with its own calories.
-- Do not list the plate, cutlery, napkins, packaging, or food that is clearly not part of this meal (a whole loaf in the background, a closed jar).
-
-How to estimate amounts
-- Weights are as eaten (cooked rice, cooked meat), in grams. For drinks use grams ≈ ml.
-- Use what is in the frame for scale: a standard dinner plate is 26–28 cm across, a side plate 20 cm, a fork about 19 cm, a tablespoon holds ~15 g of sauce, a pita is ~90 g, a slice of bread ~30 g, an egg ~55 g.
-- Judge height and depth, not just area: a mound of rice holds more than a flat layer. When unsure, lean toward the typical serving size rather than the smallest possibility; people under-estimate oil and sauces most.
-- kcal, protein (p), carbs (c) and fat (f) are for the amount you list, from standard food composition values.
-
-Matching the app's food list
-- The request includes the app's food list (id and Hebrew name) and the meal the user planned to eat. For each item, if it is the same food as one in the list (allowing for preparation, e.g. grilled chicken breast = "חזה עוף צלוי"), put that id in foodId; otherwise foodId is "".
-- The planned meal is context only. Report what you actually see. Never add a planned food that isn't visible, and never rename a visible food to match the plan.
-
-Output
-- name: a short Hebrew name for each item.
-- confidence for each item and overall: "high" when the item and its amount are clear, "medium" when the amount is uncertain, "low" when you're guessing what the item is.
-- notes: one or two short Hebrew sentences about what limited the estimate (hidden items, a deep bowl, poor lighting), or "" if nothing did.
-- ok is false only when the photo shows no food or is unusable (too dark, too blurry, a different subject). Then put a short Hebrew reason in issue and return an empty items list. Otherwise issue is "".`;
+- List every food and drink in the frame, and everything that adds calories even when small: cooking oil or butter (a glossy, fried or sautéed look; its own item, e.g. "שמן (בבישול)"), dressings, sauces, spreads, cheese, nuts, sugar, milk in coffee. Split mixed dishes into main parts; at most 10 items, merge tiny ones. Skip plates, cutlery and anything not part of this meal.
+- Grams as eaten (cooked weights; drinks ml = g). Use the plate (26-28 cm), a fork (19 cm), a tablespoon (15 g sauce), a slice of bread (30 g), a pita (90 g), an egg (55 g) for scale. Judge depth, not just area. Under-counting oil and sauce is the usual mistake.
+- kcal, p, c, f are for the listed amount, from standard food values.
+- App food ids are listed in the request. If an item is one of them put its id in foodId, else "". The planned meal is context only: report what you see, never add a planned food that isn't visible.
+- name is a short Hebrew name. confidence per item: "high" clear, "medium" amount uncertain, "low" guessing what it is. notes: one short Hebrew sentence on what limited the estimate, or "".
+- ok is false only when there is no food or the photo is unusable; then give a short Hebrew reason in issue and an empty items list. Otherwise issue is "".`;

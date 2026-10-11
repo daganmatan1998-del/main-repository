@@ -152,3 +152,40 @@ test('body-fat photos go to Anthropic only, whatever free keys exist', async () 
   assert.equal(res.status, 503, 'without an Anthropic key the estimate is unavailable');
   assert.equal(t.calls.length, 0, 'the photos were not sent to any free provider');
 });
+
+test('a provider that rejects reasoning_effort is asked again without it, and not asked again later', async () => {
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    const b = JSON.parse(init.body);
+    seen.push(b.reasoning_effort ? 'effort' : 'plain');
+    if (b.reasoning_effort) return new Response('{}', { status: 400 });
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"a":1}' }, finish_reason: 'stop' }] }), { status: 200 });
+  };
+  const spec = { ...CHAT, json: true, fast: true, schema: { type: 'object' } };
+  await complete({ MISTRAL_API_KEY: 'a' }, 'chat', spec, { fetchImpl });
+  await complete({ MISTRAL_API_KEY: 'a' }, 'chat', spec, { fetchImpl });
+  assert.deepEqual(seen, ['effort', 'plain', 'plain'], 'the second request goes straight to the form it accepts');
+});
+
+test('an engine that takes too long goes to the back for a while', async () => {
+  const realNow = Date.now;
+  let t = realNow();
+  Date.now = () => t;
+  try {
+    const fetchImpl = async (url) => {
+      if (host(url) === 'api.groq.com') t += 40_000; // 40 s answer
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] }), { status: 200 });
+    };
+    const env = { GROQ_API_KEY: 'a', MISTRAL_API_KEY: 'b', ENGINES_CHAT: '' };
+    for (let i = 0; i < 6; i++) await complete(env, 'chat', CHAT, { fetchImpl });
+    const next = [];
+    for (let i = 0; i < 6; i++) next.push((await complete(env, 'chat', CHAT, { fetchImpl })).engine);
+    assert.ok(next.every((e) => e === 'mistral'), `slow engine was still used: ${next}`);
+    t += 11 * 60 * 1000;
+    const later = new Set();
+    for (let i = 0; i < 6; i++) later.add((await complete(env, 'chat', CHAT, { fetchImpl })).engine);
+    assert.ok(later.has('groq'), 'it gets another chance after a while');
+  } finally {
+    Date.now = realNow;
+  }
+});

@@ -304,7 +304,9 @@ const MEAL_PHOTO_SCHEMA = {
   required: ['ok', 'items', 'confidence', 'notes', 'issue'],
   additionalProperties: false,
 };
-const MAX_MEAL_BODY = 1.5 * 1024 * 1024; // one photo plus the food list
+// What the model is shown instead of the full JSON Schema (a fifth of the tokens).
+const MEAL_PHOTO_EXAMPLE = '{"ok":true,"items":[{"name":"אורז","grams":150,"kcal":195,"p":4,"c":42,"f":0.5,"foodId":"white_rice","confidence":"high"}],"confidence":"medium","notes":"","issue":""}';
+const MAX_MEAL_BODY = 1.5 * 1024 * 1024; // one photo plus the food ids
 
 // /api/meal-photo — "calorie camera": one top-down photo of a plate, returned
 // as an editable list of items with grams and macros. The photo is forwarded
@@ -319,15 +321,16 @@ export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
     return json(400, { error: 'bad_photo' }, cors);
   }
   const str = (v, n) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f]/g, ' ').slice(0, n) : '');
+  // Food ids only (snake_case English, short): names would cost five times the tokens.
+  const idOk = (v) => typeof v === 'string' && /^[a-z0-9_]{1,40}$/.test(v);
   const foods = (Array.isArray(body.foods) ? body.foods : []).slice(0, 300)
-    .filter((f) => f && typeof f.id === 'string' && /^[a-z0-9_]{1,40}$/.test(f.id))
-    .map((f) => ({ id: f.id, name: str(f.name, 60) }));
+    .map((f) => (f && typeof f === 'object' ? f.id : f)).filter(idOk);
   const planned = (Array.isArray(body.planned) ? body.planned : []).slice(0, 20)
-    .map((i) => ({ name: str(i && i.name, 60), grams: typeof (i && i.grams) === 'number' ? Math.round(i.grams) : null }))
+    .map((i) => ({ id: idOk(i && i.id) ? i.id : '', name: str(i && i.name, 60), grams: typeof (i && i.grams) === 'number' ? Math.round(i.grams) : null }))
     .filter((i) => i.name);
   const mealName = str(body.meal, 40);
 
-  const ask = `Meal: ${mealName || 'unknown'}\nPlanned (context only): ${JSON.stringify(planned)}\nApp food list: ${JSON.stringify(foods)}\nList everything on the plate. Reply with the JSON object only.`;
+  const ask = `Meal: ${mealName || 'unknown'}\nPlanned (context only): ${JSON.stringify(planned)}\nApp food ids: ${foods.join(',')}\nJSON only.`;
 
   try {
     const r = await complete(env, 'mealphoto', {
@@ -336,13 +339,15 @@ export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
       image: photo,
       json: true,
       schema: MEAL_PHOTO_SCHEMA,
-      maxTokens: 4000,
+      example: MEAL_PHOTO_EXAMPLE,
+      maxTokens: 1500,
+      fast: true,
       // Only when MEALPHOTO_ALLOW_ANTHROPIC=1: by default the calorie camera never spends Anthropic credits.
       anthropic: async () => {
         const response = await clientFor(env, fetchImpl).beta.messages.create({
           model: env.CLAUDE_MODEL || MODEL,
-          max_tokens: 4000,
-          output_config: { effort: 'medium', format: { type: 'json_schema', schema: MEAL_PHOTO_SCHEMA } },
+          max_tokens: 1500,
+          output_config: { effort: 'low', format: { type: 'json_schema', schema: MEAL_PHOTO_SCHEMA } },
           betas: ['server-side-fallback-2026-07-01'],
           fallbacks: 'default',
           system: MEAL_PHOTO_PROMPT,
@@ -361,10 +366,10 @@ export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
     let out;
     try { out = JSON.parse(r.text); } catch { return json(502, { error: 'bad_model_output' }, cors); }
     if (!out.ok) return json(200, { ok: false, issue: str(out.issue, 300) || 'לא זוהה אוכל בתמונה.' }, cors);
-    const known = new Set(foods.map((f) => f.id));
+    const known = new Set(foods);
     const num = (v, hi) => Math.round(Math.min(hi, Math.max(0, Number(v) || 0)) * 10) / 10;
     const conf = (v) => (['low', 'medium', 'high'].includes(v) ? v : 'low');
-    const items = (Array.isArray(out.items) ? out.items : []).slice(0, 25)
+    const items = (Array.isArray(out.items) ? out.items : []).slice(0, 12)
       .map((i) => ({
         name: str(i.name, 60).trim(),
         grams: Math.round(num(i.grams, 3000)),

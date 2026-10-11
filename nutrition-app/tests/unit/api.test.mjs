@@ -153,8 +153,8 @@ const mpReq = (body) => new Request('https://nutri.example/api/meal-photo', {
 const mpBody = {
   photo: PHOTO,
   meal: 'ארוחת צהריים',
-  planned: [{ name: 'חזה עוף צלוי', grams: 150 }, { name: 'אורז לבן מבושל', grams: 180 }],
-  foods: [{ id: 'chicken_breast', name: 'חזה עוף צלוי' }, { id: 'white_rice', name: 'אורז לבן מבושל' }, { id: 'bad id!', name: 'x' }],
+  planned: [{ id: 'chicken_breast', name: 'חזה עוף צלוי', grams: 150 }, { id: 'white_rice', name: 'אורז לבן מבושל', grams: 180 }],
+  foods: ['chicken_breast', 'white_rice', 'bad id!'],
 };
 const mpItem = (o) => ({ name: 'x', grams: 100, kcal: 100, p: 1, c: 1, f: 1, foodId: '', confidence: 'medium', ...o });
 
@@ -205,12 +205,17 @@ test('meal-photo: sends the photo with the plan and food list to a free engine a
   assert.match(c.body.model, /llama-4|scout/i, 'the vision model, not the text model');
   assert.equal(c.body.response_format.type, 'json_object');
   assert.equal(c.body.messages[0].role, 'system');
-  assert.match(c.body.messages[0].content, /JSON Schema/);
+  assert.match(c.body.messages[0].content, /shaped exactly like this example/);
   const user = c.body.messages[1].content;
   assert.equal(user[0].type, 'image_url');
   assert.match(user[0].image_url.url, /^data:image\/jpeg;base64,/);
   assert.match(user[1].text, /חזה עוף צלוי/);
+  assert.match(user[1].text, /App food ids: chicken_breast,white_rice\n/);
   assert.ok(!user[1].text.includes('bad id!'), 'invalid food ids never reach the model');
+  assert.ok(user[1].text.length < 400, 'the request text stays small');
+  assert.equal(c.body.reasoning_effort, 'low');
+  assert.ok(c.body.max_tokens <= 1500);
+  assert.ok(!c.body.messages[0].content.includes('"properties"'), 'a short example, not the full JSON Schema');
 });
 
 test('meal-photo: never uses Anthropic unless explicitly allowed', async () => {

@@ -40,11 +40,7 @@ async function fakeAnthropic(url, init) {
     const user = body.messages[1].content;
     const ctx = user.find((b) => b.type === 'text').text;
     const planned = JSON.parse(ctx.match(/Planned \(context only\): (.*)/)[1]);
-    const foods = JSON.parse(ctx.match(/App food list: (.*)/)[1]);
-    const items = planned.map((p) => {
-      const f = foods.find((x) => x.name === p.name);
-      return { name: p.name, grams: p.grams, kcal: 100, p: 5, c: 10, f: 3, foodId: f ? f.id : '', confidence: 'high' };
-    });
+    const items = planned.map((p) => ({ name: p.name, grams: p.grams, kcal: 100, p: 5, c: 10, f: 3, foodId: p.id, confidence: 'high' }));
     if (mealPhotoMode === 'sauce') items.push({ name: 'רוטב שום', grams: 30, kcal: 150, p: 0.5, c: 2, f: 16, foodId: '', confidence: 'low' });
     const out = { ok: true, items, confidence: 'medium', notes: 'כמות הרוטב משוערת.', issue: '' };
     return new Response(JSON.stringify({

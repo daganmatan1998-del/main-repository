@@ -7,4 +7,4 @@
 //          or wrapped with Capacitor (native apps have no same-origin server).
 export const API_BASE = '';
 
-export const APP_VERSION = '1.6.0';
+export const APP_VERSION = '1.6.1';

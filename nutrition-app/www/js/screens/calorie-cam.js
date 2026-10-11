@@ -15,7 +15,10 @@ import { toJpeg, fileToJpeg } from './bodyfat.js';
 import { fromEstimate, custom, rename, withGrams, totalsOf, compareToPlan, record } from '../mealphoto.js';
 
 const CONFIDENCE = { low: 'נמוכה', medium: 'בינונית', high: 'גבוהה' };
-const MAX_SIDE = 1280; // enough detail to tell the sauce from the rice
+// Small on purpose: image tokens (and so free-tier quota and waiting time) grow with
+// the picture. 768 px still tells rice from sauce; a plate is large in the frame.
+const MAX_SIDE = 768;
+const QUALITY = 0.65;
 
 export function openCalorieCamera(meal, day) {
   const el = h('div', { class: 'overlay bf mc keep', role: 'dialog', 'aria-modal': 'true', 'aria-label': `מצלמת קלוריות — ${meal.name}` });
@@ -81,7 +84,7 @@ export function openCalorieCamera(meal, day) {
       if (!f) return;
       status.textContent = 'מעבד…';
       try {
-        shot = await fileToJpeg(f, MAX_SIDE);
+        shot = await fileToJpeg(f, MAX_SIDE, QUALITY);
         review();
       } catch {
         status.textContent = 'לא ניתן לפתוח את הקובץ. נסו תמונה אחרת.';
@@ -130,7 +133,7 @@ export function openCalorieCamera(meal, day) {
       if (!stream || !video.videoWidth) { status.textContent = 'המצלמה עוד נטענת…'; return; }
       shoot.disabled = true;
       stage.classList.add('flash');
-      shot = await toJpeg(video, video.videoWidth, video.videoHeight, MAX_SIDE);
+      shot = await toJpeg(video, video.videoWidth, video.videoHeight, MAX_SIDE, QUALITY);
       review();
     });
   }
@@ -164,8 +167,8 @@ export function openCalorieCamera(meal, day) {
         body: JSON.stringify({
           photo: shot.b64,
           meal: meal.name,
-          planned: meal.items.map((i) => ({ name: FOOD_BY_ID[i.foodId].name, grams: i.grams })),
-          foods: FOODS.map((f) => ({ id: f.id, name: f.name })),
+          planned: meal.items.map((i) => ({ id: i.foodId, name: FOOD_BY_ID[i.foodId].name, grams: i.grams })),
+          foods: FOODS.map((f) => f.id),
         }),
       });
       clearTimeout(t);
