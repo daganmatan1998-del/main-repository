@@ -1,10 +1,10 @@
 {
   "name": "friends",
   "appId": "app.nutri.planner.friends",
-  "appName": "נוטרי חברים",
-  "title": "נוטרי חברים — תוכנית תזונה אישית",
+  "appName": "פיטי",
+  "title": "פיטי — תוכנית תזונה אישית",
   "workerName": "nutri-friends",
   "apiBase": "",
   "allowedOrigins": "capacitor://localhost,https://localhost",
-  "themeColor": "#2b7a67"
+  "themeColor": "#d9822b"
 }
