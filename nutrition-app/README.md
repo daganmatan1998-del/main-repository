@@ -315,7 +315,7 @@ Accounts are off until `CLOUD.url` and `CLOUD.anonKey` are set in `www/js/config
 
 ```bash
 npm test              # 72 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy, PKCE
-npm run test:e2e      # 185 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm run test:e2e      # 187 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 npm run test:cloud    # 29 browser checks: Google sign-in, sync across three devices, photo backup, conflicts, sign-out, delete; profile picture and nickname
 ```
 

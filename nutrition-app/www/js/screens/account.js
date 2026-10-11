@@ -25,7 +25,7 @@ export function googleButton(label = 'התחברות עם Google') {
   const btn = h('button', {
     type: 'button', class: 'btn btn-block btn-google', id: 'btn-google',
     onclick: async () => {
-      if (!cloud.cloudReady()) { msg.textContent = 'ההתחברות עוד לא הוגדרה באפליקציה.'; return; }
+      if (!cloud.cloudReady()) { msg.textContent = 'ההתחברות עוד לא מחוברת — היא תיפתח בעדכון הקרוב.'; return; }
       if (!navigator.onLine) { msg.textContent = 'צריך חיבור לאינטרנט כדי להתחבר.'; return; }
       btn.disabled = true;
       msg.textContent = 'מעביר להתחברות…';
@@ -41,6 +41,13 @@ const ERRORS = {
 };
 
 export function accountCard() {
+  if (!cloud.cloudReady()) {
+    // Ready in the app, waiting for the Supabase project (config.js CLOUD).
+    return h('section', { class: 'card', id: 'account-card' },
+      h('div', { class: 'row space' }, h('h2', null, 'גיבוי וחשבון'), h('span', { class: 'badge' }, 'בקרוב')),
+      h('p', { class: 'muted small' }, 'בקרוב: התחברות עם Google ושמירת הנתונים בחשבון שלך, כדי להחליף טלפון או להיכנס ממכשיר אחר בלי לאבד כלום. בינתיים הכול נשמר במכשיר הזה.'),
+      googleButton());
+  }
   if (!cloud.signedIn()) {
     return h('section', { class: 'card', id: 'account-card' },
       h('h2', null, 'גיבוי וחשבון'),

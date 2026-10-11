@@ -42,7 +42,7 @@ export function renderProfile(root) {
       h('span', null, 'פעילות'), h('b', null, `${ACTIVITY[p.activity].label} · ${p.workouts} אימונים בשבוע`))));
 
   // ---- cloud account ----
-  if (cloud.cloudReady()) root.appendChild(accountCard());
+  root.appendChild(accountCard());
 
   // ---- plan for the AI features ----
   if (BILLING.enabled) {

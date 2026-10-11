@@ -851,6 +851,11 @@ try {
   // =============== paid plan for the AI features (the trial is over by now) ===============
   await page.click('a[href="#/profile"]');
   await page.waitForSelector('#plan-card');
+  check('without a cloud project the account card is shown as "coming soon"', (await page.locator('#account-card').innerText()).includes('בקרוב'));
+  await page.click('#account-card #btn-google');
+  await wait(300);
+  check('its Google button explains it isn\'t connected yet, and goes nowhere', (await page.locator('#account-card').innerText()).includes('עוד לא מחוברת') && page.url().includes('#/profile'));
+  await page.locator('#account-card').screenshot({ path: path.join(SHOTS, '36-account-soon.png') });
   check('profile shows the plan, inactive after the 7-day trial', (await page.locator('#plan-card .badge').innerText()).includes('לא פעיל'));
   await page.click('#btn-plan');
   await page.waitForSelector('#paywall');
