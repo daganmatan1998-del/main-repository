@@ -7,15 +7,15 @@
 //          or wrapped with Capacitor (native apps have no same-origin server).
 export const API_BASE = '';
 
-export const APP_VERSION = '1.8.1';
+export const APP_VERSION = '1.9.0';
 
 // Cloud accounts (Supabase): sign in with Google, data kept in the user's own
 // private row. Both empty = no accounts; everything stays on the device.
 // The anon key is public by design — row-level security in
 // supabase/setup.sql is what keeps each user's data to themselves.
 export const CLOUD = {
-  url: '', // https://<project>.supabase.co
-  anonKey: '',
+  url: 'https://neswgxihjffyftzwxbjv.supabase.co',
+  anonKey: 'sb_publishable_rQvwPP8gZm3QS5mbfKxDpg_QuObOSu5',
 };
 
 // Paid plan for the AI features (assistant, recipe ideas, calorie camera).

@@ -91,7 +91,7 @@ async function supabase(route) {
 
 const server = createServer({
   env: {},
-  overrides: { '/js/config.js': (t) => t.replace("url: '',", `url: '${SUPA}',`).replace("anonKey: '',", "anonKey: 'anon-e2e',") },
+  overrides: { '/js/config.js': (t) => t.replace(/url: '[^']*',/, `url: '${SUPA}',`).replace(/anonKey: '[^']*',/, "anonKey: 'anon-e2e',") },
 });
 await new Promise((r) => server.listen(0, r));
 const BASE = `http://localhost:${server.address().port}`;

@@ -263,7 +263,7 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
 
 ### Cloud accounts: sign in with Google (v1.8)
 
-Accounts are off until `CLOUD.url` and `CLOUD.anonKey` are set in `www/js/config.js`. Until then the app has no sign-in button and works exactly as before, on the device only.
+Accounts are on once `CLOUD.url` and `CLOUD.anonKey` are set (they are, for the project in config.js) in `www/js/config.js`. Until then the app has no sign-in button and works exactly as before, on the device only.
 
 **What the user gets**
 
