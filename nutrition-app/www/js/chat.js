@@ -78,7 +78,7 @@ export async function ask(messages, context) {
   try { data = await res.json(); } catch { /* non-JSON error page */ }
   if (!res.ok) {
     const code = data?.error || `http_${res.status}`;
-    throw new ChatError(code, data?.message || 'העוזר אינו זמין כרגע.');
+    throw new ChatError(code, 'העוזר אינו זמין כרגע.');
   }
   return data.text;
 }

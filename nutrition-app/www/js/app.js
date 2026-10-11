@@ -18,6 +18,8 @@ import { renderProfile } from './screens/profile.js';
 import { renderShopping } from './screens/shopping.js';
 import { applyTheme } from './theme.js';
 import { onInstallChange } from './install.js';
+import { startSync, syncNow } from './sync.js';
+import { openConflict } from './screens/account.js';
 
 const ROUTES = {
   today: { label: 'היום', icon: 'today', render: renderToday },
@@ -195,9 +197,29 @@ async function boot() {
   updateOnline();
   onInstallChange(() => { if (lastKey === 'route:today' || lastKey === 'route:profile') rerender(); });
 
+  // Cloud account: finish a Google sign-in that just returned, then sync.
+  // Coming back from sign-in waits for the data, so a new device opens on
+  // the restored plan instead of flashing the registration screens.
+  let signIn = null;
+  try { signIn = await startSync(); } catch (e) { console.warn('sync start failed', e); }
+  let first = null;
+  if (signIn && signIn.ok) {
+    first = await Promise.race([syncNow(), new Promise((r) => setTimeout(() => r({ slow: true }), 20000))]);
+  }
+
   document.getElementById('splash')?.remove();
   render(true);
   registerSW();
+
+  if (signIn && signIn.error) toast(signIn.error === 'denied' ? 'ההתחברות בוטלה.' : 'ההתחברות נכשלה. נסו שוב.');
+  if (signIn && signIn.ok) {
+    if (first && first.conflict) openConflict();
+    else if (first && first.restored) toast('הנתונים שלך נטענו מהחשבון');
+    else if (!store.isOnboarded()) toast('התחברת! לא נמצאו נתונים קודמים בחשבון — בואו נתחיל.');
+    else toast('התחברת — הנתונים מגובים בחשבון');
+  } else {
+    syncNow().then((r) => { if (r && r.conflict) openConflict(); });
+  }
 }
 
 function registerSW() {

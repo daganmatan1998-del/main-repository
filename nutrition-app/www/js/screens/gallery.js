@@ -35,7 +35,10 @@ export function renderGallery(root) {
     });
     const frame = h('div', { class: 'tile-img' });
     if (c) {
-      urlFor(c.photoId).then((u) => { if (u) frame.appendChild(h('img', { src: u, alt: '', loading: 'lazy' })); });
+      urlFor(c.photoId).then((u) => {
+        // A week photographed on another device, with photo backup off.
+        frame.appendChild(u ? h('img', { src: u, alt: '', loading: 'lazy' }) : h('span', { class: 'missing' }, icon('lock', 22), 'במכשיר אחר'));
+      });
     } else {
       frame.appendChild(h('span', { class: 'missing' }, icon('camera', 26), 'לא צולם'));
     }

@@ -2,7 +2,7 @@
 // weight / body-fat chart.
 
 import { h, icon, fmt, fmtDate, dayNumber, daysBetween, signed, ltr } from '../util.js';
-import { ring, macroBar, mealCard } from '../components.js';
+import { ring, macroBar, mealCard, avatar } from '../components.js';
 import { lineChart } from '../chart.js';
 import { dayTotals } from '../mealplan.js';
 import { GOALS } from '../nutrition.js';
@@ -25,9 +25,10 @@ export function renderToday(root, { askAbout }) {
   const hello = hour < 12 ? 'בוקר טוב' : hour < 18 ? 'צהריים טובים' : 'ערב טוב';
 
   root.appendChild(h('header', { class: 'page-head' },
-    h('div', null,
-      h('h1', null, `${hello}, ${state.profile.name}`),
-      h('p', { class: 'muted' }, `יום ${new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}`)),
+    h('a', { class: 'head-avatar', href: '#/profile', 'aria-label': 'פרופיל' }, avatar(44)),
+    h('div', { class: 'grow' },
+      h('h1', null, `${hello}, ${state.profile.nickname || state.profile.name}`),
+      h('p', { class: 'muted' }, new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' }))),
     h('a', { class: 'checkin-chip', href: '#/gallery', 'aria-label': 'הצילום השבועי הבא' },
       icon('camera', 16), g.daysToNext <= 0 ? 'היום' : g.daysToNext === 1 ? 'צילום מחר' : `צילום בעוד ${g.daysToNext} ימים`)));
 

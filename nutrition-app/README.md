@@ -261,6 +261,44 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
   - **Accounts and a server record of who paid.** The provider's webhook should reach the Worker, and the AI endpoints should check the subscription. Today the check runs on the device only, so it is easy to bypass.
   - **Store builds:** an App Store build must sell the plan through Apple's in-app purchase instead.
 
+### Cloud accounts: sign in with Google (v1.8)
+
+Accounts are off until `CLOUD.url` and `CLOUD.anonKey` are set in `www/js/config.js`. Until then the app has no sign-in button and works exactly as before, on the device only.
+
+**What the user gets**
+
+- **Profile → "גיבוי וחשבון" → "התחברות עם Google".** The data on the device is uploaded to their account.
+- **On a new phone:** the welcome screen has "יש לי חשבון — התחברות עם Google". After sign-in the plan, logs, weigh-ins, chat, settings and profile picture come back and the app opens on Today.
+- **Sync:** every change goes up a moment later; opening the app pulls the newer copy. The whole state is one document and the newest copy wins. Two devices edited offline at the same moment keep the later one.
+- **Both sides have data** (a device with its own plan signs in to an account that has one too): nothing is overwritten. The user picks "load from the account" or "keep this device's data".
+- **Progress photos stay on the device** unless the user turns on "גיבוי תמונות ההתקדמות". Turning it off deletes the cloud copies. The profile picture always syncs.
+- **Sign-out** keeps the data on the device, or deletes it from the device (for a phone that isn't yours). The account keeps its copy.
+- **Delete all data,** while signed in, also deletes the cloud files, the data row and the account itself.
+
+**How it works**
+
+- **Supabase:** Auth (Google), Postgres and Storage, called over plain HTTPS from `cloud.js`. There is no SDK, because the app has no build step.
+- **Sign-in:** OAuth with PKCE, so there is no client secret anywhere.
+- **Data:** `sync.js` decides what goes up and what comes down; `store.snapshot()` and `store.applySnapshot()` are the data in and out.
+- **Protection:** the anon key in `config.js` is public by design. Row-level security in `supabase/setup.sql` limits each signed-in user to their own row and their own folder, `<user id>/…`, in a private bucket.
+
+**Setting it up (about 20 minutes, free tier)**
+
+1. **Create a project** at supabase.com.
+2. **Run the setup SQL:** open SQL Editor → New query, paste `supabase/setup.sql`, and click Run.
+3. **Create the Google credentials** in Google Cloud Console:
+   - APIs & Services → Credentials → Create OAuth client ID → Web application.
+   - Authorized redirect URI: `https://<project>.supabase.co/auth/v1/callback`.
+4. **Turn on Google in Supabase:** Authentication → Sign In / Providers → Google. Paste the client ID and secret. The secret lives in Supabase only, never in the app.
+5. **Set the app's address in Supabase:** Authentication → URL Configuration. Set Site URL to the app's address and add it under Redirect URLs (for example `https://nutri.<you>.workers.dev/`).
+6. **Fill in `www/js/config.js`:** under `CLOUD`, set `url` (Project Settings → API → Project URL) and `anonKey` (the anon / publishable key).
+7. **Upload the app again** with `UPLOAD-APP.bat`. The CSP in `www/_headers` already allows `https://*.supabase.co`.
+
+**Still open**
+
+- **App Store builds:** an App Store build that offers Google sign-in must also offer Sign in with Apple. Supabase supports it; it's not wired yet.
+- **Server-side paid plan:** the Worker can now know who is calling. Checking the paid plan on the server, once payments are connected, is the next step.
+
 ### Weekly-gate rules (what "can't be bypassed" means here)
 
 - The gate decision is made in one function, `render()` in `app.js`. It runs on every route change, return from the background, focus, bfcache restore, and every 30 seconds.
@@ -276,18 +314,23 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
 ## Tests
 
 ```bash
-npm test              # 67 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
+npm test              # 72 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy, PKCE
 npm run test:e2e      # 185 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm run test:cloud    # 29 browser checks: Google sign-in, sync across three devices, photo backup, conflicts, sign-out, delete; profile picture and nickname
 ```
 
-The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.
+The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. The cloud run uses an in-memory fake of the Supabase APIs. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.
 
 ## Privacy
 
-- **On the device only:** your profile, every weigh-in, every photo and the chat history. There is no account and no analytics.
+- **On the device, and in your account only if you sign in:**
+  - your profile, every weigh-in and the chat history
+  - progress photos, which go to the account only with photo backup on
+  - there are no analytics
 - **Sent to the assistant:** age, sex, height, current metrics, goal, daily targets, restrictions and today's menu. Never your name, photos or registration date. The request goes through your Worker to whichever AI engine answers, a free provider or Anthropic. Free plans of some providers may use content to improve their models.
 - **Sent to the calorie camera:** the plate photo, which the Worker forwards once to a free vision provider. It is not stored by the app, but free-plan providers may use it for training. The consent screen says so.
 - **Body-fat photos go to Anthropic only**, never to a free provider.
-- **Delete all data** (Profile, then type "מחק" to confirm) erases the database, settings and chat from the device.
+- **Delete all data** (Profile, then type "מחק" to confirm) erases the database, settings and chat from the device. While signed in it also erases the cloud copy and the account.
+- **No AI vendor names in the app.** The consent texts say the photos go to external analysis services without naming them, and the assistant is told not to say which model it runs on.
 
 The app shows that it is not medical advice, during onboarding, in the chat and in Profile.

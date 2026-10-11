@@ -364,3 +364,18 @@ export function dietNoteBox(diet) {
   update(diet);
   return { el, update };
 }
+
+// The profile picture, or the first letter of the nickname / name on a tinted
+// circle when there is none. Object URLs are freed once the image has loaded.
+export function avatar(size = 40) {
+  const p = state.profile || {};
+  const label = (p.nickname || p.name || '').trim();
+  const el = h('span', { class: 'avatar', style: { width: `${size}px`, height: `${size}px`, fontSize: `${Math.round(size * 0.42)}px` } });
+  if (state.avatar && state.avatar.blob) {
+    const url = URL.createObjectURL(state.avatar.blob);
+    el.appendChild(h('img', { src: url, alt: '', onload: () => setTimeout(() => URL.revokeObjectURL(url), 1000) }));
+  } else {
+    el.appendChild(h('span', { 'aria-hidden': 'true' }, label ? [...label][0] : '🙂'));
+  }
+  return el;
+}

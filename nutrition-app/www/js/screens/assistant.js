@@ -121,9 +121,9 @@ export function renderAssistant(root) {
         messages.push({ role: 'assistant', content: localAnswer(local), at: Date.now(), local: true });
       } else {
         const why = e.code === 'offline' ? 'אין חיבור לאינטרנט — העוזר זמין רק אונליין. התפריט וההחלפות בכפתורי "החלף" עובדים גם בלי חיבור.'
-          : e.code === 'not_configured' ? 'העוזר עוד לא הוגדר בשרת (חסר מפתח API). ראו הוראות התקנה ב-README.'
+          : e.code === 'not_configured' ? 'העוזר עוד לא זמין. נסו שוב מאוחר יותר.'
             : e.code === 'rate_limited' ? 'יותר מדי בקשות. נסו שוב בעוד דקה.'
-              : e.code === 'all_engines_busy' ? 'כל מנועי ה-AI עמוסים כרגע. נסו שוב בעוד כמה דקות.'
+              : e.code === 'all_engines_busy' ? 'העוזר עמוס כרגע. נסו שוב בעוד כמה דקות.'
               : 'העוזר לא זמין כרגע. נסו שוב בעוד רגע.';
         messages.push({ role: 'assistant', content: why, at: Date.now(), error: true });
       }

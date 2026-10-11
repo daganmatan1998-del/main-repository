@@ -19,7 +19,7 @@ const ANGLES = [
 
 const CONFIDENCE = { low: 'נמוכה', medium: 'בינונית', high: 'גבוהה' };
 const METHOD = {
-  ai: 'ניתוח תמונות (AI)',
+  ai: 'ניתוח תמונות',
   'ai+tape': 'ניתוח תמונות + מדידות סרט',
   tape: 'מדידות סרט (שיטת הצי האמריקאי)',
   bmi: 'נוסחה לפי BMI וגיל (הערכה גסה)',
@@ -131,7 +131,7 @@ export function openBodyFatEstimator(person) {
           h('li', null, 'יש טיימר — יש זמן להתרחק ולעמוד בתנוחה')),
         h('div', { class: 'notice warn small' }, DISCLAIMER),
         h('label', { class: 'bf-consent' }, consent,
-          h('span', null, 'אני מסכים/ה שהתמונות יישלחו לניתוח AI (Anthropic) דרך השרת של האפליקציה. הן לא נשמרות בשרת ולא באפליקציה.')),
+          h('span', null, 'אני מסכים/ה שהתמונות יישלחו לניתוח דרך השרת של האפליקציה. הן לא נשמרות בשרת ולא באפליקציה.')),
         start,
         h('button', { class: 'btn btn-ghost btn-block', id: 'bf-no-photos', onclick: () => measurements(false) }, 'אין לי איך לצלם — הערכה לפי מדידות / משקל וגובה'));
     }

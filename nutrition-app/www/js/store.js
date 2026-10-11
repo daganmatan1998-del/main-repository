@@ -9,7 +9,19 @@ import { gateStatus, weekSlots, weekIndex } from './schedule.js';
 
 const listeners = new Set();
 export function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
-function emit() { for (const fn of listeners) fn(); }
+function emit() { saved(); for (const fn of listeners) fn(); }
+
+// Every write stamps savedAt and tells the cloud sync (sync.js) that there is
+// something new to upload. Applying a copy from the cloud does neither.
+const saveHooks = new Set();
+export function onSaved(fn) { saveHooks.add(fn); return () => saveHooks.delete(fn); }
+let applying = false;
+function saved() {
+  if (applying) return;
+  state.meta.savedAt = Date.now();
+  db.kv.set('meta', state.meta).catch(() => {});
+  for (const fn of saveHooks) fn();
+}
 
 export const state = {
   loaded: false,
@@ -22,7 +34,8 @@ export const state = {
   logs: {}, // { [day]: { eaten: number[] } }
   chat: [],
   shopping: {}, // { [menuWeek]: checkedItemIds[] }
-  meta: { maxSeen: 0 },
+  meta: { maxSeen: 0 }, // + savedAt, and the sync bookkeeping in sync.js
+  avatar: null, // { blob, at } — the profile picture
 };
 
 export async function load() {
@@ -31,6 +44,7 @@ export async function load() {
     db.kv.get('logs'), db.kv.get('chat'), db.kv.get('meta'), db.getAll('checkins'), db.getAll('metrics'),
     db.kv.get('shopping'),
   ]);
+  state.avatar = (await db.kv.get('avatar')) || null;
   state.profile = profile || null;
   state.periods = periods || [];
   state.settings = { ...state.settings, ...(settings || {}) };
@@ -278,6 +292,7 @@ export async function startNextPeriod(period) {
 
 export async function saveShoppingChecks(key, ids) {
   state.shopping = { ...state.shopping, [key]: ids };
+  saved();
   // Keep the last few weeks only.
   const keys = Object.keys(state.shopping).map(Number).sort((a, b) => b - a);
   for (const k of keys.slice(4)) delete state.shopping[k];
@@ -292,7 +307,75 @@ export async function excludeFood(foodId) {
 
 export async function saveChat(messages) {
   state.chat = messages.slice(-60);
+  saved();
   await db.kv.set('chat', state.chat);
+}
+
+// Profile picture: a small square JPEG (image.js squareImage), or null to remove.
+export async function setAvatar(img) {
+  state.avatar = img ? { blob: img.blob, at: Date.now() } : null;
+  if (state.avatar) await db.kv.set('avatar', state.avatar); else await db.kv.del('avatar');
+  emit();
+}
+
+// ---------- cloud copy (see sync.js) ----------
+// Settings that belong to this device and never travel between devices.
+const DEVICE_SETTINGS = ['reminders', 'installDismissed'];
+
+export function snapshot() {
+  const settings = { ...state.settings };
+  for (const k of DEVICE_SETTINGS) delete settings[k];
+  return {
+    v: 1,
+    savedAt: state.meta.savedAt || 0,
+    profile: state.profile,
+    periods: state.periods,
+    settings,
+    overrides: state.overrides,
+    logs: state.logs,
+    chat: state.chat,
+    shopping: state.shopping,
+    checkins: state.checkins,
+    metrics: state.metrics,
+    avatarAt: state.avatar ? state.avatar.at : 0,
+  };
+}
+
+// Replaces this device's data with a copy from the cloud. Photos are not part
+// of it — sync.js brings those separately.
+export async function applySnapshot(s) {
+  const device = {};
+  for (const k of DEVICE_SETTINGS) if (k in state.settings) device[k] = state.settings[k];
+  await Promise.all([
+    db.kv.set('profile', s.profile), db.kv.set('periods', s.periods || []), db.kv.set('overrides', s.overrides || {}),
+    db.kv.set('logs', s.logs || {}), db.kv.set('chat', s.chat || []), db.kv.set('shopping', s.shopping || {}),
+    db.kv.set('settings', { ...(s.settings || {}), ...device }),
+  ]);
+  await db.replaceAll('checkins', s.checkins || []);
+  await db.replaceAll('metrics', s.metrics || []);
+  state.meta.savedAt = s.savedAt || 0;
+  await db.kv.set('meta', state.meta);
+  await load();
+  applying = true;
+  try { for (const fn of listeners) fn(); } finally { applying = false; }
+}
+
+// Bookkeeping that is not user data (no savedAt stamp, no upload).
+export async function saveMeta(patch) {
+  Object.assign(state.meta, patch);
+  await db.kv.set('meta', state.meta);
+}
+
+// The profile picture as it arrived from the cloud, keeping its timestamp.
+export async function restoreAvatar(blob, at) {
+  state.avatar = blob ? { blob, at } : null;
+  if (state.avatar) await db.kv.set('avatar', state.avatar); else await db.kv.del('avatar');
+  applying = true;
+  try { for (const fn of listeners) fn(); } finally { applying = false; }
+}
+
+export async function putPhoto(photo) {
+  await db.put('photos', photo);
 }
 
 export async function getPhoto(id) {
