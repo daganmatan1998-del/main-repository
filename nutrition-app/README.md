@@ -267,6 +267,13 @@ Accounts are on once `CLOUD.url` and `CLOUD.anonKey` are set (they are, for the 
 
 **What the user gets**
 
+- **First screen (v1.10):** a new person sees three choices, and nothing else until they pick:
+  - **התחברות:** Google sign-in, expecting data in the account. It restores the plan, or says no account with data was found and starts a new plan.
+  - **יצירת חשבון:** Google sign-in for a new account, then the registration. If the account turns out to have data already, it is loaded instead.
+  - **המשך ללא חשבון:** guest mode, everything on this device only. The choice is remembered, and the welcome screen has a way back to the choices.
+  - Google doesn't ask whether you meant to sign in or sign up, so the first two buttons share one sign-in. They differ only in what happens afterward.
+  - The screen shows only when `CLOUD` is set, nobody is signed in and the person hasn't chosen guest. After "delete all data" it comes back.
+
 - **Profile → "גיבוי וחשבון" → "התחברות עם Google".** The data on the device is uploaded to their account.
 - **On a new phone:** the welcome screen has "יש לי חשבון — התחברות עם Google". After sign-in the plan, logs, weigh-ins, chat, settings and profile picture come back and the app opens on Today.
 - **Sync:** every change goes up a moment later; opening the app pulls the newer copy. The whole state is one document and the newest copy wins. Two devices edited offline at the same moment keep the later one.
@@ -316,7 +323,7 @@ Accounts are on once `CLOUD.url` and `CLOUD.anonKey` are set (they are, for the 
 ```bash
 npm test              # 72 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy, PKCE
 npm run test:e2e      # 187 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
-npm run test:cloud    # 29 browser checks: Google sign-in, sync across three devices, photo backup, conflicts, sign-out, delete; profile picture and nickname
+npm run test:cloud    # 37 browser checks: the first screen, Google sign-in, sync across devices, photo backup, conflicts, sign-out, delete; profile picture and nickname
 ```
 
 The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. The cloud run uses an in-memory fake of the Supabase APIs. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.

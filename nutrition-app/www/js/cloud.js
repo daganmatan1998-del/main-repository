@@ -23,6 +23,7 @@ export const cloudReady = (cfg = CLOUD) => !!(cfg.url && cfg.anonKey);
 
 const VERIFIER_KEY = 'nutri-pkce';
 const RETURN_KEY = 'nutri-return';
+const INTENT_KEY = 'nutri-intent';
 const BUCKET = 'nutri';
 
 let session = null; // { access_token, refresh_token, expires_at, user: { id, email, name } }
@@ -71,11 +72,13 @@ export function sessionFrom(data, now = Date.now()) {
 
 // ---------- sign in / out ----------
 
-export async function signIn() {
+// intent: 'login' (expects data in the account) or 'signup' (a new account).
+export async function signIn(intent = 'login') {
   if (!cloudReady()) throw new CloudError('not_configured');
   const { verifier, challenge } = await pkcePair();
   try {
     localStorage.setItem(VERIFIER_KEY, verifier);
+    localStorage.setItem(INTENT_KEY, intent);
     localStorage.setItem(RETURN_KEY, location.hash || '#/today');
   } catch {
     throw new CloudError('storage_unavailable');
@@ -92,11 +95,14 @@ export async function finishSignIn() {
   if (!code && !error) return null;
   let verifier = null;
   let back = '#/today';
+  let intent = 'login';
   try {
     verifier = localStorage.getItem(VERIFIER_KEY);
     back = localStorage.getItem(RETURN_KEY) || back;
+    intent = localStorage.getItem(INTENT_KEY) || intent;
     localStorage.removeItem(VERIFIER_KEY);
     localStorage.removeItem(RETURN_KEY);
+    localStorage.removeItem(INTENT_KEY);
   } catch { /* storage unavailable: verifier stays null */ }
   // Drop ?code from the address bar so a refresh doesn't replay it.
   history.replaceState(null, '', location.pathname + back);
@@ -105,7 +111,7 @@ export async function finishSignIn() {
   try {
     const data = await authCall('token?grant_type=pkce', { auth_code: code, code_verifier: verifier });
     await saveSession(sessionFrom(data));
-    return { ok: true };
+    return { ok: true, intent };
   } catch (e) {
     return { error: e.code || 'failed' };
   }

@@ -20,16 +20,16 @@ function googleLogo() {
   return svg;
 }
 
-export function googleButton(label = 'התחברות עם Google') {
+export function googleButton(label = 'התחברות עם Google', { intent = 'login', id = 'btn-google', primary = false } = {}) {
   const msg = h('p', { class: 'muted small center', 'aria-live': 'polite' });
   const btn = h('button', {
-    type: 'button', class: 'btn btn-block btn-google', id: 'btn-google',
+    type: 'button', class: `btn btn-block btn-google${primary ? ' btn-google-primary' : ''}`, id,
     onclick: async () => {
       if (!cloud.cloudReady()) { msg.textContent = 'ההתחברות עוד לא מחוברת — היא תיפתח בעדכון הקרוב.'; return; }
       if (!navigator.onLine) { msg.textContent = 'צריך חיבור לאינטרנט כדי להתחבר.'; return; }
       btn.disabled = true;
       msg.textContent = 'מעביר להתחברות…';
-      try { await cloud.signIn(); } catch { btn.disabled = false; msg.textContent = 'לא הצלחנו להתחיל את ההתחברות. נסו שוב.'; }
+      try { await cloud.signIn(intent); } catch { btn.disabled = false; msg.textContent = 'לא הצלחנו להתחיל את ההתחברות. נסו שוב.'; }
     },
   }, googleLogo(), h('span', null, label));
   return h('div', { class: 'google-wrap' }, btn, msg);

@@ -214,8 +214,8 @@ async function boot() {
   if (signIn && signIn.error) toast(signIn.error === 'denied' ? 'ההתחברות בוטלה.' : 'ההתחברות נכשלה. נסו שוב.');
   if (signIn && signIn.ok) {
     if (first && first.conflict) openConflict();
-    else if (first && first.restored) toast('הנתונים שלך נטענו מהחשבון');
-    else if (!store.isOnboarded()) toast('התחברת! לא נמצאו נתונים קודמים בחשבון — בואו נתחיל.');
+    else if (first && first.restored) toast(signIn.intent === 'signup' ? 'כבר היה לך חשבון — הנתונים נטענו.' : 'הנתונים שלך נטענו מהחשבון');
+    else if (!store.isOnboarded()) toast(signIn.intent === 'signup' ? 'החשבון נוצר! בואו נבנה את התוכנית שלך.' : 'לא נמצא חשבון עם נתונים — נתחיל ביצירת תוכנית חדשה.');
     else toast('התחברת — הנתונים מגובים בחשבון');
   } else {
     syncNow().then((r) => { if (r && r.conflict) openConflict(); });

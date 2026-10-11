@@ -176,9 +176,18 @@ try {
   // ======== device A: registers, profile character, then signs in ========
   const A = await device('A');
   await A.page.goto(BASE + '/');
+  await A.page.waitForSelector('#entry');
+  const entryBtns = await A.page.locator('#entry button').evaluateAll((els) => els.map((e) => e.id));
+  check(`the first screen offers exactly sign in / create account / guest (${entryBtns})`, entryBtns.join() === 'entry-login,entry-signup,entry-guest');
+  check('no registration field or tab bar behind the first screen', (await A.page.locator('#ob-next').count()) === 0 && !(await A.page.locator('#tabbar').isVisible()));
+  await A.page.screenshot({ path: path.join(SHOTS, 'c01-entry.png') });
+  await A.page.click('#entry-guest');
   await A.page.waitForSelector('#ob-next');
-  check('welcome offers "I already have an account" with Google', await A.page.locator('.welcome #btn-google').isVisible());
-  await A.page.screenshot({ path: path.join(SHOTS, 'c01-welcome-google.png') });
+  check('"no account" goes to the registration welcome, with a way back to the choices', await A.page.locator('#entry-back').isVisible());
+  await A.page.screenshot({ path: path.join(SHOTS, 'c01b-guest-welcome.png') });
+  await A.page.reload();
+  await A.page.waitForSelector('#ob-next');
+  check('the guest choice is remembered on this device', (await A.page.locator('#entry').count()) === 0);
   await onboard(A.page, 'מתן');
 
   const head = await headText(A.page);
@@ -237,11 +246,11 @@ try {
     return logs && Object.values(logs).some((l) => l.eaten && l.eaten.length);
   }));
 
-  // ======== device B: new phone, signs in from the welcome screen ========
+  // ======== device B: new phone, "sign in" on the first screen ========
   const B = await device('B');
   await B.page.goto(BASE + '/');
-  await B.page.waitForSelector('.welcome #btn-google');
-  await B.page.click('.welcome #btn-google');
+  await B.page.waitForSelector('#entry-login');
+  await B.page.click('#entry-login');
   await B.page.waitForSelector('.page-today', { timeout: 15000 });
   check('new device opens straight on the restored plan', (await headText(B.page)).includes('מתנוש'));
   check('the eaten meal came along', (await B.page.locator('.meal.eaten, .meal .check-btn[aria-pressed="true"]').count()) >= 1);
@@ -264,6 +273,7 @@ try {
   // ======== device C: has its own data, signs in to the same account ========
   const C = await device('C');
   await C.page.goto(BASE + '/');
+  await C.page.click('#entry-guest');
   await C.page.waitForSelector('#ob-next');
   await onboard(C.page, 'אחר');
   await C.page.click('a[href="#/profile"]');
@@ -286,8 +296,23 @@ try {
   check('delete warns it also closes the cloud account', (await A.page.locator('.sheet').innerText()).includes('מהחשבון בענן'));
   await A.page.fill('#confirm-delete', 'מחק');
   await A.page.click('#confirm-delete-btn');
-  await A.page.waitForSelector('#ob-next', { timeout: 15000 });
+  await A.page.waitForSelector('#entry', { timeout: 15000 });
   check('delete removes the row, every file and the account', fake.row === null && fake.files.size === 0 && fake.deletedAccount);
+  check('after deleting everything the first screen is back', await A.page.locator('#entry-signup').isVisible());
+
+  // ======== "sign in" with an account that has no data / "create account" ========
+  await A.page.click('#entry-login');
+  await A.page.waitForSelector('#ob-next', { timeout: 15000 });
+  check('signing in to an account without data starts a new plan, and says so', await until(async () => (await A.page.locator('#toast, .toast').allInnerTexts()).join().includes('לא נמצא חשבון עם נתונים')));
+  check('a signed-in person is not asked to choose again, and has no "back to choices" button', (await A.page.locator('#entry-back').count()) === 0);
+
+  const G = await device('G');
+  await G.page.goto(BASE + '/');
+  await G.page.click('#entry-signup');
+  await G.page.waitForSelector('#ob-next', { timeout: 15000 });
+  check('creating an account goes on to registration, and says the account was created', await until(async () => (await G.page.locator('#toast, .toast').allInnerTexts()).join().includes('החשבון נוצר')));
+  await onboard(G.page, 'חדש');
+  check('registration finished while signed in: the plan is uploaded to the new account', await until(() => fake.row && fake.row.data.profile.name === 'חדש'));
 
   check('no uncaught page errors', pageErrors.length === 0, pageErrors.join(' | '));
 } catch (e) {

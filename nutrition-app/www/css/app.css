@@ -699,3 +699,12 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .welcome .restore p { margin: 0 0 8px; }
 #account-card .grid2 { margin-top: 10px; }
 #account-card #account-user { margin: 4px 0 2px; word-break: break-all; }
+
+/* ---------- entry screen ---------- */
+.entry { padding-top: 10vh; }
+.entry-actions { display: grid; gap: 12px; max-width: 360px; margin: 26px auto 14px; }
+.entry-actions .google-wrap { gap: 4px; }
+.btn-google-primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+.btn-google-primary:hover { background: color-mix(in srgb, var(--primary) 88%, #000); }
+.entry-note { max-width: 360px; margin: 0 auto; }
+.btn-google-primary svg { background: #fff; border-radius: 50%; padding: 3px; box-sizing: content-box; }
