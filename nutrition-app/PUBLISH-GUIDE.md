@@ -4,7 +4,7 @@
 
 | | `public` (קהל, בתשלום) | `friends` (חברים, חינם) |
 |---|---|---|
-| שם בטלפון | נוטרי | פיטי |
+| שם בטלפון | נוטרי | נוטרי חברים |
 | מזהה אפליקציה | `app.nutri.planner` | `app.nutri.planner.friends` |
 | שרת (Cloudflare Worker) | `nutri-public` | `nutri-friends` |
 | איך מפיצים | Google Play / App Store, **בתשלום** | קישור PWA, או APK / TestFlight |
