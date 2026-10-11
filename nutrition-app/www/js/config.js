@@ -7,7 +7,7 @@
 //          or wrapped with Capacitor (native apps have no same-origin server).
 export const API_BASE = '';
 
-export const APP_VERSION = '1.12.0';
+export const APP_VERSION = '1.13.0';
 
 // Cloud accounts (Supabase): sign in with Google, data kept in the user's own
 // private row. Both empty = no accounts; everything stays on the device.

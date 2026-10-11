@@ -31,9 +31,17 @@ export const VENDORS = [
   { id: 'xai', env: 'XAI_API_KEY', url: 'https://api.x.ai/v1/chat/completions', model: 'grok-4.5', vision: 'grok-4.5' },
 ];
 
+// free: the free providers may serve it. anthropic: Anthropic may serve it.
+// paidFirst: Anthropic is tried first and the free engines are the fallback
+// (otherwise Anthropic is the last resort, to save its credits). Set
+// <TASK>_ALLOW_ANTHROPIC=0 on the server to keep a task off Anthropic.
 const POLICY = {
   chat: { free: true, anthropic: true, image: false },
-  mealphoto: { free: true, anthropic: false, image: true },
+  mealphoto: { free: true, anthropic: true, image: true },
+  // Body fat is the one place accuracy matters most (it sets the starting
+  // calories), so the best model goes first; the free engines take over when it
+  // is out of credits or down.
+  bodyfat: { free: true, anthropic: true, image: true, paidFirst: true },
 };
 
 const rest = new Map(); // engine id -> time it may be tried again
@@ -77,9 +85,9 @@ function allowedFor(env, task, spec) {
   const p = POLICY[task];
   if (!p) return [];
   const only = String(env[`ENGINES_${task.toUpperCase()}`] || '').split(',').map((s) => s.trim()).filter(Boolean);
-  const anthropicOk = p.anthropic || (task === 'mealphoto' && String(env.MEALPHOTO_ALLOW_ANTHROPIC || '') === '1');
+  const anthropicOk = p.anthropic && String(env[`${task.toUpperCase()}_ALLOW_ANTHROPIC`] || '') !== '0';
   let list = engineList(env).filter((e) => (e.kind === 'anthropic' ? anthropicOk : p.free));
-  if (spec.image || p.image) list = list.filter((e) => e.visionModel);
+  if (hasImage(spec) || p.image) list = list.filter((e) => e.visionModel);
   if (spec.json) list = list.filter((e) => e.kind !== 'workers-ai'); // too unreliable for structured output
   if (only.length) {
     list = only.map((id) => list.find((e) => e.id === id)).filter(Boolean);
@@ -93,7 +101,8 @@ export function hasEngine(env, task, spec = {}) {
 }
 
 // The order to try for this request: free engines rotate so their allowances
-// are used evenly; engines that are resting go last; Anthropic is always last.
+// are used evenly; engines that are resting go last. Anthropic is the last
+// resort, except for tasks marked paidFirst, where it goes first.
 function ordered(env, task, spec) {
   const list = allowedFor(env, task, spec);
   const only = String(env[`ENGINES_${task.toUpperCase()}`] || '').trim();
@@ -108,6 +117,13 @@ function ordered(env, task, spec) {
   const awake = (e) => (rest.get(e.id) || 0) <= now;
   const quick = (e) => (slow.get(e.id) || 0) <= now;
   // Awake and quick first; then awake but slow; engines that are resting last.
+  if (POLICY[task] && POLICY[task].paidFirst) {
+    return paid.filter(awake).concat(
+      rotated.filter((e) => awake(e) && quick(e)),
+      rotated.filter((e) => awake(e) && !quick(e)),
+      rotated.filter((e) => !awake(e)),
+      paid.filter((e) => !awake(e)));
+  }
   return rotated.filter((e) => awake(e) && quick(e)).concat(
     paid.filter(awake),
     rotated.filter((e) => awake(e) && !quick(e)),
@@ -147,6 +163,8 @@ export function matchesSchema(v, schema) {
 
 // ---- one call ----
 
+const hasImage = (spec) => !!(spec.image || (spec.images && spec.images.length));
+
 function openAIMessages(spec, engine) {
   const shape = spec.example
     ? `Reply with ONE JSON object only, no prose, no code fences, shaped exactly like this example:\n${spec.example}`
@@ -155,9 +173,14 @@ function openAIMessages(spec, engine) {
   const messages = [{ role: 'system', content: sys }];
   spec.messages.forEach((m, i) => {
     const last = i === spec.messages.length - 1;
-    if (last && spec.image && m.role === 'user') {
+    if (last && hasImage(spec) && m.role === 'user') {
+      // spec.image: one photo. spec.images: [{ label, data }], each preceded by its label.
+      const photos = spec.images || [{ data: spec.image }];
       messages.push({ role: 'user', content: [
-        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${spec.image}` } },
+        ...photos.flatMap((p) => [
+          ...(p.label ? [{ type: 'text', text: p.label }] : []),
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${p.data}` } },
+        ]),
         { type: 'text', text: m.content },
       ] });
     } else messages.push({ role: m.role, content: m.content });
@@ -169,14 +192,14 @@ async function viaOpenAI(engine, spec, fetchImpl) {
   const doFetch = fetchImpl || fetch;
   const send = async (withFormat, withEffort = !refuses.has(`${engine.id}|reasoning_effort`)) => {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), spec.image ? TIMEOUT_MS.image : TIMEOUT_MS.text);
+    const timer = setTimeout(() => ctrl.abort(), hasImage(spec) ? TIMEOUT_MS.image : TIMEOUT_MS.text);
     try {
       return await doFetch(engine.url, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${engine.key}` },
         signal: ctrl.signal,
         body: JSON.stringify({
-          model: spec.image ? engine.visionModel : engine.model,
+          model: hasImage(spec) ? engine.visionModel : engine.model,
           messages: openAIMessages(spec, engine),
           max_tokens: spec.maxTokens || 3000,
           ...(spec.json ? { temperature: 0.2 } : {}),
@@ -231,8 +254,8 @@ function restFor(e) {
   return REST_MS.down; // 5xx, timeouts, network
 }
 
-// task: 'chat' | 'mealphoto'. spec: { system, messages: [{role, content}],
-//   image?: base64 JPEG, json?: bool, schema?, maxTokens?, anthropic?: async () => result }.
+// task: 'chat' | 'mealphoto' | 'bodyfat'. spec: { system, messages: [{role, content}],
+//   image?: base64 JPEG, images?: [{ label, data }], json?: bool, schema?, maxTokens?, anthropic?: async () => result }.
 // Returns { text, engine, truncated?, refusal? }; throws the last error when
 // every allowed engine failed.
 export async function complete(env, task, spec, { fetchImpl } = {}) {
@@ -263,7 +286,10 @@ export async function complete(env, task, spec, { fetchImpl } = {}) {
     } catch (e) {
       last = e;
       // A wrong-shaped, empty or filtered answer says nothing about the provider's quota.
-      const ms = ['bad_output', 'empty_reply', 'filtered'].includes(e.code) ? 0 : restFor({ status: e.status || (e.name === 'AbortError' ? 504 : 502) });
+      let ms = ['bad_output', 'empty_reply', 'filtered'].includes(e.code) ? 0 : restFor({ status: e.status || (e.name === 'AbortError' ? 504 : 502) });
+      // Anthropic answers an empty balance with a 400. That is the account, not this
+      // request: rest it like a bad key, so the next requests go straight to the others.
+      if (engine.kind === 'anthropic' && /credit|billing|balance/i.test(String(e.message))) ms = REST_MS.auth;
       if (ms) rest.set(engine.id, Date.now() + ms);
       if (e.code !== 'bad_output') console.warn(`engine ${engine.id} failed:`, e.status || e.name, String(e.message).slice(0, 120));
     }

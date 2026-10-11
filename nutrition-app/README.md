@@ -229,8 +229,10 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
 | Task | Engines |
 |---|---|
 | Assistant chat and recipe ideas | all of them: free ones first, in rotation; Anthropic only as the last resort when every free engine failed |
-| Calorie camera | free engines that can see images. **Never Anthropic**, unless `MEALPHOTO_ALLOW_ANTHROPIC=1` |
-| Body-fat estimate | **Anthropic only**, so body photos never reach a free provider |
+| Calorie camera | the free engines that can see images, in rotation; Anthropic only as the last resort when every free engine failed |
+| Body-fat estimate | the other way round: **Anthropic first** (accuracy sets the starting calories), and the free vision engines take over when it is out of credits or down. An empty Anthropic balance rests it for 30 minutes, so the next requests go straight to the free engines |
+
+Set `CHAT_ALLOW_ANTHROPIC=0`, `MEALPHOTO_ALLOW_ANTHROPIC=0` or `BODYFAT_ALLOW_ANTHROPIC=0` on the server to keep a task off Anthropic.
 
 **How it behaves**
 - **Rotation:** requests rotate across the free engines, so each provider's allowance is used evenly.
@@ -357,8 +359,8 @@ Accounts are on once `CLOUD.url` and `CLOUD.anonKey` are set (they are, for the 
 ## Tests
 
 ```bash
-npm test              # 97 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy, PKCE
-npm run test:e2e      # 214 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm test              # 100 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy, PKCE
+npm run test:e2e      # 216 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 npm run test:cloud    # 37 browser checks: the first screen, Google sign-in, sync across devices, photo backup, conflicts, sign-out, delete; profile picture and nickname
 ```
 
@@ -371,8 +373,8 @@ The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. The
   - progress photos, which go to the account only with photo backup on
   - there are no analytics
 - **Sent to the assistant:** age, sex, height, current metrics, goal, daily targets, restrictions and today's menu. Never your name, photos or registration date. The request goes through your Worker to whichever AI engine answers, a free provider or Anthropic. Free plans of some providers may use content to improve their models.
-- **Sent to the calorie camera:** the plate photo, which the Worker forwards once to a free vision provider. It is not stored by the app, but free-plan providers may use it for training. The consent screen says so.
-- **Body-fat photos go to Anthropic only**, never to a free provider.
+- **Sent to the calorie camera:** the plate photo, which the Worker forwards once to a free vision provider (Anthropic only if every free one failed). It is not stored by the app, but free-plan providers may use it for training. The consent screen says so.
+- **Body-fat photos go to Anthropic first.** If it is out of credits or down, they go to a free vision provider, which may use them for training; the consent screen says so, and the result says when a fallback service made the estimate (and never reports high confidence from one). This changed in v1.13: before, they never reached a free provider.
 - **Delete all data** (Profile, then type "מחק" to confirm) erases the database, settings and chat from the device. While signed in it also erases the cloud copy and the account.
 - **No AI vendor names in the app.** The consent texts say the photos go to external analysis services without naming them, and the assistant is told not to say which model it runs on.
 

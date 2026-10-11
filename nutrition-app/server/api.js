@@ -100,9 +100,8 @@ async function admit(request, env, maxBody, task = 'bodyfat', spec = {}) {
   if (request.method !== 'POST') return { res: json(405, { error: 'method_not_allowed' }, cors) };
   if (!originAllowed(request, env)) return { res: json(403, { error: 'forbidden_origin' }) };
 
-  const served = task === 'bodyfat' ? !!env.ANTHROPIC_API_KEY : hasEngine(env, task, spec);
-  if (!served) {
-    return { res: json(503, { error: 'not_configured', message: task === 'bodyfat' ? 'ANTHROPIC_API_KEY is not set on the server.' : 'No AI engine is configured for this feature on the server.' }, cors) };
+  if (!hasEngine(env, task, spec)) {
+    return { res: json(503, { error: 'not_configured', message: 'No AI engine is configured for this feature on the server.' }, cors) };
   }
 
   const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'local';
@@ -214,9 +213,11 @@ const BODYFAT_SCHEMA = {
 };
 
 // /api/bodyfat — visual body-fat estimate from up to four photos (front,
-// left, back, right). Photos are forwarded to Claude and never stored here.
+// left, back, right). Anthropic goes first (accuracy matters most here); when
+// it is out of credits or down, the free vision engines take over (engines.js,
+// policy bodyfat). Photos are forwarded once and never stored here.
 export async function handleBodyFat(request, env, { fetchImpl } = {}) {
-  const gate = await admit(request, env, MAX_PHOTO_BODY);
+  const gate = await admit(request, env, MAX_PHOTO_BODY, 'bodyfat', { image: true });
   if (gate.res) return gate.res;
   const { body, cors } = gate;
 
@@ -237,27 +238,41 @@ export async function handleBodyFat(request, env, { fetchImpl } = {}) {
     bmiPriorPct: num(p.bmiPriorPct, 2, 70),
   };
 
-  const content = [];
-  for (const ph of photos) {
-    content.push({ type: 'text', text: `Photo — ${ph.angle}:` });
-    content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: ph.data } });
-  }
-  content.push({ type: 'text', text: `Person (self-reported): ${JSON.stringify(profile)}\nEstimate body fat percentage. Reply with the JSON object only.` });
+  const images = photos.map((ph) => ({ label: `Photo — ${ph.angle}:`, data: ph.data }));
+  const ask = `Person (self-reported): ${JSON.stringify(profile)}\nThe photos above are, in order: ${photos.map((ph) => ph.angle).join(', ')}.\nEstimate body fat percentage. Reply with the JSON object only.`;
 
   try {
-    const response = await clientFor(env, fetchImpl).beta.messages.create({
-      model: env.CLAUDE_MODEL || MODEL,
-      max_tokens: 3000,
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: BODYFAT_SCHEMA } },
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
+    const r = await complete(env, 'bodyfat', {
       system: BODYFAT_PROMPT,
-      messages: [{ role: 'user', content }],
-    });
-    if (response.stop_reason === 'refusal') {
+      messages: [{ role: 'user', content: ask }],
+      images,
+      json: true,
+      schema: BODYFAT_SCHEMA, // no example: a number in an example would anchor a smaller model
+      maxTokens: 1200,
+      anthropic: async () => {
+        const content = [];
+        for (const im of images) {
+          content.push({ type: 'text', text: im.label });
+          content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: im.data } });
+        }
+        content.push({ type: 'text', text: ask });
+        const response = await clientFor(env, fetchImpl).beta.messages.create({
+          model: env.CLAUDE_MODEL || MODEL,
+          max_tokens: 3000,
+          output_config: { effort: 'medium', format: { type: 'json_schema', schema: BODYFAT_SCHEMA } },
+          betas: ['server-side-fallback-2026-07-01'],
+          fallbacks: 'default',
+          system: BODYFAT_PROMPT,
+          messages: [{ role: 'user', content }],
+        });
+        if (response.stop_reason === 'refusal') return { refusal: true, text: '' };
+        return { text: response.content.filter((b) => b.type === 'text').map((b) => b.text).join('') };
+      },
+    }, { fetchImpl });
+    if (r.refusal) {
       return json(200, { ok: false, issue: 'לא ניתן לנתח את התמונות האלה. נסו תמונות אחרות או הזינו ערך ידנית.' }, cors);
     }
-    const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+    const text = r.text;
     let out;
     try { out = JSON.parse(text); } catch { return json(502, { error: 'bad_model_output' }, cors); }
     if (!out.ok) return json(200, { ok: false, issue: String(out.issue || 'התמונות לא מתאימות לניתוח.').slice(0, 300) }, cors);
@@ -270,8 +285,11 @@ export async function handleBodyFat(request, env, { fetchImpl } = {}) {
       estimate,
       low,
       high,
-      confidence: ['low', 'medium', 'high'].includes(out.confidence) ? out.confidence : 'low',
+      // A free engine's estimate is never presented as "high" confidence, and the
+      // app is told so it can say the estimate came from a fallback.
+      confidence: (() => { const c = ['low', 'medium', 'high'].includes(out.confidence) ? out.confidence : 'low'; return r.engine !== 'anthropic' && c === 'high' ? 'medium' : c; })(),
       notes: String(out.notes || '').slice(0, 600),
+      alt: r.engine !== 'anthropic',
     }, cors);
   } catch (e) {
     return upstreamError(e, cors);
@@ -343,7 +361,7 @@ export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
       example: MEAL_PHOTO_EXAMPLE,
       maxTokens: 1500,
       fast: true,
-      // Only when MEALPHOTO_ALLOW_ANTHROPIC=1: by default the calorie camera never spends Anthropic credits.
+      // The last resort: Anthropic is tried only after every free engine has failed.
       anthropic: async () => {
         const response = await clientFor(env, fetchImpl).beta.messages.create({
           model: env.CLAUDE_MODEL || MODEL,

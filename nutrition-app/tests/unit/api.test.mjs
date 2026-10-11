@@ -218,24 +218,28 @@ test('meal-photo: sends the photo with the plan and food list to a free engine a
   assert.ok(!c.body.messages[0].content.includes('"properties"'), 'a short example, not the full JSON Schema');
 });
 
-test('meal-photo: never uses Anthropic unless explicitly allowed', async () => {
+test('meal-photo: free engines first, Anthropic only when every free engine has failed', async () => {
   const anth = stubAnthropic({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ ok: true, confidence: 'high', notes: '', issue: '', items: [mpItem({ name: 'עוף', grams: 100 })] }) }] });
-  // Only an Anthropic key: the camera is simply not available.
-  let res = await handleApi(mpReq(mpBody), { ANTHROPIC_API_KEY: 'sk-ant-x' }, { fetchImpl: anth.fetchImpl });
-  assert.equal(res.status, 503);
-  assert.equal(anth.calls.length, 0);
-  // Free engines all down: it fails rather than falling back to the paid engine.
-  const free = stubFree([503]);
-  const both = async (url, init) => (String(url).includes('anthropic') ? anth.fetchImpl(url, init) : free.fetchImpl(url, init));
-  res = await handleApi(mpReq(mpBody), FREE_ENV, { fetchImpl: both });
-  assert.equal(res.status, 503);
+  const okFree = { ok: true, confidence: 'medium', notes: '', issue: '', items: [mpItem({ name: 'אורז', grams: 150 })] };
+  // A free engine that works: no Anthropic credits spent.
+  const free = stubFree([okFree]);
+  const both = (f) => async (url, init) => (String(url).includes('anthropic') ? anth.fetchImpl(url, init) : f.fetchImpl(url, init));
+  let res = await handleApi(mpReq(mpBody), FREE_ENV, { fetchImpl: both(free) });
+  assert.equal((await res.json()).engine, 'groq');
   assert.equal(anth.calls.length, 0, 'no Anthropic credits spent');
-  // The opt-in switch.
-  res = await handleApi(mpReq(mpBody), { ...FREE_ENV, MEALPHOTO_ALLOW_ANTHROPIC: '1' }, { fetchImpl: both });
+  // Every free engine down: Anthropic takes over.
+  const down = stubFree([503]);
+  res = await handleApi(mpReq(mpBody), FREE_ENV, { fetchImpl: both(down) });
   const j = await res.json();
   assert.equal(j.ok, true);
   assert.equal(j.engine, 'anthropic');
   assert.equal(anth.calls.length, 1);
+  // Only an Anthropic key: it works too.
+  res = await handleApi(mpReq(mpBody), { ANTHROPIC_API_KEY: 'sk-ant-x' }, { fetchImpl: anth.fetchImpl });
+  assert.equal(res.status, 200);
+  // The server-side opt-out keeps the camera off Anthropic.
+  res = await handleApi(mpReq(mpBody), { ANTHROPIC_API_KEY: 'sk-ant-x', MEALPHOTO_ALLOW_ANTHROPIC: '0' }, { fetchImpl: anth.fetchImpl });
+  assert.equal(res.status, 503);
 });
 
 test('meal-photo: no food, refusals and bad input', async () => {

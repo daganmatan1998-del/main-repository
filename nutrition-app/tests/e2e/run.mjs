@@ -202,6 +202,7 @@ try {
   await page.waitForSelector('.overlay.bf #bf-start');
   check('body-fat photos need explicit consent first', await page.locator('#bf-start').isDisabled());
   check('body-fat screen shows the no-guarantee disclaimer up front', (await page.locator('.overlay.bf').innerText()).includes('אין התחייבות'));
+  check('the body-fat consent says the photos may go to another external service if the main one is unavailable, without naming any', (await page.locator('.overlay.bf').innerText()).includes('שירות ניתוח חיצוני אחר'));
   await page.check('#bf-consent');
   await page.click('#bf-start');
   await page.waitForSelector('.bf-video');
