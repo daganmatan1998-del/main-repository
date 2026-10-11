@@ -196,6 +196,7 @@ const ICONS = {
   bell: '<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
   download: '<path d="M12 4v11m-4-4 4 4 4-4M5 20h14"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  card: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   offline: '<path d="M2 8.8a15 15 0 0 1 4.2-2.7M22 8.8a15 15 0 0 0-9.7-3.7M5 12.5a10 10 0 0 1 3.2-2M19 12.5a10 10 0 0 0-3-2M8.5 16a5 5 0 0 1 7 0M12 20h.01M3 3l18 18"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',

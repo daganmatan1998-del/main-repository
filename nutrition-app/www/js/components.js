@@ -3,12 +3,14 @@
 import { h, icon, sheet, toast, fmt, parseNum, ltr } from './util.js';
 import { FOOD_BY_ID, household, ROLE_LABEL, canExclude, DIET_NOTES } from './foods.js';
 import { alternatives } from './substitutions.js';
-import { state, setOverride, excludeFood, today, clearPhotoMeal } from './store.js';
+import { state, setOverride, excludeFood, today, clearPhotoMeal, aiStatus } from './store.js';
 import { validBf } from './nutrition.js';
 import { openBodyFatEstimator } from './screens/bodyfat.js';
 import { openRecipes } from './screens/recipes.js';
 import { validRemoval } from './mealplan.js';
 import { openCalorieCamera } from './screens/calorie-cam.js';
+import { openPaywall } from './screens/paywall.js';
+import { canUseAI } from './billing.js';
 
 export function ring(value, target, label, sub) {
   const pct = target > 0 ? Math.min(1, value / target) : 0;
@@ -40,7 +42,7 @@ export function macroBar(name, cls, value, target) {
 const SWAP_LABEL = { protein: 'החלף חלבון', carb: 'החלף פחמימה', fat: 'החלף שומן', fruit: 'החלף פרי', veg: 'החלף ירק' };
 
 export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {}) {
-  const card = h('section', { class: 'card meal' + (eaten ? ' eaten' : '') });
+  const card = h('section', { class: 'card meal' + (eaten ? ' eaten' : ''), 'data-target-kcal': meal.target.kcal });
   const head = h('div', { class: 'meal-head' },
     h('div', null,
       h('h3', null, meal.name),
@@ -58,8 +60,9 @@ export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {
   if (camOk) {
     card.appendChild(h('button', {
       class: 'btn btn-block mc-open',
-      onclick: () => openCalorieCamera(meal, day),
-    }, icon('camera', 18), meal.eaten ? 'צילום מחדש במצלמת הקלוריות' : 'מצלמת קלוריות — צלמו את הצלחת'));
+      // A paid feature after the trial: locked shows the plan screen instead.
+      onclick: () => (canUseAI(aiStatus()) ? openCalorieCamera(meal, day) : openPaywall('camera')),
+    }, icon(canUseAI(aiStatus()) ? 'camera' : 'lock', 18), meal.eaten ? 'צילום מחדש במצלמת הקלוריות' : 'מצלמת קלוריות — צלמו את הצלחת'));
   }
   if (meal.eaten) return photoMealBody(card, meal, day);
 

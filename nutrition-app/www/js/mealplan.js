@@ -225,10 +225,7 @@ function chooser({ rand, week, dayIndex, mealIdx, reseed, userSeed, roleFoods, w
   };
   // A seeded draw outside the weekly rotation.
   choose.any = (slot, eligible, avoid) => pick(eligible, rand, avoid);
-  // Every main any meal has on any day of this week, and today's position:
-  // a last-resort replacement main comes from outside this set.
-  choose.dayIndex = dayIndex;
-  choose.weekMains = new Set(weekPlan.days.flat().filter(Boolean).map((f) => f.id));
+  choose.week = true;
   return choose;
 }
 
@@ -251,10 +248,16 @@ function proteinPool(type, target, allowed) {
   // Still short of a week: this meal's own slightly weaker proteins (a second
   // protein may top them up), and only then anything strong enough.
   const alike = type === 'b' || type === 's' ? 'bs' : 'ld';
+  const fits = (f) => [...alike].some((t) => f.meals.includes(t));
   const tiers = [
-    (f) => strong(f) && [...alike].some((t) => f.meals.includes(t)),
+    (f) => strong(f) && fits(f),
     (f) => f.meals.includes(type) && capacity(f) >= target.p * 0.6,
     strong,
+    // Still under a week: a different main every day matters more than every
+    // main carrying the whole meal (the portion grows to make up for it).
+    (f) => fits(f) && capacity(f) >= target.p * 0.6,
+    (f) => f.meals.includes(type),
+    fits,
   ];
   for (const tier of tiers) {
     if (out.length >= 7) break;
@@ -285,31 +288,94 @@ function planWeekMains({ tmpl, mealTargets, allowed, week, userSeed, groups }) {
     const size = groups.filter((g) => g === group).length;
     return { order, offset: pos * Math.floor(order.length / size) };
   });
-  const usedByMeal = tmpl.map(() => new Set());
+  const days = weekGrid(orders) || dayByDay(orders);
+  return withStrongMains({ tmpl, mealTargets, allowed, days, orders });
+}
+
+// The whole week at once: a main for every meal on every day, never the same
+// main twice in a day or twice in one meal's week, each meal following its own
+// rotation where it can. A depth-first search with a step budget; it gives up
+// (null) when a meal has fewer than 7 options or the budget runs out.
+function weekGrid(orders) {
+  const meals = orders.map((_, i) => i).filter((i) => orders[i].order.length);
+  if (meals.some((i) => orders[i].order.length < 7)) return null;
+  meals.sort((a, b) => orders[a].order.length - orders[b].order.length || a - b);
+  const cells = [];
+  for (let d = 0; d < 7; d++) for (const i of meals) cells.push([d, i]);
+  const grid = [...Array(7)].map(() => new Array(orders.length).fill(null));
+  const inMeal = orders.map(() => new Set());
+  const inDay = [...Array(7)].map(() => new Set());
+  let steps = 0;
+  const go = (c) => {
+    if (c === cells.length) return true;
+    if (++steps > 20000) return false;
+    const [d, i] = cells[c];
+    const { order, offset } = orders[i];
+    const start = (d + offset) % order.length;
+    for (let k = 0; k < order.length; k++) {
+      const f = order[(start + k) % order.length];
+      if (inMeal[i].has(f.id) || inDay[d].has(f.id)) continue;
+      grid[d][i] = f; inMeal[i].add(f.id); inDay[d].add(f.id);
+      if (go(c + 1)) return true;
+      inMeal[i].delete(f.id); inDay[d].delete(f.id);
+    }
+    grid[d][i] = null;
+    return false;
+  };
+  return go(0) ? grid : null;
+}
+
+// Fallback, one day at a time (small pools: some days repeat a main).
+function dayByDay(orders) {
+  const usedByMeal = orders.map(() => new Set());
   const days = [];
   for (let d = 0; d < 7; d++) {
-    const today = new Set();
-    const picks = [];
-    orders.forEach(({ order, offset }, idx) => {
-      if (!order.length) { picks.push(null); return; }
+    // Each meal's options for today in its rotation order, minus the mains it
+    // already had this week.
+    const rotation = (idx) => {
+      const { order, offset } = orders[idx];
+      if (!order.length) return [];
       const start = (d + offset) % order.length;
-      const at = (k) => order[(start + k) % order.length];
-      let food = null;
-      for (let k = 0; k < order.length && !food; k++) {
-        const f = at(k);
-        if (!today.has(f.id) && !usedByMeal[idx].has(f.id)) food = f;
+      return order.map((_, k) => order[(start + k) % order.length]);
+    };
+    const fresh = orders.map((_, idx) => rotation(idx).filter((f) => !usedByMeal[idx].has(f.id)));
+    // Match meals to fresh mains so that no main is used twice today. When the
+    // food a meal wants is taken, the meal holding it moves to another fresh
+    // option (augmenting path) instead of the first meal settling for a repeat.
+    // Meals with the fewest fresh options go first.
+    const picks = new Array(orders.length).fill(null);
+    const owner = new Map();
+    const tryMeal = (idx, seen) => {
+      for (const f of fresh[idx]) {
+        if (seen.has(f.id)) continue;
+        seen.add(f.id);
+        const other = owner.get(f.id);
+        if (other === undefined || tryMeal(other, seen)) {
+          owner.set(f.id, idx);
+          picks[idx] = f;
+          return true;
+        }
       }
-      for (let k = 0; k < order.length && !food; k++) {
-        const f = at(k);
-        if (!today.has(f.id)) food = f;
-      }
-      food = food || at(0);
-      today.add(food.id);
-      usedByMeal[idx].add(food.id);
-      picks.push(food);
-    });
+      return false;
+    };
+    const turnOrder = orders.map((_, idx) => idx).sort((a, b) => fresh[a].length - fresh[b].length || a - b);
+    for (const idx of turnOrder) tryMeal(idx, new Set());
+    // No fresh main left for a meal: anything not already on today's menu.
+    const today = new Set(picks.filter(Boolean).map((f) => f.id));
+    for (const idx of turnOrder) {
+      if (picks[idx] || !orders[idx].order.length) continue;
+      const opts = rotation(idx);
+      picks[idx] = opts.find((f) => !today.has(f.id)) || opts[0];
+      today.add(picks[idx].id);
+    }
+    picks.forEach((f, idx) => { if (f) usedByMeal[idx].add(f.id); });
     days.push(picks);
   }
+  return days;
+}
+
+function withStrongMains({ tmpl, mealTargets, allowed, days, orders }) {
+  const usedByMeal = tmpl.map((_, idx) => new Set(days.map((d) => d[idx]).filter(Boolean).map((f) => f.id)));
   // A main too weak to carry its meal's protein alone (lentils for a big
   // lunch) is swapped, where the week allows, for a strong one this meal
   // doesn't use on any day and no other meal uses that day — so the meal
@@ -405,7 +471,7 @@ export function buildMeal(type, target, allowed, choose, usedToday, slots = SLOT
     if (slot === 'protein') {
       pool = proteinPool(type, target, allowed);
       // A single day on its own (no week plan to vary): strong mains only.
-      if (!choose.weekMains) {
+      if (!choose.week) {
         const strong = pool.filter((f) => carries(f, target, 0.85));
         if (strong.length) pool = strong;
       }
@@ -443,7 +509,9 @@ export function buildMeal(type, target, allowed, choose, usedToday, slots = SLOT
   // need: protein pudding 125 g + yogurt becomes just more pudding.
   // Still short: a bigger portion of it (up to 1.5x its usual maximum).
   // A meal always has one protein, never two; weak mains were already
-  // swapped for strong ones where the week allows it (planWeekMains).
+  // swapped for strong ones where the week allows it (planWeekMains). No
+  // swap happens here: one day can't see the others, and two days could land
+  // on the same replacement and repeat a main within the week.
   const tryProtein = (list, grow) => {
     const its = list.map((c) => ({ ...toItem(c), hi: c.slot === 'protein' && grow ? c.food.max * 1.5 : toItem(c).hi }));
     const out = solvePortions(its, target, KEYS, W_PROTEIN);
@@ -452,27 +520,7 @@ export function buildMeal(type, target, allowed, choose, usedToday, slots = SLOT
   };
   if (totals(items).p < target.p * 0.85) {
     const at = chosen.findIndex((c) => c.slot === 'protein');
-    let better = tryProtein(chosen, false) || (at >= 0 && tryProtein(chosen, true));
-    // Last resort: a main that no meal has anywhere this week, so swapping it
-    // in can't repeat a day. Days start at different candidates.
-    if (!better && at >= 0 && choose.weekMains) {
-      const others = chosen.filter((c) => c.slot !== 'protein').map((c) => c.food);
-      const fresh = allowed
-        .filter((f) => f.role === 'protein' && !choose.weekMains.has(f.id) && !usedToday.has(f.id)
-          && f.meals.includes(type) && kosherCompatible(f, others) && carries(f, target, 0.85))
-        .sort((x, y) => (x.id < y.id ? -1 : 1));
-      const from = fresh.length ? choose.dayIndex % fresh.length : 0;
-      for (const f of fresh.slice(from).concat(fresh.slice(0, from)).slice(0, 4)) {
-        const swapped = chosen.map((c, i) => (i === at ? { slot: 'protein', food: f } : c));
-        better = tryProtein(swapped, true);
-        if (better) {
-          usedToday.delete(chosen[at].food.id);
-          usedToday.add(f.id);
-          chosen[at] = swapped[at];
-          break;
-        }
-      }
-    }
+    const better = tryProtein(chosen, false) || (at >= 0 && tryProtein(chosen, true));
     if (better) items = better;
   }
   if (sink) sink.chosen = chosen.map(toItem);

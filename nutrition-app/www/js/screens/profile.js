@@ -10,7 +10,9 @@ import { openPeriodReview } from './period.js';
 import { enableReminders, disableReminders, downloadCalendar, supported as notifSupported } from '../notify.js';
 import { canInstall, isStandalone, promptInstall } from '../install.js';
 import { applyTheme } from '../theme.js';
-import { APP_VERSION } from '../config.js';
+import { APP_VERSION, BILLING } from '../config.js';
+import { openPaywall } from './paywall.js';
+import { aiStatus } from '../store.js';
 
 export function renderProfile(root) {
   const p = state.profile;
@@ -20,6 +22,19 @@ export function renderProfile(root) {
 
   root.appendChild(h('header', { class: 'page-head' },
     h('div', null, h('h1', null, p.name), h('p', { class: 'muted' }, `נרשמת ב-${fmtDate(p.regDay, true)} · שבוע ${currentWeek()}`))));
+
+  // ---- plan for the AI features ----
+  if (BILLING.enabled) {
+    const a = aiStatus();
+    root.appendChild(h('section', { class: 'card', id: 'plan-card' },
+      h('div', { class: 'row space' },
+        h('h2', null, 'נוטרי פלוס'),
+        h('span', { class: `badge ${a.state}` }, a.state === 'active' ? 'פעיל' : a.state === 'trial' ? 'ניסיון' : 'לא פעיל')),
+      h('p', { class: 'muted small' }, a.state === 'active' ? `המנוי פעיל עד ${fmtDate(new Date(a.until).toISOString().slice(0, 10))}.`
+        : a.state === 'trial' ? `עוד ${a.daysLeft} ימי ניסיון לעוזר החכם ולמצלמת הקלוריות.`
+          : 'העוזר החכם ומצלמת הקלוריות זמינים במנוי. כל השאר חינמי.'),
+      h('button', { class: 'btn btn-block btn-primary', id: 'btn-plan', onclick: () => openPaywall('') }, a.state === 'active' ? 'פרטי המנוי' : 'לשדרוג')));
+  }
 
   // ---- metrics ----
   root.appendChild(h('section', { class: 'card' },

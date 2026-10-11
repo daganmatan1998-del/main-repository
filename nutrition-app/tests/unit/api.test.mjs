@@ -148,7 +148,7 @@ test('bodyfat: rejects bad input before calling the model', async () => {
 
 // ---------- /api/meal-photo ----------
 const mpReq = (body) => new Request('https://nutri.example/api/meal-photo', {
-  method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': `203.0.113.${Math.floor(Math.random() * 200)}` }, body: JSON.stringify(body),
+  method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': `192.0.2.${Math.floor(Math.random() * 250)}` }, body: JSON.stringify(body),
 });
 const mpBody = {
   photo: PHOTO,

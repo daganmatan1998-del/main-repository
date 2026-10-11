@@ -344,7 +344,8 @@ try {
     && (await meal0().locator('.rm-chip[data-group="carb"]').getAttribute('aria-pressed')) === 'true');
   check('nothing is added in its place: the same foods, in bigger portions',
     namesNoCarb.length === namesBefore.length - 1 && namesNoCarb.every((n) => namesBefore.includes(n)), `${namesBefore} → ${namesNoCarb}`);
-  check(`the carb calories move to the rest of the meal (${mealKcal0} → ${kcalNoCarb} kcal)`, Math.abs(kcalNoCarb - mealKcal0) / mealKcal0 < 0.12); // vs the full meal, which itself can sit ~10% off its target
+  const mealTarget = Number(await meal0().getAttribute('data-target-kcal'));
+  check(`the carb calories move to the rest of the meal (${mealKcal0} → ${kcalNoCarb} kcal, target ${mealTarget})`, Math.abs(kcalNoCarb - mealTarget) / mealTarget < 0.08);
   check('the meal explains where the calories went', /קק״ל (חולקו|עברו)/.test(await meal0().locator('.rm-note').innerText()));
   await shot('08b-remove-carb');
   await page.reload();
@@ -360,7 +361,7 @@ try {
   await meal0().locator('.rm-chip[data-group="protein"]').click();
   await wait(400);
   check('a meal without protein is still a full meal', (await meal0().locator('.item.role-protein').count()) === 0
-    && Math.abs((await kcalOf()) - mealKcal0) / mealKcal0 < 0.15, `${await kcalOf()} vs ${mealKcal0}: ${await meal0().locator('.items').innerText()}`);
+    && Math.abs((await kcalOf()) - mealTarget) / mealTarget < 0.15, `${await kcalOf()} vs target ${mealTarget}: ${await meal0().locator('.items').innerText()}`);
   await meal0().locator('.rc-open').click();
   await page.waitForSelector('.overlay.recipes .rc-card');
   check('recipes still come for a meal without protein', Number((await page.locator('#rc-count').innerText()).replace(/[^\d]/g, '')) >= 20);
@@ -497,12 +498,15 @@ try {
   await shot('27-recipes', { fullPage: false });
   await page.click('#rc-filter-btn');
   await page.waitForSelector('#rc-panel');
-  await page.locator('#rc-panel').getByRole('button', { name: 'תנור', exact: true }).click();
+  // Filter by the tool of the first recipe shown (menus depend on the user's random seed).
+  const firstMeta = await page.locator('.rc-card .rc-meta').first().innerText();
+  const tool = ['אייר פרייר', 'גריל / פסים', 'בלי בישול', 'מחבת', 'תנור', 'סיר', 'בלנדר'].find((t) => firstMeta.includes(t));
+  await page.locator('#rc-panel').getByRole('button', { name: tool, exact: true }).click();
   await wait(200);
-  const ovenCount = await countOf();
+  const toolCount = await countOf();
   const metas = await page.locator('.rc-card .rc-meta').allInnerTexts();
-  check(`tool filter: oven only (${ovenCount})`, ovenCount > 0 && ovenCount < totalRecipes && metas.every((m) => m.includes('תנור')));
-  await page.locator('#rc-panel').getByRole('button', { name: 'תנור', exact: true }).click();
+  check(`tool filter: ${tool} only (${toolCount} of ${totalRecipes})`, toolCount > 0 && toolCount < totalRecipes && metas.every((m) => m.includes(tool)));
+  await page.locator('#rc-panel').getByRole('button', { name: tool, exact: true }).click();
   await page.locator('#rc-panel').getByRole('button', { name: 'נקה' }).click();
   for (const item of ['שום', 'לימון', 'זעתר', 'פטרוזיליה', 'שמיר']) await page.locator('#rc-panel .chips').first().getByRole('button', { name: item, exact: true }).click();
   await page.check('#rc-pantry-only');
@@ -841,6 +845,58 @@ try {
   await shot('20-gallery-dark');
   await page.click('a[href="#/profile"]');
   await page.getByRole('radio', { name: 'בהיר' }).click();
+
+  // =============== paid plan for the AI features (the trial is over by now) ===============
+  await page.click('a[href="#/profile"]');
+  await page.waitForSelector('#plan-card');
+  check('profile shows the plan, inactive after the 7-day trial', (await page.locator('#plan-card .badge').innerText()).includes('לא פעיל'));
+  await page.click('#btn-plan');
+  await page.waitForSelector('#paywall');
+  const methodsDesktop = await page.locator('#pay-methods .pay-btn').evaluateAll((els) => els.map((e) => e.dataset.method));
+  check(`desktop shows card and PayPal only (${methodsDesktop})`, methodsDesktop.join() === 'card,paypal');
+  check('two plans, the yearly one preselected', (await page.locator('.plan').count()) === 2 && (await page.locator('.plan.on').getAttribute('data-plan')) === 'yearly');
+  await page.click('.pay-btn[data-method="paypal"]');
+  check('paying explains that payments are not connected yet, and takes no one anywhere', (await page.locator('.pay-status').innerText()).includes('עוד לא מחובר') && page.url().includes('#/profile'));
+  await shot('35-paywall');
+  await page.locator('.sheet .icon-btn[aria-label="סגירה"]').click();
+  await page.click('a[href="#/assistant"]');
+  await page.waitForSelector('#ai-plan');
+  const calls0 = upstream.length;
+  await page.fill('#chat-input', 'שאלה אחרי הניסיון');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('#paywall');
+  check('after the trial the assistant asks for a plan and calls no AI', upstream.length === calls0);
+  await page.locator('.sheet .icon-btn[aria-label="סגירה"]').click();
+  await page.click('a[href="#/today"]');
+  await page.waitForSelector('.meal .mc-open');
+  await page.locator('.meal .mc-open').first().click();
+  await page.waitForSelector('#paywall');
+  check('the calorie camera is locked too', (await page.locator('.overlay.mc').count()) === 0 && (await page.locator('.paywall .lead').innerText()).includes('מצלמת הקלוריות'));
+  await page.locator('.sheet .icon-btn[aria-label="סגירה"]').click();
+  await page.click('a[href="#/profile"]');
+  await page.click('#m-bf-estimate');
+  await page.waitForSelector('#bf-consent');
+  check('the body-fat estimate stays free', (await page.locator('#paywall').count()) === 0);
+  await page.locator('.overlay.bf .icon-btn[aria-label="סגירה"]').click();
+  for (const [name, ua, want] of [
+    ['iPhone', 'Mozilla/5.0 (iPhone; CPU iPhone OS 19_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Mobile/15E148 Safari/604.1', 'applepay,card,paypal'],
+    ['Android', 'Mozilla/5.0 (Linux; Android 16; Pixel 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36', 'googlepay,card,paypal'],
+  ]) {
+    const p2 = await ctx.newPage();
+    await p2.addInitScript((u) => Object.defineProperty(navigator, 'userAgent', { get: () => u }), ua);
+    await p2.goto(`${BASE}/#/profile`);
+    await p2.waitForSelector('#btn-plan');
+    await p2.click('#btn-plan');
+    await p2.waitForSelector('#paywall');
+    const got = await p2.locator('#pay-methods .pay-btn').evaluateAll((els) => els.map((e) => e.dataset.method));
+    check(`${name} gets ${want.split(',')[0] === 'applepay' ? 'Apple Pay' : 'Google Pay'} first (${got})`, got.join() === want);
+    if (name === 'iPhone') {
+      await p2.locator('#pay-methods').scrollIntoViewIfNeeded();
+      await p2.waitForTimeout(400);
+      await p2.screenshot({ path: path.join(SHOTS, '36-paywall-iphone.png') });
+    }
+    await p2.close();
+  }
 
   // =============== layout at several phone sizes ===============
   for (const [w, h] of [[320, 640], [360, 740], [390, 844], [430, 932]]) {

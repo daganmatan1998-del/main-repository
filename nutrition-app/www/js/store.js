@@ -1,5 +1,6 @@
 // Application state: loaded once from IndexedDB, kept in memory, written through.
 
+import { aiAccess } from './billing.js';
 import * as db from './db.js';
 import { dayKey, addDays, daysBetween } from './util.js';
 import { computeTargets, validBf } from './nutrition.js';
@@ -62,6 +63,11 @@ export function nowMs() {
     return real;
   }
   return seen - real > ROLLBACK_TOLERANCE_MS ? seen : real;
+}
+
+// Can the AI features be used right now? (trial / active plan / locked; see billing.js)
+export function aiStatus() {
+  return aiAccess({ subscription: state.settings.subscription, regDay: state.profile && state.profile.regDay, today: today(), now: nowMs() });
 }
 
 export function today() {

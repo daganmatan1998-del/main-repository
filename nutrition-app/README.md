@@ -247,6 +247,20 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
 - **Free-tier model names change.** Override any with `<VENDOR>_MODEL` / `<VENDOR>_VISION_MODEL`, and limit a task with `ENGINES_CHAT=google,groq` / `ENGINES_MEALPHOTO=...`.
 - `/api/health` lists which engines are configured (ids only, never keys).
 
+### Paid plan for the AI features (v1.7, payments not connected yet)
+
+- **Paid** ("נוטרי פלוס"): the assistant (chat, substitution questions, recipe ideas) and the calorie camera, the features that spend AI quota.
+- **Free:** everything else, including the body-fat estimate, the menu, recipes, shopping and swaps.
+- **Trial:** every user gets `BILLING.trialDays` (7) days of the AI features from registration. Then the assistant and the camera open the payment screen instead. A substitution question still gets the equivalents computed on the device.
+- **Payment screen:**
+  - two plans (prices are placeholders in `config.js`)
+  - payment buttons for the device: **Apple Pay** on iPhone/iPad, **Google Pay** on Android, **card** and **PayPal** everywhere
+  - the VAT and auto-renewal line
+- **Connecting a provider:** set `BILLING.provider` and `BILLING.checkoutUrl` (the provider's hosted checkout). `checkoutLink()` in `billing.js` is the one place that sends the buyer there, so card details never pass through the app. Until then, every button says payments aren't connected yet. The subscription is read from `settings.subscription` (`{ plan, until, method }`).
+- **Before charging real money:**
+  - **Accounts and a server record of who paid.** The provider's webhook should reach the Worker, and the AI endpoints should check the subscription. Today the check runs on the device only, so it is easy to bypass.
+  - **Store builds:** an App Store build must sell the plan through Apple's in-app purchase instead.
+
 ### Weekly-gate rules (what "can't be bypassed" means here)
 
 - The gate decision is made in one function, `render()` in `app.js`. It runs on every route change, return from the background, focus, bfcache restore, and every 30 seconds.
@@ -262,8 +276,8 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
 ## Tests
 
 ```bash
-npm test              # 62 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
-npm run test:e2e      # 176 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm test              # 67 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
+npm run test:e2e      # 185 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 ```
 
 The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.
