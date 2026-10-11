@@ -201,7 +201,7 @@ export const DIET_NOTES = {
 
 export const ROLE_LABEL = { protein: 'חלבון', carb: 'פחמימה', fat: 'שומן', veg: 'ירקות', fruit: 'פרי' };
 
-const DIET_ALLOWED_SRC = {
+export const DIET_ALLOWED_SRC = {
   omni: ['meat', 'poultry', 'fish', 'shellfish', 'dairy', 'egg', 'plant'],
   pescatarian: ['fish', 'shellfish', 'dairy', 'egg', 'plant'],
   vegetarian: ['dairy', 'egg', 'plant'],

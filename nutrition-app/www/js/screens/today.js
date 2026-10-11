@@ -5,6 +5,7 @@ import { h, icon, fmt, fmtDate, dayNumber, daysBetween, signed, ltr } from '../u
 import { ring, macroBar, mealCard, avatar } from '../components.js';
 import { lineChart } from '../chart.js';
 import { dayTotals } from '../mealplan.js';
+import { dayDrinks } from '../drinks.js';
 import { GOALS } from '../nutrition.js';
 import { state, today, targets, dayPlan, toggleEaten, gate, activePeriod, currentMetrics, periodEnded, saveSettings } from '../store.js';
 import { openPeriodReview } from './period.js';
@@ -17,7 +18,10 @@ export function renderToday(root, { askAbout }) {
   const t = targets(day);
   const plan = dayPlan(day);
   const eaten = new Set((state.logs[day] || { eaten: [] }).eaten);
-  const consumed = dayTotals(plan, eaten);
+  // What was eaten, plus every drink logged today (drinks count once logged).
+  const eatenTotals = dayTotals(plan, eaten);
+  const drunk = dayDrinks(state.logs[day]);
+  const consumed = { kcal: eatenTotals.kcal + drunk.kcal, p: eatenTotals.p + drunk.p, c: eatenTotals.c + drunk.c, f: eatenTotals.f + drunk.f };
   const g = gate();
   const p = activePeriod();
   const cur = currentMetrics();

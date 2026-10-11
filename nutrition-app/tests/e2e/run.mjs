@@ -270,6 +270,60 @@ try {
   check('marking a meal eaten fills the calorie ring', (await page.locator('.ring-label strong').innerText()) !== '0');
   await shot('06-today', { fullPage: true });
 
+  // =============== drinks under every meal ===============
+  const ringKcal = async () => Number((await page.locator('.ring-label strong').innerText()).replace(/,/g, ''));
+  const mealA = () => page.locator('.meal').first();
+  check('every meal card has a "שתייה" box with a name field and the two optional fields', (await page.locator('.meal .drinks').count()) === 5
+    && (await mealA().locator('.drinks-title').innerText()).includes('שתייה')
+    && (await mealA().locator('.drink-opts').innerText()).includes('סוכר') && (await mealA().locator('.drink-opts').innerText()).includes('כמה כוסות'));
+  const k0 = await ringKcal();
+  await mealA().locator('.drink-name').fill('שוקו');
+  await mealA().locator('.drink-sugar').fill('2');
+  await mealA().locator('.drink-count').fill('2');
+  await mealA().locator('.drink-add').click();
+  await wait(500);
+  check('chocolate milk ×2 with 2 sugars is 404 kcal, shown on the card', (await mealA().locator('.drink-row').innerText()).includes('404'));
+  check('drinks count toward the day\'s calories', (await ringKcal()) - k0 === 404, `${k0} -> ${await ringKcal()}`);
+  await mealA().locator('.drink-name').fill('מרק פטריות מוזר');
+  await mealA().locator('.drink-add').click();
+  await wait(400);
+  check('an unknown drink asks for its calories instead of guessing', await mealA().locator('.drink-kcal-in').isVisible());
+  await mealA().locator('.drink-kcal-in').fill('50');
+  await mealA().locator('.drink-kcal-in').dispatchEvent('change');
+  await wait(400);
+  check('...and then counts them', (await ringKcal()) - k0 === 454, `${k0} -> ${await ringKcal()}`);
+  await mealA().screenshot({ path: path.join(SHOTS, '37-drinks.png') });
+  while (await mealA().locator('.drink-del').count()) { await mealA().locator('.drink-del').first().click(); await wait(300); }
+  check('removing the drinks takes their calories back off', (await ringKcal()) === k0);
+
+  // =============== sauces and cheese: calories come off the rest of the meal ===============
+  const mealKcal = async () => Number((await mealA().locator('.meal-sub').innerText()).match(/([\d,]+)\s*קק/)[1].replace(/,/g, ''));
+  const target0 = Number(await mealA().getAttribute('data-target-kcal'));
+  const itemsBefore = await mealA().locator('.item').count();
+  await mealA().locator('.extras-add').click();
+  await page.waitForSelector('#extra-search');
+  const firstGroup = await page.locator('.extra-group').first().innerText();
+  const firstKcal = Number((await page.locator('.extra-opt').first().locator('.muted').innerText()).match(/(\d+)\s*קק/)[1]);
+  check(`low-calorie sauces come first (${firstGroup}, ${firstKcal} kcal)`, firstGroup.includes('דלי קלוריות') && firstKcal <= 25);
+  await shot('38-extras-sheet');
+  await page.fill('#extra-search', 'טחינה');
+  await page.locator('.extra-opt').first().getByRole('button', { name: 'הוספה' }).click();
+  await wait(600);
+  const withSauce = await mealKcal();
+  check('a sauce shows under the meal, with its calories', (await mealA().locator('.extras-list').innerText()).includes('טחינה') && (await mealA().locator('.extras-note').innerText()).includes('הופחתו'));
+  check(`the meal keeps its calorie budget (${withSauce} vs ${target0}) and the same foods`, Math.abs(withSauce - target0) <= target0 * 0.12 && (await mealA().locator('.item').count()) === itemsBefore);
+  await mealA().locator('.extras-add').click();
+  await page.waitForSelector('#extra-search');
+  await page.fill('#extra-search', 'קוטג');
+  const cot = page.locator('.extra-opt').first();
+  check('cottage cheese is on the list', (await cot.innerText()).includes('קוטג'));
+  await cot.getByRole('button', { name: 'הוספה' }).click();
+  await wait(600);
+  check('two additions at once still keep the budget', (await mealA().locator('.extra').count()) === 2 && Math.abs((await mealKcal()) - target0) <= target0 * 0.12, `${await mealKcal()} vs ${target0}`);
+  await mealA().screenshot({ path: path.join(SHOTS, '39-extras-meal.png') });
+  while (await mealA().locator('.extra-del').count()) { await mealA().locator('.extra-del').first().click(); await wait(400); }
+  check('removing the additions returns the meal', (await mealA().locator('.extras-list').count()) === 0 && (await mealA().locator('.item').count()) === itemsBefore);
+
   // =============== Plan & swaps ===============
   await page.click('a[href="#/plan"]');
   await page.waitForSelector('.page-plan');
@@ -289,11 +343,24 @@ try {
   await page.waitForSelector('.sheet .alt');
   await shot('08-swap-sheet');
   const shownAlts = await page.locator('.sheet .alt').count();
+  check('the swap sheet opens with a search bar on top', await visible('#alt-search'));
   await page.click('#btn-all-alts');
   await wait(400);
   const allAlts = await page.locator('.sheet .alt').count();
   check(`"see all options" lists every food of the kind (${shownAlts} → ${allAlts})`, shownAlts === 6 && allAlts > 10 && (await page.locator('#btn-all-alts').count()) === 0);
   await shot('08a-swap-all');
+  // search narrows the full list to what was typed
+  const allNames = await page.locator('.sheet .alt .alt-name').allInnerTexts();
+  const word = (allNames[allNames.length - 1].replace(/[^\u05D0-\u05EA ]/g, ' ').split(' ').filter((w) => w.length >= 3)[0]) || allNames[allNames.length - 1].slice(0, 3);
+  await page.fill('#alt-search', word);
+  await wait(200);
+  const found = await page.locator('.sheet .alt .alt-name').allInnerTexts();
+  check(`searching "${word}" finds it among all ${allNames.length} options (${found.length} shown)`, found.length >= 1 && found.length <= allNames.length && found.some((n) => n.includes(word)));
+  await page.fill('#alt-search', 'זזזזזזז');
+  await wait(200);
+  check('a search with no match says so', (await page.locator('.sheet .alt').count()) === 0 && (await page.locator('.sheet .empty').count()) >= 1);
+  await page.fill('#alt-search', '');
+  await wait(200);
   const altName = await page.locator('.sheet .alt .alt-name').first().innerText();
   await page.locator('.sheet .alt button').first().click();
   await wait(500);

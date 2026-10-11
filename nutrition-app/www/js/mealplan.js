@@ -9,6 +9,7 @@
 
 import { allowedFoods, kosherCompatible, macrosFor, FOOD_BY_ID, isAllowed } from './foods.js';
 import { rng, hashStr, clamp } from './util.js';
+import { extraFood, extraMacros, MAX_EXTRAS } from './extras.js';
 
 const MEAL_NAMES = {
   b: 'ארוחת בוקר',
@@ -132,7 +133,7 @@ export function solvePortions(items, target, keys = KEYS, w = W) {
     if (it.fixed) continue;
     // keep: a food that stays on the plate whatever the solver thinks (the
     // breakfast fruit; what's left after the user removed a group).
-    it.lo = it.role === 'protein' || it.keep ? food.min : 0;
+    it.lo = it.role === 'protein' || it.keep ? food.min * (it.shrink || 1) : 0;
     it.grams = it.grams || (food.min + food.max) / 3;
   }
   descend(items, target, 80, keys, w);
@@ -140,7 +141,7 @@ export function solvePortions(items, target, keys = KEYS, w = W) {
   // Drop carbs/fats the meal doesn't need (e.g. salmon already brings the fat).
   let kept = items.filter((it) => it.fixed || it.keep || it.role === 'protein' || it.grams >= FOOD_BY_ID[it.foodId].min * 0.5);
   for (const it of kept) {
-    if (!it.fixed) it.lo = FOOD_BY_ID[it.foodId].min;
+    if (!it.fixed) it.lo = FOOD_BY_ID[it.foodId].min * (it.shrink || 1);
   }
   descend(kept, target, 80, keys, w);
 
@@ -154,7 +155,7 @@ export function solvePortions(items, target, keys = KEYS, w = W) {
   }
   descend(kept, target, 80, keys, w);
   for (const it of kept) it.grams = roundGrams(FOOD_BY_ID[it.foodId], it.grams);
-  return kept.map(({ lo, hi, fixed, keep, ...rest }) => rest);
+  return kept.map(({ lo, hi, fixed, keep, shrink, ...rest }) => rest);
 }
 
 function itemWithMacros(it) {
@@ -432,10 +433,12 @@ const keysFor = (removed) => KEYS.filter((k) => !removed.some((g) => GROUP_MACRO
 // their usual portion (up to STRETCH) to carry the calories of what was
 // removed; no new food is added in its place and none of them is dropped.
 const STRETCH = 1.8;
-function solveWithout(items, target, removed) {
+// shrink < 1 lets portions go below their usual minimum (sauces or cheese the
+// person added leave less room for the rest of the meal).
+function solveWithout(items, target, removed, shrink = 1) {
   const keys = keysFor(removed);
   const aim = retarget(target, removed);
-  const out = solvePortions(items.map((it) => ({ ...it, keep: true, hi: FOOD_BY_ID[it.foodId].max * STRETCH })), aim, keys);
+  const out = solvePortions(items.map((it) => ({ ...it, keep: true, shrink, hi: FOOD_BY_ID[it.foodId].max * STRETCH })), aim, keys);
   // The macro aim leaves the meal off its calories when the remaining foods
   // also carry the removed macro (fat in entrecôte, carbs in chickpeas).
   // Calories come first: scale the remaining portions together onto them.
@@ -450,7 +453,7 @@ function solveWithout(items, target, removed) {
       if (Math.abs(factor - 1) < 0.02) break;
       for (const it of movable) {
         const food = FOOD_BY_ID[it.foodId];
-        it.grams = roundGrams(food, clamp(it.grams * factor, food.min, food.max * STRETCH));
+        it.grams = roundGrams(food, clamp(it.grams * factor, food.min * shrink, food.max * STRETCH));
       }
     }
   };
@@ -613,15 +616,25 @@ export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 
         if (at >= 0) items[at] = replacement;
       }
     }
+    // Sauces and cheese the person added: their calories come off the rest of
+    // the meal, so the meal keeps its calorie budget. The macros they carry
+    // are taken off the macro aim too, the calories off the total.
+    const extras = (ov.extras || []).filter((e) => e && extraFood(e.foodId) && e.grams > 0).slice(0, MAX_EXTRAS)
+      .map((e) => ({ foodId: e.foodId, grams: Math.round(e.grams * 2) / 2, ...extraMacros(e.foodId, e.grams) }));
+    const ex = extras.reduce((s, e) => ({ kcal: s.kcal + e.kcal, p: s.p + e.p, c: s.c + e.c, f: s.f + e.f }), { kcal: 0, p: 0, c: 0, f: 0 });
+    const aimTarget = extras.length
+      ? { kcal: Math.max(target.kcal * 0.3, target.kcal - ex.kcal), p: Math.max(0, target.p - ex.p), c: Math.max(0, target.c - ex.c), f: Math.max(0, target.f - ex.f) }
+      : target;
     // What's left of the meal grows to carry the removed group's calories:
     // same foods, bigger portions, nothing added in its place.
-    if (removed.length) {
+    if (removed.length || extras.length) {
       // Vegetables and the meal's fruit keep their serving; the rest grows.
       const set = (it) => it.role === 'veg' || it.slot === 'fruit';
-      items = solveWithout(items.map(({ slot, role, foodId, grams }) => ({ slot, role, foodId, grams: set({ slot, role }) ? grams : 0, fixed: set({ slot, role }) })), target, removed);
+      items = solveWithout(items.map(({ slot, role, foodId, grams }) => ({ slot, role, foodId, grams: set({ slot, role }) ? grams : 0, fixed: set({ slot, role }) })), aimTarget, removed, extras.length ? 0.5 : 1);
     }
     items = items.map(itemWithMacros);
     const t = totals(items);
+    t.kcal += ex.kcal; t.p += ex.p; t.c += ex.c; t.f += ex.f;
     const aim = retarget(target, removed);
     return {
       index: idx,
@@ -633,6 +646,7 @@ export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 
       freedKcal: Math.round(kcalOf(target, removed.map((g) => GROUP_MACRO[g]).filter(Boolean))),
       target: { kcal: Math.round(target.kcal), p: Math.round(aim.p), c: Math.round(aim.c), f: Math.round(aim.f) },
       items,
+      extras: extras.map((e) => ({ foodId: e.foodId, grams: e.grams, kcal: Math.round(e.kcal), p: round1(e.p), c: round1(e.c), f: round1(e.f) })),
       totals: { kcal: Math.round(t.kcal), p: round1(t.p), c: round1(t.c), f: round1(t.f) },
     };
   });

@@ -236,6 +236,8 @@ export async function setOverride(day, mealIdx, patch) {
   if (patch.swap) m.swaps = { ...(m.swaps || {}), [patch.swap.slot]: { foodId: patch.swap.foodId, grams: patch.swap.grams } };
   // removed: the food groups taken out of this meal (survives "another meal").
   if (patch.removed !== undefined) m.removed = [...patch.removed];
+  // extras: sauces / cheese added to this meal ({ foodId, grams }); also survives "another meal".
+  if (patch.extras !== undefined) m.extras = patch.extras.map(({ foodId, grams }) => ({ foodId, grams }));
   d[mealIdx] = m;
   state.overrides[day] = d;
   // Keep only the recent past and the future.
@@ -257,6 +259,33 @@ export async function toggleEaten(day, mealIdx) {
   const set = new Set(log.eaten);
   if (set.has(mealIdx)) set.delete(mealIdx); else set.add(mealIdx);
   state.logs[day] = { ...log, eaten: [...set].sort((a, b) => a - b) };
+  await saveLogs();
+}
+
+// Drinks logged with a meal (see drinks.js): logs[day].drinks[mealIdx] = entries.
+export async function addDrink(day, mealIdx, drink) {
+  const log = state.logs[day] || { eaten: [] };
+  const all = { ...(log.drinks || {}) };
+  all[mealIdx] = [...(all[mealIdx] || []), drink];
+  state.logs[day] = { ...log, drinks: all };
+  await saveLogs();
+}
+
+export async function updateDrink(day, mealIdx, at, patch) {
+  const log = state.logs[day];
+  if (!log || !log.drinks || !log.drinks[mealIdx]) return;
+  const list = log.drinks[mealIdx].map((d, i) => (i === at ? { ...d, ...patch } : d));
+  state.logs[day] = { ...log, drinks: { ...log.drinks, [mealIdx]: list } };
+  await saveLogs();
+}
+
+export async function removeDrink(day, mealIdx, at) {
+  const log = state.logs[day];
+  if (!log || !log.drinks || !log.drinks[mealIdx]) return;
+  const drinks = { ...log.drinks };
+  drinks[mealIdx] = drinks[mealIdx].filter((_, i) => i !== at);
+  if (!drinks[mealIdx].length) delete drinks[mealIdx];
+  state.logs[day] = { ...log, drinks };
   await saveLogs();
 }
 

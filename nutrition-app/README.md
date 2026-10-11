@@ -261,6 +261,23 @@ Closing the camera at any point logs nothing. The photo is never saved: it lives
   - **Accounts and a server record of who paid.** The provider's webhook should reach the Worker, and the AI endpoints should check the subscription. Today the check runs on the device only, so it is easy to bypass.
   - **Store builds:** an App Store build must sell the plan through Apple's in-app purchase instead.
 
+### Search, drinks and sauces (v1.11)
+
+- **Search in "replace an item":** a search bar on top of the swap sheet. Typing a name searches every food of that kind (names and aliases), not just the short list.
+- **Drinks ("שתייה") under every meal** of today and past days:
+  - a free-text field ("מה שתיתם?") with suggestions, plus two optional fields: **sugar (teaspoons per cup)** and **how many cups**
+  - the text is matched against a table of about 25 common drinks (`drinks.js`, per cup) to get calories; the longest match wins, so "קפה עם חלב" beats "קפה"
+  - a drink the table doesn't know is saved with 0 calories and the person types the calories of one cup
+  - drinks count toward the day's calories and macros as soon as they're added (ring and bars on Today), whether or not the meal is marked eaten
+  - one teaspoon of sugar is 16 kcal and 4 g carbs
+- **Sauces and cheese ("הוספת רוטב או גבינה") on every meal:**
+  - the list (`extras.js`) has about 25 sauces and 5 cheeses, filtered by diet, allergies, kosher (no dairy beside meat) and keto (at most 3 g carbs a serving)
+  - low-calorie sauces (25 kcal or less a serving) come first, lowest first, then the rest, then cheeses
+  - the **calories come off the rest of the meal**: the other foods shrink (down to half their usual minimum if they must) so the meal stays on its budget. Meals with a removed group work the same way
+  - up to 4 per meal; each can be made smaller or bigger, or removed
+  - they are kept apart from the food table, so they never appear in generated menus, swaps, recipes or the weekly shopping list
+- **Not done yet:** the assistant doesn't know about the drinks or the added sauces, and the shopping list doesn't include the sauces.
+
 ### Cloud accounts: sign in with Google (v1.8)
 
 Accounts are on once `CLOUD.url` and `CLOUD.anonKey` are set (they are, for the project in config.js) in `www/js/config.js`. Until then the app has no sign-in button and works exactly as before, on the device only.
@@ -321,8 +338,8 @@ Accounts are on once `CLOUD.url` and `CLOUD.anonKey` are set (they are, for the 
 ## Tests
 
 ```bash
-npm test              # 72 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy, PKCE
-npm run test:e2e      # 187 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm test              # 82 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy, PKCE
+npm run test:e2e      # 202 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 npm run test:cloud    # 37 browser checks: the first screen, Google sign-in, sync across devices, photo backup, conflicts, sign-out, delete; profile picture and nickname
 ```
 

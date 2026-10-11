@@ -220,3 +220,7 @@ export function parseNum(v) {
   if (s === '') return NaN;
   return Number(s);
 }
+
+// Search-friendly text: lower case, without quotes/geresh/hyphens/niqqud, so
+// "קוטג'" matches "קוטג" and "סריראצ׳ה" matches "סריראצה".
+export const normText = (s) => String(s || '').toLowerCase().replace(/[֑-ׇ'"׳״`´’‘\-–—.,()/]/g, '').replace(/\s+/g, ' ').trim();
