@@ -183,6 +183,30 @@ Meals also stick to foods that belong in them. Breakfast and snacks only borrow 
 
 Every meal comes with one fruit, a normal serving: breakfast, lunch, dinner and snacks. It's never two; snacks no longer use a fruit as their carb. Each fruit can be swapped, or taken out with **בלי פרי**. Keto and carnivore have no fruit.
 
+### Calorie camera (v1.5)
+
+Every meal card on today and past days has **מצלמת קלוריות — צלמו את הצלחת** at the top.
+
+1. **Photo:** the back camera opens with a round guide ("the whole plate inside the circle, from above"). There are tips to include side plates, sauces, bread and drinks, and to put a fork next to the plate for scale. An existing photo can be uploaded instead. The first use asks for consent to send the photo for analysis.
+2. **Analysis** (`/api/meal-photo`): one call to Claude Opus 5.5 with vision and a strict JSON schema, using the same safety setup as the body-fat estimate. Claude gets the photo, the planned meal (context only, never assumed) and the app's food list.
+   - **What it's told to list:** every item in the frame, including cooking oil, dressings, sauces, spreads and toppings; people under-count these most.
+   - **How it estimates:** cooked weights in grams, using the plate, cutlery and standard portions for scale.
+   - **What it returns per item:** kcal, protein, carbs, fat, a confidence level, and a matching food id when the item is one the app knows.
+   - **Server checks:** the server validates and clamps everything, and drops unknown ids.
+3. **Fixing the list:**
+   - Change any amount in grams; the calories recalculate.
+   - Rename an item: pick one of the app's foods from the suggestions and it switches to that food's values, or type a free name.
+   - Delete items, or add one: a known food, or a custom one with kcal per 100 g.
+   - Uncertain items are highlighted.
+   - Foods the app knows are computed from its own food table, so a photographed chicken breast counts exactly like the planned one.
+4. **Confirm.** The plate is compared with the planned meal. Any unplanned item over 20 kcal (sauce, oil and so on), any missing planned food, or calories more than 15% off counts as different.
+   - **Matches:** the meal is marked eaten.
+   - **Differs:** the app shows what's different and asks *"update the meal to what you ate?"*.
+     - **Yes:** the meal card shows the photographed items (badge "לפי הצילום", with the planned calories alongside). Today's calories count what was eaten, and **חזרה לארוחה המתוכננת** undoes it.
+     - **No:** back to the camera. Nothing is logged until a plate is confirmed.
+
+Closing the camera at any point logs nothing. The photo is never saved: it lives in memory, goes to the server once for analysis, and is discarded. The shopping list keeps using the planned meal. The assistant sees what was actually eaten.
+
 ### Weekly-gate rules (what "can't be bypassed" means here)
 
 - The gate decision is made in one function, `render()` in `app.js`. It runs on every route change, return from the background, focus, bfcache restore, and every 30 seconds.
@@ -198,8 +222,8 @@ Every meal comes with one fruit, a normal serving: breakfast, lunch, dinner and 
 ## Tests
 
 ```bash
-npm test              # 40 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
-npm run test:e2e      # 162 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
+npm test              # 46 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy
+npm run test:e2e      # 175 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 ```
 
 The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. It controls the device clock to move through weeks and saves screenshots to `tests/e2e/screenshots/`.

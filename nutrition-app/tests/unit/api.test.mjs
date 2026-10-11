@@ -145,3 +145,60 @@ test('bodyfat: rejects bad input before calling the model', async () => {
   assert.equal(calls.length, 0);
   assert.equal((await handleApi(bfReq(bfBody), {}, { fetchImpl })).status, 503);
 });
+
+// ---------- /api/meal-photo ----------
+const mpReq = (body) => new Request('https://nutri.example/api/meal-photo', {
+  method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': `203.0.113.${Math.floor(Math.random() * 200)}` }, body: JSON.stringify(body),
+});
+const mpBody = {
+  photo: PHOTO,
+  meal: 'ארוחת צהריים',
+  planned: [{ name: 'חזה עוף צלוי', grams: 150 }, { name: 'אורז לבן מבושל', grams: 180 }],
+  foods: [{ id: 'chicken_breast', name: 'חזה עוף צלוי' }, { id: 'white_rice', name: 'אורז לבן מבושל' }, { id: 'bad id!', name: 'x' }],
+};
+const mpItem = (o) => ({ name: 'x', grams: 100, kcal: 100, p: 1, c: 1, f: 1, foodId: '', confidence: 'medium', ...o });
+
+test('meal-photo: sends the photo with the plan and food list, and returns cleaned items', async () => {
+  const out = {
+    ok: true, confidence: 'medium', notes: 'השמן בטיגון מוערך.', issue: '',
+    items: [
+      mpItem({ name: 'חזה עוף', grams: 160, kcal: 264, p: 49.6, c: 0, f: 5.8, foodId: 'chicken_breast', confidence: 'high' }),
+      mpItem({ name: 'רוטב טחינה', grams: 30, kcal: 180, foodId: 'made_up_id' }),
+      mpItem({ name: 'שמן (בבישול)', grams: 99999, kcal: 99999 }),
+      mpItem({ name: '', grams: 50 }),
+      mpItem({ name: 'אוויר', grams: 0 }),
+    ],
+  };
+  const { calls, fetchImpl } = stubAnthropic({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(out) }] });
+  const res = await handleApi(mpReq(mpBody), ENV, { fetchImpl });
+  const j = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(j.ok, true);
+  assert.deepEqual(j.items.map((i) => i.name), ['חזה עוף', 'רוטב טחינה', 'שמן (בבישול)']);
+  assert.equal(j.items[0].foodId, 'chicken_breast');
+  assert.equal(j.items[1].foodId, '', 'unknown ids are dropped');
+  assert.ok(j.items[2].grams <= 3000 && j.items[2].kcal <= 5000, 'values are clamped');
+  const body = calls[0].body;
+  assert.equal(body.model, 'claude-opus-5-5');
+  assert.equal(body.output_config.format.type, 'json_schema');
+  assert.equal(body.fallbacks, 'default');
+  assert.equal(body.messages[0].content[0].type, 'image');
+  assert.match(body.system, /sauces|oil/i);
+  const ctx = body.messages[0].content[1].text;
+  assert.match(ctx, /חזה עוף צלוי/);
+  assert.ok(!ctx.includes('bad id!'), 'invalid food ids never reach the model');
+});
+
+test('meal-photo: no food, refusals and bad input', async () => {
+  let { fetchImpl } = stubAnthropic({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ ok: false, items: [], confidence: 'low', notes: '', issue: 'התמונה חשוכה מדי.' }) }] });
+  let j = await (await handleApi(mpReq(mpBody), ENV, { fetchImpl })).json();
+  assert.deepEqual([j.ok, j.issue], [false, 'התמונה חשוכה מדי.']);
+  ({ fetchImpl } = stubAnthropic({ stop_reason: 'refusal', content: [] }));
+  j = await (await handleApi(mpReq(mpBody), ENV, { fetchImpl })).json();
+  assert.equal(j.ok, false);
+  const stub = stubAnthropic();
+  for (const body of [{}, { photo: '<img>' }, { photo: 'A'.repeat(1000 * 1024) }]) {
+    assert.equal((await handleApi(mpReq(body), ENV, { fetchImpl: stub.fetchImpl })).status, 400);
+  }
+  assert.equal(stub.calls.length, 0);
+});

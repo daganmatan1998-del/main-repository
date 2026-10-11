@@ -100,8 +100,15 @@ export function targets(day = today()) {
 export function dayPlan(day = today()) {
   const t = targets(day);
   if (!t) return [];
-  return generateDay(day, t, state.profile.prefs, state.overrides[day] || {}, state.profile.seed || 0,
+  const meals = generateDay(day, t, state.profile.prefs, state.overrides[day] || {}, state.profile.seed || 0,
     { week: menuWeek(day), dayIndex: daysBetween(state.profile.regDay, day) - menuWeek(day) * 7 });
+  // A meal the user photographed and chose to replace shows (and counts) what
+  // they actually ate; its planned items stay underneath for the shopping list.
+  const photos = (state.logs[day] && state.logs[day].photo) || {};
+  return meals.map((m) => {
+    const ph = photos[m.index];
+    return ph && ph.replace ? { ...m, eaten: ph, plannedTotals: m.totals, totals: ph.totals } : m;
+  });
 }
 
 // Menu weeks follow the check-in weeks (registration day = start of week 0),
@@ -218,15 +225,39 @@ export async function setOverride(day, mealIdx, patch) {
   emit();
 }
 
-export async function toggleEaten(day, mealIdx) {
-  const log = state.logs[day] || { eaten: [] };
-  const set = new Set(log.eaten);
-  if (set.has(mealIdx)) set.delete(mealIdx); else set.add(mealIdx);
-  state.logs[day] = { eaten: [...set].sort((a, b) => a - b) };
+async function saveLogs() {
   const cutoff = addDays(today(), -60);
   for (const k of Object.keys(state.logs)) if (k < cutoff) delete state.logs[k];
   await db.kv.set('logs', state.logs);
   emit();
+}
+
+export async function toggleEaten(day, mealIdx) {
+  const log = state.logs[day] || { eaten: [] };
+  const set = new Set(log.eaten);
+  if (set.has(mealIdx)) set.delete(mealIdx); else set.add(mealIdx);
+  state.logs[day] = { ...log, eaten: [...set].sort((a, b) => a - b) };
+  await saveLogs();
+}
+
+// Calorie camera: the confirmed photo record for a meal (see mealphoto.js).
+// With rec.replace the meal shows what was eaten; either way it is marked eaten.
+export async function savePhotoMeal(day, mealIdx, rec) {
+  const log = state.logs[day] || { eaten: [] };
+  const eaten = new Set(log.eaten);
+  eaten.add(mealIdx);
+  state.logs[day] = { ...log, eaten: [...eaten].sort((a, b) => a - b), photo: { ...(log.photo || {}), [mealIdx]: rec } };
+  await saveLogs();
+}
+
+// Back to the planned meal (the photo record is dropped, the meal stays eaten).
+export async function clearPhotoMeal(day, mealIdx) {
+  const log = state.logs[day];
+  if (!log || !log.photo) return;
+  const photo = { ...log.photo };
+  delete photo[mealIdx];
+  state.logs[day] = { ...log, photo };
+  await saveLogs();
 }
 
 export async function startNextPeriod(period) {

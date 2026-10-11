@@ -3,11 +3,12 @@
 import { h, icon, sheet, toast, fmt, parseNum, ltr } from './util.js';
 import { FOOD_BY_ID, household, ROLE_LABEL, canExclude, DIET_NOTES } from './foods.js';
 import { alternatives } from './substitutions.js';
-import { state, setOverride, excludeFood } from './store.js';
+import { state, setOverride, excludeFood, today, clearPhotoMeal } from './store.js';
 import { validBf } from './nutrition.js';
 import { openBodyFatEstimator } from './screens/bodyfat.js';
 import { openRecipes } from './screens/recipes.js';
 import { validRemoval } from './mealplan.js';
+import { openCalorieCamera } from './screens/calorie-cam.js';
 
 export function ring(value, target, label, sub) {
   const pct = target > 0 ? Math.min(1, value / target) : 0;
@@ -52,6 +53,16 @@ export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {
     }, icon('check', 20), h('span', null, eaten ? 'נאכל' : 'סמן')) : null);
   card.appendChild(head);
 
+  // Calorie camera: today and past days only (you photograph what you eat).
+  const camOk = day && day <= today();
+  if (camOk) {
+    card.appendChild(h('button', {
+      class: 'btn btn-block mc-open',
+      onclick: () => openCalorieCamera(meal, day),
+    }, icon('camera', 18), meal.eaten ? 'צילום מחדש במצלמת הקלוריות' : 'מצלמת קלוריות — צלמו את הצלחת'));
+  }
+  if (meal.eaten) return photoMealBody(card, meal, day);
+
   const list = h('ul', { class: 'items' });
   for (const it of meal.items) {
     const food = FOOD_BY_ID[it.foodId];
@@ -79,6 +90,34 @@ export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {
       class: 'btn btn-block rc-open',
       onclick: () => openRecipes(meal, day),
     }, h('span', { 'aria-hidden': 'true' }, '🍳'), 'מתכונים לארוחה'));
+  }
+  return card;
+}
+
+// A meal replaced by what the calorie camera saw: those items, read-only, with
+// a way back to the planned meal.
+function photoMealBody(card, meal, day) {
+  card.classList.add('photo-meal');
+  card.appendChild(h('div', { class: 'mc-badge' }, icon('camera', 14), 'לפי הצילום · ', h('span', { class: 'num' }, `בתפריט: ${fmt(meal.plannedTotals.kcal)} קק״ל`)));
+  const list = h('ul', { class: 'items' });
+  for (const it of meal.eaten.items) {
+    const food = it.foodId && FOOD_BY_ID[it.foodId];
+    list.appendChild(h('li', { class: `item role-${food ? food.role : 'photo'}` },
+      h('div', { class: 'item-main' },
+        h('span', { class: 'role-dot', title: food ? ROLE_LABEL[food.role] : 'מהצילום' }),
+        h('div', { class: 'item-text' },
+          h('div', { class: 'item-name' }, it.name),
+          h('div', { class: 'item-amt' },
+            h('b', { class: 'num' }, `${fmt(it.grams)} ג׳`),
+            food ? h('span', null, ` · ${household(food, it.grams)}`) : null,
+            h('span', { class: 'muted num' }, ` · ${it.kcal} קק״ל`))))));
+  }
+  card.appendChild(list);
+  if (day) {
+    card.appendChild(h('button', {
+      class: 'btn btn-ghost btn-block btn-small',
+      onclick: async () => { await clearPhotoMeal(day, meal.index); toast('חזרה לארוחה מהתפריט'); },
+    }, 'חזרה לארוחה המתוכננת'));
   }
   return card;
 }

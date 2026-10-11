@@ -40,7 +40,7 @@ function silhouette(angle) {
 }
 
 // Downscales a frame (video, image or bitmap) to a JPEG and returns base64.
-async function toJpeg(source, w, h, maxSide = 1024) {
+export async function toJpeg(source, w, h, maxSide = 1024) {
   const scale = Math.min(1, maxSide / Math.max(w, h));
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(w * scale);
@@ -53,15 +53,15 @@ async function toJpeg(source, w, h, maxSide = 1024) {
   return { b64: btoa(s), url: URL.createObjectURL(blob) };
 }
 
-async function fileToJpeg(file) {
+export async function fileToJpeg(file, maxSide = 1024) {
   const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => null);
-  if (bmp) return toJpeg(bmp, bmp.width, bmp.height);
+  if (bmp) return toJpeg(bmp, bmp.width, bmp.height, maxSide);
   const url = URL.createObjectURL(file);
   try {
     const img = new Image();
     img.src = url;
     await img.decode();
-    return toJpeg(img, img.naturalWidth, img.naturalHeight);
+    return toJpeg(img, img.naturalWidth, img.naturalHeight, maxSide);
   } finally {
     URL.revokeObjectURL(url);
   }

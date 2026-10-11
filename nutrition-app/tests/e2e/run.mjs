@@ -30,9 +30,26 @@ function check(name, cond, detail = '') {
 
 // ---------- stub Anthropic ----------
 const upstream = [];
+// Calorie camera: 'sauce' = the planned meal plus garlic sauce; 'exact' = the planned meal.
+let mealPhotoMode = 'sauce';
 async function fakeAnthropic(url, init) {
   const body = JSON.parse(init.body);
   upstream.push({ url: String(url), headers: new Headers(init.headers), body });
+  if (typeof body.system === 'string' && body.system.includes('on a plate')) {
+    const ctx = body.messages[0].content.find((b) => b.type === 'text').text;
+    const planned = JSON.parse(ctx.match(/Planned \(context only\): (.*)/)[1]);
+    const foods = JSON.parse(ctx.match(/App food list: (.*)/)[1]);
+    const items = planned.map((p) => {
+      const f = foods.find((x) => x.name === p.name);
+      return { name: p.name, grams: p.grams, kcal: 100, p: 5, c: 10, f: 3, foodId: f ? f.id : '', confidence: 'high' };
+    });
+    if (mealPhotoMode === 'sauce') items.push({ name: 'רוטב שום', grams: 30, kcal: 150, p: 0.5, c: 2, f: 16, foodId: '', confidence: 'low' });
+    const out = { ok: true, items, confidence: 'medium', notes: 'כמות הרוטב משוערת.', issue: '' };
+    return new Response(JSON.stringify({
+      id: 'msg_mp', type: 'message', role: 'assistant', model: body.model, stop_reason: 'end_turn',
+      usage: { input_tokens: 10, output_tokens: 10 }, content: [{ type: 'text', text: JSON.stringify(out) }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
   if (typeof body.system === 'string' && body.system.includes('body fat')) {
     const est = { ok: true, estimate: 26.5, low: 23, high: 30, confidence: 'medium', notes: 'הערכה לפי קו המותן והירכיים.', issue: '' };
     return new Response(JSON.stringify({
@@ -329,7 +346,7 @@ try {
     && (await meal0().locator('.rm-chip[data-group="carb"]').getAttribute('aria-pressed')) === 'true');
   check('nothing is added in its place: the same foods, in bigger portions',
     namesNoCarb.length === namesBefore.length - 1 && namesNoCarb.every((n) => namesBefore.includes(n)), `${namesBefore} → ${namesNoCarb}`);
-  check(`the carb calories move to the rest of the meal (${mealKcal0} → ${kcalNoCarb} kcal)`, Math.abs(kcalNoCarb - mealKcal0) / mealKcal0 < 0.08);
+  check(`the carb calories move to the rest of the meal (${mealKcal0} → ${kcalNoCarb} kcal)`, Math.abs(kcalNoCarb - mealKcal0) / mealKcal0 < 0.12); // vs the full meal, which itself can sit ~10% off its target
   check('the meal explains where the calories went', /קק״ל (חולקו|עברו)/.test(await meal0().locator('.rm-note').innerText()));
   await shot('08b-remove-carb');
   await page.reload();
@@ -360,6 +377,82 @@ try {
   await meal0().locator('.rm-chip[data-group="fruit"]').click();
   await wait(300);
   check('tapping again puts everything back', (await meal0().locator('.rm-note').count()) === 0 && (await meal0().locator('.item.role-protein').count()) > 0);
+
+  // =============== calorie camera ===============
+  const lunch = () => page.locator('.meal').nth(1);
+  const lunchName = (await lunch().locator('h3').innerText()).trim();
+  check('every meal has a calorie camera at the top', (await page.locator('.meal .mc-open').count()) === (await page.locator('.meal').count())
+    && (await lunch().locator('.mc-open').evaluate((b) => b.previousElementSibling.classList.contains('meal-head'))));
+  await lunch().locator('.mc-open').click();
+  await page.waitForSelector('#mc-consent');
+  check('first use asks consent before any photo is sent', await page.isDisabled('#mc-start'));
+  await page.check('#mc-consent');
+  await page.click('#mc-start');
+  await page.waitForSelector('#mc-shoot');
+  await wait(800);
+  await shot('30-calorie-camera');
+  const shootAndAnalyze = async () => {
+    await page.waitForFunction(() => { const v = document.querySelector('.mc .bf-video'); return v && v.videoWidth > 0; }, null, { timeout: 10000 });
+    await page.click('#mc-shoot');
+    await page.waitForSelector('#mc-analyze');
+    await page.click('#mc-analyze');
+    await page.waitForSelector('#mc-items .mc-item');
+  };
+  await shootAndAnalyze();
+  const mpReq = upstream.filter((u) => typeof u.body.system === 'string' && u.body.system.includes('on a plate')).at(-1)?.body;
+  check('the photo goes to Claude as an image with the planned meal and food list', mpReq && mpReq.messages[0].content[0].type === 'image'
+    && mpReq.messages[0].content[1].text.includes('Planned') && mpReq.output_config.format.type === 'json_schema');
+  const names = await page.locator('#mc-items .mc-name').evaluateAll((els) => els.map((e) => e.value));
+  check(`every item on the plate is listed, sauce included (${names.length})`, names.includes('רוטב שום'), names.join(', '));
+  const total0 = Number((await page.innerText('#mc-total')).replace(/[^\d]/g, ''));
+  const sauceRow = page.locator('#mc-items .mc-item').filter({ has: page.locator('input[value="רוטב שום"]') });
+  await sauceRow.locator('.mc-grams').fill('60');
+  await wait(200);
+  const total1 = Number((await page.innerText('#mc-total')).replace(/[^\d]/g, ''));
+  check(`changing grams recalculates the plate (${total0} → ${total1} kcal)`, total1 === total0 + 150);
+  await page.click('#mc-add');
+  const newRow = page.locator('#mc-items .mc-item').last();
+  await newRow.locator('.mc-name').fill('עוגייה');
+  await newRow.locator('.mc-name').dispatchEvent('change');
+  await newRow.locator('.mc-grams').fill('20');
+  await newRow.locator('.mc-per100 ').fill('450');
+  await wait(200);
+  const total2 = Number((await page.innerText('#mc-total')).replace(/[^\d]/g, ''));
+  check(`an ingredient can be added with its calories (${total2})`, total2 === total1 + 90);
+  await shot('31-calorie-camera-items', { fullPage: true });
+  await page.click('#mc-confirm');
+  await page.waitForSelector('#mc-replace');
+  check('a plate that isn\'t the planned meal asks whether to update the meal', (await page.locator('.mc-diff').innerText()).includes('רוטב שום'));
+  await shot('32-calorie-camera-differs');
+  await page.click('#mc-no');
+  await page.waitForSelector('#mc-message');
+  check('"no" goes back to the camera and logs nothing', (await page.locator('#mc-shoot').count()) === 1
+    && !(await idbDump()).kv.some((v) => v && typeof v === 'object' && Object.values(v).some((d) => d && d.photo)));
+  await shootAndAnalyze();
+  await page.click('#mc-confirm');
+  await page.waitForSelector('#mc-replace');
+  await page.click('#mc-replace');
+  await page.waitForSelector('.overlay.mc', { state: 'detached' });
+  await wait(300);
+  check('"yes" replaces the meal with what was eaten', (await lunch().locator('.mc-badge').count()) === 1 && (await lunch().innerText()).includes('רוטב שום'));
+  check('the camera is released when the flow ends', await page.evaluate(() => !document.querySelector('.mc .bf-video')));
+  await shot('33-calorie-camera-replaced');
+  await lunch().getByRole('button', { name: 'חזרה לארוחה המתוכננת' }).click();
+  await wait(300);
+  check('the planned meal can be restored', (await lunch().locator('.mc-badge').count()) === 0 && !(await lunch().innerText()).includes('רוטב שום'));
+  mealPhotoMode = 'exact';
+  await page.locator('.meal').nth(2).locator('.mc-open').click();
+  check('consent is asked only once', await page.waitForSelector('#mc-shoot').then(() => true));
+  await shootAndAnalyze();
+  await page.click('#mc-confirm');
+  await page.waitForSelector('.overlay.mc', { state: 'detached' });
+  await wait(300);
+  const log = (await idbDump()).kv.find((v) => v && typeof v === 'object' && Object.values(v).some((d) => d && d.photo));
+  const dayLog = log && Object.values(log).find((d) => d && d.photo);
+  check('a plate matching the plan is logged as eaten without asking', dayLog && dayLog.eaten.includes(2) && dayLog.photo[2] && dayLog.photo[2].replace === false
+    && (await page.locator('.meal').nth(2).locator('.mc-badge').count()) === 0, JSON.stringify(dayLog));
+  mealPhotoMode = 'sauce';
+  void lunchName;
 
   // =============== weekly shopping list ===============
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });

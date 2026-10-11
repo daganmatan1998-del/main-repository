@@ -5,7 +5,7 @@
 // The browser never sees it.
 
 import Anthropic from '@anthropic-ai/sdk';
-import { SYSTEM_PROMPT, BODYFAT_PROMPT } from './system-prompt.js';
+import { SYSTEM_PROMPT, BODYFAT_PROMPT, MEAL_PHOTO_PROMPT } from './system-prompt.js';
 
 const MODEL = 'claude-opus-5-5';
 const MAX_BODY = 64 * 1024;
@@ -262,10 +262,105 @@ export async function handleBodyFat(request, env, { fetchImpl } = {}) {
   }
 }
 
+const MEAL_ITEM = {
+  type: 'object',
+  properties: {
+    name: { type: 'string' },
+    grams: { type: 'number' },
+    kcal: { type: 'number' },
+    p: { type: 'number' },
+    c: { type: 'number' },
+    f: { type: 'number' },
+    foodId: { type: 'string' },
+    confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
+  },
+  required: ['name', 'grams', 'kcal', 'p', 'c', 'f', 'foodId', 'confidence'],
+  additionalProperties: false,
+};
+const MEAL_PHOTO_SCHEMA = {
+  type: 'object',
+  properties: {
+    ok: { type: 'boolean' },
+    items: { type: 'array', items: MEAL_ITEM },
+    confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
+    notes: { type: 'string' },
+    issue: { type: 'string' },
+  },
+  required: ['ok', 'items', 'confidence', 'notes', 'issue'],
+  additionalProperties: false,
+};
+const MAX_MEAL_BODY = 1.5 * 1024 * 1024; // one photo plus the food list
+
+// /api/meal-photo — "calorie camera": one top-down photo of a plate, returned
+// as an editable list of items with grams and macros. The photo is forwarded
+// to Claude and never stored here.
+export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
+  const gate = await admit(request, env, MAX_MEAL_BODY);
+  if (gate.res) return gate.res;
+  const { body, cors } = gate;
+
+  const photo = body.photo;
+  if (typeof photo !== 'string' || !/^[A-Za-z0-9+/=]+$/.test(photo) || photo.length > MAX_PHOTO_B64) {
+    return json(400, { error: 'bad_photo' }, cors);
+  }
+  const str = (v, n) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f]/g, ' ').slice(0, n) : '');
+  const foods = (Array.isArray(body.foods) ? body.foods : []).slice(0, 300)
+    .filter((f) => f && typeof f.id === 'string' && /^[a-z0-9_]{1,40}$/.test(f.id))
+    .map((f) => ({ id: f.id, name: str(f.name, 60) }));
+  const planned = (Array.isArray(body.planned) ? body.planned : []).slice(0, 20)
+    .map((i) => ({ name: str(i && i.name, 60), grams: typeof (i && i.grams) === 'number' ? Math.round(i.grams) : null }))
+    .filter((i) => i.name);
+  const mealName = str(body.meal, 40);
+
+  const content = [
+    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: photo } },
+    { type: 'text', text: `Meal: ${mealName || 'unknown'}\nPlanned (context only): ${JSON.stringify(planned)}\nApp food list: ${JSON.stringify(foods)}\nList everything on the plate. Reply with the JSON object only.` },
+  ];
+
+  try {
+    const response = await clientFor(env, fetchImpl).beta.messages.create({
+      model: env.CLAUDE_MODEL || MODEL,
+      max_tokens: 4000,
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema: MEAL_PHOTO_SCHEMA } },
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      system: MEAL_PHOTO_PROMPT,
+      messages: [{ role: 'user', content }],
+    });
+    if (response.stop_reason === 'refusal') {
+      return json(200, { ok: false, issue: 'לא ניתן לנתח את התמונה הזאת. נסו לצלם שוב.' }, cors);
+    }
+    const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+    let out;
+    try { out = JSON.parse(text); } catch { return json(502, { error: 'bad_model_output' }, cors); }
+    if (!out.ok) return json(200, { ok: false, issue: str(out.issue, 300) || 'לא זוהה אוכל בתמונה.' }, cors);
+    const known = new Set(foods.map((f) => f.id));
+    const num = (v, hi) => Math.round(Math.min(hi, Math.max(0, Number(v) || 0)) * 10) / 10;
+    const conf = (v) => (['low', 'medium', 'high'].includes(v) ? v : 'low');
+    const items = (Array.isArray(out.items) ? out.items : []).slice(0, 25)
+      .map((i) => ({
+        name: str(i.name, 60).trim(),
+        grams: Math.round(num(i.grams, 3000)),
+        kcal: Math.round(num(i.kcal, 5000)),
+        p: num(i.p, 400),
+        c: num(i.c, 600),
+        f: num(i.f, 400),
+        foodId: known.has(i.foodId) ? i.foodId : '',
+        confidence: conf(i.confidence),
+      }))
+      .filter((i) => i.name && i.grams > 0);
+    if (!items.length) return json(200, { ok: false, issue: 'לא זוהה אוכל בתמונה. צלמו את כל הצלחת מלמעלה.' }, cors);
+    return json(200, { ok: true, items, confidence: conf(out.confidence), notes: str(out.notes, 400) }, cors);
+  } catch (e) {
+    return upstreamError(e, cors);
+  }
+}
+
 export async function handleApi(request, env, opts) {
   const { pathname } = new URL(request.url);
   if (pathname === '/api/chat') return handleChat(request, env, opts);
   if (pathname === '/api/bodyfat') return handleBodyFat(request, env, opts);
+  if (pathname === '/api/meal-photo') return handleMealPhoto(request, env, opts);
   if (pathname === '/api/health') return json(200, { ok: true, configured: !!env.ANTHROPIC_API_KEY });
   return json(404, { error: 'not_found' });
 }

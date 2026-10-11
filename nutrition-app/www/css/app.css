@@ -620,3 +620,30 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 }
 .rm-note svg { flex-shrink: 0; margin-top: 2px; }
 .alt-all { margin: 4px 0 8px; background: var(--primary-weak); border-color: transparent; color: var(--primary); }
+
+/* ============ calorie camera ============ */
+.mc-open { margin: 8px 0 4px; min-height: 44px; background: var(--primary-weak); border-color: transparent; color: var(--primary); }
+.mc-stage { aspect-ratio: 1 / 1; }
+.mc-guide { position: absolute; inset: 8%; border: 2px dashed rgba(255, 255, 255, .8); border-radius: 50%; pointer-events: none; box-shadow: 0 0 0 999px rgba(0, 0, 0, .18); }
+.mc-guide-text { position: absolute; inset-inline: 0; bottom: 10px; text-align: center; color: #fff; font-size: .85rem; text-shadow: 0 1px 6px rgba(0, 0, 0, .8); pointer-events: none; }
+.mc-photo-row { display: flex; gap: 12px; align-items: center; }
+.mc-photo-row p { margin: 0 0 4px; }
+.mc-thumb { width: 96px; height: 96px; object-fit: cover; border-radius: 14px; flex-shrink: 0; background: #0b1210; }
+.mc-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.mc-item { display: grid; gap: 6px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+.mc-item.unsure { border-color: var(--warn-text); }
+.mc-line { display: flex; align-items: center; gap: 8px; }
+.mc-line .mc-name { flex: 1; min-height: 44px; padding: 8px 12px; }
+.mc-del { width: 40px; height: 40px; }
+.mc-g { display: inline-flex; align-items: center; gap: 6px; }
+.mc-g input, .mc-per input { width: 92px; min-height: 44px; padding: 8px 10px; text-align: center; }
+.mc-hh { flex: 1; }
+.mc-kcal { font-weight: 600; white-space: nowrap; }
+.mc-per { display: flex; align-items: center; gap: 8px; }
+.mc-per[hidden] { display: none; }
+.mc-unsure { color: var(--warn-text); }
+.mc-total { text-align: center; display: grid; gap: 4px; }
+.mc-total-kcal b { font-size: 2rem; color: var(--primary); }
+.mc-diff p { margin: 4px 0; }
+.mc-badge { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 0; padding: 4px 10px; border-radius: 999px; background: var(--primary-weak); color: var(--primary); font-size: .8rem; font-weight: 500; }
+.role-photo .role-dot { background: var(--muted); }
