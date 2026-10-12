@@ -24,7 +24,7 @@ export function buildContext(extra = {}) {
   const allowedIds = new Set(allowedFoods(p.prefs).map((f) => f.id));
   return {
     profile: {
-      sex: p.sex === 'female' ? 'Woman' : 'Man',
+      sex: p.sex === 'female' ? 'Female' : 'Male',
       age: p.age,
       heightCm: p.height,
       weightKg: cur?.weight,

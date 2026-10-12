@@ -128,7 +128,7 @@ export function openCalorieCamera(meal, day) {
       const camInput = h('input', { type: 'file', accept: 'image/*', capture: 'environment', class: 'visually-hidden', tabindex: '-1', 'aria-hidden': 'true' });
       camInput.addEventListener('change', () => { fileInput.files = camInput.files; fileInput.dispatchEvent(new Event('change')); });
       body.appendChild(camInput);
-      body.insertBefore(h('button', { class: 'btn btn-primary btn-lg btn-block', onclick: () => camInput.click() }, icon('camera'), tr('Take with the phone camera')), status);
+      body.insertBefore(h('button', { class: 'btn btn-primary btn-lg btn-block', onclick: () => camInput.click() }, icon('camera'), tr('Use the phone camera')), status);
     }
 
     shoot.addEventListener('click', async () => {
@@ -156,7 +156,7 @@ export function openCalorieCamera(meal, day) {
   async function analyze() {
     clear(body);
     body.append(header(tr('Analyzing the plate…')),
-      h('div', { class: 'bf-wait' }, h('div', { class: 'spinner', 'aria-hidden': 'true' }), h('p', null, tr('Identifying every item and counting calories, this takes about half a minute…'))));
+      h('div', { class: 'bf-wait' }, h('div', { class: 'spinner', 'aria-hidden': 'true' }), h('p', null, tr('Identifying every item and counting calories — this takes about half a minute…'))));
     let problem = null;
     try {
       if (!navigator.onLine) throw new Error('offline');
@@ -214,7 +214,7 @@ export function openCalorieCamera(meal, day) {
       clear(totalBox);
       totalBox.append(
         h('div', { class: 'mc-total-kcal' }, h('b', { class: 'num', id: 'mc-total' }, fmt(t.kcal)), h('span', null, tr(' kcal on the plate'))),
-        h('div', { class: 'muted small num' }, tr('P {0} · C {1} · F {2} g · in the menu: {3} kcal', fmt(t.p), fmt(t.c), fmt(t.f), fmt(meal.items.reduce((s, i) => s + i.kcal, 0)))));
+        h('div', { class: 'muted small num' }, tr('P {0} · C {1} · F {2} g · on the menu: {3} kcal', fmt(t.p), fmt(t.c), fmt(t.f), fmt(meal.items.reduce((s, i) => s + i.kcal, 0)))));
     };
     const row = (idx) => {
       const it = items[idx];
@@ -272,7 +272,7 @@ export function openCalorieCamera(meal, day) {
       h('div', { class: 'mc-photo-row' },
         h('img', { src: shot.url, alt: tr('The photographed plate'), class: 'mc-thumb' }),
         h('div', null,
-          h('p', { class: 'small' }, tr('This is what was recognized. You can change an amount (grams) or an ingredient, delete and add.')),
+          h('p', { class: 'small' }, tr('This is what was recognized. You can change an amount (grams) or an ingredient, or delete and add items.')),
           h('p', { class: 'muted small' }, tr('Confidence: {0}', CONFIDENCE[estimate.confidence] || '—')),
           h('p', { class: 'muted small', id: 'mc-engine' }, tr('A quick estimate — check the amounts and sauces.')))),
       estimate.notes ? h('p', { class: 'notice small' }, estimate.notes) : null,
@@ -299,11 +299,11 @@ export function openCalorieCamera(meal, day) {
     clear(body);
     body.append(...[
       header(tr('This meal differs from the menu')),
-      h('p', { class: 'lead' }, tr('What\'s on the plate does not match {0} as it is in the menu.', meal.name)),
+      h('p', { class: 'lead' }, tr('What\'s on the plate does not match {0} on your menu.', meal.name)),
       h('div', { class: 'card mc-diff' }, ...[
-        cmp.extra.length ? h('p', null, h('b', null, tr('Not in the menu: ')), cmp.extra.join(', ')) : null,
-        cmp.missing.length ? h('p', null, h('b', null, tr('In the menu but not on the plate: ')), cmp.missing.join(', ')) : null,
-        h('p', { class: 'num' }, h('b', null, tr('Calories: ')), tr('{0} on the plate, {1} in the menu', fmt(cmp.eaten), fmt(cmp.planned))),
+        cmp.extra.length ? h('p', null, h('b', null, tr('Not on the menu: ')), cmp.extra.join(', ')) : null,
+        cmp.missing.length ? h('p', null, h('b', null, tr('On the menu but not on the plate: ')), cmp.missing.join(', ')) : null,
+        h('p', { class: 'num' }, h('b', null, tr('Calories: ')), tr('{0} on the plate, {1} on the menu', fmt(cmp.eaten), fmt(cmp.planned))),
       ].filter(Boolean)),
       h('p', null, tr('Replace the meal\'s ingredient list with what you ate?')),
       h('button', { class: 'btn btn-primary btn-lg btn-block', id: 'mc-replace', onclick: async () => {
@@ -311,7 +311,7 @@ export function openCalorieCamera(meal, day) {
         toast(tr('{0} was updated to what you ate ✓', meal.name));
         close();
       } }, tr('Yes, update it to what I ate')),
-      h('button', { class: 'btn btn-lg btn-block', id: 'mc-no', onclick: () => capture(tr('The meal was not updated. Photograph the meal from the menu — it is marked as eaten only after you confirm.')) }, tr('No — back to the camera')),
+      h('button', { class: 'btn btn-lg btn-block', id: 'mc-no', onclick: () => capture(tr('The meal was not updated. Photograph the meal on your menu — it\'s marked as eaten only after you confirm.')) }, tr('No — back to the camera')),
     ].filter(Boolean));
   }
 

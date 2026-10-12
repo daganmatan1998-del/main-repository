@@ -232,10 +232,10 @@ async function boot() {
   // (not over the weekly photo, the summary or a half-finished form).
   window.addEventListener('app:ready-for-reminders', () => maybeAskReminders());
 
-  if (signIn && signIn.error) toast(signIn.error === 'denied' ? tr('Sign-in was cancelled.') : tr('Sign-in failed. Try again.'));
+  if (signIn && signIn.error) toast(signIn.error === 'denied' ? tr('Sign-in was canceled.') : tr('Sign-in failed. Try again.'));
   if (signIn && signIn.ok) {
     if (first && first.conflict) openConflict();
-    else if (first && first.restored) toast(signIn.intent === 'signup' ? tr('You already had an account — your data was loaded.') : tr('Your data was loaded from your account'));
+    else if (first && first.restored) toast(signIn.intent === 'signup' ? tr('You already have an account — your data was loaded.') : tr('Your data was loaded from your account'));
     else if (!store.isOnboarded()) toast(signIn.intent === 'signup' ? tr('Account created! Let\'s build your plan.') : tr('No account with data was found — let\'s start a new plan.'));
     else toast(tr('Signed in — your data is backed up to your account'));
   } else {

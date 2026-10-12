@@ -63,22 +63,22 @@ function renderText(text) {
 }
 
 function localAnswer(res) {
-  if (!res.options.length) return tr('I couldn\'t find a suitable substitute in the database for your restrictions.');
+  if (!res.options.length) return tr('I couldn\'t find a substitute in the database that fits your restrictions.');
   const lines = res.options.map((o) => tr('- **{0}** — {1} g ({2}), {3} kcal', o.name, o.grams, o.household, o.kcal));
-  return tr('Instead of {0} g of {1} ({2} kcal):\n{3}\n\nThe amounts are calculated to match the same amount of {4}.', res.source.grams, res.source.name, res.source.kcal, lines.join('\n'), { p: tr('Protein'), c: tr('Carbs'), f: tr('Fat'), kcal: tr('Calories') }[res.matchedOn]);
+  return tr('Instead of {0} g of {1} ({2} kcal):\n{3}\n\nThe amounts are calculated to give the same amount of {4}.', res.source.grams, res.source.name, res.source.kcal, lines.join('\n'), { p: tr('Protein'), c: tr('Carbs'), f: tr('Fat'), kcal: tr('Calories') }[res.matchedOn]);
 }
 
 export function renderAssistant(root) {
   const messages = state.chat.slice();
   const log = h('div', { class: 'chat-log', id: 'chat-log', 'aria-live': 'polite' });
-  const input = h('textarea', { id: 'chat-input', rows: 1, placeholder: tr('Ask about substitutes, meals, amounts…'), 'aria-label': tr('Message to the assistant'), enterkeyhint: 'send' });
+  const input = h('textarea', { id: 'chat-input', rows: 1, placeholder: tr('Ask about substitutes, meals, amounts…'), 'aria-label': tr('Message the assistant'), enterkeyhint: 'send' });
   const sendBtn = h('button', { class: 'send-btn', id: 'chat-send', 'aria-label': tr('Send') }, icon('send'));
 
   const bubble = (m) => {
     const b = h('div', { class: `msg ${m.role}${m.error ? ' error' : ''}${m.local ? ' local' : ''}` });
     if (m.role === 'assistant') b.innerHTML = renderText(m.content);
     else b.textContent = m.content;
-    if (m.local) b.appendChild(h('small', { class: 'muted' }, tr('Thinking on your device (the online assistant is unavailable)')));
+    if (m.local) b.appendChild(h('small', { class: 'muted' }, tr('Answering on your device (the online assistant is unavailable)')));
     return b;
   };
 
@@ -88,7 +88,7 @@ export function renderAssistant(root) {
       log.appendChild(h('div', { class: 'chat-empty' },
         h('div', { class: 'chat-avatar' }, icon('sparkle', 28)),
         h('p', null, tr('Hi! I\'m your nutrition assistant. I know your menu, targets and restrictions.')),
-        h('p', { class: 'muted small' }, tr('You can also tap "Swap" next to any item in the menu.'))));
+        h('p', { class: 'muted small' }, tr('You can also tap "Swap" next to any item on the menu.'))));
     }
     messages.forEach((m) => log.appendChild(bubble(m)));
     if (inFlight) log.appendChild(h('div', { class: 'msg assistant typing', 'aria-label': tr('The assistant is typing') }, h('i'), h('i'), h('i')));
@@ -121,7 +121,7 @@ export function renderAssistant(root) {
       if (local) {
         messages.push({ role: 'assistant', content: localAnswer(local), at: Date.now(), local: true });
       } else {
-        const why = e.code === 'offline' ? tr('No internet connection — the assistant works only online. The menu and the "Swap" buttons also work without a connection.')
+        const why = e.code === 'offline' ? tr('No internet connection — the assistant works only online. The menu and the "Swap" buttons still work without a connection.')
           : e.code === 'not_configured' ? tr('The assistant is not available yet. Try again later.')
             : e.code === 'rate_limited' ? tr('Too many requests. Try again in a minute.')
               : e.code === 'all_engines_busy' ? tr('The assistant is busy right now. Try again in a few minutes.')
@@ -162,7 +162,7 @@ export function renderAssistant(root) {
   if (access.state !== 'active') {
     root.appendChild(h('div', { class: `notice ${access.state === 'locked' ? 'warn' : 'ok'} small ai-plan`, id: 'ai-plan' },
       icon(access.state === 'locked' ? 'lock' : 'sparkle', 16),
-      h('span', null, access.state === 'locked' ? tr('The smart assistant is available with a Nutri Plus plan.') : tr('Trial: {0, plural, one {# more day} other {# more days}} of the smart assistant for free.', access.daysLeft)),
+      h('span', null, access.state === 'locked' ? tr('The smart assistant is available with a Nutri Plus subscription.') : tr('Free trial: {0, plural, one {# more day} other {# more days}} of the smart assistant.', access.daysLeft)),
       h('button', { class: 'btn btn-small', onclick: () => openPaywall('chat') }, access.state === 'locked' ? tr('Open') : tr('Details'))));
   }
   root.appendChild(log);

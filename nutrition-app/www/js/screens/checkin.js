@@ -37,7 +37,7 @@ export function renderGate(root, gate) {
     const missed = missedWeeks(gate.week);
     wrap.append(...[
       h('p', { class: 'lead' }, tr('It\'s time for the weekly photo (since {0}). To keep using the app, upload a photo and then update your weight and body fat.', fmtDate(gate.dueDay))),
-      missed.length ? h('p', { class: 'notice warn small' }, tr('Weeks {0} were not photographed — they will show empty in the gallery. Now taking week {1}.', missed.join(', '), gate.week)) : null,
+      missed.length ? h('p', { class: 'notice warn small' }, tr('No photos for weeks {0} — they will appear empty in the gallery. Now taking week {1}.', missed.join(', '), gate.week)) : null,
       h('ul', { class: 'tips' },
         h('li', null, tr('The same light, the same place and the same pose every week')),
         h('li', null, tr('Preferably in the morning, before eating')),
@@ -59,7 +59,7 @@ export function renderGate(root, gate) {
     wrap.append(...[
       h('div', { class: 'row gap center-y' }, thumb, h('p', { class: 'small' }, icon('check', 16), tr(' The photo is saved. Only your measurements are left to update.'))),
       replace,
-      prev ? h('p', { class: 'muted small' }, tr('Previous measurement: {0} kg, {1}% fat.', fmt(prev.weight, 1), prev.bf ?? '—')) : null,
+      prev ? h('p', { class: 'muted small' }, tr('Previous measurement: {0} kg, {1}% body fat.', fmt(prev.weight, 1), prev.bf ?? '—')) : null,
       metricsForm({
         submitLabel: tr('Save and open the app'),
         previous: prev,
@@ -86,9 +86,9 @@ export function renderSummary(root, onContinue) {
   const tb = s.targetsBefore;
   const ta = s.targetsAfter;
   const goal = state.periods.find((p) => p.status === 'active')?.goal;
-  let msg = tr('Keep it up — consistency is the key.');
-  if (goal === 'cut' && dw < 0) msg = tr('Nice drop! You\'re keeping the same pace.');
-  if (goal === 'cut' && dw >= 0) msg = tr('No drop this week — it happens (water, salt, cycle). If it repeats for two weeks, the plan will adjust itself.');
+  let msg = tr('Keep it up — consistency is key.');
+  if (goal === 'cut' && dw < 0) msg = tr('Nice drop! You\'re keeping a steady pace.');
+  if (goal === 'cut' && dw >= 0) msg = tr('No drop this week — it happens (water, salt, cycle). If it repeats for two weeks, the plan will adjust automatically.');
   if (goal === 'bulk' && dw > 0) msg = tr('Weight gain as planned. 💪');
   if (goal === 'bulk' && dw <= 0) msg = tr('No gain this week — make sure you eat all of your meals.');
 

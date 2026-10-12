@@ -43,5 +43,5 @@ export function renderEntry(root) {
       googleButton(tr('Sign in'), { intent: 'login', id: 'entry-login', primary: true }),
       googleButton(tr('Create an account'), { intent: 'signup', id: 'entry-signup' }),
       h('button', { type: 'button', class: 'btn btn-ghost btn-block', id: 'entry-guest', onclick: chooseGuest }, tr('Continue without an account'))),
-    h('p', { class: 'muted small entry-note' }, tr('With an account your data is also kept in the cloud, and you can change phones without losing anything. Sign-in is through Google. Without an account everything is kept only on this device, and you can always sign in later from Profile.'))));
+    h('p', { class: 'muted small entry-note' }, tr('With an account, your data is also kept in the cloud, and you can change phones without losing anything. Sign-in is through Google. Without an account, everything is kept only on this device, and you can always sign in later from Profile.'))));
 }

@@ -18,7 +18,7 @@ export function renderPlan(root, { askAbout }) {
   const tot = dayTotals(plan);
 
   root.appendChild(h('header', { class: 'page-head' },
-    h('div', null, h('h1', null, tr('My menu')), h('p', { class: 'muted' }, tr('Matched to your goal, restrictions and number of meals')))));
+    h('div', null, h('h1', null, tr('My menu')), h('p', { class: 'muted' }, tr('Tailored to your goal, restrictions and number of meals')))));
   root.appendChild(h('a', { href: '#/shopping', class: 'btn btn-primary btn-block shop-btn', id: 'btn-shopping' }, h('span', { 'aria-hidden': 'true' }, '🛒'), tr('Weekly shopping')));
 
   const strip = h('div', { class: 'day-strip', role: 'tablist', 'aria-label': tr('Choose a day') });
@@ -49,5 +49,5 @@ export function renderPlan(root, { askAbout }) {
     }, icon('shuffle', 16), tr('Another meal')));
     root.appendChild(card);
   }
-  root.appendChild(h('p', { class: 'muted small center' }, tr('Amounts are by cooked / ready-to-eat weight. Vegetables are in a relatively free amount.')));
+  root.appendChild(h('p', { class: 'muted small center' }, tr('Amounts are by cooked / ready-to-eat weight. Vegetables can be eaten fairly freely.')));
 }

@@ -22,7 +22,7 @@ const TEMPLATES = {
   3: [['b', 0.28], ['l', 0.4], ['d', 0.32]],
   4: [['b', 0.25], ['l', 0.35], ['s', 0.15, tr('Snack')], ['d', 0.25]],
   5: [['b', 0.22], ['s', 0.12, tr('Mid-morning snack')], ['l', 0.3], ['s', 0.12, tr('Afternoon snack')], ['d', 0.24]],
-  6: [['b', 0.2], ['s', 0.1, tr('Mid-morning snack')], ['l', 0.27], ['s', 0.11, tr('Afternoon snack')], ['d', 0.22], ['s', 0.1, tr('Night snack')]],
+  6: [['b', 0.2], ['s', 0.1, tr('Mid-morning snack')], ['l', 0.27], ['s', 0.11, tr('Afternoon snack')], ['d', 0.22], ['s', 0.1, tr('Evening snack')]],
 };
 
 // Every meal comes with one fruit (it can be taken out like any group).

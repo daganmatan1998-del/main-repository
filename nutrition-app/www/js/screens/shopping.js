@@ -46,7 +46,7 @@ export function renderShopping(root) {
 
   const progress = h('p', { class: 'muted small center', id: 'shop-progress' });
   const updateProgress = () => {
-    progress.textContent = tr('{0} of {1} ticked', checked.size, total);
+    progress.textContent = tr('{0} of {1} checked', checked.size, total);
   };
 
   const list = h('div', { class: 'shop-list' });
@@ -84,7 +84,7 @@ export function renderShopping(root) {
     } catch (e) { if (e && e.name === 'AbortError') return; }
     try {
       await navigator.clipboard.writeText(text);
-      toast(tr('The list was copied — you can paste it in a chat'));
+      toast(tr('The list was copied — you can paste it into a chat'));
     } catch {
       toast(tr('Sharing isn\'t available in this browser'));
     }
@@ -99,9 +99,9 @@ export function renderShopping(root) {
           await saveShoppingChecks(r.key, []);
           window.dispatchEvent(new Event('app:rerender'));
         },
-      }, tr('Clear ticks'))),
+      }, tr('Uncheck all'))),
     progress,
     list,
-    h('p', { class: 'muted small center' }, tr('The amounts are calculated from all of the meals in the range, including the swaps you chose. Meat and grains are by uncooked weight. Adding a swap or changing the menu updates the list.')));
+    h('p', { class: 'muted small center' }, tr('The amounts are calculated from all of the meals in the range, including the swaps you chose. Meat and grains are listed by raw weight. Adding a swap or changing the menu updates the list.')));
   updateProgress();
 }

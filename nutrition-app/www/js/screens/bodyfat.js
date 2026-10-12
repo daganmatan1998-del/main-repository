@@ -14,7 +14,7 @@ import { deurenberg, navy, combine } from '../bodyfat.js';
 
 const ANGLES = [
   { id: 'front', label: tr('Front'), hint: tr('Facing the camera, arms slightly away from your body') },
-  { id: 'left', label: tr('Left side'), hint: tr('Left side to the camera, arms down at your sides or crossed on your chest') },
+  { id: 'left', label: tr('Left side'), hint: tr('Left side to the camera, arms down at your sides or crossed over your chest') },
   { id: 'back', label: tr('Back'), hint: tr('Back to the camera, arms slightly away from your body') },
   { id: 'right', label: tr('Right side'), hint: tr('Right side to the camera') },
 ];
@@ -24,7 +24,7 @@ const METHOD = {
   ai: tr('Photo analysis'),
   'ai+tape': tr('Photo analysis + tape measurements'),
   tape: tr('Tape measurements (US Navy method)'),
-  bmi: tr('A BMI and age formula (rough estimate)'),
+  bmi: tr('BMI and age formula (rough estimate)'),
 };
 
 export const DISCLAIMER = tr('The numbers are not guaranteed to be accurate. This is an estimate only and may be off by several percentage points. For an exact number, consult a dietitian or get a professional measurement (calipers / DEXA).');
@@ -127,7 +127,7 @@ export function openBodyFatEstimator(person) {
         header(tr('Body fat estimate from photos')),
         h('p', { class: 'lead' }, tr('We\'ll take 4 photos — front, left side, back and right side — and estimate your body fat from them.')),
         h('ul', { class: 'tips' },
-          h('li', null, tr('Fitted clothes or swimwear — loose clothes hide your body lines')),
+          h('li', null, tr('Fitted clothes or swimwear — loose clothes hide your body shape')),
           h('li', null, tr('A well-lit place with a plain background')),
           h('li', null, tr('Put the phone at waist height, 2–2.5 meters (6–8 ft) away from you, so your whole body is in the frame')),
           h('li', null, tr('There is a timer — you have time to step back and get into position'))),
@@ -205,7 +205,7 @@ export function openBodyFatEstimator(person) {
         const camInput = h('input', { type: 'file', accept: 'image/*', capture: 'user', class: 'visually-hidden', tabindex: '-1', 'aria-hidden': 'true' });
         camInput.addEventListener('change', () => { fileInput.files = camInput.files; fileInput.dispatchEvent(new Event('change')); });
         body.appendChild(camInput);
-        body.insertBefore(h('button', { class: 'btn btn-primary btn-lg btn-block', onclick: () => camInput.click() }, icon('camera'), tr('Take with the phone camera')), status);
+        body.insertBefore(h('button', { class: 'btn btn-primary btn-lg btn-block', onclick: () => camInput.click() }, icon('camera'), tr('Use the phone camera')), status);
       }
 
       shoot.addEventListener('click', async () => {
@@ -233,8 +233,8 @@ export function openBodyFatEstimator(person) {
       const last = i === ANGLES.length - 1;
       body.append(
         header(tr('Photo {0} of 4: {1}', i + 1, angle.label)),
-        h('div', { class: 'bf-stage' }, h('img', { src: photos[angle.id].url, alt: tr('Photo {0}', angle.label), class: 'bf-shot' })),
-        h('p', { class: 'small center' }, tr('Is your whole body in the photo? Can you see the body lines?')),
+        h('div', { class: 'bf-stage' }, h('img', { src: photos[angle.id].url, alt: tr('Photo: {0}', angle.label), class: 'bf-shot' })),
+        h('p', { class: 'small center' }, tr('Is your whole body in the photo? Is your body shape clearly visible?')),
         h('div', { class: 'row gap' },
           h('button', { class: 'btn btn-primary btn-lg grow', id: 'bf-keep', onclick: () => (last ? measurements(true) : capture(i + 1)) }, icon('check'), last ? tr('Continue to analysis') : tr('Next')),
           h('button', { class: 'btn btn-lg', onclick: () => { URL.revokeObjectURL(photos[angle.id].url); delete photos[angle.id]; capture(i); } }, tr('Retake'))));
@@ -261,7 +261,7 @@ export function openBodyFatEstimator(person) {
       };
       body.append(
         header(tr('For extra accuracy (optional)')),
-        h('p', { class: 'muted' }, tr('Have a measuring tape? Three quick measurements improve accuracy. No tape? You can skip.')),
+        h('p', { class: 'muted' }, tr('Have a measuring tape? Three quick measurements improve accuracy. No tape? You can skip this.')),
         fields,
         h('button', { class: 'btn btn-primary btn-lg btn-block', id: 'bf-analyze', onclick: go }, withPhotos ? tr('Analyze') : tr('Calculate estimate')),
         h('button', { class: 'btn btn-ghost btn-block', id: 'bf-skip-tape', onclick: () => analyze(withPhotos, null) }, tr('Skip')));
@@ -270,7 +270,7 @@ export function openBodyFatEstimator(person) {
     // ---------- analysis ----------
     async function analyze(withPhotos, tape) {
       clear(body);
-      body.append(header(tr('Analyzing…')), h('div', { class: 'bf-wait' }, h('div', { class: 'spinner', 'aria-hidden': 'true' }), h('p', null, withPhotos ? tr('Analyzing the photos, this takes about half a minute…') : tr('Calculating…'))));
+      body.append(header(tr('Analyzing…')), h('div', { class: 'bf-wait' }, h('div', { class: 'spinner', 'aria-hidden': 'true' }), h('p', null, withPhotos ? tr('Analyzing the photos — this takes about half a minute…') : tr('Calculating…'))));
       let ai = null;
       let issue = null;
       let failure = null;
@@ -315,7 +315,7 @@ export function openBodyFatEstimator(person) {
           h('button', { class: 'btn btn-small', onclick: () => analyze(true, tape) }, tr('Try again'))) : null,
         h('div', { class: 'bf-result card' },
           h('div', { class: 'bf-big', id: 'bf-value' }, h('span', { class: 'ltr' }, `${value}%`)),
-          h('div', { class: 'muted' }, tr('Reasonable range: '), h('span', { class: 'ltr' }, `${r.low}%–${r.high}%`)),
+          h('div', { class: 'muted' }, tr('Likely range: '), h('span', { class: 'ltr' }, `${r.low}%–${r.high}%`)),
           h('div', { class: 'kv' },
             h('span', null, tr('Method')), h('b', null, METHOD[r.method]),
             h('span', null, tr('Confidence')), h('b', null, CONFIDENCE[r.confidence] || '—')),

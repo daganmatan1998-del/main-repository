@@ -8,19 +8,19 @@ import { state, saveSettings } from '../store.js';
 import { enablePush, serverReady, pushSupported, needsInstall } from '../push.js';
 
 const RESULT_TEXT = {
-  on: tr('Great, messages are on.'),
+  on: tr('Great, notifications are on.'),
   denied: tr('Notifications are blocked. You can allow them in the browser or device settings.'),
   unsupported: tr('This device does not support notifications from the app.'),
-  unavailable: tr('Messages are not available yet. The app needs to be uploaded again.'),
+  unavailable: tr('Notifications aren\'t available yet. The app needs an update.'),
   failed: tr('Something went wrong turning on reminders. Try again.'),
 };
 
 export function openRemindersSheet({ onDone, asking = false } = {}) {
   // Closing the sheet any other way than "yes" counts as "not now" (asked once).
-  return sheet(tr('Messages'), (close) => {
+  return sheet(tr('Notifications'), (close) => {
     const msg = h('p', { class: 'muted small center', 'aria-live': 'polite' });
     const body = h('div', { class: 'form', id: 'reminders-sheet' },
-      h('p', { class: 'lead' }, tr('Do you allow Nutri to send you messages?')));
+      h('p', { class: 'lead' }, tr('Allow Nutri to send you notifications?')));
     if (needsInstall()) {
       body.appendChild(h('div', { class: 'notice warn small' }, tr('On iPhone, reminders work only after you add the app to your home screen: the share button → "Add to Home Screen", and then open it from there.')));
       body.appendChild(h('button', { class: 'btn btn-block', id: 'push-later', onclick: () => close() }, tr('Got it')));

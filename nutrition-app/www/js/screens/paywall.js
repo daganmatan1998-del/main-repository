@@ -57,7 +57,7 @@ export function openPaywall(feature = '') {
     const pay = (method) => {
       const url = checkoutLink(plan, method);
       if (!url) {
-        status.textContent = tr('Payment with {0} is not connected yet. Once a payment provider is connected, this button will go to the payment page.', METHOD_LABEL[method]);
+        status.textContent = tr('Payment with {0} isn\'t available yet. Once a payment provider is connected, this button will take you to the payment page.', METHOD_LABEL[method]);
         status.classList.add('show');
         return;
       }
@@ -66,11 +66,11 @@ export function openPaywall(feature = '') {
     const methods = paymentMethods({ ua: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints || 0 });
 
     const intro = feature
-      ? `${AI_FEATURES[feature]} ${access.state === 'locked' ? tr('is available with a plan') : tr('is included in the plan')}.`
-      : tr('Nutri\'s smart tools in one plan.');
+      ? `${AI_FEATURES[feature]} ${access.state === 'locked' ? tr('is available with a subscription') : tr('is included in your subscription')}.`
+      : tr('Nutri\'s smart tools in one subscription.');
     const trialLine = access.state === 'trial'
       ? tr('{0, plural, one {# day} other {# days}} left in the free trial.', access.daysLeft)
-      : access.state === 'locked' ? (BILLING.trialDays ? tr('The free trial is over.') : tr('The smart assistant and the calorie camera are available with a plan.')) : tr('Your plan is active.');
+      : access.state === 'locked' ? (BILLING.trialDays ? tr('The free trial is over.') : tr('The smart assistant and the calorie camera are available with a subscription.')) : tr('Your subscription is active.');
 
     return h('div', { class: 'paywall', id: 'paywall' },
       h('p', { class: 'lead' }, intro),
@@ -82,6 +82,6 @@ export function openPaywall(feature = '') {
       planList,
       h('div', { class: 'pay-methods', id: 'pay-methods' }, ...methods.map((m) => methodButton(m, pay))),
       status,
-      h('p', { class: 'muted tiny' }, tr('The price includes VAT. The plan renews automatically and you can cancel at any time.')));
+      h('p', { class: 'muted tiny' }, tr('The price includes VAT. The subscription renews automatically and you can cancel at any time.')));
   });
 }

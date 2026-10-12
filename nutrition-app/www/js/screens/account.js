@@ -26,7 +26,7 @@ export function googleButton(label = tr('Sign in with Google'), { intent = 'logi
   const btn = h('button', {
     type: 'button', class: `btn btn-block btn-google${primary ? ' btn-google-primary' : ''}`, id,
     onclick: async () => {
-      if (!cloud.cloudReady()) { msg.textContent = tr('Sign-in is not connected yet — it will open in the next update.'); return; }
+      if (!cloud.cloudReady()) { msg.textContent = tr('Sign-in isn\'t available yet — it\'s coming in the next update.'); return; }
       if (!navigator.onLine) { msg.textContent = tr('You need an internet connection to sign in.'); return; }
       btn.disabled = true;
       msg.textContent = tr('Taking you to sign-in…');
@@ -58,7 +58,7 @@ export function accountCard() {
   const u = cloud.currentUser();
   const st = syncStatus();
   const line = st.busy ? tr('Syncing…')
-    : st.conflict ? tr('Waiting for your choice: which copy to keep.')
+    : st.conflict ? tr('Waiting for you to choose which copy to keep.')
       : st.error ? (ERRORS[st.error] || tr('Syncing failed. We\'ll try again soon.'))
         : st.syncedAt ? tr('Synced · updated {0}', syncedAgo(st.syncedAt)) : tr('Waiting for the first sync…');
   const backup = h('input', {
@@ -78,7 +78,7 @@ export function accountCard() {
     st.conflict ? h('button', { class: 'btn btn-primary btn-block', onclick: openConflict }, tr('Choose a copy')) : null,
     h('label', { class: 'switch-row' },
       h('span', null, h('strong', null, tr('Back up progress photos')),
-        h('small', { class: 'muted' }, tr('Off: photos stay only on this device. On: they are also kept in your account, private — only you can access them.'))),
+        h('small', { class: 'muted' }, tr('Off: photos stay only on this device. On: they are also saved privately in your account — only you can access them.'))),
       backup),
     h('div', { class: 'grid2' },
       h('button', { class: 'btn', id: 'btn-sync', disabled: st.busy, onclick: async () => { const r = await syncNow(); if (r.conflict) openConflict(); else if (!r.error) toast(tr('Your data is synced')); } }, tr('Sync now')),
@@ -102,7 +102,7 @@ window.addEventListener('app:sync', () => {
 
 // Both this device and the account have data that were never synced together.
 export function openConflict() {
-  sheet(tr('There is data in both the account and on this device'), (close) => {
+  sheet(tr('There is data both in your account and on this device'), (close) => {
     const choose = async (choice) => {
       close();
       const r = await resolveConflict(choice);
@@ -117,16 +117,16 @@ export function openConflict() {
 
 function openSignOut() {
   sheet(tr('Sign out'), (close) => h('div', { class: 'form' },
-    h('p', null, tr('Your data stays saved in your account. You can keep it on this device too, or delete it from this device (for example on a device that is not yours).')),
+    h('p', null, tr('Your data stays saved in your account. You can keep it on this device too, or delete it from this device (for example, if this device isn\'t yours).')),
     h('button', {
       class: 'btn btn-block', id: 'signout-keep',
-      onclick: async () => { await cloud.signOut(); close(); toast(tr('Signed out. Your data stayed on this device.')); window.dispatchEvent(new Event('app:rerender')); },
+      onclick: async () => { await cloud.signOut(); close(); toast(tr('Signed out. Your data remains on this device.')); window.dispatchEvent(new Event('app:rerender')); },
     }, tr('Sign out, keep the data on this device')),
     h('button', {
       class: 'btn btn-danger btn-block', id: 'signout-wipe',
       onclick: async () => {
         await cloud.signOut();
-        try { await wipe(); } catch { toast(tr('Deleting was blocked — close other tabs of the app and try again.')); return; }
+        try { await wipe(); } catch { toast(tr('Couldn\'t delete — close any other tabs with the app open and try again.')); return; }
         close();
         location.hash = '';
         location.reload();

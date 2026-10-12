@@ -76,12 +76,12 @@ export function openRecipes(meal, day) {
     const toggleIn = (key) => (id) => save({ [key]: f[key].includes(id) ? f[key].filter((x) => x !== id) : [...f[key], id] });
     panelBox.appendChild(h('section', { class: 'card rc-panel', id: 'rc-panel' },
       h('h3', null, tr('What do I have at home?')),
-      h('p', { class: 'muted small' }, tr('Tick the spices and basics you have. Salt, pepper and water are always counted.')),
+      h('p', { class: 'muted small' }, tr('Check the spices and staples you have. Salt, pepper and water are always included.')),
       chipGroup(PANTRY.map((p) => ({ id: p, label: p })), f.have, toggleIn('have')),
       h('div', { class: 'row gap wrap rc-mini' },
         h('button', { type: 'button', class: 'btn btn-small btn-ghost', onclick: () => save({ have: PANTRY.slice() }) }, tr('Select all')),
         h('button', { type: 'button', class: 'btn btn-small btn-ghost', onclick: () => save({ have: [] }) }, tr('Clear'))),
-      toggleRow(tr('Show only recipes whose spices I all have'), f.pantryOnly, (v) => save({ pantryOnly: v }), 'rc-pantry-only'),
+      toggleRow(tr('Show only recipes I have all the spices for'), f.pantryOnly, (v) => save({ pantryOnly: v }), 'rc-pantry-only'),
       h('h3', null, tr('Styles I like')),
       chipGroup(CUISINES, f.cuisines, toggleIn('cuisines')),
       h('h3', null, tr('Cooking with')),
@@ -93,7 +93,7 @@ export function openRecipes(meal, day) {
           onclick: () => save({ maxTime: v }),
         }, label))),
       toggleRow(tr('Not spicy'), f.noSpicy, (v) => save({ noSpicy: v }), 'rc-no-spicy'),
-      toggleRow(tr('Only with the ingredients in the menu (no substitutes)'), f.noSwaps, (v) => save({ noSwaps: v }), 'rc-no-swaps'),
+      toggleRow(tr('Only with ingredients on my menu (no substitutes)'), f.noSwaps, (v) => save({ noSwaps: v }), 'rc-no-swaps'),
       toggleRow(tr('Only my favorites ❤'), f.favorites, (v) => save({ favorites: v }), 'rc-favs'),
       h('button', { type: 'button', class: 'btn btn-ghost btn-block', onclick: () => save({ ...DEFAULT_FILTERS }) }, tr('Reset all filters'))));
   }
@@ -128,7 +128,7 @@ export function openRecipes(meal, day) {
     details.append(
       h('h4', null, tr('Ingredients')),
       h('ul', { class: 'rc-ingr' }, ...r.ingredients.map((i) => h('li', null, h('b', { class: 'num' }, tr('{0} g', i.grams)), ` ${i.name} `, h('span', { class: 'muted' }, `(${i.household})`)))),
-      h('p', { class: 'small muted' }, tr('Spices and base: {0}, salt and pepper. In small amounts — no significant calories.', r.pantry.join(', '))),
+      h('p', { class: 'small muted' }, tr('Spices and staples: {0}, salt and pepper. Used in small amounts — no significant calories.', r.pantry.join(', '))),
       h('h4', null, tr('Instructions')),
       h('ol', { class: 'rc-steps' }, ...r.steps.map((s) => h('li', null, s))),
       h('div', { class: 'row gap wrap' },
@@ -140,7 +140,7 @@ export function openRecipes(meal, day) {
             toast(tr('The menu was updated to match the recipe'));
             close();
           },
-        }, icon('swap', 16), tr('Replace in the menu to match the recipe')) : null));
+        }, icon('swap', 16), tr('Update the menu to match the recipe')) : null));
     const card = h('article', { class: 'card rc-card' }, head, details);
     return card;
   }
@@ -158,7 +158,7 @@ export function openRecipes(meal, day) {
     list.slice(0, shown).forEach((r) => listBox.appendChild(recipeCard(r)));
     if (list.length > shown) {
       listBox.appendChild(h('button', { class: 'btn btn-block', id: 'rc-more', onclick: () => { shown += PAGE; drawList(); } },
-        tr('More recipes ({0} more)', list.length - shown)));
+        tr('More recipes ({0})', list.length - shown)));
     }
   }
 
@@ -180,12 +180,12 @@ export function openRecipes(meal, day) {
       h('div', { class: 'bf-head' },
         h('h2', null, tr('Recipes for {0}', meal.name)),
         h('button', { class: 'icon-btn', 'aria-label': tr('Close'), onclick: close }, icon('close', 24))),
-      h('p', { class: 'muted small' }, tr('Every recipe is built from exactly the amounts of the meal, so the menu stays balanced.')),
+      h('p', { class: 'muted small' }, tr('Every recipe uses the exact amounts in your meal, so the menu stays balanced.')),
       h('div', { class: 'chips rc-items' }, ...meal.items.map((i) => h('span', { class: 'pill' }, tr('{0} {1} g', FOOD_BY_ID[i.foodId].name, i.grams)))),
       h('div', { class: 'row gap rc-search-row' }, search, filterBtn)),
     panelBox,
     listBox,
-    h('button', { class: 'btn btn-ghost btn-block', id: 'rc-ai', onclick: askAI }, icon('sparkle', 18), tr('A brand new idea from the assistant')));
+    h('button', { class: 'btn btn-ghost btn-block', id: 'rc-ai', onclick: askAI }, icon('sparkle', 18), tr('A brand-new idea from the assistant')));
 
   document.body.appendChild(el);
   draw();

@@ -6,7 +6,7 @@
 import { t as tr } from './i18n.js';
 
 const TEXTS = {
-  'I can\'t help with that question. You can ask about the menu, substitutions and food.': tr('I can\'t help with that question. You can ask about the menu, substitutions and food.'),
+  'I can\'t help with that question. You can ask about the menu, substitutes and food.': tr('I can\'t help with that question. You can ask about the menu, substitutes and food.'),
   'These photos can\'t be analyzed. Try other photos or enter a value manually.': tr('These photos can\'t be analyzed. Try other photos or enter a value manually.'),
   'The photos are not suitable for analysis.': tr('The photos are not suitable for analysis.'),
   'This photo can\'t be analyzed. Try taking it again.': tr('This photo can\'t be analyzed. Try taking it again.'),

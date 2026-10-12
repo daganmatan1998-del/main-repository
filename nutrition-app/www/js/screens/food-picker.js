@@ -58,7 +58,7 @@ export function openFoodPicker(prefs, onSave) {
         groups.appendChild(h('section', { class: 'picker-group' },
           h('div', { class: 'row space' },
             h('h3', null, ROLE_TITLE[role]),
-            h('span', { class: 'muted small' }, tr('{0} in the options', left))),
+            h('span', { class: 'muted small' }, tr('{0} left', left))),
           chips));
       }
       if (!groups.childNodes.length) groups.appendChild(h('p', { class: 'empty' }, tr('No food with this name was found.')));
@@ -67,7 +67,7 @@ export function openFoodPicker(prefs, onSave) {
     draw();
 
     body.append(
-      h('p', { class: 'muted small' }, tr('Tap a food to take it out of the menu (marked in red). Every {0}, carb and fat in your menu always gets a substitute from the foods that stay.', ROLE_LABEL.protein)),
+      h('p', { class: 'muted small' }, tr('Tap a food to take it out of the menu (marked in red). Every {0}, carb and fat on your menu always gets a substitute from the remaining foods.', ROLE_LABEL.protein)),
       search,
       groups,
       h('div', { class: 'picker-actions' },

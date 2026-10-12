@@ -34,7 +34,7 @@ export function renderProfile(root) {
     h('div', { class: 'profile-id' },
       h('h1', null, p.nickname || p.name),
       p.nickname ? h('p', { class: 'muted' }, p.name) : null,
-      h('p', { class: 'muted small' }, tr('Registered on {0} · week {1}', fmtDate(p.regDay, true), currentWeek())))));
+      h('p', { class: 'muted small' }, tr('Joined {0} · week {1}', fmtDate(p.regDay, true), currentWeek())))));
 
   // ---- personal details (first: who this profile is) ----
   root.appendChild(h('section', { class: 'card', id: 'details-card' },
@@ -42,7 +42,7 @@ export function renderProfile(root) {
     h('div', { class: 'kv' },
       h('span', null, tr('Name')), h('b', null, p.name),
       h('span', null, tr('Nickname')), h('b', { id: 'kv-nickname' }, p.nickname || '—'),
-      h('span', null, tr('Sex, age, height')), h('b', null, tr('{0}, {1}, {2} cm', p.sex === 'female' ? tr('Woman') : tr('Man'), p.age, p.height)),
+      h('span', null, tr('Sex, age, height')), h('b', null, tr('{0}, {1}, {2} cm', p.sex === 'female' ? tr('Female') : tr('Male'), p.age, p.height)),
       h('span', null, tr('Activity')), h('b', null, tr('{0} · {1, plural, one {# workout} other {# workouts}} a week', ACTIVITY[p.activity].label, p.workouts)))));
 
   // ---- cloud account ----
@@ -55,10 +55,10 @@ export function renderProfile(root) {
       h('div', { class: 'row space' },
         h('h2', null, tr('Nutri Plus')),
         h('span', { class: `badge ${a.state}` }, a.state === 'active' ? tr('Active') : a.state === 'trial' ? tr('Trial') : tr('Inactive'))),
-      h('p', { class: 'muted small' }, a.state === 'active' ? tr('The plan is active until {0}.', fmtDate(new Date(a.until).toISOString().slice(0, 10)))
-        : a.state === 'trial' ? tr('{0, plural, one {# more trial day} other {# more trial days}} of the smart assistant and the calorie camera.', a.daysLeft)
-          : tr('The smart assistant and the calorie camera are available with a plan. Everything else is free.')),
-      h('button', { class: 'btn btn-block btn-primary', id: 'btn-plan', onclick: () => openPaywall('') }, a.state === 'active' ? tr('Plan details') : tr('Upgrade'))));
+      h('p', { class: 'muted small' }, a.state === 'active' ? tr('Your subscription is active until {0}.', fmtDate(new Date(a.until).toISOString().slice(0, 10)))
+        : a.state === 'trial' ? tr('{0, plural, one {# trial day} other {# trial days}} left for the smart assistant and the calorie camera.', a.daysLeft)
+          : tr('The smart assistant and the calorie camera are available with a subscription. Everything else is free.')),
+      h('button', { class: 'btn btn-block btn-primary', id: 'btn-plan', onclick: () => openPaywall('') }, a.state === 'active' ? tr('Subscription details') : tr('Upgrade'))));
   }
 
   // ---- metrics ----
@@ -103,7 +103,7 @@ export function renderProfile(root) {
     onchange: async (e) => {
       if (e.target.checked) {
         const r = await enableReminders();
-        if (r !== 'granted') { e.target.checked = false; toast(r === 'denied' ? tr('Notifications are blocked in the browser settings.') : tr('Notifications are not supported here.')); } else toast(tr('Reminders are on'));
+        if (r !== 'granted') { e.target.checked = false; toast(r === 'denied' ? tr('Notifications are blocked in the browser settings.') : tr('Notifications are not supported here.')); } else toast(tr('Notifications are on'));
       } else {
         await disableReminders();
       }
@@ -118,7 +118,7 @@ export function renderProfile(root) {
         openRemindersSheet({ onDone: () => window.dispatchEvent(new Event('app:rerender')) });
       } else {
         await disablePush();
-        toast(tr('Messages are off'));
+        toast(tr('Notifications are off'));
       }
     },
   });
@@ -126,10 +126,10 @@ export function renderProfile(root) {
     h('h2', null, tr('Settings')),
     h('div', { class: 'field' }, h('span', null, tr('Language‖setting')), languageBar()),
     h('div', { class: 'field' }, h('span', null, tr('Appearance')),
-      segmented([{ id: 'system', label: tr('Follow the device') }, { id: 'light', label: tr('Light') }, { id: 'dark', label: tr('Dark') }], state.settings.theme,
+      segmented([{ id: 'system', label: tr('Use device setting') }, { id: 'light', label: tr('Light') }, { id: 'dark', label: tr('Dark') }], state.settings.theme,
         async (v) => { await saveSettings({ theme: v }); applyTheme(v); }, tr('Color scheme'))),
     h('label', { class: 'switch-row' },
-      h('span', null, h('strong', null, tr('Messages from Nutri')), !pushSupported() && needsInstall() ? h('small', { class: 'muted' }, tr('On iPhone: first add the app to your home screen')) : !pushSupported() ? h('small', { class: 'muted' }, tr('This device does not support messages')) : null),
+      h('span', null, h('strong', null, tr('Notifications from Nutri')), !pushSupported() && needsInstall() ? h('small', { class: 'muted' }, tr('On iPhone: first add the app to your home screen')) : !pushSupported() ? h('small', { class: 'muted' }, tr('This device does not support notifications')) : null),
       pushToggle),
     h('label', { class: 'switch-row' },
       h('span', null, h('strong', null, tr('Weekly photo reminder')), h('small', { class: 'muted' }, notifSupported() ? tr('A notification on photo day (when the browser supports it)') : tr('This browser does not support notifications — use the calendar'))),
@@ -145,7 +145,7 @@ export function renderProfile(root) {
     try {
       const persisted = navigator.storage?.persisted ? await navigator.storage.persisted() : false;
       const est = navigator.storage?.estimate ? await navigator.storage.estimate() : null;
-      storageInfo.textContent = `${est ? tr('In use: {0}MB. ', (est.usage / 1048576).toFixed(1)) : ''}${persisted ? tr('Storage is protected from automatic deletion.') : tr('The browser may free up storage if the device fills up — installing the app lowers the risk.')}`;
+      storageInfo.textContent = `${est ? tr('In use: {0} MB. ', (est.usage / 1048576).toFixed(1)) : ''}${persisted ? tr('Storage is protected from automatic deletion.') : tr('The browser may free up storage if the device fills up — installing the app lowers the risk.')}`;
     } catch { storageInfo.textContent = ''; }
   })();
   root.appendChild(h('section', { class: 'card' },
@@ -153,9 +153,9 @@ export function renderProfile(root) {
     h('ul', { class: 'bullets small' },
       cloud.signedIn()
         ? h('li', null, icon('lock', 16), tr('Your data is kept on your device and in your private cloud account, which only you can access. Progress photos {0}', state.settings.photoBackup ? tr('are backed up in the account too.') : tr('are kept only on the device (photo backup is off).')))
-        : h('li', null, icon('lock', 16), tr('All your data — including photos and body measurements — is kept only on this device. Signing in to an account also keeps a copy of it in the cloud.')),
-      h('li', null, icon('chat', 16), tr('Only the nutrition data that is needed (age, measurements, goal, menu and restrictions) is sent with a question to the assistant — no name and no photos.')),
-      h('li', null, icon('info', 16), cloud.signedIn() ? tr('Deleting all data below also deletes it from the cloud account, including the account itself.') : tr('Deleting the app or clearing the browser\'s site data also deletes your data.'))),
+        : h('li', null, icon('lock', 16), tr('All your data — including photos and body measurements — is kept only on this device. If you sign in, a copy is also kept in the cloud.')),
+      h('li', null, icon('chat', 16), tr('When you ask the assistant, only the needed nutrition data (age, measurements, goal, menu and restrictions) is sent — never your name or photos.')),
+      h('li', null, icon('info', 16), cloud.signedIn() ? tr('"Delete all data" below also removes it from the cloud and deletes the account itself.') : tr('Deleting the app or clearing the browser\'s site data also deletes your data.'))),
     storageInfo,
     h('button', { class: 'btn btn-danger btn-block', id: 'btn-delete-all', onclick: deleteAll }, icon('trash', 18), tr('Delete all data'))));
 
@@ -172,7 +172,7 @@ function editDetails() {
       h('div', { class: 'grid2' },
         h('label', { class: 'field' }, h('span', null, tr('Name')), h('input', { id: 'ed-name', autocomplete: 'given-name', value: d.name, oninput: (e) => { d.name = e.target.value; } })),
         h('label', { class: 'field' }, h('span', null, tr('Nickname')), h('input', { id: 'ed-nickname', placeholder: tr('How should we address you?'), maxlength: 20, value: d.nickname, oninput: (e) => { d.nickname = e.target.value; } }))),
-      h('div', { class: 'field' }, h('span', null, tr('Sex')), segmented([{ id: 'male', label: tr('Man') }, { id: 'female', label: tr('Woman') }], d.sex, (v) => { d.sex = v; }, tr('Sex'))),
+      h('div', { class: 'field' }, h('span', null, tr('Sex')), segmented([{ id: 'male', label: tr('Male') }, { id: 'female', label: tr('Female') }], d.sex, (v) => { d.sex = v; }, tr('Sex'))),
       h('div', { class: 'grid2' },
         h('label', { class: 'field' }, h('span', null, tr('Age')), h('input', { inputmode: 'numeric', value: d.age, oninput: (e) => { d.age = e.target.value; } })),
         h('label', { class: 'field' }, h('span', null, tr('Height (cm)')), h('input', { inputmode: 'numeric', value: d.height, oninput: (e) => { d.height = e.target.value; } }))),
@@ -269,7 +269,7 @@ function deleteAll() {
           await cloud.deleteAccount();
         } catch {
           btn.disabled = false;
-          toast(tr('We couldn\'t delete from the cloud account (you need an internet connection). Nothing was deleted.'));
+          toast(tr('We couldn\'t delete your data from the cloud account (an internet connection is needed). Nothing was deleted.'));
           return;
         }
       }
@@ -277,7 +277,7 @@ function deleteAll() {
         await wipe();
       } catch {
         btn.disabled = false;
-        toast(tr('Deleting was blocked — close other tabs of the app and try again.'));
+        toast(tr('Couldn\'t delete — close any other tabs with the app open and try again.'));
         return;
       }
       close();
@@ -286,8 +286,8 @@ function deleteAll() {
     });
     return h('div', { class: 'form' },
       h('p', null, withCloud
-        ? tr('This will delete from this device and from the cloud account your profile, plan, all measurements, all photos and chats, and close the account. It cannot be undone.')
-        : tr('This will delete from this device your profile, plan, all measurements, all photos and chats. It cannot be undone.')),
+        ? tr('This will delete your profile, plan, all measurements, photos and chats from this device and the cloud account, and close the account. It cannot be undone.')
+        : tr('This will delete your profile, plan, all measurements, photos and chats from this device. It cannot be undone.')),
       h('label', { class: 'field' }, h('span', null, tr('To confirm, type "delete"')), input),
       btn);
   });

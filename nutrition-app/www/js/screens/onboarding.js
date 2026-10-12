@@ -103,25 +103,25 @@ export function renderOnboarding(root) {
   const validators = {
     1: () => {
       let ok = setErr('name', d.name.trim().length >= 2 ? '' : tr('Enter a name (at least 2 characters).'));
-      ok = setErr('sex', d.sex ? '' : tr('Choose a sex (used to calculate your metabolic rate).')) && ok;
+      ok = setErr('sex', d.sex ? '' : tr('Choose your sex (used to calculate your metabolic rate).')) && ok;
       const age = parseNum(d.age);
-      ok = setErr('age', age >= 16 && age <= 90 ? '' : tr('Age between 16 and 90.')) && ok;
+      ok = setErr('age', age >= 16 && age <= 90 ? '' : tr('Age must be between 16 and 90.')) && ok;
       const ht = parseNum(d.height);
-      ok = setErr('height', ht >= 120 && ht <= 230 ? '' : tr('Height between 120 and 230 cm.')) && ok;
+      ok = setErr('height', ht >= 120 && ht <= 230 ? '' : tr('Height must be between 120 and 230 cm.')) && ok;
       return ok;
     },
     2: () => {
       const w = parseNum(d.weight);
-      let ok = setErr('weight', w >= 30 && w <= 300 ? '' : tr('Weight between 30 and 300 kg.'));
-      ok = setErr('bf', validBf(parseNum(d.bf)) ? '' : tr('Body fat between 3 and 60%.')) && ok;
+      let ok = setErr('weight', w >= 30 && w <= 300 ? '' : tr('Weight must be between 30 and 300 kg.'));
+      ok = setErr('bf', validBf(parseNum(d.bf)) ? '' : tr('Body fat must be between 3 and 60%.')) && ok;
       return ok;
     },
     3: () => setErr('goal', d.goal ? '' : tr('Choose a goal.')),
     4: () => {
       const wk = weeksValue();
-      let ok = setErr('customWeeks', wk >= 2 && wk <= 52 ? '' : tr('A duration between 2 and 52 weeks.'));
+      let ok = setErr('customWeeks', wk >= 2 && wk <= 52 ? '' : tr('Length must be between 2 and 52 weeks.'));
       ok = setErr('targetWeight', parseNum(d.targetWeight) >= 30 ? '' : tr('Enter a target weight.')) && ok;
-      ok = setErr('targetBf', validBf(parseNum(d.targetBf)) ? '' : tr('Target body fat between 3 and 60%.')) && ok;
+      ok = setErr('targetBf', validBf(parseNum(d.targetBf)) ? '' : tr('Target body fat must be between 3 and 60%.')) && ok;
       if (ok && assessment().level === 'error') {
         toast(tr('Fix the target before you continue.'));
         return false;
@@ -186,14 +186,14 @@ export function renderOnboarding(root) {
             h('li', null, icon('lock', 18), tr('Your data is kept on your device and, if you want, in a private account in the cloud.')),
             h('li', null, icon('camera', 18), tr('Once a week: a progress photo and a weigh-in — it is required, and it is what makes the difference.')),
             h('li', null, icon('chat', 18), tr('A nutrition assistant that knows your menu and restrictions.'))),
-          cloudReady() && !currentUser() ? h('button', { type: 'button', class: 'btn btn-ghost', id: 'entry-back', onclick: backToEntry }, tr('I have an account, or I want to create one')) : null,
+          cloudReady() && !currentUser() ? h('button', { type: 'button', class: 'btn btn-ghost', id: 'entry-back', onclick: backToEntry }, tr('I have an account or want to create one')) : null,
           disclaimer());
       case 1:
         return h('div', null,
           h('h2', null, tr('A little about you')),
           field(tr('Name'), 'name', { type: 'text', autocomplete: 'given-name', enterkeyhint: 'next' }),
           h('div', { class: 'field' }, h('span', { id: 'lbl-sex' }, tr('Sex')),
-            h('div', { id: 'ob-sex' }, segmented([{ id: 'male', label: tr('Man') }, { id: 'female', label: tr('Woman') }], d.sex, (v) => { d.sex = v; saveDraft(d); }, tr('Sex'))),
+            h('div', { id: 'ob-sex' }, segmented([{ id: 'male', label: tr('Male') }, { id: 'female', label: tr('Female') }], d.sex, (v) => { d.sex = v; saveDraft(d); }, tr('Sex'))),
             h('div', { class: 'field-err', id: 'err-sex', role: 'alert' })),
           h('div', { class: 'grid2' },
             field(tr('Age'), 'age', { type: 'text', inputmode: 'numeric' }),
@@ -203,7 +203,7 @@ export function renderOnboarding(root) {
           h('h2', null, tr('Your measurements today')),
           field(tr('Weight (kg)'), 'weight', { type: 'text', inputmode: 'decimal' }),
           field(tr('Body fat (%)'), 'bf', { type: 'text', inputmode: 'decimal' },
-            tr('An estimate is enough: a smart scale, calipers or a measurement at a gym. Body fat allows a more accurate calculation (the Katch-McArdle formula).')),
+            tr('An estimate is enough: a smart scale, calipers or a measurement at a gym. Knowing your body fat allows a more accurate calculation (the Katch-McArdle formula).')),
           h('button', {
             type: 'button',
             class: 'btn btn-block bf-link',
@@ -263,7 +263,7 @@ export function renderOnboarding(root) {
           h('div', { class: 'grid2' },
             field(tr('Target weight (kg)'), 'targetWeight', { type: 'text', inputmode: 'decimal', onupdate: touched }),
             field(tr('Target body fat (%)'), 'targetBf', { type: 'text', inputmode: 'decimal', onupdate: touched })),
-          h('p', { class: 'muted small' }, tr('Current: {0} kg, {1}% fat.', d.weight, d.bf)),
+          h('p', { class: 'muted small' }, tr('Current: {0} kg, {1}% body fat.', d.weight, d.bf)),
           assessEl);
         refresh();
         return body;
@@ -357,12 +357,12 @@ export function renderOnboarding(root) {
               h('span', { class: 'pill carb' }, tr('Carbs {0} g', t.carbs)),
               h('span', { class: 'pill fat' }, tr('Fat {0} g', t.fat))),
             h('p', { class: 'muted small' },
-              tr('Estimated energy expenditure {0} kcal per day (resting {1}, by the {2}). ', fmt(t.tdee), fmt(t.bmr), `\u2066${t.method}\u2069`),
-              t.deltaKcal ? tr('{0} of {1} kcal — expected pace {2} kg per week.', t.deltaKcal < 0 ? tr('Deficit') : tr('Surplus'), Math.abs(t.deltaKcal), Math.abs(t.plannedKgPerWeek)) : tr('Calories for maintenance.')),
+              tr('Estimated energy expenditure: {0} kcal per day (resting: {1}, using the {2}). ', fmt(t.tdee), fmt(t.bmr), `\u2066${t.method}\u2069`),
+              t.deltaKcal ? tr('{0} of {1} kcal — expected pace {2} kg per week.', t.deltaKcal < 0 ? tr('Deficit') : tr('Surplus'), Math.abs(t.deltaKcal), Math.abs(t.plannedKgPerWeek)) : tr('Maintenance calories.')),
             ...t.warnings.map((w) => h('p', { class: 'notice warn small' }, w)),
             protOk < 3 ? h('p', { class: 'notice warn small' }, tr('Your restrictions leave few protein sources. The menu will work, but it will be less varied.')) : null),
           h('h3', null, tr('Starting photo (week 0)')),
-          h('p', { class: 'muted small' }, tr('Optional, but worth it: it will be your point of comparison in the gallery. From next week the weekly photo is required.')),
+          h('p', { class: 'muted small' }, tr('Optional, but worth it: it will be your point of comparison in the gallery. Starting next week, the weekly photo is required.')),
           photoBox);
       }
       default:

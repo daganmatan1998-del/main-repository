@@ -11,7 +11,7 @@ import { FOOD_BY_ID, DIET_ALLOWED_SRC, kosherCompatible, dislikeMatches, parseDi
 
 const tsp = (g = 5) => ({ u: raw('{0, plural, =0.25 {{1} teaspoon} =0.5 {{1} teaspoon} =0.75 {{1} teaspoon} one {{1} teaspoon} other {{1} teaspoons}}'), g, step: 1 });
 const tbsp = (g) => ({ u: raw('{0, plural, =0.25 {{1} tablespoon} =0.5 {{1} tablespoon} =0.75 {{1} tablespoon} one {{1} tablespoon} other {{1} tablespoons}}'), g, step: 0.5 });
-const cup4 = { u: raw('{0, plural, =0.25 {{1} ¼ cup} =0.5 {{1} ¼ cup} =0.75 {{1} ¼ cup} one {{1} ¼ cup} other {{1} ¼ cup}}'), g: 60, step: 1 };
+const cup4 = { u: raw('{0, plural, =0.25 {{1} quarter cup} =0.5 {{1} quarter cup} =0.75 {{1} quarter cup} one {{1} quarter cup} other {{1} quarter cups}}'), g: 60, step: 1 };
 
 // Per 100 g. serving = the grams added when tapped.
 const SAUCES = [

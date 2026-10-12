@@ -34,7 +34,7 @@ function toBlob(canvas, quality) {
 export async function compressImage(file) {
   if (!file) throw new ImageError(tr('No file was selected.'));
   if (file.type && !file.type.startsWith('image/')) throw new ImageError(tr('The selected file is not an image.'));
-  if (file.size > 40 * 1024 * 1024) throw new ImageError(tr('The image is too large (over 40MB).'));
+  if (file.size > 40 * 1024 * 1024) throw new ImageError(tr('The image is too large (over 40 MB).'));
 
   let src;
   try {

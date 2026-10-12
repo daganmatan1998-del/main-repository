@@ -43,7 +43,7 @@ export async function promptInstall() {
     sheet(tr('Install on iPhone'), h('ol', { class: 'ios-steps' },
       h('li', null, tr('Tap the share button '), h('b', null, '⬆︎'), tr(' at the bottom of Safari')),
       h('li', null, tr('Choose '), h('b', null, tr('"Add to Home Screen"'))),
-      h('li', null, tr('Tap '), h('b', null, tr('"Add"')), tr(' — and the app appears as an icon'))));
+      h('li', null, tr('Tap '), h('b', null, tr('"Add"')), tr(' — the app will appear as an icon'))));
     return 'ios';
   }
   toast(tr('Installation is available from the browser menu → "Install app"'));
@@ -57,7 +57,7 @@ export function installCard() {
       h('img', { src: 'icons/icon-192.png', alt: '', width: 44, height: 44, class: 'app-icon' }),
       h('div', { class: 'grow' },
         h('strong', null, tr('Install the app')),
-        h('p', { class: 'muted small' }, tr('Quick access from your home screen, full screen, and it works without internet.')))),
+        h('p', { class: 'muted small' }, tr('Quick access from your home screen, full-screen view, and offline use.')))),
     h('div', { class: 'row gap' },
       h('button', { class: 'btn btn-primary', onclick: () => promptInstall() }, icon('download', 18), tr('Install')),
       h('button', { class: 'btn btn-ghost', onclick: () => saveSettings({ installDismissed: true }) }, tr('Not now'))));

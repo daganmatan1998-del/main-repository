@@ -273,7 +273,7 @@ function photoMealBody(card, meal, day) {
   if (day) {
     card.appendChild(h('button', {
       class: 'btn btn-ghost btn-block btn-small',
-      onclick: async () => { await clearPhotoMeal(day, meal.index); toast(tr('Back to the menu meal')); },
+      onclick: async () => { await clearPhotoMeal(day, meal.index); toast(tr('Back to the meal from the menu')); },
     }, tr('Back to the planned meal')));
   }
   return card;
@@ -331,8 +331,8 @@ function removalBar(meal, day) {
     const rest = ['protein', 'carb', 'fat'].filter((g) => meal.removable.includes(g) && !macros.includes(g)).map((g) => MACRO_NAME[g]);
     const to = rest.length > 1 ? tr('split between the {0} and the {1}', rest[0], rest[1]) : tr('moved to the {0}', rest[0]);
     const text = macros.length
-      ? tr('{0}{1} — {2} kcal {3}, and the meal stays on the same calories.', REMOVED_TEXT[macros[0]], sides.length ? tr(' and also {0}', sides.join(tr(' and '))) : '', fmt(meal.freedKcal), to)
-      : tr('{0} {1} — the rest of the meal was increased to the same calories.', sides.join(tr(' and ')), sides.length > 1 || removed[0] === 'veg' ? tr('were removed') : tr('was removed'));
+      ? tr('{0}{1} — {2} kcal {3}, and the meal keeps the same calories.', REMOVED_TEXT[macros[0]], sides.length ? tr(' and also {0}', sides.join(tr(' and '))) : '', fmt(meal.freedKcal), to)
+      : tr('{0} {1} — the rest of the meal was increased to keep the same calories.', sides.join(tr(' and ')), sides.length > 1 || removed[0] === 'veg' ? tr('were removed') : tr('was removed'));
     wrap.appendChild(h('p', { class: 'rm-note small' }, icon('info', 16), h('span', null, text)));
   }
   return wrap;

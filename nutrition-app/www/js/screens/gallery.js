@@ -30,7 +30,7 @@ export function renderGallery(root) {
     const c = s.checkin;
     const tile = h('button', {
       class: 'tile' + (c ? '' : ' empty'),
-      'aria-label': c ? tr('Week {0}, {1}', s.week, fmtDate(s.date)) : tr('Week {0} — not photographed', s.week),
+      'aria-label': c ? tr('Week {0}, {1}', s.week, fmtDate(s.date)) : tr('Week {0} — no photo', s.week),
       disabled: !c,
       onclick: c ? () => openViewer(withPhotos, withPhotos.indexOf(s), urlFor) : null,
     });
@@ -41,7 +41,7 @@ export function renderGallery(root) {
         frame.appendChild(u ? h('img', { src: u, alt: '', loading: 'lazy' }) : h('span', { class: 'missing' }, icon('lock', 22), tr('On another device')));
       });
     } else {
-      frame.appendChild(h('span', { class: 'missing' }, icon('camera', 26), tr('Not photographed')));
+      frame.appendChild(h('span', { class: 'missing' }, icon('camera', 26), tr('No photo')));
     }
     tile.append(frame, h('div', { class: 'tile-cap' },
       h('b', null, s.week === 0 ? tr('Open') : tr('Week {0}', s.week)),

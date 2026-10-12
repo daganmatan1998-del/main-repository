@@ -10,8 +10,8 @@ export const KCAL_PER_KG = 7700;
 // which avoids the usual double-counting of "moderately active" multipliers.
 export const ACTIVITY = {
   sedentary: { label: tr('Sedentary'), hint: tr('Office work, little walking'), f: 1.2 },
-  light: { label: tr('Lightly active'), hint: tr('Lots of standing or walking, 7–10 thousand steps'), f: 1.3 },
-  active: { label: tr('Active'), hint: tr('A job on your feet, over 10 thousand steps'), f: 1.4 },
+  light: { label: tr('Lightly active'), hint: tr('Lots of standing or walking, 7,000–10,000 steps'), f: 1.3 },
+  active: { label: tr('Active'), hint: tr('A job on your feet, over 10,000 steps'), f: 1.4 },
   very: { label: tr('Very active'), hint: tr('Hard physical work'), f: 1.5 },
 };
 const PER_WORKOUT = 0.035; // multiplier added per weekly workout (~45–60 min)
