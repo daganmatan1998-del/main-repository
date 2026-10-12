@@ -212,15 +212,17 @@ await test('losing a level, then the retry uses different words for the same obj
   await startLevelById(page, 'en-4b');
   await page.waitForFunction(() => window.__rd.session?.state?.enemies.some((e) => e.status === 'walking'));
   const first = await page.evaluate(() => window.__rd.session.state.enemies.map((e) => e.items.map((i) => i.id).join('+')));
-  // Fast-forward: one heart left, the front enemy reaches the gate.
+  // Fast-forward: nobody reads, every monster slips in and vanishes.
   await page.evaluate(() => {
     const st = window.__rd.session.state;
-    st.castleHp = 1;
-    st.enemies.find((e) => e.status === 'walking').progress = 0.9999;
+    const front = st.enemies.find((e) => e.status === 'walking');
+    for (const e of st.enemies) if (e !== front) e.status = 'breached';
+    front.progress = 0.9999;
   });
   await page.waitForSelector('[data-testid=defeat]', { timeout: 5000 });
-  const hp = await page.evaluate(() => window.__rd.session.state.castleHp);
-  assert(hp === 0, 'castle health should reach 0');
+  const end = await page.evaluate(() => ({ hp: window.__rd.session.state.castleHp, why: window.__rd.session.state.lostReason, text: document.querySelector('[data-testid=defeat]').textContent }));
+  assert(end.hp === 2, 'monsters that slip in must not hurt the castle: ' + end.hp);
+  assert(end.why === 'fewRead' && /half/i.test(end.text), 'the defeat should explain that half must be read: ' + JSON.stringify(end));
   await page.click('[data-testid=retry]');
   await page.waitForFunction(() => window.__rd.session?.state?.status === 'playing');
   const second = await page.evaluate(() => window.__rd.session.state.enemies.map((e) => e.items.map((i) => i.id).join('+')));
@@ -373,52 +375,83 @@ await test('pausing freezes the walk; resuming continues it', async () => {
   await page.context().close();
 });
 
-await test('boss fight: announced, three words one at a time, wrong answers do not advance it, level ends on the third', async () => {
+await test('world boss fight: announced, six words, each world its own boss, never pushed back, ends on the sixth', async () => {
   const page = await newPage();
   await setup(page, 'en');
-  await startLevelById(page, 'en-1a');
-  // Defeat the regular enemies by reading them.
-  for (let i = 0; i < 120; i++) {
-    const info = await page.evaluate(() => {
-      const s = window.__rd.session.state;
-      return { regularLeft: s.enemies.filter((e) => e.type !== 'boss' && e.status !== 'defeated' && e.status !== 'breached').length, intro: s.intro, bossWalking: s.enemies.some((e) => e.type === 'boss' && e.status === 'walking') };
-    });
-    if (info.regularLeft === 0 && (info.intro > 0 || info.bossWalking)) break;
-    const walking = await page.evaluate(() => window.__rd.session.state.enemies.some((e) => e.status === 'walking'));
-    if (walking) await page.click('[data-sim=correct]');
-    await page.waitForTimeout(500);
-  }
-  const intro = await page.evaluate(() => ({ intro: window.__rd.session.state.intro, banner: document.querySelector('.toast, #toast')?.textContent ?? '' }));
+  const bossIds = await page.evaluate(() => window.__rd.app.levels.filter((l) => l.boss).map((l) => l.id));
+  assert(bossIds.length === 6 && bossIds[0] === 'en-boss-1', 'one boss level per world: ' + bossIds);
+  const regular = await page.evaluate(() => window.__rd.app.levels.filter((l) => !l.boss).every((l) => l.enemyCount === 10));
+  assert(regular, 'regular levels must have ten monsters');
+  await startLevelById(page, 'en-boss-1');
+  const intro = await page.evaluate(() => ({ intro: window.__rd.session.state.intro, banner: document.querySelector('.toast, #toast')?.textContent ?? '', n: window.__rd.session.state.enemies.length }));
+  assert(intro.n === 1, 'a boss level is the boss alone');
   assert(intro.intro > 0, 'the boss should be announced before it walks');
-  assert(/troll|three words/i.test(intro.banner), 'announcement text missing: ' + intro.banner);
+  assert(/King Slime/.test(intro.banner) && /six words/i.test(intro.banner), 'announcement text missing: ' + intro.banner);
   await page.waitForFunction(() => window.__rd.session.state.enemies.some((e) => e.type === 'boss' && e.status === 'walking'), null, { timeout: 6000 });
+  const variant = await page.evaluate(() => window.__rd.app.renderer.bossVariant);
+  assert(variant === 'meadow', 'world 1 has its own boss design, got ' + variant);
 
-  const words = await page.evaluate(() => window.__rd.session.state.enemies.find((e) => e.type === 'boss').items.map((i) => i.display));
-  assert(words.length === 3 && new Set(words).size === 3, 'boss needs exactly three different words: ' + words);
+  const words = await page.evaluate(() => window.__rd.session.state.enemies[0].items.map((i) => i.display));
+  assert(words.length === 6 && new Set(words).size === 6, 'boss needs exactly six different words: ' + words);
   const readShown = () => page.textContent('[data-testid=target-text]');
-  for (let stage = 0; stage < 3; stage++) {
+  for (let stage = 0; stage < 6; stage++) {
     const shown = (await readShown()).trim();
-    assert(shown.endsWith(`: ${words[stage]}`), `stage ${stage + 1} shows "${shown}", expected "${words[stage]}"`);
-    assert(shown.includes(`${stage + 1}`) && shown.includes('3'), 'should say which word of three: ' + shown);
-    for (const other of words.filter((_, i) => i !== stage)) {
-      assert(!shown.endsWith(`: ${other}`), `another boss word "${other}" is shown while reading "${shown}"`);
-    }
-    // what the boss's sign shows is its current item, one word only
-    const signItem = await page.evaluate(() => { const b = window.__rd.session.state.enemies.find((e) => e.type === 'boss'); return b.items[b.phase].display; });
-    assert(signItem === words[stage], 'the boss sign is not on the current word');
+    assert(shown.endsWith(`: ${words[stage]}`), `word ${stage + 1} shows "${shown}", expected "${words[stage]}"`);
+    assert(shown.includes(`${stage + 1}`) && shown.includes('6'), 'should say which word of six: ' + shown);
     if (stage === 1) {
       // wrong, unclear and silent attempts leave the boss on the second word
       for (const a of ['wrong', 'unclear', 'silence']) { await page.click(`[data-sim=${a}]`); await page.waitForTimeout(650); }
-      const phase = await page.evaluate(() => window.__rd.session.state.enemies.find((e) => e.type === 'boss').phase);
+      const phase = await page.evaluate(() => window.__rd.session.state.enemies[0].phase);
       assert(phase === 1, 'a failed attempt advanced the boss to phase ' + phase);
-      assert((await readShown()).trim().endsWith(`: ${words[1]}`), 'the word changed after a failed attempt');
     }
+    const before = await page.evaluate(() => window.__rd.session.state.enemies[0].progress);
     await page.click('[data-sim=correct]');
     await page.waitForTimeout(700);
+    if (stage < 5) {
+      const after = await page.evaluate(() => window.__rd.session.state.enemies[0].progress);
+      assert(after >= before, `a correct word pushed the boss back (${before} → ${after})`);
+    }
   }
   await page.waitForSelector('[data-testid=victory]', { timeout: 8000 });
-  const stats = await page.evaluate(() => { const s = window.__rd.session.state; return { status: s.status, boss: s.enemies.find((e) => e.type === 'boss').status }; });
+  const stats = await page.evaluate(() => { const s = window.__rd.session.state; return { status: s.status, boss: s.enemies[0].status }; });
   assert(stats.status === 'won' && stats.boss === 'defeated', 'level should be won with the boss defeated: ' + JSON.stringify(stats));
+  assert(page.errors.length === 0, 'page errors: ' + page.errors.join('; '));
+  await page.context().close();
+});
+
+await test('each world has a different boss, and the boss hits the castle one heart per blow', async () => {
+  const page = await newPage();
+  await setup(page, 'he');
+  const seen = [];
+  for (const stage of [2, 5]) {
+    await startLevelById(page, `he-boss-${stage}`);
+    seen.push(await page.evaluate(() => window.__rd.app.renderer.bossVariant));
+    if (stage === 5) {
+      await page.waitForFunction(() => window.__rd.session.state.enemies[0].status === 'walking', null, { timeout: 6000 });
+      const hp0 = await page.evaluate(() => { const st = window.__rd.session.state; st.enemies[0].progress = 0.9999; return st.castleHp; });
+      await page.waitForFunction((h) => window.__rd.session.state.castleHp === h - 1, hp0, { timeout: 2000 });
+      const at = await page.evaluate(() => window.__rd.session.state.enemies[0].progress);
+      assert(at === 1, 'the boss stays at the gate and keeps striking');
+    } else {
+      await page.evaluate(() => window.__rd.session.exit('home'));
+    }
+  }
+  assert(seen[0] === 'forest' && seen[1] === 'volcano', 'bosses should differ by world: ' + seen);
+  await page.context().close();
+});
+
+await test('extra castle hearts can be bought with coins', async () => {
+  const page = await newPage();
+  await setup(page, 'en');
+  await page.evaluate(() => { const a = window.__rd.app; a.profile.coins = 200; a.save(); a.show('shop'); });
+  await page.waitForSelector('[data-testid=shop-hearts]');
+  await page.click('[data-testid=buy-heart]');
+  await page.waitForSelector('[data-testid=screen-shop]');
+  const p = await page.evaluate(() => ({ coins: window.__rd.app.profile.coins, extra: window.__rd.app.profile.extraHearts }));
+  assert(p.extra === 1 && p.coins === 150, 'buying a heart failed: ' + JSON.stringify(p));
+  await startLevelById(page, 'en-1a');
+  const hp = await page.evaluate(() => ({ hp: window.__rd.session.state.castleHp, max: window.__rd.session.state.castleMax }));
+  assert(hp.hp === 3 && hp.max === 3, 'the castle should now start with three hearts: ' + JSON.stringify(hp));
   await page.context().close();
 });
 
@@ -527,7 +560,7 @@ await test('weapons shop: buy, equip and the game uses it', async () => {
   await page.context().close();
 });
 
-await test('tutorial: a monster that reaches the castle hurts it and goes back, it does not just stop', async () => {
+await test('tutorial: a monster that reaches the castle walks again, it does not just stop', async () => {
   const page = await newPage();
   await setup(page, 'en');
   await page.click('[data-testid=play]');
@@ -536,7 +569,7 @@ await test('tutorial: a monster that reaches the castle hurts it and goes back, 
   const before = await page.evaluate(() => { const st = window.__rd.session.state; st.enemies.find((e) => e.status === 'walking').progress = 0.985; return st.castleHp; });
   await page.waitForTimeout(1200);
   const after = await page.evaluate(() => { const st = window.__rd.session.state; const e = st.enemies.find((x) => x.status === 'walking'); return { hp: st.castleHp, progress: e?.progress, status: st.status }; });
-  assert(after.hp < before, `the castle should lose a heart (${before} → ${after.hp})`);
+  assert(after.hp === before, `the tutorial castle is never hurt (${before} → ${after.hp})`);
   assert(after.progress !== undefined && after.progress < 0.5 && after.status === 'playing', 'the monster should walk again from the start: ' + JSON.stringify(after));
   assert(page.errors.length === 0, 'page errors: ' + page.errors.join('; '));
   await page.context().close();

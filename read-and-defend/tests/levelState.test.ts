@@ -70,13 +70,33 @@ describe('level state', () => {
     expect(target.wrong).toBe(0);
   });
 
-  it('reaching the castle costs health', () => {
+  it('a monster that reaches the castle vanishes: not defeated, and the castle is not hurt', () => {
     const s = createLevelState(specs('cat', 'sun', 'map'));
+    expect(s.castleHp).toBe(2);                 // the castle starts with two hearts
     tick(s, 0.1);
     for (let i = 0; i < 500 && s.breaches === 0; i++) tick(s, 0.1);
     expect(s.breaches).toBe(1);
-    expect(s.castleHp).toBe(4);
-    expect(drainEvents(s).some((e) => e.type === 'resolved' && !e.solved)).toBe(true);
+    expect(s.castleHp).toBe(2);
+    const gone = s.enemies.find((e) => e.status === 'breached')!;
+    expect(gone).toBeTruthy();
+    const ev = drainEvents(s);
+    expect(ev.some((e) => e.type === 'breach' && e.damage === 0 && !e.returns)).toBe(true);
+    expect(ev.some((e) => e.type === 'resolved' && !e.solved)).toBe(true);
+  });
+
+  it('a regular level is passed only by reading at least half of its monsters', () => {
+    const lost = createLevelState(specs('cat', 'sun', 'map', 'dog'));
+    for (let i = 0; i < 3000 && lost.status === 'playing'; i++) tick(lost, 0.1);
+    expect(lost.status).toBe('lost');          // waiting is not a way through
+    expect(lost.lostReason).toBe('fewRead');
+    expect(lost.castleHp).toBe(2);
+
+    const won = createLevelState(specs('cat', 'sun', 'map', 'dog'));
+    for (let i = 0; i < 3000 && won.status === 'playing'; i++) {
+      tick(won, 0.1);
+      if (won.enemies.filter((e) => e.status === 'defeated').length < 2) readTarget(won);
+    }
+    expect(won.status).toBe('won');            // two of four read: enough
   });
 
   it('listening slows the enemies down', () => {
@@ -113,10 +133,10 @@ describe('level state', () => {
     expect(e.progress).toBeGreaterThan(p);
   });
 
-  it('practice mode: the castle is really hit, never falls, and the monster comes back', () => {
+  it('practice mode: a monster that reaches the castle walks again, nothing is lost', () => {
     const s = createLevelState(specs('cat'), { practice: true });
     for (let i = 0; i < 1000; i++) tick(s, 0.1);
-    expect(s.castleHp).toBe(1);               // lost hearts, but never the last one
+    expect(s.castleHp).toBe(s.castleMax);
     expect(s.status).toBe('playing');
     const e = currentTarget(s)!;
     expect(e.status).toBe('walking');          // not stuck at the gate: it walks again
@@ -129,7 +149,7 @@ describe('level state', () => {
     const s = createLevelState(specs('cat'));
     s.listening = true;                        // a permanently noisy room
     for (let i = 0; i < 60 * 14; i++) { s.listening = true; tick(s, 1 / 60); }
-    expect(s.castleHp).toBeLessThan(s.castleMax);
+    expect(s.breaches).toBe(1);                // it reached the gate (and vanished)
   });
 
   it('three wrong readings freeze the enemy (no time pressure)', () => {

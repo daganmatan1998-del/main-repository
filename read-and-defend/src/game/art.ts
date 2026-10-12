@@ -178,6 +178,8 @@ export interface EnemyLook {
   phases?: number;
   /** 1 → 0 after being hit (a boss losing a word): flash and recoil. */
   hurt?: number;
+  /** Which boss to draw (one per world). */
+  variant?: BossVariant;
 }
 
 function eyes(ctx: Ctx, x: number, y: number, r: number, gap: number, t: number): void {
@@ -189,6 +191,187 @@ function eyes(ctx: Ctx, x: number, y: number, r: number, gap: number, t: number)
     ctx.beginPath(); ctx.ellipse(x + dx + r * 0.25, y + r * 0.1, r * 0.5, r * 0.5 * blink, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.beginPath(); ctx.arc(x + dx + r * 0.4, y - r * 0.2, r * 0.18, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+/** Which boss: one per world, each with its own look. */
+export type BossVariant = 'troll' | 'meadow' | 'forest' | 'canyon' | 'snow' | 'volcano' | 'sky';
+
+function blob(ctx: Ctx, x: number, y: number, rx: number, ry: number, fill: string | CanvasGradient): void {
+  ctx.fillStyle = fill;
+  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+function grad(ctx: Ctx, B: number, y: number, r: number, light: string, dark: string): CanvasGradient {
+  const g = ctx.createRadialGradient(-B * 0.1, y - r * 0.4, B * 0.04, 0, y, r);
+  g.addColorStop(0, light); g.addColorStop(1, dark);
+  return g;
+}
+
+function mouth(ctx: Ctx, x: number, y: number, w: number, color: string, teeth = true): void {
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.ellipse(x, y, w, w * 0.45, 0, 0, Math.PI); ctx.fill();
+  if (teeth) { ctx.fillStyle = '#fff'; ctx.fillRect(x - w * 0.6, y, w * 0.35, w * 0.35); ctx.fillRect(x + w * 0.25, y, w * 0.35, w * 0.35); }
+}
+
+/**
+ * The six world bosses (and the original troll). All stand on (0,0), are
+ * about 1.2·B tall and face +x; the caller flips them for right-to-left.
+ */
+function drawBoss(ctx: Ctx, v: BossVariant, B: number, t: number, step: number): void {
+  switch (v) {
+    case 'meadow': {
+      // King Slime: a huge wobbling jelly with a golden crown.
+      const sq = 1 + Math.sin(t * 4) * 0.06;
+      ctx.fillStyle = grad(ctx, B, -B * 0.45, B * 0.6, '#c7f9cc', '#2d9d5f');
+      ctx.beginPath();
+      ctx.moveTo(-B * 0.5 * sq, 0);
+      ctx.bezierCurveTo(-B * 0.55 * sq, -B * 1.05 / sq, B * 0.55 * sq, -B * 1.05 / sq, B * 0.5 * sq, 0);
+      ctx.closePath(); ctx.fill();
+      blob(ctx, -B * 0.2, -B * 0.62 / sq, B * 0.08, B * 0.05, 'rgba(255,255,255,0.55)');
+      eyes(ctx, B * 0.05, -B * 0.5 / sq, B * 0.07, B * 0.13, t);
+      mouth(ctx, B * 0.05, -B * 0.3 / sq, B * 0.12, '#1b5e3a');
+      // Crown.
+      const cy = -B * 0.8 / sq;
+      ctx.fillStyle = '#ffd166'; ctx.strokeStyle = '#b8860b'; ctx.lineWidth = B * 0.015;
+      ctx.beginPath();
+      ctx.moveTo(-B * 0.2, cy); ctx.lineTo(-B * 0.22, cy - B * 0.2); ctx.lineTo(-B * 0.1, cy - B * 0.1);
+      ctx.lineTo(0, cy - B * 0.26); ctx.lineTo(B * 0.1, cy - B * 0.1); ctx.lineTo(B * 0.22, cy - B * 0.2); ctx.lineTo(B * 0.2, cy);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      for (const [dx, c] of [[-B * 0.1, '#ef476f'], [B * 0.1, '#118ab2']] as const) blob(ctx, dx, cy - B * 0.05, B * 0.025, B * 0.025, c);
+      break;
+    }
+    case 'forest': {
+      // Tree Troll: a walking trunk with a leafy head and branch arms.
+      ctx.fillStyle = '#5d4037';
+      ctx.fillRect(-B * 0.2, -B * 0.18, B * 0.13, B * 0.18 + step * B * 0.02);
+      ctx.fillRect(B * 0.07, -B * 0.18, B * 0.13, B * 0.18 - step * B * 0.02);
+      ctx.fillStyle = '#795548';
+      roundRect(ctx, -B * 0.28, -B * 0.85, B * 0.56, B * 0.7, B * 0.12); ctx.fill();
+      ctx.strokeStyle = '#4e342e'; ctx.lineWidth = B * 0.015;
+      for (const x of [-B * 0.15, 0, B * 0.15]) { ctx.beginPath(); ctx.moveTo(x, -B * 0.8); ctx.quadraticCurveTo(x + B * 0.04, -B * 0.5, x, -B * 0.2); ctx.stroke(); }
+      // Branch arms, swaying.
+      ctx.lineWidth = B * 0.05; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(B * 0.26, -B * 0.6); ctx.lineTo(B * 0.5, -B * 0.75 + step * B * 0.05); ctx.lineTo(B * 0.6, -B * 0.9 + step * B * 0.05); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-B * 0.26, -B * 0.6); ctx.lineTo(-B * 0.5, -B * 0.5 - step * B * 0.05); ctx.stroke();
+      // Leaves.
+      for (const [x, y, r] of [[0, -B * 1.0, 0.3], [-B * 0.24, -B * 0.92, 0.2], [B * 0.24, -B * 0.92, 0.2], [0, -B * 1.18, 0.16]] as const) blob(ctx, x, y, B * r, B * r * 0.8, '#43a047');
+      blob(ctx, -B * 0.08, -B * 1.05, B * 0.1, B * 0.06, 'rgba(200,255,200,0.35)');
+      eyes(ctx, B * 0.03, -B * 0.66, B * 0.055, B * 0.1, t);
+      mouth(ctx, B * 0.03, -B * 0.45, B * 0.1, '#3e2723');
+      break;
+    }
+    case 'canyon': {
+      // Rock Golem: stacked boulders with glowing eyes.
+      const glow = 0.6 + 0.4 * Math.sin(t * 5);
+      for (const [x, y, rx, ry] of [[-B * 0.2, -B * 0.1, 0.14, 0.12], [B * 0.2, -B * 0.1, 0.14, 0.12]] as const) blob(ctx, x, y + (x < 0 ? step : -step) * B * 0.02, B * rx, B * ry, '#7f8c8d');
+      blob(ctx, 0, -B * 0.5, B * 0.42, B * 0.34, grad(ctx, B, -B * 0.5, B * 0.45, '#bdc3c7', '#636e72'));
+      blob(ctx, -B * 0.45, -B * 0.55 + step * B * 0.03, B * 0.14, B * 0.16, '#95a5a6');
+      blob(ctx, B * 0.45, -B * 0.55 - step * B * 0.03, B * 0.14, B * 0.16, '#95a5a6');
+      blob(ctx, 0, -B * 0.95, B * 0.24, B * 0.2, grad(ctx, B, -B * 0.95, B * 0.26, '#d0d3d4', '#7f8c8d'));
+      ctx.strokeStyle = '#4d5656'; ctx.lineWidth = B * 0.015;
+      ctx.beginPath(); ctx.moveTo(-B * 0.1, -B * 0.7); ctx.lineTo(-B * 0.02, -B * 0.55); ctx.lineTo(-B * 0.12, -B * 0.4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(B * 0.18, -B * 0.6); ctx.lineTo(B * 0.25, -B * 0.45); ctx.stroke();
+      ctx.shadowColor = '#ff9f1c'; ctx.shadowBlur = B * 0.1 * glow;
+      for (const dx of [-B * 0.08, B * 0.1]) blob(ctx, dx, -B * 0.98, B * 0.045, B * 0.03, `rgba(255,159,28,${0.7 + 0.3 * glow})`);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#2d3436'; ctx.fillRect(-B * 0.08, -B * 0.86, B * 0.18, B * 0.035);
+      break;
+    }
+    case 'snow': {
+      // Ice Yeti: white fur, a blue face and icicle horns.
+      ctx.fillStyle = '#dfe6e9';
+      ctx.fillRect(-B * 0.22, -B * 0.2, B * 0.15, B * 0.2 + step * B * 0.02);
+      ctx.fillRect(B * 0.07, -B * 0.2, B * 0.15, B * 0.2 - step * B * 0.02);
+      blob(ctx, 0, -B * 0.55, B * 0.4, B * 0.42, grad(ctx, B, -B * 0.55, B * 0.5, '#ffffff', '#b2bec3'));
+      // Furry fringe.
+      ctx.fillStyle = '#ffffff';
+      for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.arc(i * B * 0.11, -B * 0.16, B * 0.06, 0, Math.PI * 2); ctx.fill(); }
+      blob(ctx, -B * 0.42, -B * 0.55 + step * B * 0.04, B * 0.1, B * 0.2, '#f5f6fa');
+      blob(ctx, B * 0.42, -B * 0.55 - step * B * 0.04, B * 0.1, B * 0.2, '#f5f6fa');
+      blob(ctx, B * 0.03, -B * 0.82, B * 0.2, B * 0.17, '#74b9ff');
+      eyes(ctx, B * 0.03, -B * 0.86, B * 0.045, B * 0.08, t);
+      mouth(ctx, B * 0.03, -B * 0.74, B * 0.08, '#0c3c78');
+      ctx.fillStyle = '#a5d8ff'; ctx.strokeStyle = '#4dabf7'; ctx.lineWidth = B * 0.01;
+      for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sx * B * 0.12, -B * 0.97); ctx.lineTo(sx * B * 0.22, -B * 1.22); ctx.lineTo(sx * B * 0.04, -B * 1.0); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+      break;
+    }
+    case 'volcano': {
+      // Lava Dragon: red scales, flapping wings, a flickering flame.
+      const flap = Math.sin(t * 6);
+      ctx.fillStyle = '#922b21';
+      for (const sx of [-1, 1]) {
+        ctx.beginPath(); ctx.moveTo(sx * B * 0.15, -B * 0.7);
+        ctx.lineTo(sx * B * 0.65, -B * (1.05 + flap * 0.12)); ctx.lineTo(sx * B * 0.55, -B * 0.75); ctx.lineTo(sx * B * 0.62, -B * 0.55);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = '#c0392b';
+      ctx.fillRect(-B * 0.2, -B * 0.2, B * 0.13, B * 0.2 + step * B * 0.02);
+      ctx.fillRect(B * 0.07, -B * 0.2, B * 0.13, B * 0.2 - step * B * 0.02);
+      blob(ctx, 0, -B * 0.5, B * 0.34, B * 0.36, grad(ctx, B, -B * 0.5, B * 0.42, '#f1948a', '#b03a2e'));
+      blob(ctx, B * 0.04, -B * 0.42, B * 0.18, B * 0.24, '#f9e79f');
+      blob(ctx, B * 0.06, -B * 0.92, B * 0.22, B * 0.18, '#cb4335');
+      blob(ctx, B * 0.26, -B * 0.86, B * 0.13, B * 0.09, '#cb4335');
+      ctx.fillStyle = '#fdebd0';
+      for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sx * B * 0.1 + B * 0.04, -B * 1.05); ctx.lineTo(sx * B * 0.16 + B * 0.04, -B * 1.2); ctx.lineTo(sx * B * 0.02 + B * 0.04, -B * 1.08); ctx.fill(); }
+      eyes(ctx, B * 0.06, -B * 0.97, B * 0.04, B * 0.07, t);
+      // Flame breath, flickering.
+      const f = 0.7 + 0.3 * Math.sin(t * 18);
+      ctx.fillStyle = `rgba(255,140,0,${0.75 * f})`;
+      ctx.beginPath(); ctx.moveTo(B * 0.38, -B * 0.86); ctx.quadraticCurveTo(B * 0.55, -B * (0.95 + 0.05 * f), B * (0.6 + 0.08 * f), -B * 0.84); ctx.quadraticCurveTo(B * 0.55, -B * 0.78, B * 0.38, -B * 0.84); ctx.fill();
+      blob(ctx, B * 0.5, -B * 0.85, B * 0.05 * f, B * 0.03, 'rgba(255,230,120,0.9)');
+      break;
+    }
+    case 'sky': {
+      // Storm Wizard: floats on a cloud, star hat, crackling staff.
+      const bob = Math.sin(t * 2.5) * B * 0.04;
+      ctx.save(); ctx.translate(0, bob);
+      for (const [x, r] of [[-B * 0.25, 0.16], [0, 0.2], [B * 0.25, 0.16]] as const) blob(ctx, x, -B * 0.1, B * r, B * r * 0.6, '#eceff1');
+      ctx.fillStyle = grad(ctx, B, -B * 0.5, B * 0.5, '#b39ddb', '#5e35b1');
+      ctx.beginPath(); ctx.moveTo(-B * 0.32, -B * 0.15); ctx.lineTo(0, -B * 0.85); ctx.lineTo(B * 0.32, -B * 0.15); ctx.closePath(); ctx.fill();
+      blob(ctx, B * 0.02, -B * 0.82, B * 0.16, B * 0.15, '#ffe0b2');
+      ctx.fillStyle = '#eeeeee';
+      ctx.beginPath(); ctx.moveTo(-B * 0.1, -B * 0.76); ctx.quadraticCurveTo(B * 0.02, -B * 0.45, B * 0.14, -B * 0.76); ctx.fill();
+      eyes(ctx, B * 0.02, -B * 0.85, B * 0.035, B * 0.06, t);
+      ctx.fillStyle = '#4527a0';
+      ctx.beginPath(); ctx.moveTo(-B * 0.2, -B * 0.93); ctx.lineTo(B * 0.06, -B * 1.3); ctx.lineTo(B * 0.22, -B * 0.93); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffd166';
+      for (const [x, y] of [[0, -B * 1.05], [B * 0.1, -B * 1.15]] as const) { ctx.beginPath(); ctx.arc(x, y, B * 0.025, 0, Math.PI * 2); ctx.fill(); }
+      ctx.strokeStyle = '#8d6e63'; ctx.lineWidth = B * 0.035; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(B * 0.4, -B * 0.1); ctx.lineTo(B * 0.4, -B * 1.0); ctx.stroke();
+      const z = Math.sin(t * 9) > 0 ? 1 : 0.4;
+      ctx.strokeStyle = `rgba(255,235,59,${z})`; ctx.lineWidth = B * 0.02;
+      ctx.beginPath(); ctx.moveTo(B * 0.4, -B * 1.02); ctx.lineTo(B * 0.48, -B * 1.12); ctx.lineTo(B * 0.42, -B * 1.14); ctx.lineTo(B * 0.52, -B * 1.26); ctx.stroke();
+      ctx.restore();
+      break;
+    }
+    default: {
+      ctx.fillStyle = '#6d4c7d';
+      ctx.fillRect(-B * 0.2, -B * 0.2, B * 0.14, B * 0.2 + step * B * 0.02);
+      ctx.fillRect(B * 0.06, -B * 0.2, B * 0.14, B * 0.2 - step * B * 0.02);
+      const g = ctx.createRadialGradient(-B * 0.1, -B * 0.55, B * 0.05, 0, -B * 0.45, B * 0.5);
+      g.addColorStop(0, '#c39bd3'); g.addColorStop(1, '#7d3c98');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.ellipse(0, -B * 0.45, B * 0.36, B * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e8daef';
+      ctx.beginPath(); ctx.ellipse(B * 0.04, -B * 0.38, B * 0.2, B * 0.18, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#a569bd';
+      ctx.beginPath(); ctx.arc(0, -B * 0.82, B * 0.2, 0, Math.PI * 2); ctx.fill();
+      // Horns.
+      ctx.fillStyle = '#fdebd0';
+      ctx.beginPath(); ctx.moveTo(-B * 0.14, -B * 0.95); ctx.quadraticCurveTo(-B * 0.3, -B * 1.12, -B * 0.22, -B * 1.2); ctx.quadraticCurveTo(-B * 0.2, -B * 1.05, -B * 0.06, -B * 0.98); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(B * 0.14, -B * 0.95); ctx.quadraticCurveTo(B * 0.3, -B * 1.12, B * 0.22, -B * 1.2); ctx.quadraticCurveTo(B * 0.2, -B * 1.05, B * 0.06, -B * 0.98); ctx.fill();
+      eyes(ctx, B * 0.03, -B * 0.85, B * 0.045, B * 0.07, t);
+      ctx.fillStyle = '#4a235a';
+      ctx.beginPath(); ctx.ellipse(B * 0.04, -B * 0.73, B * 0.07, B * 0.03, 0, 0, Math.PI); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(-B * 0.0, -B * 0.73, B * 0.025, B * 0.03); ctx.fillRect(B * 0.07, -B * 0.73, B * 0.025, B * 0.03);
+      // Big club.
+      ctx.save(); ctx.translate(B * 0.34, -B * 0.5); ctx.rotate(-0.4 + step * 0.1);
+      ctx.fillStyle = '#8b5a2b'; roundRect(ctx, -B * 0.05, -B * 0.5, B * 0.12, B * 0.55, B * 0.05); ctx.fill();
+      ctx.restore();
+      break;
+    }
   }
 }
 
@@ -305,30 +488,7 @@ export function drawEnemy(ctx: Ctx, type: EnemyType, x: number, y: number, u: nu
     case 'boss': {
       const B = u * 1.9;
       const step = Math.sin(t * 3.5);
-      ctx.fillStyle = '#6d4c7d';
-      ctx.fillRect(-B * 0.2, -B * 0.2, B * 0.14, B * 0.2 + step * B * 0.02);
-      ctx.fillRect(B * 0.06, -B * 0.2, B * 0.14, B * 0.2 - step * B * 0.02);
-      const g = ctx.createRadialGradient(-B * 0.1, -B * 0.55, B * 0.05, 0, -B * 0.45, B * 0.5);
-      g.addColorStop(0, '#c39bd3'); g.addColorStop(1, '#7d3c98');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.ellipse(0, -B * 0.45, B * 0.36, B * 0.32, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#e8daef';
-      ctx.beginPath(); ctx.ellipse(B * 0.04, -B * 0.38, B * 0.2, B * 0.18, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#a569bd';
-      ctx.beginPath(); ctx.arc(0, -B * 0.82, B * 0.2, 0, Math.PI * 2); ctx.fill();
-      // Horns.
-      ctx.fillStyle = '#fdebd0';
-      ctx.beginPath(); ctx.moveTo(-B * 0.14, -B * 0.95); ctx.quadraticCurveTo(-B * 0.3, -B * 1.12, -B * 0.22, -B * 1.2); ctx.quadraticCurveTo(-B * 0.2, -B * 1.05, -B * 0.06, -B * 0.98); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(B * 0.14, -B * 0.95); ctx.quadraticCurveTo(B * 0.3, -B * 1.12, B * 0.22, -B * 1.2); ctx.quadraticCurveTo(B * 0.2, -B * 1.05, B * 0.06, -B * 0.98); ctx.fill();
-      eyes(ctx, B * 0.03, -B * 0.85, B * 0.045, B * 0.07, t);
-      ctx.fillStyle = '#4a235a';
-      ctx.beginPath(); ctx.ellipse(B * 0.04, -B * 0.73, B * 0.07, B * 0.03, 0, 0, Math.PI); ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(-B * 0.0, -B * 0.73, B * 0.025, B * 0.03); ctx.fillRect(B * 0.07, -B * 0.73, B * 0.025, B * 0.03);
-      // Big club.
-      ctx.save(); ctx.translate(B * 0.34, -B * 0.5); ctx.rotate(-0.4 + step * 0.1);
-      ctx.fillStyle = '#8b5a2b'; roundRect(ctx, -B * 0.05, -B * 0.5, B * 0.12, B * 0.55, B * 0.05); ctx.fill();
-      ctx.restore();
+      drawBoss(ctx, look.variant ?? 'troll', B, t, step);
       // Phase pips (how many readings are left), shape not just colour.
       if (look.phases && look.phases > 1) {
         for (let i = 0; i < look.phases; i++) {

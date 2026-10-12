@@ -1,5 +1,5 @@
 import { createRng } from '../core/rng';
-import { drawCastle, drawEnemy, enemyTop, roundRect, THEMES, type Theme } from './art';
+import { drawCastle, drawEnemy, enemyTop, roundRect, THEMES, type Theme, type BossVariant } from './art';
 import type { EnvironmentId } from './levels';
 import { currentItem, type Enemy, type EnemyType, type GameEvent, type LevelState } from './levelState';
 import { computeLayout, pointAt, type Field, type SceneLayout } from './path';
@@ -61,6 +61,8 @@ export class SceneRenderer {
   private hidden = new Set<number>();
   private shake = 0;
   private castleFlash = 0;
+  /** Each world has its own boss. */
+  private bossVariant: BossVariant = 'troll';
   /** Whole-screen flash (lightning), 1 → 0. */
   private flash = 0;
   private field: Field = { x: 0, y: 0, w: 0, h: 0 };
@@ -77,6 +79,7 @@ export class SceneRenderer {
 
   setScene(env: EnvironmentId, rtl: boolean): void {
     this.theme = THEMES[env];
+    this.bossVariant = env;
     this.rtl = rtl;
     this.bg = null;
     this.ambient = [];
@@ -155,9 +158,15 @@ export class SceneRenderer {
         case 'breach': {
           if (!ev.returns) this.hidden.add(ev.enemy.id);
           const g = this.layout.gate;
-          this.burst(g.x, g.y - this.layout.unit * 0.4, 24, '#c8b6a6', 'dust');
-          if (!this.opts.reducedMotion) this.shake = 0.35;
-          this.castleFlash = 1;
+          if (ev.damage > 0) {
+            // A boss blow: dust, a shake, the castle flashes.
+            this.burst(g.x, g.y - this.layout.unit * 0.4, 24, '#c8b6a6', 'dust');
+            if (!this.opts.reducedMotion) this.shake = 0.35;
+            this.castleFlash = 1;
+          } else {
+            // A monster vanishes at the gate in a puff.
+            this.burst(g.x, g.y - this.layout.unit * 0.4, 14, '#e8e0ff', 'dust');
+          }
           break;
         }
         case 'won': {
@@ -521,7 +530,7 @@ export class SceneRenderer {
           y: pos.y,
           draw: () => drawEnemy(ctx, e.type, pos.x, pos.y, L.unit, {
             t: this.t + e.id * 1.7, facing: pos.facing, confused: conf, target: e.id === ui.targetId, frozen: e.frozen,
-            phase: e.phase, phases: e.items.length, hurt,
+            phase: e.phase, phases: e.items.length, hurt, variant: this.bossVariant,
           }),
         });
       }
@@ -530,7 +539,7 @@ export class SceneRenderer {
       d.t += dt;
       list.push({
         y: d.y,
-        draw: () => drawEnemy(ctx, d.type, d.x, d.y, L.unit, { t: this.t, facing: d.facing, confused: 0, target: false, frozen: false, hurt: 0.4 + 0.3 * Math.sin(d.t * 30) }),
+        draw: () => drawEnemy(ctx, d.type, d.x, d.y, L.unit, { t: this.t, facing: d.facing, confused: 0, target: false, frozen: false, hurt: 0.4 + 0.3 * Math.sin(d.t * 30), variant: this.bossVariant }),
       });
     }
     for (const d of this.dying) {
@@ -543,7 +552,7 @@ export class SceneRenderer {
           ctx.globalAlpha = 1 - k;
           ctx.translate(d.x, d.y);
           ctx.scale(1 + k * 0.4, 1 - k * 0.8);
-          drawEnemy(ctx, d.type, 0, 0, L.unit, { t: this.t, facing: d.facing, confused: 0, target: false, frozen: false });
+          drawEnemy(ctx, d.type, 0, 0, L.unit, { t: this.t, facing: d.facing, confused: 0, target: false, frozen: false, variant: this.bossVariant });
           ctx.restore();
         },
       });
@@ -589,7 +598,7 @@ export class SceneRenderer {
       const rise = 1 - Math.pow(1 - Math.min(1, k * 1.6), 3);
       drawEnemy(ctx, 'boss', w / 2, h * (0.62 + 0.2 * (1 - rise)), u * (0.6 + 0.6 * rise), {
         t: this.t, facing: this.rtl ? -1 : 1, confused: 0, target: false, frozen: false,
-        phase: 0, phases: boss.items.length,
+        phase: 0, phases: boss.items.length, variant: this.bossVariant,
       });
     }
     ctx.textAlign = 'center';

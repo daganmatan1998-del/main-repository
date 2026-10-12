@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { getPack, knownSkills } from '../src/content/registry';
-import { selectBossWords, selectLevelItems } from '../src/content/selector';
+import { BOSS_WORDS, selectBossWords, selectLevelItems } from '../src/content/selector';
 import { createRng } from '../src/core/rng';
 import { evaluate } from '../src/evaluation/evaluator';
 import { buildLevels } from '../src/game/levels';
 import {
-  applyEvaluation, createLevelState, currentItem, currentTarget, drainEvents, tick, type EnemySpec, type LevelState,
+  applyEvaluation, bossWalkSeconds, createLevelState, currentItem, currentTarget, drainEvents, tick, type EnemySpec, type LevelState,
 } from '../src/game/levelState';
 import { buildEnemyPlan } from '../src/game/plan';
 import { PROFILES } from '../src/learning/adaptive';
@@ -17,40 +17,69 @@ const en = packs.en;
 const w = (x: string) => en.items.find((i) => i.id === `en:word:${x}`)!;
 const say = (t: string) => [{ transcript: t }];
 
-describe('every level ends with a boss', () => {
-  it('all levels, in both languages, are boss levels', () => {
+describe('worlds: regular levels of ten monsters, a boss fight at the end of each world', () => {
+  it('regular levels have exactly ten monsters and no boss; the last level of every world is its boss', () => {
     for (const pack of Object.values(packs)) {
       const levels = buildLevels(pack);
-      expect(levels.length).toBeGreaterThan(10);
-      expect(levels.every((l) => l.boss)).toBe(true);
+      const stages = [...new Set(pack.units.map((u) => u.stage))];
+      const bosses = levels.filter((l) => l.boss);
+      expect(bosses.map((l) => l.stage)).toEqual(stages);            // one boss per world
+      for (const stage of stages) {
+        const world = levels.filter((l) => l.stage === stage);
+        expect(world[world.length - 1].boss, `${pack.lang} world ${stage}`).toBe(true);
+        expect(world.slice(0, -1).every((l) => !l.boss && l.enemyCount === 10)).toBe(true);
+      }
+      levels.forEach((l, i) => expect(l.number).toBe(i + 1));
     }
   });
 
-  it('the enemy plan of every level ends with exactly one boss of exactly three words', () => {
+  it('a regular level is ten monsters with no boss among them', () => {
     for (const pack of Object.values(packs)) {
-      for (const level of buildLevels(pack)) {
-        const sel = selectLevelItems(pack, level.unitIndex, createLearner(), { count: level.enemyCount, rng: createRng(level.number), profile: normal, boss: true });
+      for (const level of buildLevels(pack).filter((l) => !l.boss)) {
+        const sel = selectLevelItems(pack, level.unitIndex, createLearner(), { count: level.enemyCount, rng: createRng(level.number), profile: normal, boss: false });
         const plan = buildEnemyPlan(sel, createLearner(), normal);
-        const bosses = plan.filter((e) => e.type === 'boss');
-        expect(bosses, level.id).toHaveLength(1);
-        expect(plan[plan.length - 1].type).toBe('boss');
-        expect(bosses[0].items, level.id).toHaveLength(3);
+        expect(plan, level.id).toHaveLength(10);
+        expect(plan.some((e) => e.type === 'boss')).toBe(false);
       }
+    }
+  });
+
+  it('each world\'s boss is faster than the last, and still leaves several seconds per word', () => {
+    const walks = [1, 2, 3, 4, 5, 6].map(bossWalkSeconds);
+    for (let i = 1; i < walks.length; i++) expect(walks[i]).toBeLessThan(walks[i - 1]);
+    for (const wk of walks) expect(wk / BOSS_WORDS).toBeGreaterThanOrEqual(6.5);
+  });
+
+  it('boss words get harder from world to world', () => {
+    for (const pack of Object.values(packs)) {
+      const bossLevels = buildLevels(pack).filter((l) => l.boss);
+      const mean = bossLevels.map((l) => {
+        let sum = 0; let n = 0;
+        for (let seed = 1; seed <= 12; seed++) {
+          for (const it of selectBossWords(pack, l.unitIndex, createLearner(), { rng: createRng(seed * 7 + l.stage), stage: l.stage }).items) {
+            sum += it.difficulty + 0.12 * [...it.display.replace(/[\u0591-\u05C7]/g, '')].length; n++;
+          }
+        }
+        return sum / n;
+      });
+      // never easier than the world before (the first two English worlds are both
+      // three-letter words, so they may tie), and clearly harder by the end
+      for (let i = 1; i < mean.length; i++) expect(mean[i], `${pack.lang} world ${i + 1}`).toBeGreaterThan(mean[i - 1] - 0.05);
+      expect(mean[mean.length - 1]).toBeGreaterThan(mean[0] + 1);
     }
   });
 });
 
 describe('boss words', () => {
-  it('are three different real words, easiest first, in every unit of both languages', () => {
+  it('are six different real words, easiest first, in every unit of both languages', () => {
     for (const pack of Object.values(packs)) {
       pack.units.forEach((_, ui) => {
         for (let seed = 1; seed <= 6; seed++) {
           const b = selectBossWords(pack, ui, createLearner(), { rng: createRng(seed * 31 + ui) });
-          expect(b.items, `${pack.lang} unit ${ui}`).toHaveLength(3);
-          expect(new Set(b.items.map((i) => i.display)).size).toBe(3);
+          expect(b.items, `${pack.lang} unit ${ui}`).toHaveLength(BOSS_WORDS);
+          expect(new Set(b.items.map((i) => i.display)).size).toBe(BOSS_WORDS);
           for (const it of b.items) { expect(it.kind).toBe('word'); expect(it.isRealWord).toBe(true); }
-          expect(b.items[0].difficulty).toBeLessThanOrEqual(b.items[1].difficulty);
-          expect(b.items[1].difficulty).toBeLessThanOrEqual(b.items[2].difficulty);
+          for (let i = 1; i < b.items.length; i++) expect(b.items[i - 1].difficulty).toBeLessThanOrEqual(b.items[i].difficulty);
         }
       });
     }
@@ -239,24 +268,45 @@ describe('boss fight', () => {
     expect(boss.phase).toBe(0);
   });
 
-  it('cannot be beaten by waiting: reaching the castle hurts, the boss returns, the level is not won', () => {
+  it('a correct word does not push the boss back: it keeps coming with its next word', () => {
+    const s = bossLevel();
+    defeatRegulars(s);
+    while (!currentTarget(s)) tick(s, 0.1);
+    const boss = currentTarget(s)!;
+    for (let i = 0; i < 30; i++) tick(s, 0.1);
+    const before = boss.progress;
+    expect(before).toBeGreaterThan(0);
+    readNow(s);
+    expect(boss.phase).toBe(1);
+    expect(boss.progress).toBe(before);     // no knock-back
+    tick(s, 0.5);
+    expect(boss.progress).toBeGreaterThan(before);
+  });
+
+  it('at the castle the boss strikes one heart per blow until it is read; waiting loses', () => {
     const s = bossLevel();
     defeatRegulars(s);
     while (!currentTarget(s)) tick(s, 0.1);
     const boss = currentTarget(s)!;
     readNow(s); // one word done
-    const hp = s.castleHp;
+    expect(s.castleHp).toBe(2);
     boss.progress = 0.9999;
-    tick(s, 0.5);
-    expect(s.castleHp).toBeLessThan(hp);
-    expect(s.status).toBe('playing');
+    tick(s, 0.2);
+    expect(s.castleHp).toBe(1);             // first blow on arrival
     expect(boss.status).toBe('walking');
-    expect(boss.progress).toBe(0);          // lumbered back to the start
+    expect(boss.progress).toBe(1);          // it stays at the gate
     expect(boss.phase).toBe(1);             // progress is kept
-    expect(drainEvents(s).some((e) => e.type === 'breach' && e.returns)).toBe(true);
-    // waiting long enough eventually costs the whole castle, never the win
-    for (let i = 0; i < 20000 && s.status === 'playing'; i++) tick(s, 0.1);
+    expect(drainEvents(s).some((e) => e.type === 'breach' && e.damage === 1)).toBe(true);
+    for (let i = 0; i < 20 && s.castleHp === 1; i++) tick(s, 0.1);   // the next blow, ~4 s later
+    expect(s.status).toBe('playing');
+    for (let i = 0; i < 25; i++) tick(s, 0.1);
     expect(s.status).toBe('lost');
+    expect(s.lostReason).toBe('castle');
+  });
+
+  it('bought hearts give more blows of time', () => {
+    const s = createLevelState([{ type: 'boss', items: bossLevel().enemies.find((e) => e.type === 'boss')!.items }], { castleHp: 5 });
+    expect(s.castleMax).toBe(5);
   });
 
   it('every reading is recorded individually for learning', () => {

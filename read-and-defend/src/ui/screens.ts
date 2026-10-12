@@ -4,7 +4,8 @@ import type { LanguageCode } from '../content/types';
 import { stringsFor, t } from '../i18n/strings';
 import { averageReadingMs, isMastered, recentAccuracy, transferRate, weakSkills } from '../learning/learner';
 import { clearProfile, newProfile, PACE_FACTOR, PACES, type Pace } from '../progress/profile';
-import { ACHIEVEMENTS, buy, DAILY_REWARD, ensureDaily, equip, SHOP, shopColor } from '../progress/rewards';
+import { ACHIEVEMENTS, buy, buyHeart, DAILY_REWARD, ensureDaily, equip, MAX_EXTRA_HEARTS, nextHeartPrice, SHOP, shopColor } from '../progress/rewards';
+import { BASE_CASTLE_HP } from '../game/levelState';
 import type { ProviderChoice } from '../speech/providerFactory';
 import type { App } from './app';
 import { SceneRenderer } from '../game/renderer';
@@ -166,7 +167,8 @@ export function mapScreen(app: App): void {
         disabled: !unlocked,
       });
       if (unlocked) {
-        node.append(el('span', { class: 'num' }, String(l.number)), el('span', { class: 'sub' }, unit.title[app.lang]), starsRow(rec?.stars ?? 0));
+        const subtitle = l.boss ? `${t('bossFight')} ${stringsFor(app.lang).bossNames[l.stage] ?? ''}` : unit.title[app.lang];
+        node.append(el('span', { class: 'num' }, String(l.number)), el('span', { class: 'sub' }, subtitle), starsRow(rec?.stars ?? 0));
         if (rec?.skipped) node.append(el('span', { class: 'tag' }, t('skippedTag')));
         else if (idx === next) node.append(el('span', { class: 'tag next-tag' }, t('play')));
         else if (l.unitIndex === reviewUnit && !l.boss && (rec?.wins ?? 0) > 0) node.append(el('span', { class: 'tag' }, t('practiceSuggest')));
@@ -241,6 +243,24 @@ export function shopScreen(app: App): void {
   });
 
   const reshow = () => { shopScroll = s.scrollTop; app.save(); app.applyDocumentSettings(); app.show('shop'); };
+  {
+    // Castle hearts: the castle starts with two; more can be bought.
+    const extra = app.profile.extraHearts ?? 0;
+    const total = BASE_CASTLE_HP + extra;
+    const row = el('div', { class: 'hearts-row', 'data-testid': 'shop-hearts', 'aria-label': `${t('hearts')}: ${total}` });
+    for (let i = 0; i < BASE_CASTLE_HP + MAX_EXTRA_HEARTS; i++) {
+      const h = icon(i < total ? 'heart' : 'heartEmpty');
+      h.style.color = i < total ? 'var(--heart)' : 'rgba(0,0,0,0.25)';
+      row.append(h);
+    }
+    const price = nextHeartPrice(app.profile);
+    const btn = el('button', {
+      class: 'btn btn-gold', 'data-testid': 'buy-heart',
+      disabled: price === null || app.profile.coins < price,
+    }, price === null ? t('heartsMax') : el('span', { style: 'display:inline-flex;gap:6px;align-items:center' }, icon('heart'), t('buyHeart'), icon('coin'), String(price)));
+    btn.addEventListener('click', () => { if (buyHeart(app.profile)) { sound.play('coin'); reshow(); } });
+    col.append(el('div', { class: 'panel' }, el('h3', {}, t('hearts')), el('p', { class: 'muted' }, t('heartsInfo')), row, btn));
+  }
   for (const slot of ['weapon', 'banner', 'walls', 'magic'] as const) {
     const title = slot === 'weapon' ? t('weapons') : t(slot === 'banner' ? 'banners' : slot);
     const panel = el('div', { class: 'panel' }, el('h3', {}, title));

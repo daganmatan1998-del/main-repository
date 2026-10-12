@@ -24,7 +24,7 @@ export function fastTrackTarget(lp: LangProgress, pack: LanguagePack, levels: Le
   if (stars < 3 || won.unitIndex < FAST_TRACK_FIRST_UNIT) return null;
   const idx = levels.findIndex((l) => l.id === won.id);
   const next = levels[idx + 1];
-  if (!next || next.unitIndex !== won.unitIndex || levelDone(lp, next.id)) return null;
+  if (!next || next.boss || next.unitIndex !== won.unitIndex || levelDone(lp, next.id)) return null;
   if (!unitReady(pack, won.unitIndex, lp.learner)) return null;
   const transfer = recentTransfer(lp.learner);
   if (transfer === undefined || transfer < 0.7) return null;

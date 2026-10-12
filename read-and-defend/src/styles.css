@@ -592,3 +592,8 @@ html[data-reduced-motion='1'] *, html[data-reduced-motion='1'] *::before, html[d
 }
 .update-bar .btn { min-height: 44px; padding: 6px 18px; }
 .update-bar svg { width: 20px; height: 20px; }
+
+/* Shop: castle hearts. */
+.hearts-row { display: flex; gap: 6px; justify-content: center; margin: 8px 0 12px; }
+.hearts-row svg { width: 34px; height: 34px; }
+.panel .muted { margin: 4px 0 0; color: var(--ink-soft); font-size: 1rem; line-height: 1.35; }

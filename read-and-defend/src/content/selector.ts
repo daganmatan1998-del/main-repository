@@ -43,7 +43,8 @@ export interface Selection {
   focusSkills: string[];
 }
 
-export const BOSS_WORDS = 3;
+/** Words in a boss fight, read one after another. */
+export const BOSS_WORDS = 6;
 
 /* ------------------------------------------------------------ unit view */
 
@@ -142,7 +143,7 @@ const MIN_POOL = 6;
 
 export function selectBossWords(
   pack: LanguagePack, unitIndex: number, learner: LearnerState,
-  opts: { rng: Rng; previous?: string[][]; taken?: Set<string> },
+  opts: { rng: Rng; previous?: string[][]; taken?: Set<string>; stage?: number },
 ): BossChoice {
   const view = unitView(pack, unitIndex, learner);
   const free = new Set(pack.bossFreeSkills);
@@ -156,17 +157,34 @@ export function selectBossWords(
   while (pool.length < MIN_POOL && tier < 3) { tier++; pool = words.filter((w) => unknown(w) <= tier); }
   if (opts.taken) pool = pool.filter((w) => !opts.taken!.has(w.id) && !opts.taken!.has(`d:${w.display}`));
   if (pool.length < BOSS_WORDS) pool = words.filter((w) => unknown(w) <= 3 && !opts.taken?.has(w.id));
+  // World bosses get harder world by world: from the second world on, the
+  // easiest part of what has been taught is left out (a bigger part each
+  // world), as long as enough different words remain for the fight.
+  // Hardness: the difficulty score, with word length breaking its many ties.
+  const hardness = (w: LearningItem) => w.difficulty + 0.12 * [...w.display.replace(/[\u0591-\u05C7]/g, '')].length;
+  if (opts.stage && opts.stage > 1) {
+    const sorted = [...pool].sort((a, b) => hardness(a) - hardness(b));
+    // Keep the harder part of the pool: 20 % cut in world 2, up to 85 % by world 6,
+    // relaxed step by step if that leaves too few different words.
+    for (let q = Math.min(0.85, 0.2 + 0.13 * (opts.stage - 2)); q > 0; q -= 0.1) {
+      const cut = hardness(sorted[Math.floor(sorted.length * q)] ?? sorted[0]);
+      const harder = pool.filter((w) => hardness(w) >= cut);
+      if (new Set(harder.map((w) => w.display)).size >= BOSS_WORDS + 2) { pool = harder; break; }
+    }
+  }
 
   const focus = new Set(unitFocus(pack, unitIndex, view.known));
   const prev = (opts.previous ?? []).map((ids) => new Set(ids));
-  const lo = Math.min(...pool.map((w) => w.difficulty));
-  const hi = Math.max(...pool.map((w) => w.difficulty));
+  const lo = Math.min(...pool.map(hardness));
+  const hi = Math.max(...pool.map(hardness));
+  // Later worlds lean harder and harder toward the top of what is taught.
+  const lean = 1 + Math.max(0, (opts.stage ?? 1) - 1) * 0.6;
   const score = (w: LearningItem): number => {
     let x = 1;
     if (w.skills.some((k) => focus.has(k))) x += 1.5;
     if (isNovel(learner, w.id)) x += 1.5;
     x += 2 * weaknessOf(learner, w);
-    x *= 0.6 + 0.8 * (hi > lo ? (w.difficulty - lo) / (hi - lo) : 0.5); // lean toward the harder end of what is taught
+    x *= Math.pow(0.6 + 0.8 * (hi > lo ? (hardness(w) - lo) / (hi - lo) : 0.5), lean); // lean toward the harder end of what is taught
     if (prev[0]?.has(w.id)) x *= 0.1;
     else if (prev.some((s) => s.has(w.id))) x *= 0.5;
     const seen = learner.items[w.id];
@@ -183,7 +201,7 @@ export function selectBossWords(
     chosen.push(pick);
     shown.add(pick.display);
   }
-  chosen.sort((a, b) => a.difficulty - b.difficulty);
+  chosen.sort((a, b) => a.difficulty - b.difficulty || hardness(a) - hardness(b));
   return { items: chosen, assist: tier > 0 };
 }
 

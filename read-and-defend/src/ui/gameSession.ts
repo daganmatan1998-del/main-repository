@@ -1,7 +1,7 @@
 import { sound } from '../audio/sfx';
 import { speaker } from '../audio/tts';
 import { createRng } from '../core/rng';
-import { eligibleItems, selectLevelItems } from '../content/selector';
+import { eligibleItems, selectBossWords, selectLevelItems } from '../content/selector';
 import type { LearningItem } from '../content/types';
 import { evaluate, type Evaluation, type RecognitionAlternative } from '../evaluation/evaluator';
 import { getEvalConfig } from '../evaluation/config';
@@ -11,7 +11,7 @@ import {
   type Enemy, type GameEvent, type LevelState,
 } from '../game/levelState';
 import { buildEnemyPlan } from '../game/plan';
-import { setPathLength } from '../game/levelState';
+import { BASE_CASTLE_HP, bossWalkSeconds, setPathLength } from '../game/levelState';
 import { matchUtterance, readingOrder, tokenize } from '../game/utterance';
 import { fastTrackTarget } from '../progress/fastTrack';
 import { stringsFor, t } from '../i18n/strings';
@@ -164,19 +164,34 @@ export class GameSession {
       return;
     }
     const rec = levelRecord(this.lp, this.level.id);
+    const rng = createRng(Date.now() ^ (rec.attempts * 7919));
+    // Two hearts, plus any bought in the shop.
+    const castleHp = BASE_CASTLE_HP + (this.app.profile.extraHearts ?? 0);
+    if (this.level.boss) {
+      // The world's boss fight: six words in a row, one boss, nothing else.
+      const boss = selectBossWords(pack, this.level.unitIndex, learner, { rng, previous: rec.history, stage: this.level.stage });
+      rec.history.unshift(boss.items.map((i) => i.id));
+      rec.history = rec.history.slice(0, 3);
+      rec.attempts += 1;
+      this.app.save();
+      this.state = createLevelState([{ type: 'boss', items: boss.items, assist: boss.assist, walkSeconds: bossWalkSeconds(this.level.stage) }], {
+        durationFactor, castleHp, maxAlive: 1,
+      });
+      return;
+    }
     const sel = selectLevelItems(pack, this.level.unitIndex, learner, {
-      count: Math.max(4, this.level.enemyCount + this.profileD.enemyDelta),
-      rng: createRng(Date.now() ^ (rec.attempts * 7919)),
+      count: this.level.enemyCount,
+      rng,
       profile: this.profileD,
       previous: rec.history,
-      boss: this.level.boss,
+      boss: false,
     });
     rec.history.unshift([...sel.items, ...sel.boss].map((i) => i.id));
     rec.history = rec.history.slice(0, 3);
     rec.attempts += 1;
     this.app.save();
     this.state = createLevelState(buildEnemyPlan(sel, learner, this.profileD), {
-      durationFactor, maxAlive: this.profileD.maxAlive, castleHp: this.profileD.mode === 'ease' ? 6 : 5,
+      durationFactor, maxAlive: this.profileD.maxAlive, castleHp,
     });
   }
 
@@ -497,13 +512,22 @@ export class GameSession {
         case 'bossIntro':
           sound.play('boss');
           haptic('success');
-          toast(t('bossIncoming'), '', 2600);
-          if (this.settings.voiceHints) speaker.speak(t('bossIncoming'), this.app.pack.speechLang, 0.95);
+          {
+            const msg = t('bossIncoming', { name: stringsFor(this.app.lang).bossNames[this.level.stage] ?? '' });
+            toast(msg, '', 2600);
+            if (this.settings.voiceHints) speaker.speak(msg, this.app.pack.speechLang, 0.95);
+          }
           break;
         case 'breach':
-          sound.play('breach');
-          haptic('soft');
-          if (!ev.returns) this.say(`${t('practiceNow')}: ${currentItem(ev.enemy).display}`, 'info');
+          if (ev.damage > 0) {
+            // The boss strikes the castle.
+            sound.play('breach');
+            haptic('soft');
+          } else {
+            // A monster slipped in and vanished; show the word it carried.
+            sound.play('unclear');
+            this.say(`${t('practiceNow')}: ${currentItem(ev.enemy).display}`, 'info');
+          }
           break;
         case 'won':
           sound.play('win');
@@ -686,7 +710,7 @@ export class GameSession {
     }
     m.append(el('h2', {}, won ? t('victory') : t('defeat')));
     if (won) m.append(el('div', { class: 'big-stars' }, ...Array.from(starsRow(stars).children)));
-    else m.append(el('p', {}, t('defeatSub')));
+    else m.append(el('p', {}, this.state.lostReason === 'fewRead' ? t('defeatFewRead') : t('defeatSub')));
 
     const solved = this.reads.filter((r) => r.solved);
     if (solved.length) {

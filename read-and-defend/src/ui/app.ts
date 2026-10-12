@@ -107,7 +107,8 @@ export class App {
 
   isUnlocked(index: number): boolean {
     if (index === 0) return true;
-    return levelDone(this.progress, this.levels[index - 1].id);
+    // A level already won stays open (older saves predate the boss levels).
+    return levelDone(this.progress, this.levels[index - 1].id) || levelDone(this.progress, this.levels[index].id);
   }
 
   show(name: ScreenName): void {

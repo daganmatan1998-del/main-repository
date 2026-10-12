@@ -84,6 +84,22 @@ export const SHOP: ShopItem[] = [
   { id: 'weapon-stars', slot: 'weapon', price: 200, color: 'rainbow', name: { en: 'Star shower', he: 'מְטַר כּוֹכָבִים' } },
 ];
 
+/** Extra castle hearts: each one costs more than the last. */
+export const HEART_PRICES = [50, 100, 160];
+export const MAX_EXTRA_HEARTS = HEART_PRICES.length;
+
+export function nextHeartPrice(profile: Profile): number | null {
+  return HEART_PRICES[profile.extraHearts ?? 0] ?? null;
+}
+
+export function buyHeart(profile: Profile): boolean {
+  const price = nextHeartPrice(profile);
+  if (price === null || profile.coins < price) return false;
+  profile.coins -= price;
+  profile.extraHearts = (profile.extraHearts ?? 0) + 1;
+  return true;
+}
+
 export function buy(profile: Profile, id: string): boolean {
   const item = SHOP.find((s) => s.id === id);
   if (!item || profile.owned.includes(id) || profile.coins < item.price) return false;

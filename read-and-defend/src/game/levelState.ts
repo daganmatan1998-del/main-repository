@@ -11,10 +11,12 @@ export type EnemyType = 'slime' | 'goblin' | 'bat' | 'knight' | 'boss';
 
 export interface EnemySpec {
   type: EnemyType;
-  /** Items to read in order; a boss needs three, one at a time. */
+  /** Items to read in order; a boss has six, one at a time. */
   items: LearningItem[];
   /** Show the sound breakdown from the start (words using sounds not yet taught). */
   assist?: boolean;
+  /** Override the type's walk time (bosses get faster world by world). */
+  walkSeconds?: number;
 }
 
 /** Monsters only slow down for speech on the first 80 % of the road. */
@@ -42,6 +44,8 @@ export interface Enemy {
   /** Frozen enemies do not move (scaffold after repeated struggle). */
   frozen: boolean;
   spawnIndex: number;
+  /** A boss at the castle: seconds until its next blow. */
+  gateTimer?: number;
 }
 
 export type LevelStatus = 'playing' | 'paused' | 'won' | 'lost';
@@ -67,8 +71,12 @@ export interface LevelConfig {
   durationFactor: number;
   /** Fraction of normal speed while the child is reading aloud. */
   listeningSlow: number;
-  /** Practice mode: enemies stop at the gate instead of hurting the castle. */
+  /** Practice mode: a monster that reaches the castle walks again from the start. */
   practice?: boolean;
+  /** Seconds between the boss's blows once it stands at the castle. */
+  bossHitInterval: number;
+  /** Share of a regular level's monsters that must be read to pass it. */
+  passShare: number;
   /** How long the boss announcement lasts before the boss starts to walk. */
   bossIntroSeconds: number;
 }
@@ -93,7 +101,10 @@ export interface LevelState {
   correct: number;
   firstTry: number;
   wrong: number;
+  /** Monsters that reached the castle (and vanished) plus blows taken from a boss. */
   breaches: number;
+  /** Why a level was lost: the castle fell (boss), or too few monsters were read. */
+  lostReason?: 'castle' | 'fewRead';
   events: GameEvent[];
 }
 
@@ -104,19 +115,33 @@ export interface LevelState {
  * pushed back each time the child reads a word).
  */
 export const WALK_SECONDS: Record<EnemyType, number> = {
-  slime: 7, goblin: 7, bat: 5, knight: 9, boss: 40,
+  slime: 7, goblin: 7, bat: 5, knight: 9, boss: 60,
 };
 export const STANDARD_WALK_SECONDS = 7;
 
-export const DAMAGE: Record<EnemyType, number> = {
-  slime: 1, goblin: 1, bat: 1, knight: 2, boss: 2,
-};
+/**
+ * Only the boss hurts the castle: a monster that reaches it simply vanishes
+ * (it is not counted as defeated), while a boss stands at the gate and strikes,
+ * one heart per blow, until its words are read.
+ */
+export const BOSS_DAMAGE = 1;
+/** The castle's hearts before any are bought in the shop. */
+export const BASE_CASTLE_HP = 2;
 
-/** How far the boss is knocked back by each word read correctly. */
-export const BOSS_KNOCKBACK = 0.2;
+/**
+ * Seconds a world's boss needs to cross the whole road (before the speed
+ * setting). It never stops or steps back: each word read swaps the word on
+ * its sign while it keeps coming, so the walk has to leave time for all six
+ * words - about 11 s a word in the first world, 7 s in the last.
+ */
+export const BOSS_WALK_BY_STAGE: Record<number, number> = { 1: 66, 2: 60, 3: 55, 4: 50, 5: 46, 6: 42 };
+
+export function bossWalkSeconds(stage: number): number {
+  return BOSS_WALK_BY_STAGE[stage] ?? BOSS_WALK_BY_STAGE[6];
+}
 
 export const DEFAULT_CONFIG: LevelConfig = {
-  castleHp: 5, spawnInterval: 6, maxAlive: 3, durationFactor: 1, listeningSlow: 0.5, bossIntroSeconds: 2.4,
+  castleHp: BASE_CASTLE_HP, bossHitInterval: 4, passShare: 0.5, spawnInterval: 6, maxAlive: 3, durationFactor: 1, listeningSlow: 0.5, bossIntroSeconds: 2.4,
 };
 
 /** Default road length until the renderer reports the real one. */
@@ -126,7 +151,7 @@ export function createLevelState(specs: EnemySpec[], config: Partial<LevelConfig
   const cfg = { ...DEFAULT_CONFIG, ...config };
   const enemies = specs.map((s, i): Enemy => ({
     id: i + 1, type: s.type, items: s.items, phase: 0, progress: 0,
-    walkSeconds: WALK_SECONDS[s.type], assist: !!s.assist, status: 'waiting',
+    walkSeconds: s.walkSeconds ?? WALK_SECONDS[s.type], assist: !!s.assist, status: 'waiting',
     wrong: 0, wrongTotal: 0, targetTime: 0, frozen: false, spawnIndex: i,
   }));
   return {
@@ -213,6 +238,12 @@ export function tick(s: LevelState, dt: number): void {
     if (e.frozen) continue;
     // While the child speaks, monsters slow down - but only on the first part
     // of the road, so a noisy room can never hold one at the castle gate.
+    if (e.type === 'boss' && e.progress >= 1) {
+      // At the gate the boss strikes again and again until it is read.
+      e.gateTimer = (e.gateTimer ?? s.config.bossHitInterval) - dt;
+      if (e.gateTimer <= 0) { bossBlow(s, e); e.gateTimer = s.config.bossHitInterval; }
+      continue;
+    }
     const slow = s.listening && e.progress < LISTENING_SLOW_UNTIL ? s.config.listeningSlow : 1;
     // distance = speed × time, as a fraction of the road
     e.progress = Math.min(1, e.progress + (speedOf(s, e) * dt * slow) / s.pathLength);
@@ -222,44 +253,64 @@ export function tick(s: LevelState, dt: number): void {
 }
 
 function breach(s: LevelState, e: Enemy): void {
-  const damage = DAMAGE[e.type];
-  if (s.config.practice) {
-    // In practice the castle really is hit (the child sees it lose a heart),
-    // but it never falls, and the monster goes back to try again.
-    s.castleHp = Math.max(1, s.castleHp - 1);
-    e.progress = 0;
-    e.wrong = 0;
-    s.events.push({ type: 'breach', enemy: e, damage: 1, returns: true });
+  if (e.type === 'boss') {
+    // The boss stays at the gate and strikes at once, then every few seconds.
+    e.progress = 1;
+    e.gateTimer = s.config.bossHitInterval;
+    bossBlow(s, e);
     return;
   }
-  s.castleHp = Math.max(0, s.castleHp - damage);
-  s.breaches += 1;
-  s.combo = 0;
-  if (e.type === 'boss') {
-    // The boss is never "passed" by reaching the castle: it hurts, then
-    // lumbers back to the start with the words it still has to be read.
+  if (s.config.practice) {
+    // Practice: nothing is lost; the monster simply walks again.
     e.progress = 0;
     e.wrong = 0;
     e.frozen = false;
-    s.events.push({ type: 'breach', enemy: e, damage, returns: true });
+    s.events.push({ type: 'breach', enemy: e, damage: 0, returns: true });
     return;
   }
+  // A monster that reaches the castle vanishes. It is not defeated, and the
+  // castle is not hurt: the reading is simply missed.
+  s.breaches += 1;
+  s.combo = 0;
   e.status = 'breached';
-  s.events.push({ type: 'breach', enemy: e, damage, returns: false });
+  s.events.push({ type: 'breach', enemy: e, damage: 0, returns: false });
   // Every unread phase is recorded as unsolved practice, not as a mistake.
   for (let p = e.phase; p < e.items.length; p++) {
     s.events.push({ type: 'resolved', item: e.items[p], wrongAttempts: p === e.phase ? e.wrong : 0, solved: false });
   }
 }
 
+function bossBlow(s: LevelState, e: Enemy): void {
+  s.castleHp = Math.max(0, s.castleHp - BOSS_DAMAGE);
+  s.breaches += 1;
+  s.combo = 0;
+  s.events.push({ type: 'breach', enemy: e, damage: BOSS_DAMAGE, returns: true });
+}
+
+/** Share of the level's monsters that were read (not lost at the gate). */
+export function readShare(s: LevelState): number {
+  const regular = s.enemies.filter((e) => e.type !== 'boss');
+  if (!regular.length) return 1;
+  return regular.filter((e) => e.status === 'defeated').length / regular.length;
+}
+
 function checkEnd(s: LevelState): void {
   if (s.status !== 'playing') return;
   if (s.castleHp <= 0) {
     s.status = 'lost';
+    s.lostReason = 'castle';
     s.events.push({ type: 'lost' });
     return;
   }
   if (s.enemies.every((e) => e.status === 'defeated' || e.status === 'breached')) {
+    // A regular level is passed by reading enough of its monsters (the
+    // castle is never hurt there, so waiting is not a way through).
+    if (!s.config.practice && readShare(s) < s.config.passShare) {
+      s.status = 'lost';
+      s.lostReason = 'fewRead';
+      s.events.push({ type: 'lost' });
+      return;
+    }
     s.status = 'won';
     s.events.push({ type: 'won' });
   }
@@ -310,8 +361,7 @@ export function applyEvaluation(s: LevelState, targetId: number | null, ev: Eval
     hit.wrong = 0;
     hit.targetTime = 0;
     hit.frozen = false;
-    // A boss staggers back with each word it loses.
-    hit.progress = Math.max(0, hit.progress - BOSS_KNOCKBACK);
+    // A boss does not step back: it keeps coming with its next word.
     s.events.push({ type: 'phase', enemy: hit, item: currentItem(hit) });
   } else {
     hit.status = 'defeated';
@@ -338,6 +388,7 @@ export function starsFor(s: LevelState): number {
   const total = s.enemies.reduce((n, e) => n + e.items.length, 0);
   const ftRate = total ? s.firstTry / total : 0;
   if (s.breaches === 0 && ftRate >= 0.8) return 3;
-  if (s.castleHp >= s.castleMax / 2) return 2;
+  const boss = s.enemies.some((e) => e.type === 'boss');
+  if (boss ? s.castleHp >= s.castleMax / 2 : readShare(s) >= 0.8) return 2;
   return 1;
 }

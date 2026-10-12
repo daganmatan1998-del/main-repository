@@ -67,6 +67,8 @@ export interface Profile {
   coins: number;
   xp: number;
   owned: string[];
+  /** Hearts bought in the shop, on top of the castle's two. */
+  extraHearts: number;
   equipped: { banner: string; walls: string; magic: string; weapon: string };
   achievements: Record<string, number>;
   langs: Record<LanguageCode, LangProgress>;
@@ -90,7 +92,7 @@ export const DEFAULT_OWNED = ['banner-red', 'walls-stone', 'magic-gold', 'weapon
 
 export function newProfile(): Profile {
   return {
-    version: 1, lang: null, settings: { ...DEFAULT_SETTINGS }, coins: 0, xp: 0,
+    version: 1, lang: null, settings: { ...DEFAULT_SETTINGS }, coins: 0, xp: 0, extraHearts: 0,
     owned: [...DEFAULT_OWNED],
     equipped: { banner: 'banner-red', walls: 'walls-stone', magic: 'magic-gold', weapon: 'weapon-magic' },
     achievements: {}, langs: { en: newLangProgress(), he: newLangProgress() },

@@ -1,10 +1,10 @@
 import type { LanguageCode, LanguagePack } from '../content/types';
 
 /**
- * Levels are generated from the curriculum: every unit has two levels — a
- * practice level and a guarded level that ends with a boss. A level never
- * owns a word list; it owns a unit (learning objectives), and the selector
- * draws fresh items for every attempt.
+ * Levels are generated from the curriculum. Every unit has two regular
+ * levels of ten monsters; the last level of every world is a boss fight.
+ * A level never owns a word list; it owns a unit (learning objectives), and
+ * the selector draws fresh items for every attempt.
  */
 
 export type EnvironmentId = 'meadow' | 'forest' | 'canyon' | 'snow' | 'volcano' | 'sky';
@@ -25,26 +25,29 @@ export const STAGE_ENVIRONMENT: Record<number, EnvironmentId> = {
   1: 'meadow', 2: 'forest', 3: 'canyon', 4: 'snow', 5: 'volcano', 6: 'sky',
 };
 
+/** Monsters in every regular level. */
+export const REGULAR_ENEMIES = 10;
+
 /**
- * Every level ends with a boss (three words, one at a time). A unit has two
- * levels; a fluent reader may skip the second (see progress/fastTrack.ts).
+ * Two regular levels per unit; after the last unit of each world, that
+ * world's boss. A fluent reader may skip a unit's second level (see
+ * progress/fastTrack.ts) but never a boss.
  */
 export function buildLevels(pack: LanguagePack): LevelDef[] {
   const levels: LevelDef[] = [];
+  const add = (l: Omit<LevelDef, 'number' | 'lang'>) => levels.push({ ...l, lang: pack.lang, number: levels.length + 1 });
   pack.units.forEach((u, unitIndex) => {
     for (const second of [false, true]) {
-      const n = levels.length + 1;
-      // Regular enemies before the boss; the boss is extra.
-      const base = u.stage <= 2 ? 6 : u.stage <= 4 ? 7 : 8;
-      levels.push({
-        id: `${u.id}${second ? 'b' : 'a'}`,
-        lang: pack.lang,
-        unitIndex,
-        number: n,
-        boss: true,
-        enemyCount: base,
-        environment: STAGE_ENVIRONMENT[u.stage],
-        stage: u.stage,
+      add({
+        id: `${u.id}${second ? 'b' : 'a'}`, unitIndex, boss: false, enemyCount: REGULAR_ENEMIES,
+        environment: STAGE_ENVIRONMENT[u.stage], stage: u.stage,
+      });
+    }
+    const lastOfWorld = pack.units[unitIndex + 1]?.stage !== u.stage;
+    if (lastOfWorld) {
+      add({
+        id: `${pack.lang}-boss-${u.stage}`, unitIndex, boss: true, enemyCount: 0,
+        environment: STAGE_ENVIRONMENT[u.stage], stage: u.stage,
       });
     }
   });
