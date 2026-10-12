@@ -4,7 +4,8 @@
 // Privacy: the context sent with each question is the minimum the assistant
 // needs — no name, no photos, no registration date.
 
-import { t as tr } from './i18n.js';
+import { t as tr, lang } from './i18n.js';
+import { serverText } from './server-texts.js';
 import { API_BASE } from './config.js';
 import { state, targets, dayPlan, currentMetrics, activePeriod, today } from './store.js';
 import { allowedFoods, FOODS, ALLERGENS, DIETS, ROLE_LABEL } from './foods.js';
@@ -67,7 +68,7 @@ export async function ask(messages, context) {
     res = await fetch(`${API_BASE}/api/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ messages: messages.map(({ role, content }) => ({ role, content })), context }),
+      body: JSON.stringify({ messages: messages.map(({ role, content }) => ({ role, content })), context, lang }),
       signal: ctrl.signal,
     });
   } catch {
@@ -81,5 +82,6 @@ export async function ask(messages, context) {
     const code = data?.error || `http_${res.status}`;
     throw new ChatError(code, tr('The assistant is unavailable right now.'));
   }
-  return data.text;
+  // The server's fixed refusal is in English: show it in the app's language.
+  return serverText(data.text);
 }

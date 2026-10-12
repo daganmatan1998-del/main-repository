@@ -1,6 +1,6 @@
 // Small DOM + formatting helpers shared by every screen.
 
-import { t as tr, locale, dateParts } from './i18n.js';
+import { t as tr, locale, dateParts, isRTL } from './i18n.js';
 export function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
   if (attrs) {
@@ -204,7 +204,12 @@ const ICONS = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>',
 };
 
+// "back" points toward where the user came from: right in a right-to-left
+// language, left in a left-to-right one.
+const FLIPPED = { back: 'forward', forward: 'back' };
+
 export function icon(name, size = 22) {
+  if (!isRTL && FLIPPED[name]) name = FLIPPED[name];
   const span = document.createElement('span');
   span.className = 'ic';
   span.setAttribute('aria-hidden', 'true');

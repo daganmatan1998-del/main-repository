@@ -14,6 +14,7 @@ const SHELL = [
   'css/app.css',
   'js/app.js',
   'js/i18n.js',
+  'js/server-texts.js',
   'js/lang/he.js',
   'js/screens/language.js',
   'js/config.js',

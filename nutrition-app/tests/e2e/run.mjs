@@ -88,7 +88,7 @@ const ctx = await browser.newContext({
 });
 await ctx.clock.setFixedTime(at(0));
 await ctx.grantPermissions(['camera', 'notifications']);
-await ctx.addInitScript(() => { try { if (!localStorage.getItem('nutri-lang')) localStorage.setItem('nutri-lang', 'he'); } catch {} }); // the checks below were written against Hebrew
+await ctx.addInitScript((lang) => { try { if (!localStorage.getItem('nutri-lang')) localStorage.setItem('nutri-lang', lang); } catch {} }, process.env.E2E_LANG || 'he'); // the checks below were written against Hebrew
 // There is no push service in the test browser: a stand-in that behaves like one subscription.
 await ctx.addInitScript(() => {
   const sub = { endpoint: 'https://fcm.googleapis.com/fcm/send/e2e-device', unsubscribe: async () => { window.__pushUnsubscribed = true; return true; } };

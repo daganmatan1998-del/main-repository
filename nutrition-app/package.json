@@ -9,6 +9,7 @@
     "test": "node --import ./tests/unit/pin-he.mjs --test tests/unit/*.test.mjs",
     "test:e2e": "node tests/e2e/run.mjs",
     "test:cloud": "node tests/e2e/cloud.mjs",
+    "test:i18n": "node tests/e2e/i18n.mjs",
     "deploy": "wrangler deploy"
   },
   "dependencies": {

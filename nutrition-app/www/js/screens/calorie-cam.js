@@ -7,7 +7,8 @@
 // The photo lives in memory only: it is sent once for analysis and never
 // saved on the device or the server.
 
-import { t as tr } from '../i18n.js';
+import { t as tr, lang } from '../i18n.js';
+import { serverText } from '../server-texts.js';
 import { h, icon, clear, fmt, toast } from '../util.js';
 import { API_BASE } from '../config.js';
 import { FOODS, FOOD_BY_ID, household } from '../foods.js';
@@ -170,6 +171,7 @@ export function openCalorieCamera(meal, day) {
           meal: meal.name,
           planned: meal.items.map((i) => ({ id: i.foodId, name: FOOD_BY_ID[i.foodId].name, grams: i.grams })),
           foods: FOODS.map((f) => f.id),
+          lang,
         }),
       });
       clearTimeout(t);
@@ -177,7 +179,7 @@ export function openCalorieCamera(meal, day) {
       if (!res.ok) throw new Error(data.error || `http_${res.status}`);
       if (done) return;
       if (!data.ok) {
-        capture(tr('We couldn\'t analyze the photo: {0} Take another one.', data.issue || tr('No food was recognized.')));
+        capture(tr('We couldn\'t analyze the photo: {0} Take another one.', serverText(data.issue) || tr('No food was recognized.')));
         return;
       }
       items = data.items.map(fromEstimate);

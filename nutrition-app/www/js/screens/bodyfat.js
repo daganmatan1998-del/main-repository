@@ -6,7 +6,8 @@
 // Photos live only in memory here: they are sent once for analysis and are
 // never saved on the device or on the server.
 
-import { t as tr } from '../i18n.js';
+import { t as tr, lang } from '../i18n.js';
+import { serverText } from '../server-texts.js';
 import { h, icon, clear, parseNum } from '../util.js';
 import { API_BASE } from '../config.js';
 import { deurenberg, navy, combine } from '../bodyfat.js';
@@ -285,13 +286,14 @@ export function openBodyFatEstimator(person) {
             body: JSON.stringify({
               photos: ANGLES.filter((a) => photos[a.id]).map((a) => ({ angle: a.id, data: photos[a.id].b64 })),
               profile: { sex: person.sex, age: person.age, heightCm: person.height, weightKg: person.weight, bmiPriorPct: prior },
+              lang,
             }),
           });
           clearTimeout(t);
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data.error || `http_${res.status}`);
           if (data.ok) ai = data;
-          else issue = data.issue;
+          else issue = serverText(data.issue);
         } catch (e) {
           failure = e.message === 'offline' ? tr('No internet connection') : e.message === 'not_configured' ? tr('The analysis service is not set up on the server yet') : tr('The analysis service is unavailable right now');
         }
