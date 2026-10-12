@@ -21,7 +21,7 @@
    serving the copy they already have.
    ===================================================================== */
 
-const SHELL_VERSION = 'jarvis-shell-v4';
+const SHELL_VERSION = 'jarvis-shell-v5';
 const CDN_VERSION   = 'jarvis-cdn-v1';
 
 /* Only what the app cannot start without. Icons are left out on purpose:
@@ -91,6 +91,10 @@ self.addEventListener('fetch', event => {
   }
 
   if (url.origin !== self.location.origin) return;   // anything else: not ours
+
+  /* The update check asks the server, never the cache: a cached answer
+     would say "up to date" forever. Left to the network untouched. */
+  if (url.pathname.endsWith('/version.json')) return;
 
   /* Network first for the page itself. A cached shell that never refreshes is
      an app frozen at the version it was installed on, and this one is updated

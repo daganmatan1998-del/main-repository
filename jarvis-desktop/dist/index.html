@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="jarvis-build" content="970db363c60e">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -2994,6 +2995,64 @@ if(!IS_DESKTOP && 'serviceWorker' in navigator && location.protocol !== 'file:')
       console.info('JARVIS: offline cache unavailable —', err && err.message);
     });
   });
+}
+/* IS IT THE LATEST? (2.34.0, the site and the home-screen app).
+
+   Each build of this page carries its own id (jarvis-build, stamped by
+   scripts/stamp-version.mjs). The server publishes the newest id in
+   version.json. When they differ, the page asks him - never reloads on its
+   own, so a reply in progress is not cut off. "Later" asks again at the
+   next check; a check runs a few seconds after opening, when he comes back
+   to the app, and every 15 minutes while it is open. Offline or not found:
+   nothing is said. The desktop app is never asked: it updates by its own
+   script. */
+if(!IS_DESKTOP && location.protocol !== 'file:'){
+  const BUILD = (document.querySelector('meta[name="jarvis-build"]') || {}).content || '';
+  const UPDATE_EVERY_MS = 15 * 60 * 1000;
+  let updateAsked = false, updateLaterUntil = 0;
+  const showUpdateBanner = (latest) => {
+    if(updateAsked) return;
+    updateAsked = true;
+    const bar = document.createElement('div');
+    bar.id = 'updateBanner';
+    bar.setAttribute('role', 'status');
+    bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:10000;' +
+      'display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid rgba(0,229,255,0.55);border-radius:12px;' +
+      'background:rgba(0,14,28,0.96);color:#cdf6ff;font:14px/1.35 system-ui,sans-serif;box-shadow:0 0 18px rgba(0,229,255,0.25);direction:rtl';
+    const text = document.createElement('span');
+    text.style.flex = '1';
+    text.textContent = 'גרסה חדשה של ג׳רוויס זמינה. לעדכן עכשיו?';
+    const btn = (label, primary) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.style.cssText = 'font:inherit;padding:6px 12px;border-radius:8px;cursor:pointer;color:#e9fbff;' +
+        (primary ? 'background:rgba(0,229,255,0.28);border:1px solid #00e5ff;' : 'background:transparent;border:1px solid rgba(0,229,255,0.4);');
+      return b;
+    };
+    const later = btn('אחר כך', false), now = btn('עדכן', true);
+    later.addEventListener('click', () => {
+      bar.remove(); updateAsked = false; updateLaterUntil = Date.now() + 5 * 60 * 1000;
+    });
+    now.addEventListener('click', () => {
+      /* Reload past every cache: the page itself, then the worker takes the new one. */
+      const u = new URL(location.href); u.searchParams.set('v', latest);
+      location.replace(u.toString());
+    });
+    bar.append(text, later, now);
+    document.body.appendChild(bar);
+  };
+  const checkForUpdate = async () => {
+    if(updateAsked || document.visibilityState !== 'visible' || Date.now() < updateLaterUntil) return;
+    try{
+      const r = await fetch('./version.json', { cache: 'no-store' });
+      if(!r.ok) return;
+      const v = await r.json();
+      if(v && v.build && BUILD && v.build !== BUILD) showUpdateBanner(v.build);
+    }catch(err){ /* offline: nothing to say */ }
+  };
+  window.addEventListener('load', () => setTimeout(checkForUpdate, 4000));
+  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') checkForUpdate(); });
+  setInterval(checkForUpdate, UPDATE_EVERY_MS);
 }
 if(IS_DESKTOP) document.documentElement.classList.add('tauri');
 
