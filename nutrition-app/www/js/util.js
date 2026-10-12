@@ -222,4 +222,4 @@ export function parseNum(v) {
 
 // Search-friendly text: lower case, without quotes/geresh/hyphens/niqqud, so
 // "קוטג'" matches "קוטג" and "סריראצ׳ה" matches "סריראצה".
-export const normText = (s) => String(s || '').toLowerCase().replace(/[֑-ׇ'"׳״`´’‘\-–—.,()/]/g, '').replace(/\s+/g, ' ').trim();
+export const normText = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/[֑-ׇ'"׳״`´’‘\-–—.,()/]/g, '').replace(/\s+/g, ' ').trim();

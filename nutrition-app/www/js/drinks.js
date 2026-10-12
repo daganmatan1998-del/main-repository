@@ -4,6 +4,7 @@
 // person can type the calories per cup themselves. Sugar and the number of
 // cups are optional.
 
+import { t as tr, trl } from './i18n.js';
 import { normText } from './util.js';
 
 export const SUGAR_TSP_KCAL = 16; // one level teaspoon of sugar: 4 g
@@ -12,32 +13,32 @@ export const SUGAR_TSP_CARBS = 4;
 // kcal / macros per cup. `keys`: words that identify the drink (the longest
 // match in the text wins), so "קפה עם חלב" beats the plain "קפה".
 const DRINKS = [
-  { name: 'מים', keys: ['מים', 'מים מינרליים', 'סודה', 'מי סודה', 'מים עם לימון'], kcal: 0, p: 0, c: 0, f: 0 },
-  { name: 'תה (בלי סוכר)', keys: ['תה', 'תה ירוק', 'תה נענע', 'תה צמחים', 'חליטה'], kcal: 2, p: 0, c: 0.5, f: 0 },
-  { name: 'קפה שחור', keys: ['קפה שחור', 'אספרסו', 'אמריקנו', 'קפה בלי חלב', 'נס קפה שחור', 'קפה טורקי', 'קפה נמס', 'קפה'], kcal: 3, p: 0.2, c: 0.4, f: 0 },
-  { name: 'קפה עם טיפת חלב', keys: ['קפה עם חלב', 'קפה עם טיפת חלב', 'נס קפה עם חלב', 'נס קפה', 'קפה בטעם'], kcal: 35, p: 1.8, c: 2.5, f: 1.8 },
-  { name: 'קפה הפוך / לאטה', keys: ['הפוך', 'לאטה', 'קפה הפוך', 'קפוצינו', 'קפוצ׳ינו', 'קפה לאטה', 'מקיאטו גדול'], kcal: 120, p: 6, c: 9, f: 6 },
-  { name: 'קפה קר', keys: ['קפה קר', 'אייס קפה', 'אייס לאטה', 'קפה בקרח'], kcal: 110, p: 4, c: 17, f: 3 },
-  { name: 'שוקו', keys: ['שוקו', 'שוקו חם', 'שוקו קר', 'קקאו', 'שוקו תנובה'], kcal: 170, p: 8, c: 24, f: 5 },
-  { name: 'חלב 3%', keys: ['חלב', 'חלב 3%', 'כוס חלב'], kcal: 150, p: 8, c: 12, f: 8 },
-  { name: 'חלב 1%', keys: ['חלב 1%', 'חלב דל שומן'], kcal: 110, p: 8, c: 12, f: 2.5 },
-  { name: 'חלב סויה', keys: ['חלב סויה', 'משקה סויה'], kcal: 90, p: 7, c: 4, f: 4 },
-  { name: 'חלב שקדים (לא ממותק)', keys: ['חלב שקדים', 'משקה שקדים'], kcal: 30, p: 1, c: 1, f: 2.5 },
-  { name: 'חלב שיבולת שועל', keys: ['חלב שיבולת שועל', 'חלב שיבולת', 'משקה שיבולת'], kcal: 120, p: 3, c: 16, f: 5 },
-  { name: 'שייק חלבון', keys: ['שייק חלבון', 'שייק', 'משקה חלבון', 'פרוטאין'], kcal: 200, p: 25, c: 10, f: 5 },
-  { name: 'סמודי פירות', keys: ['סמודי', 'סמוזי', 'שייק פירות'], kcal: 170, p: 3, c: 38, f: 1 },
-  { name: 'מיץ תפוזים טבעי', keys: ['מיץ תפוזים', 'תפוזים סחוט', 'מיץ תפוז', 'מיץ'], kcal: 110, p: 2, c: 26, f: 0.5 },
-  { name: 'מיץ תפוחים / ענבים', keys: ['מיץ תפוחים', 'מיץ ענבים', 'מיץ פירות', 'פריגת', 'פרימור'], kcal: 115, p: 0.3, c: 28, f: 0 },
-  { name: 'לימונדה / מיץ ממותק', keys: ['לימונדה', 'שתיה ממותקת', 'משקה ממותק', 'ליפטון', 'אייס טי', 'תה קר', 'סירופ'], kcal: 90, p: 0, c: 23, f: 0 },
-  { name: 'קולה / משקה מוגז ממותק', keys: ['קולה', 'קוקה קולה', 'פפסי', 'ספרייט', 'פאנטה', 'משקה מוגז', 'סודה ממותקת', 'שוופס', 'מוגז'], kcal: 105, p: 0, c: 26, f: 0 },
-  { name: 'משקה דיאט / זירו', keys: ['זירו', 'דיאט', 'קולה זירו', 'קולה דיאט', 'מקס', 'משקה דיאט', 'סודה דיאט'], kcal: 2, p: 0, c: 0, f: 0 },
-  { name: 'משקה אנרגיה', keys: ['משקה אנרגיה', 'רד בול', 'XL', 'מונסטר', 'אנרגיה'], kcal: 110, p: 0, c: 27, f: 0 },
-  { name: 'משקה איזוטוני / ספורט', keys: ['איזוטוני', 'גטורייד', 'משקה ספורט', 'פאוורייד'], kcal: 60, p: 0, c: 15, f: 0 },
-  { name: 'יוגורט שתייה', keys: ['יוגורט שתיה', 'יוגורט שתייה', 'דנונינו שתיה', 'שתיית יוגורט', 'קפיר', 'ביו שתיה', 'שתיה חלבית'], kcal: 130, p: 7, c: 18, f: 3 },
-  { name: 'בירה (כוס)', keys: ['בירה', 'גולדסטאר', 'מלכה', 'קורונה', 'בירה קלה'], kcal: 110, p: 1, c: 9, f: 0 },
-  { name: 'יין (כוס קטנה)', keys: ['יין', 'יין אדום', 'יין לבן', 'רוזה'], kcal: 125, p: 0, c: 4, f: 0 },
-  { name: 'משקה חריף (שוט)', keys: ['וודקה', 'ויסקי', 'ערק', 'ג׳ין', 'ג׳ין טוניק', 'שוט', 'טקילה', 'רום', 'קוקטייל', 'ליקר'], kcal: 100, p: 0, c: 1, f: 0 },
-].map((d) => ({ ...d, normKeys: d.keys.map(normText) }));
+  { name: tr('Water'), keys: [tr('Water'), ...trl('mineral water'), ...trl('soda water'), ...trl('club soda'), ...trl('water with lemon')], kcal: 0, p: 0, c: 0, f: 0 },
+  { name: tr('Tea (no sugar)'), keys: [...trl('tea'), ...trl('green tea'), ...trl('mint tea'), ...trl('herbal tea'), ...trl('infusion')], kcal: 2, p: 0, c: 0.5, f: 0 },
+  { name: tr('Black coffee'), keys: [tr('Black coffee'), ...trl('espresso'), ...trl('americano'), ...trl('coffee without milk'), ...trl('black nescafe'), ...trl('turkish coffee'), ...trl('instant coffee'), ...trl('coffee')], kcal: 3, p: 0.2, c: 0.4, f: 0 },
+  { name: tr('Coffee with a splash of milk'), keys: [...trl('coffee with milk'), tr('Coffee with a splash of milk'), ...trl('nescafe with milk'), ...trl('nescafe'), ...trl('flavored coffee')], kcal: 35, p: 1.8, c: 2.5, f: 1.8 },
+  { name: tr('Latte / flat white'), keys: [...trl('hafuch'), ...trl('latte'), ...trl('hafuch coffee'), ...trl('cappuccino'), ...trl('cappuccino'), ...trl('coffee latte'), ...trl('large macchiato')], kcal: 120, p: 6, c: 9, f: 6 },
+  { name: tr('Iced coffee'), keys: [tr('Iced coffee'), ...trl('iced coffee'), ...trl('iced latte'), ...trl('coffee with ice')], kcal: 110, p: 4, c: 17, f: 3 },
+  { name: tr('Chocolate milk'), keys: [tr('Chocolate milk'), ...trl('hot chocolate'), ...trl('cold chocolate milk'), ...trl('cocoa'), ...trl('tnuva chocolate milk')], kcal: 170, p: 8, c: 24, f: 5 },
+  { name: tr('Milk 3%'), keys: [...trl('milk'), tr('Milk 3%'), ...trl('glass of milk')], kcal: 150, p: 8, c: 12, f: 8 },
+  { name: tr('Milk 1%'), keys: [tr('Milk 1%'), ...trl('low-fat milk')], kcal: 110, p: 8, c: 12, f: 2.5 },
+  { name: tr('Soy milk'), keys: [tr('Soy milk'), ...trl('soy drink')], kcal: 90, p: 7, c: 4, f: 4 },
+  { name: tr('Almond milk (unsweetened)'), keys: [...trl('almond milk'), ...trl('almond drink')], kcal: 30, p: 1, c: 1, f: 2.5 },
+  { name: tr('Oat milk'), keys: [tr('Oat milk'), ...trl('oat milk'), ...trl('oat drink')], kcal: 120, p: 3, c: 16, f: 5 },
+  { name: tr('protein shake'), keys: [...trl('protein shake'), ...trl('shake'), ...trl('protein drink'), ...trl('protein')], kcal: 200, p: 25, c: 10, f: 5 },
+  { name: tr('Fruit smoothie'), keys: [...trl('smoothie'), ...trl('smoothie'), ...trl('fruit shake')], kcal: 170, p: 3, c: 38, f: 1 },
+  { name: tr('Fresh orange juice'), keys: [...trl('orange juice'), ...trl('squeezed orange juice'), ...trl('orange juice'), ...trl('juice')], kcal: 110, p: 2, c: 26, f: 0.5 },
+  { name: tr('Apple / grape juice'), keys: [...trl('apple juice'), ...trl('grape juice'), ...trl('fruit juice'), ...trl('prigat'), ...trl('primor')], kcal: 115, p: 0.3, c: 28, f: 0 },
+  { name: tr('Lemonade / sweetened juice'), keys: [...trl('lemonade'), ...trl('sweetened drink'), ...trl('sweetened beverage'), ...trl('lipton'), ...trl('iced tea'), ...trl('cold tea'), ...trl('syrup')], kcal: 90, p: 0, c: 23, f: 0 },
+  { name: tr('Cola / sweetened soft drink'), keys: [...trl('cola'), ...trl('coca-cola'), ...trl('pepsi'), ...trl('sprite'), ...trl('fanta'), ...trl('soft drink'), ...trl('sweetened soda'), ...trl('schweppes'), ...trl('fizzy drink')], kcal: 105, p: 0, c: 26, f: 0 },
+  { name: tr('Diet / zero drink'), keys: [...trl('zero'), ...trl('diet'), ...trl('cola zero'), ...trl('diet cola'), ...trl('pepsi max'), ...trl('diet drink'), ...trl('diet soda')], kcal: 2, p: 0, c: 0, f: 0 },
+  { name: tr('Energy drink'), keys: [tr('Energy drink'), ...trl('red bull'), 'XL', ...trl('monster'), ...trl('energy')], kcal: 110, p: 0, c: 27, f: 0 },
+  { name: tr('Isotonic / sports drink'), keys: [...trl('isotonic'), ...trl('gatorade'), ...trl('sports drink'), ...trl('powerade')], kcal: 60, p: 0, c: 15, f: 0 },
+  { name: tr('Drinking yogurt'), keys: [...trl('drinking yogurt'), tr('Drinking yogurt'), ...trl('danonino drink'), ...trl('yogurt drink'), ...trl('kefir'), ...trl('bio drink'), ...trl('dairy drink')], kcal: 130, p: 7, c: 18, f: 3 },
+  { name: tr('Beer (glass)'), keys: [...trl('beer'), ...trl('goldstar'), ...trl('malka'), ...trl('corona'), ...trl('light beer')], kcal: 110, p: 1, c: 9, f: 0 },
+  { name: tr('Wine (small glass)'), keys: [...trl('wine'), ...trl('red wine'), ...trl('white wine'), ...trl('rosé')], kcal: 125, p: 0, c: 4, f: 0 },
+  { name: tr('Spirits (shot)'), keys: [...trl('vodka'), ...trl('whisky'), ...trl('arak'), ...trl('gin'), ...trl('gin and tonic'), ...trl('shot'), ...trl('tequila'), ...trl('rum'), ...trl('cocktail'), ...trl('liqueur')], kcal: 100, p: 0, c: 1, f: 0 },
+].map((d) => ({ ...d, normKeys: [...new Set(d.keys.map(normText))] }));
 
 // Names offered while typing (the input's suggestions).
 export const DRINK_NAMES = DRINKS.map((d) => d.name);

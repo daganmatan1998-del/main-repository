@@ -39,12 +39,16 @@ const meta = LANGS.find((l) => l.code === lang);
 export const dir = meta.dir;
 export const locale = meta.locale;
 export const isRTL = dir === 'rtl';
+// German and a few others write every noun with a capital: never lowercase a name inside a sentence.
+export const capitalNouns = meta.capitalNouns === true;
 
 const EMPTY = { ui: {}, data: {} };
 let pack = EMPTY;
 if (lang !== 'en') {
   try {
     pack = (await import(`./lang/${lang}.js`)).default || EMPTY;
+    // `fn`: texts a pack writes as functions (grammar no template can express).
+    if (pack.fn) pack = { ...pack, ui: { ...pack.ui, ...pack.fn } };
   } catch (e) {
     console.warn(`language pack ${lang} failed to load; showing English`, e);
   }
@@ -62,11 +66,16 @@ const stripContext = (s) => { const i = s.indexOf('‖'); return i < 0 ? s : s.s
 export function t(message, ...args) {
   if (typeof message !== 'string') return '';
   const tpl = pack.ui[message] !== undefined ? pack.ui[message] : stripContext(message);
-  return format(tpl, args);
+  // A pack may hold a function for the rare text whose grammar no template can
+  // express (Hebrew prefixes that merge with an article, for instance).
+  return typeof tpl === 'function' ? tpl(...args) : format(tpl, args);
 }
 
+// Search words and synonyms: one message holding variants separated by '|'.
+export const trl = (message) => t(message).split('|').filter(Boolean);
+
 // The message in the active language without filling placeholders (for tests and tooling).
-export const raw = (message) => (pack.ui[message] !== undefined ? pack.ui[message] : stripContext(message));
+export const raw = (message) => (pack.ui[message] !== undefined && typeof pack.ui[message] === 'string' ? pack.ui[message] : stripContext(message));
 
 // Data overlay of the active language: names and wording by id, for the data
 // modules (foods, recipes, shopping …). Empty for English, the base language.
