@@ -1,5 +1,6 @@
 // Small DOM + formatting helpers shared by every screen.
 
+import { t as tr, locale, dateParts } from './i18n.js';
 export function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
   if (attrs) {
@@ -58,16 +59,13 @@ export function daysBetween(a, b) {
   return dayNumber(b) - dayNumber(a);
 }
 
-const HE_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
-
 export function weekdayName(key) {
-  const d = new Date(dayNumber(key) * 86400000);
-  return HE_DAYS[d.getUTCDay()];
+  return dateParts(key, { weekday: 'long' });
 }
 
+// Day and month (and the year) in the order and punctuation of the language.
 export function fmtDate(key, withYear = false) {
-  const [y, m, d] = key.split('-');
-  return withYear ? `${Number(d)}.${Number(m)}.${y}` : `${Number(d)}.${Number(m)}`;
+  return dateParts(key, withYear ? { day: 'numeric', month: 'numeric', year: 'numeric' } : { day: 'numeric', month: 'numeric' });
 }
 
 // ---------- numbers ----------
@@ -78,7 +76,7 @@ export function round(n, step = 1) {
 
 export function fmt(n, digits = 0) {
   if (n === null || n === undefined || Number.isNaN(n)) return '—';
-  return Number(n).toLocaleString('he-IL', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+  return Number(n).toLocaleString(locale, { maximumFractionDigits: digits, minimumFractionDigits: 0 });
 }
 
 export function signed(n, digits = 1) {
@@ -152,7 +150,7 @@ export function sheet(title, content, { onClose } = {}) {
     h('div', { class: 'sheet-grip', 'aria-hidden': 'true' }),
     h('div', { class: 'sheet-head' },
       h('h2', null, title),
-      h('button', { class: 'icon-btn', 'aria-label': 'סגירה', onclick: close }, icon('close'))),
+      h('button', { class: 'icon-btn', 'aria-label': tr('Close'), onclick: close }, icon('close'))),
     h('div', { class: 'sheet-body' }, body));
   backdrop.appendChild(panel);
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
@@ -162,14 +160,14 @@ export function sheet(title, content, { onClose } = {}) {
   return { el: panel, close };
 }
 
-export function confirmDialog(title, text, okLabel = 'אישור', danger = false) {
+export function confirmDialog(title, text, okLabel = tr('Confirm'), danger = false) {
   return new Promise((resolve) => {
     let done = false;
     const s = sheet(title, (close) => h('div', null,
       h('p', { class: 'muted' }, text),
       h('div', { class: 'row gap' },
         h('button', { class: 'btn ' + (danger ? 'btn-danger' : 'btn-primary'), onclick: () => { done = true; resolve(true); close(); } }, okLabel),
-        h('button', { class: 'btn btn-ghost', onclick: () => close() }, 'ביטול'))),
+        h('button', { class: 'btn btn-ghost', onclick: () => close() }, tr('Cancel')))),
       { onClose: () => { if (!done) resolve(false); } });
     return s;
   });
@@ -177,6 +175,7 @@ export function confirmDialog(title, text, okLabel = 'אישור', danger = fals
 
 // Inline SVG icon set (stroke icons, currentColor) — no icon font, works offline.
 const ICONS = {
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
   today: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
   plan: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
   chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>',

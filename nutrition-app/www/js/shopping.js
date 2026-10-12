@@ -9,6 +9,7 @@
 // Pure module: no DOM, so it is unit-tested directly.
 
 import { FOOD_BY_ID } from './foods.js';
+import { t as tr, locale } from './i18n.js';
 
 export const DEPTS = [
   { id: 'produce', label: 'ירקות ופירות', icon: '🥦' },
@@ -183,10 +184,10 @@ export const SHOP = {
 export function fmtWeight(g) {
   if (g >= 1000) {
     const kg = Math.ceil(g / 100) / 10;
-    return `${kg.toLocaleString('he-IL', { maximumFractionDigits: 1 })} ק״ג`;
+    return tr('{0} kg', kg.toLocaleString(locale, { maximumFractionDigits: 1 }));
   }
   const step = g > 200 ? 50 : g > 50 ? 10 : 5;
-  return `${Math.max(step, Math.ceil(g / step) * step)} ג׳`;
+  return tr('{0} g', Math.max(step, Math.ceil(g / step) * step));
 }
 
 // days: [{ day, meals }] where meals come from generateDay().

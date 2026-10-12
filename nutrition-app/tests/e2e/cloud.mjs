@@ -102,6 +102,7 @@ const pageErrors = [];
 async function device(name) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'he-IL', timezoneId: 'Asia/Jerusalem' });
   await ctx.route(`${SUPA}/**`, supabase);
+  await ctx.addInitScript(() => { try { if (!localStorage.getItem('nutri-lang')) localStorage.setItem('nutri-lang', 'he'); } catch {} });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => pageErrors.push(`${name}: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error' && !/status of (400|401|404)/.test(m.text())) pageErrors.push(`${name}: ${m.text()}`); });
@@ -178,7 +179,7 @@ try {
   await A.page.goto(BASE + '/');
   await A.page.waitForSelector('#entry');
   const entryBtns = await A.page.locator('#entry button').evaluateAll((els) => els.map((e) => e.id));
-  check(`the first screen offers exactly sign in / create account / guest (${entryBtns})`, entryBtns.join() === 'entry-login,entry-signup,entry-guest');
+  check(`the first screen offers the language picker, then exactly sign in / create account / guest (${entryBtns})`, entryBtns.join() === 'lang-btn,entry-login,entry-signup,entry-guest');
   check('no registration field or tab bar behind the first screen', (await A.page.locator('#ob-next').count()) === 0 && !(await A.page.locator('#tabbar').isVisible()));
   await A.page.screenshot({ path: path.join(SHOTS, 'c01-entry.png') });
   await A.page.click('#entry-guest');

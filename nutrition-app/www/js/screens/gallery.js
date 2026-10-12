@@ -3,6 +3,7 @@
 // There is deliberately no per-photo delete: removing a week's photo would
 // re-open (or dodge) the weekly requirement. Deleting everything lives in Profile.
 
+import { t as tr } from '../i18n.js';
 import { h, icon, clear, fmt, fmtDate, ltr } from '../util.js';
 import { slots, getPhoto } from '../store.js';
 
@@ -21,15 +22,15 @@ export function renderGallery(root) {
   const withPhotos = all.filter((s) => s.checkin);
 
   root.appendChild(h('header', { class: 'page-head' },
-    h('div', null, h('h1', null, 'גלריית התקדמות'), h('p', { class: 'muted' }, `${withPhotos.length} תמונות · ${all.length} שבועות`)),
-    withPhotos.length >= 2 ? h('button', { class: 'btn btn-small', id: 'btn-compare', onclick: () => openCompare(withPhotos, urlFor) }, icon('compare', 18), 'השוואה') : null));
+    h('div', null, h('h1', null, tr('Progress gallery')), h('p', { class: 'muted' }, tr('{0} photos · {1} weeks', withPhotos.length, all.length))),
+    withPhotos.length >= 2 ? h('button', { class: 'btn btn-small', id: 'btn-compare', onclick: () => openCompare(withPhotos, urlFor) }, icon('compare', 18), tr('Compare')) : null));
 
   const grid = h('div', { class: 'gallery-grid' });
   for (const s of all) {
     const c = s.checkin;
     const tile = h('button', {
       class: 'tile' + (c ? '' : ' empty'),
-      'aria-label': c ? `שבוע ${s.week}, ${fmtDate(s.date)}` : `שבוע ${s.week} — לא צולם`,
+      'aria-label': c ? tr('Week {0}, {1}', s.week, fmtDate(s.date)) : tr('Week {0} — not photographed', s.week),
       disabled: !c,
       onclick: c ? () => openViewer(withPhotos, withPhotos.indexOf(s), urlFor) : null,
     });
@@ -37,19 +38,19 @@ export function renderGallery(root) {
     if (c) {
       urlFor(c.photoId).then((u) => {
         // A week photographed on another device, with photo backup off.
-        frame.appendChild(u ? h('img', { src: u, alt: '', loading: 'lazy' }) : h('span', { class: 'missing' }, icon('lock', 22), 'במכשיר אחר'));
+        frame.appendChild(u ? h('img', { src: u, alt: '', loading: 'lazy' }) : h('span', { class: 'missing' }, icon('lock', 22), tr('On another device')));
       });
     } else {
-      frame.appendChild(h('span', { class: 'missing' }, icon('camera', 26), 'לא צולם'));
+      frame.appendChild(h('span', { class: 'missing' }, icon('camera', 26), tr('Not photographed')));
     }
     tile.append(frame, h('div', { class: 'tile-cap' },
-      h('b', null, s.week === 0 ? 'פתיחה' : `שבוע ${s.week}`),
+      h('b', null, s.week === 0 ? tr('Open') : tr('Week {0}', s.week)),
       h('span', { class: 'muted num' }, fmtDate(s.date)),
-      c && c.weight ? h('span', { class: 'num' }, `${fmt(c.weight, 1)} ק״ג · ${c.bf ?? '—'}%`) : h('span', { class: 'muted' }, '—')));
+      c && c.weight ? h('span', { class: 'num' }, tr('{0} kg · {1}%', fmt(c.weight, 1), c.bf ?? '—')) : h('span', { class: 'muted' }, '—')));
     grid.appendChild(tile);
   }
   root.appendChild(grid);
-  root.appendChild(h('p', { class: 'muted small center' }, icon('lock', 14), ' התמונות שמורות רק במכשיר הזה ואינן נשלחות לשום שרת.'));
+  root.appendChild(h('p', { class: 'muted small center' }, icon('lock', 14), tr(' Photos are saved only on this device and are not sent to any server.')));
 
   return () => { for (const u of urls.values()) URL.revokeObjectURL(u); };
 }
@@ -66,11 +67,11 @@ function overlay(cls, label) {
 
 function caption(s) {
   const c = s.checkin;
-  return `${s.week === 0 ? 'פתיחה' : `שבוע ${s.week}`} · ${fmtDate(s.date, true)}${c.weight ? ` · ${fmt(c.weight, 1)} ק״ג · ${c.bf}%` : ''}`;
+  return `${s.week === 0 ? tr('Open') : tr('Week {0}', s.week)} · ${fmtDate(s.date, true)}${c.weight ? tr(' · {0} kg · {1}%', fmt(c.weight, 1), c.bf) : ''}`;
 }
 
 function openViewer(list, index, urlFor) {
-  const { el, close } = overlay('viewer', 'תמונה במסך מלא');
+  const { el, close } = overlay('viewer', tr('Full-screen photo'));
   let i = index;
   const img = h('img', { alt: '' });
   const cap = h('div', { class: 'viewer-cap num' });
@@ -82,10 +83,10 @@ function openViewer(list, index, urlFor) {
     next.disabled = i === list.length - 1;
   };
   // RTL: "previous" (earlier week) sits on the right.
-  const prev = h('button', { class: 'icon-btn nav prev', 'aria-label': 'שבוע קודם', onclick: () => { if (i > 0) { i--; show(); } } }, icon('back', 26));
-  const next = h('button', { class: 'icon-btn nav next', 'aria-label': 'שבוע הבא', onclick: () => { if (i < list.length - 1) { i++; show(); } } }, icon('forward', 26));
+  const prev = h('button', { class: 'icon-btn nav prev', 'aria-label': tr('Previous week'), onclick: () => { if (i > 0) { i--; show(); } } }, icon('back', 26));
+  const next = h('button', { class: 'icon-btn nav next', 'aria-label': tr('Next week'), onclick: () => { if (i < list.length - 1) { i++; show(); } } }, icon('forward', 26));
   el.append(
-    h('button', { class: 'icon-btn close', 'aria-label': 'סגירה', onclick: close }, icon('close', 26)),
+    h('button', { class: 'icon-btn close', 'aria-label': tr('Close'), onclick: close }, icon('close', 26)),
     h('div', { class: 'viewer-stage' }, img), prev, next, cap);
   let x0 = null;
   el.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
@@ -101,7 +102,7 @@ function openViewer(list, index, urlFor) {
 }
 
 function openCompare(list, urlFor) {
-  const { el, close } = overlay('compare', 'השוואת לפני ואחרי');
+  const { el, close } = overlay('compare', tr('Before and after comparison'));
   let a = 0;
   let b = list.length - 1;
   let mode = 'slider';
@@ -117,15 +118,15 @@ function openCompare(list, urlFor) {
     const cb = list[b].checkin;
     const sign = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}`;
     const diff = ca.weight && cb.weight
-      ? h('p', { class: 'cmp-diff' }, ltr(sign(cb.weight - ca.weight)), ' ק״ג · ', ltr(`${sign(cb.bf - ca.bf)}%`), ' שומן')
+      ? h('p', { class: 'cmp-diff' }, ltr(sign(cb.weight - ca.weight)), tr(' kg · '), ltr(`${sign(cb.bf - ca.bf)}%`), tr(' fat'))
       : null;
     if (mode === 'slider') {
-      const after = h('img', { src: ub, alt: `אחרי: ${caption(list[b])}`, class: 'cmp-img' });
-      const before = h('img', { src: ua, alt: `לפני: ${caption(list[a])}`, class: 'cmp-img top' });
+      const after = h('img', { src: ub, alt: tr('After: {0}', caption(list[b])), class: 'cmp-img' });
+      const before = h('img', { src: ua, alt: tr('Before: {0}', caption(list[a])), class: 'cmp-img top' });
       const handle = h('div', { class: 'cmp-handle', 'aria-hidden': 'true' });
-      const range = h('input', { type: 'range', min: 0, max: 100, value: 50, class: 'cmp-range', 'aria-label': 'מחוון השוואה' });
+      const range = h('input', { type: 'range', min: 0, max: 100, value: 50, class: 'cmp-range', 'aria-label': tr('Comparison slider') });
       const stage = h('div', { class: 'cmp-stage', dir: 'ltr' }, after, before, handle, range,
-        h('span', { class: 'cmp-tag left' }, 'לפני'), h('span', { class: 'cmp-tag right' }, 'אחרי'));
+        h('span', { class: 'cmp-tag left' }, tr('Before')), h('span', { class: 'cmp-tag right' }, tr('After')));
       const set = (v) => {
         before.style.clipPath = `inset(0 ${100 - v}% 0 0)`;
         handle.style.left = `${v}%`;
@@ -135,25 +136,25 @@ function openCompare(list, urlFor) {
       body.appendChild(stage);
     } else {
       body.appendChild(h('div', { class: 'cmp-side' },
-        h('figure', null, h('img', { src: ua, alt: '' }), h('figcaption', null, 'לפני · ', caption(list[a]))),
-        h('figure', null, h('img', { src: ub, alt: '' }), h('figcaption', null, 'אחרי · ', caption(list[b])))));
+        h('figure', null, h('img', { src: ua, alt: '' }), h('figcaption', null, tr('Before · '), caption(list[a]))),
+        h('figure', null, h('img', { src: ub, alt: '' }), h('figcaption', null, tr('After · '), caption(list[b])))));
     }
     if (diff) body.appendChild(diff);
   };
 
   const modeSeg = h('div', { class: 'segmented small' },
-    ...[['slider', 'מחוון'], ['side', 'זה לצד זה']].map(([id, label]) => h('button', {
+    ...[['slider', tr('Slider')], ['side', tr('Side by side')]].map(([id, label]) => h('button', {
       class: mode === id ? 'on' : '',
       onclick: (e) => { mode = id; modeSeg.querySelectorAll('button').forEach((x) => x.classList.remove('on')); e.currentTarget.classList.add('on'); draw(); },
     }, label)));
 
   el.append(
     h('div', { class: 'compare-head' },
-      h('h2', null, 'לפני / אחרי'),
-      h('button', { class: 'icon-btn', 'aria-label': 'סגירה', onclick: close }, icon('close', 24))),
+      h('h2', null, tr('Before / After')),
+      h('button', { class: 'icon-btn', 'aria-label': tr('Close'), onclick: close }, icon('close', 24))),
     h('div', { class: 'compare-pickers' },
-      h('label', null, h('span', null, 'לפני'), select(a, (v) => { a = v; draw(); }, 'שבוע לפני')),
-      h('label', null, h('span', null, 'אחרי'), select(b, (v) => { b = v; draw(); }, 'שבוע אחרי'))),
+      h('label', null, h('span', null, tr('Before')), select(a, (v) => { a = v; draw(); }, tr('Week before'))),
+      h('label', null, h('span', null, tr('After')), select(b, (v) => { b = v; draw(); }, tr('Week after')))),
     modeSeg,
     body);
   draw();

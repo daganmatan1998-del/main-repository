@@ -7,21 +7,22 @@
 // counts 9/4 of a gram of carbs). Discrete foods (eggs, bread slices) are
 // rounded to whole units and the rest re-solved around them.
 
+import { t as tr } from './i18n.js';
 import { allowedFoods, kosherCompatible, macrosFor, FOOD_BY_ID, isAllowed } from './foods.js';
 import { rng, hashStr, clamp } from './util.js';
 import { extraFood, extraMacros, MAX_EXTRAS } from './extras.js';
 
 const MEAL_NAMES = {
-  b: 'ארוחת בוקר',
-  l: 'ארוחת צהריים',
-  d: 'ארוחת ערב',
+  b: tr('Breakfast'),
+  l: tr('Lunch'),
+  d: tr('Dinner'),
 };
 
 const TEMPLATES = {
   3: [['b', 0.28], ['l', 0.4], ['d', 0.32]],
-  4: [['b', 0.25], ['l', 0.35], ['s', 0.15, 'ארוחת ביניים'], ['d', 0.25]],
-  5: [['b', 0.22], ['s', 0.12, 'ביניים בוקר'], ['l', 0.3], ['s', 0.12, 'ביניים אחר הצהריים'], ['d', 0.24]],
-  6: [['b', 0.2], ['s', 0.1, 'ביניים בוקר'], ['l', 0.27], ['s', 0.11, 'ביניים אחר הצהריים'], ['d', 0.22], ['s', 0.1, 'ארוחת לילה']],
+  4: [['b', 0.25], ['l', 0.35], ['s', 0.15, tr('Snack')], ['d', 0.25]],
+  5: [['b', 0.22], ['s', 0.12, tr('Mid-morning snack')], ['l', 0.3], ['s', 0.12, tr('Afternoon snack')], ['d', 0.24]],
+  6: [['b', 0.2], ['s', 0.1, tr('Mid-morning snack')], ['l', 0.27], ['s', 0.11, tr('Afternoon snack')], ['d', 0.22], ['s', 0.1, tr('Night snack')]],
 };
 
 // Every meal comes with one fruit (it can be taken out like any group).

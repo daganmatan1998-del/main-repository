@@ -2,6 +2,7 @@
 // amounts (or their substitutes), with filters for what's at home and what
 // the user likes. Opens as a full-screen overlay from any meal card.
 
+import { t as tr } from '../i18n.js';
 import { h, icon, clear, toast } from '../util.js';
 import { state, saveSettings, setOverride } from '../store.js';
 import { recipesForMeal, filterRecipes, CUISINES, TOOLS, PANTRY } from '../recipes.js';
@@ -44,7 +45,7 @@ export function openRecipes(meal, day) {
   let panelOpen = false;
   let q = '';
 
-  const el = h('div', { class: 'overlay recipes', role: 'dialog', 'aria-modal': 'true', 'aria-label': `מתכונים ל${meal.name}` });
+  const el = h('div', { class: 'overlay recipes', role: 'dialog', 'aria-modal': 'true', 'aria-label': tr('Recipes for {0}', meal.name) });
   const close = () => { el.remove(); document.removeEventListener('keydown', onKey); window.removeEventListener('hashchange', close); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
@@ -61,7 +62,7 @@ export function openRecipes(meal, day) {
   const body = h('div', { class: 'rc-body' });
   el.appendChild(body);
 
-  const search = h('input', { type: 'search', id: 'rc-search', placeholder: 'חיפוש: שם, מרכיב או תבלין…', 'aria-label': 'חיפוש מתכון' });
+  const search = h('input', { type: 'search', id: 'rc-search', placeholder: tr('Search: name, ingredient or spice…'), 'aria-label': tr('Search recipes') });
   search.addEventListener('input', () => { q = search.value; shown = PAGE; drawList(); });
   const listBox = h('div');
   const panelBox = h('div');
@@ -70,31 +71,31 @@ export function openRecipes(meal, day) {
   function drawPanel() {
     clear(panelBox);
     filterBtn.setAttribute('aria-expanded', panelOpen ? 'true' : 'false');
-    clear(filterBtn).append(icon('edit', 16), ` סינון${activeCount(f) ? ` (${activeCount(f)})` : ''}`);
+    clear(filterBtn).append(icon('edit', 16), tr(' Filter{0}', activeCount(f) ? ` (${activeCount(f)})` : ''));
     if (!panelOpen) return;
     const toggleIn = (key) => (id) => save({ [key]: f[key].includes(id) ? f[key].filter((x) => x !== id) : [...f[key], id] });
     panelBox.appendChild(h('section', { class: 'card rc-panel', id: 'rc-panel' },
-      h('h3', null, 'מה יש לי בבית?'),
-      h('p', { class: 'muted small' }, 'סמנו תבלינים ובסיסים שיש לכם. מלח, פלפל ומים — תמיד בחשבון.'),
+      h('h3', null, tr('What do I have at home?')),
+      h('p', { class: 'muted small' }, tr('Tick the spices and basics you have. Salt, pepper and water are always counted.')),
       chipGroup(PANTRY.map((p) => ({ id: p, label: p })), f.have, toggleIn('have')),
       h('div', { class: 'row gap wrap rc-mini' },
-        h('button', { type: 'button', class: 'btn btn-small btn-ghost', onclick: () => save({ have: PANTRY.slice() }) }, 'סמן הכול'),
-        h('button', { type: 'button', class: 'btn btn-small btn-ghost', onclick: () => save({ have: [] }) }, 'נקה')),
-      toggleRow('להציג רק מתכונים שיש לי את כל התבלינים שלהם', f.pantryOnly, (v) => save({ pantryOnly: v }), 'rc-pantry-only'),
-      h('h3', null, 'סגנון שאני אוהב/ת'),
+        h('button', { type: 'button', class: 'btn btn-small btn-ghost', onclick: () => save({ have: PANTRY.slice() }) }, tr('Select all')),
+        h('button', { type: 'button', class: 'btn btn-small btn-ghost', onclick: () => save({ have: [] }) }, tr('Clear'))),
+      toggleRow(tr('Show only recipes whose spices I all have'), f.pantryOnly, (v) => save({ pantryOnly: v }), 'rc-pantry-only'),
+      h('h3', null, tr('Styles I like')),
       chipGroup(CUISINES, f.cuisines, toggleIn('cuisines')),
-      h('h3', null, 'במה לבשל'),
+      h('h3', null, tr('Cooking with')),
       chipGroup(TOOLS, f.tools, toggleIn('tools')),
-      h('h3', null, 'זמן הכנה'),
-      h('div', { class: 'segmented small', role: 'radiogroup', 'aria-label': 'זמן הכנה' },
-        ...[[0, 'הכול'], [10, 'עד 10 דק׳'], [20, 'עד 20 דק׳'], [40, 'עד 40 דק׳']].map(([v, label]) => h('button', {
+      h('h3', null, tr('Prep time')),
+      h('div', { class: 'segmented small', role: 'radiogroup', 'aria-label': tr('Prep time') },
+        ...[[0, tr('Any')], [10, tr('Up to 10 min')], [20, tr('Up to 20 min')], [40, tr('Up to 40 min')]].map(([v, label]) => h('button', {
           type: 'button', role: 'radio', 'aria-checked': f.maxTime === v ? 'true' : 'false', class: f.maxTime === v ? 'on' : '',
           onclick: () => save({ maxTime: v }),
         }, label))),
-      toggleRow('בלי חריף', f.noSpicy, (v) => save({ noSpicy: v }), 'rc-no-spicy'),
-      toggleRow('רק עם המרכיבים שבתפריט (בלי תחליפים)', f.noSwaps, (v) => save({ noSwaps: v }), 'rc-no-swaps'),
-      toggleRow('רק המועדפים שלי ❤', f.favorites, (v) => save({ favorites: v }), 'rc-favs'),
-      h('button', { type: 'button', class: 'btn btn-ghost btn-block', onclick: () => save({ ...DEFAULT_FILTERS }) }, 'איפוס כל הסינונים')));
+      toggleRow(tr('Not spicy'), f.noSpicy, (v) => save({ noSpicy: v }), 'rc-no-spicy'),
+      toggleRow(tr('Only with the ingredients in the menu (no substitutes)'), f.noSwaps, (v) => save({ noSwaps: v }), 'rc-no-swaps'),
+      toggleRow(tr('Only my favorites ❤'), f.favorites, (v) => save({ favorites: v }), 'rc-favs'),
+      h('button', { type: 'button', class: 'btn btn-ghost btn-block', onclick: () => save({ ...DEFAULT_FILTERS }) }, tr('Reset all filters'))));
   }
 
   function recipeCard(r) {
@@ -103,8 +104,8 @@ export function openRecipes(meal, day) {
     const head = h('button', { class: 'rc-head', 'aria-expanded': 'false' },
       h('span', { class: 'rc-title' }, r.title),
       h('span', { class: 'rc-meta muted small' },
-        `⏱ ${r.time} דק׳ · ${TOOL_LABEL[r.tool]} · ${r.flavorLabel}${r.spicy ? ' · 🌶' : ''}`),
-      r.swaps.length ? h('span', { class: 'rc-swap small' }, `עם תחליף: ${r.swaps.map((s) => FOOD_BY_ID[s.foodId].name).join(', ')}`) : null);
+        tr('⏱ {0} min · {1} · {2}{3}', r.time, TOOL_LABEL[r.tool], r.flavorLabel, r.spicy ? ' · 🌶' : '')),
+      r.swaps.length ? h('span', { class: 'rc-swap small' }, tr('With a substitute: {0}', r.swaps.map((s) => FOOD_BY_ID[s.foodId].name).join(', '))) : null);
     head.addEventListener('click', () => {
       const open = details.hidden;
       details.hidden = !open;
@@ -120,15 +121,15 @@ export function openRecipes(meal, day) {
         await saveSettings({ favRecipes: has ? list.filter((x) => x.id !== r.id) : [...list, { id: r.id, title: r.title }].slice(-300) });
         favBtn.classList.toggle('btn-primary', !has);
         favBtn.setAttribute('aria-pressed', !has ? 'true' : 'false');
-        favBtn.lastChild.textContent = !has ? ' שמור' : ' שמירה';
-        toast(!has ? 'נשמר למועדפים' : 'הוסר מהמועדפים');
+        favBtn.lastChild.textContent = !has ? tr(' Saved') : tr(' Save');
+        toast(!has ? tr('Saved to favorites') : tr('Removed from favorites'));
       },
-    }, '❤', fav ? ' שמור' : ' שמירה');
+    }, '❤', fav ? tr(' Saved') : tr(' Save'));
     details.append(
-      h('h4', null, 'מצרכים'),
-      h('ul', { class: 'rc-ingr' }, ...r.ingredients.map((i) => h('li', null, h('b', { class: 'num' }, `${i.grams} ג׳`), ` ${i.name} `, h('span', { class: 'muted' }, `(${i.household})`)))),
-      h('p', { class: 'small muted' }, `תבלינים ובסיס: ${r.pantry.join(', ')}, מלח ופלפל. בכמויות קטנות — בלי קלוריות משמעותיות.`),
-      h('h4', null, 'אופן ההכנה'),
+      h('h4', null, tr('Ingredients')),
+      h('ul', { class: 'rc-ingr' }, ...r.ingredients.map((i) => h('li', null, h('b', { class: 'num' }, tr('{0} g', i.grams)), ` ${i.name} `, h('span', { class: 'muted' }, `(${i.household})`)))),
+      h('p', { class: 'small muted' }, tr('Spices and base: {0}, salt and pepper. In small amounts — no significant calories.', r.pantry.join(', '))),
+      h('h4', null, tr('Instructions')),
       h('ol', { class: 'rc-steps' }, ...r.steps.map((s) => h('li', null, s))),
       h('div', { class: 'row gap wrap' },
         favBtn,
@@ -136,10 +137,10 @@ export function openRecipes(meal, day) {
           class: 'btn btn-small btn-primary',
           onclick: async () => {
             for (const s of r.swaps) await setOverride(day, meal.index, { swap: s });
-            toast('התפריט עודכן לפי המתכון');
+            toast(tr('The menu was updated to match the recipe'));
             close();
           },
-        }, icon('swap', 16), 'להחליף בתפריט לפי המתכון') : null));
+        }, icon('swap', 16), tr('Replace in the menu to match the recipe')) : null));
     const card = h('article', { class: 'card rc-card' }, head, details);
     return card;
   }
@@ -148,16 +149,16 @@ export function openRecipes(meal, day) {
     clear(listBox);
     const list = filterRecipes(all, { ...f, q, favIds: favIds() });
     listBox.appendChild(h('p', { class: 'muted small', id: 'rc-count', 'aria-live': 'polite' },
-      `נמצאו ${list.length.toLocaleString('he-IL')} מתכונים לארוחה הזו`));
+      tr('{0, plural, one {# recipe was} other {# recipes were}} found for this meal', list.length)));
     if (!list.length) {
       listBox.appendChild(h('div', { class: 'empty' },
-        h('p', null, 'אין מתכונים שמתאימים לכל הסינונים.'),
-        h('button', { class: 'btn btn-small', onclick: () => save({ ...DEFAULT_FILTERS }) }, 'איפוס סינונים')));
+        h('p', null, tr('No recipes fit all of the filters.')),
+        h('button', { class: 'btn btn-small', onclick: () => save({ ...DEFAULT_FILTERS }) }, tr('Reset filters'))));
     }
     list.slice(0, shown).forEach((r) => listBox.appendChild(recipeCard(r)));
     if (list.length > shown) {
       listBox.appendChild(h('button', { class: 'btn btn-block', id: 'rc-more', onclick: () => { shown += PAGE; drawList(); } },
-        `עוד מתכונים (${(list.length - shown).toLocaleString('he-IL')} נוספים)`));
+        tr('More recipes ({0} more)', list.length - shown)));
     }
   }
 
@@ -167,9 +168,9 @@ export function openRecipes(meal, day) {
   }
 
   const askAI = () => {
-    const items = meal.items.map((i) => `${i.grams} ג׳ ${FOOD_BY_ID[i.foodId].name}`).join(', ');
+    const items = meal.items.map((i) => tr('{0} g {1}', i.grams, FOOD_BY_ID[i.foodId].name)).join(', ');
     const likes = f.cuisines.map((c) => CUISINES.find((x) => x.id === c)?.label).filter(Boolean);
-    const text = `תן לי מתכון חדש ל${meal.name} עם המרכיבים: ${items}.${likes.length ? ` אני אוהב/ת סגנון ${likes.join(' או ')}.` : ''}${f.pantryOnly && f.have.length ? ` יש לי בבית: ${f.have.join(', ')}.` : ''}`;
+    const text = tr('Give me a new recipe for {0} with these ingredients: {1}.{2}{3}', meal.name, items, likes.length ? tr(' I like the {0} style.', likes.join(tr(' or '))) : '', f.pantryOnly && f.have.length ? tr(' I have at home: {0}.', f.have.join(', ')) : '');
     close();
     window.dispatchEvent(new CustomEvent('app:ask', { detail: { text, extra: { recipeRequest: { meal: meal.name, items: meal.items.map((i) => ({ name: FOOD_BY_ID[i.foodId].name, grams: i.grams })) } } } }));
   };
@@ -177,14 +178,14 @@ export function openRecipes(meal, day) {
   body.append(
     h('div', { class: 'rc-top' },
       h('div', { class: 'bf-head' },
-        h('h2', null, `מתכונים ל${meal.name}`),
-        h('button', { class: 'icon-btn', 'aria-label': 'סגירה', onclick: close }, icon('close', 24))),
-      h('p', { class: 'muted small' }, 'כל מתכון בנוי בדיוק מהכמויות של הארוחה, כך שהתפריט נשאר מאוזן.'),
-      h('div', { class: 'chips rc-items' }, ...meal.items.map((i) => h('span', { class: 'pill' }, `${FOOD_BY_ID[i.foodId].name} ${i.grams} ג׳`))),
+        h('h2', null, tr('Recipes for {0}', meal.name)),
+        h('button', { class: 'icon-btn', 'aria-label': tr('Close'), onclick: close }, icon('close', 24))),
+      h('p', { class: 'muted small' }, tr('Every recipe is built from exactly the amounts of the meal, so the menu stays balanced.')),
+      h('div', { class: 'chips rc-items' }, ...meal.items.map((i) => h('span', { class: 'pill' }, tr('{0} {1} g', FOOD_BY_ID[i.foodId].name, i.grams)))),
       h('div', { class: 'row gap rc-search-row' }, search, filterBtn)),
     panelBox,
     listBox,
-    h('button', { class: 'btn btn-ghost btn-block', id: 'rc-ai', onclick: askAI }, icon('sparkle', 18), 'רעיון חדש לגמרי מהעוזר'));
+    h('button', { class: 'btn btn-ghost btn-block', id: 'rc-ai', onclick: askAI }, icon('sparkle', 18), tr('A brand new idea from the assistant')));
 
   document.body.appendChild(el);
   draw();

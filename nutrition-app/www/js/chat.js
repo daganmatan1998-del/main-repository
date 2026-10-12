@@ -4,6 +4,7 @@
 // Privacy: the context sent with each question is the minimum the assistant
 // needs — no name, no photos, no registration date.
 
+import { t as tr } from './i18n.js';
 import { API_BASE } from './config.js';
 import { state, targets, dayPlan, currentMetrics, activePeriod, today } from './store.js';
 import { allowedFoods, FOODS, ALLERGENS, DIETS, ROLE_LABEL } from './foods.js';
@@ -22,7 +23,7 @@ export function buildContext(extra = {}) {
   const allowedIds = new Set(allowedFoods(p.prefs).map((f) => f.id));
   return {
     profile: {
-      sex: p.sex === 'female' ? 'אישה' : 'גבר',
+      sex: p.sex === 'female' ? 'Woman' : 'Man',
       age: p.age,
       heightCm: p.height,
       weightKg: cur?.weight,
@@ -47,18 +48,18 @@ export function buildContext(extra = {}) {
     excludedFoods: FOODS.filter((f) => !allowedIds.has(f.id)).map((f) => f.name),
     todayPlan: plan.map((m) => ({
       meal: m.name,
-      items: m.items.map((i) => `${FOODS.find((f) => f.id === i.foodId).name} ${i.grams} ג׳ (${ROLE_LABEL[i.role]}, ${i.kcal} קק״ל, ח${i.p}/פ${i.c}/ש${i.f})`),
+      items: m.items.map((i) => `${FOODS.find((f) => f.id === i.foodId).name} ${i.grams} g (${ROLE_LABEL[i.role]}, ${i.kcal} kcal, P${i.p}/C${i.c}/F${i.f})`),
       // Groups the user chose to leave out of this meal (calories moved to the rest).
       ...(m.removed && m.removed.length ? { removedByUser: m.removed.map((g) => ROLE_LABEL[g]) } : {}),
       // Replaced by what the calorie camera saw on the plate.
-      ...(m.eaten ? { actuallyEaten: m.eaten.items.map((i) => `${i.name} ${i.grams} ג׳ (${i.kcal} קק״ל)`) } : {}),
+      ...(m.eaten ? { actuallyEaten: m.eaten.items.map((i) => `${i.name} ${i.grams} g (${i.kcal} kcal)`) } : {}),
     })),
     ...extra,
   };
 }
 
 export async function ask(messages, context) {
-  if (!navigator.onLine) throw new ChatError('offline', 'אין חיבור לאינטרנט.');
+  if (!navigator.onLine) throw new ChatError('offline', tr('No internet connection.'));
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 60000);
   let res;
@@ -70,7 +71,7 @@ export async function ask(messages, context) {
       signal: ctrl.signal,
     });
   } catch {
-    throw new ChatError('offline', 'לא ניתן להתחבר לשרת העוזר.');
+    throw new ChatError('offline', tr('Can\'t reach the assistant\'s server.'));
   } finally {
     clearTimeout(timer);
   }
@@ -78,7 +79,7 @@ export async function ask(messages, context) {
   try { data = await res.json(); } catch { /* non-JSON error page */ }
   if (!res.ok) {
     const code = data?.error || `http_${res.status}`;
-    throw new ChatError(code, 'העוזר אינו זמין כרגע.');
+    throw new ChatError(code, tr('The assistant is unavailable right now.'));
   }
   return data.text;
 }

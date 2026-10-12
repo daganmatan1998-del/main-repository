@@ -88,6 +88,7 @@ const ctx = await browser.newContext({
 });
 await ctx.clock.setFixedTime(at(0));
 await ctx.grantPermissions(['camera', 'notifications']);
+await ctx.addInitScript(() => { try { if (!localStorage.getItem('nutri-lang')) localStorage.setItem('nutri-lang', 'he'); } catch {} }); // the checks below were written against Hebrew
 // There is no push service in the test browser: a stand-in that behaves like one subscription.
 await ctx.addInitScript(() => {
   const sub = { endpoint: 'https://fcm.googleapis.com/fcm/send/e2e-device', unsubscribe: async () => { window.__pushUnsubscribed = true; return true; } };
@@ -176,8 +177,8 @@ try {
   check('app boots to onboarding for a new user', await visible('.welcome'));
 
   const manifest = await (await page.request.get(BASE + '/manifest.webmanifest')).json();
-  check('manifest: standalone, rtl, he, start_url, icons 192/512/maskable',
-    manifest.display === 'standalone' && manifest.dir === 'rtl' && manifest.lang === 'he' && manifest.start_url
+  check('manifest: standalone, ltr, en, start_url, icons 192/512/maskable',
+    manifest.display === 'standalone' && manifest.dir === 'ltr' && manifest.lang === 'en' && manifest.start_url
     && manifest.icons.some((i) => i.sizes === '192x192') && manifest.icons.some((i) => i.sizes === '512x512') && manifest.icons.some((i) => i.purpose === 'maskable'));
   for (const icon of manifest.icons) {
     const r = await page.request.get(`${BASE}/${icon.src}`);
@@ -1068,7 +1069,7 @@ try {
       const g = kv.get('profile');
       g.onsuccess = () => {
         kv.put({ ...g.result, regDay }, 'profile');
-        kv.put({ theme: 'light', reminders: true, installDismissed: false }, 'settings');
+        kv.put({ theme: 'light', reminders: true, installDismissed: false, lang: 'he' }, 'settings');
       };
       t.oncomplete = () => { r.result.close(); resolve(); };
     };

@@ -13,6 +13,9 @@ const SHELL = [
   'manifest.webmanifest',
   'css/app.css',
   'js/app.js',
+  'js/i18n.js',
+  'js/lang/he.js',
+  'js/screens/language.js',
   'js/config.js',
   'js/util.js',
   'js/db.js',
@@ -184,13 +187,14 @@ async function checkReminder() {
     if (week < 1 || settings.notifiedWeek === week) return;
     const checkins = (await read(db, 'checkins')) || [];
     if (checkins.some((c) => c.week === week && c.completedAt)) return;
-    await self.registration.showNotification('הגיע זמן הצילום השבועי 📸', {
-      body: `צילום התקדמות לשבוע ${week} ועדכון משקל ואחוז שומן.`,
+    const lang = settings.lang || 'en';
+    const [title, body] = notifyText(lang, 'weekly');
+    await self.registration.showNotification(title, {
+      body: body.replace('{0}', week),
       tag: 'weekly-checkin',
       icon: 'icons/icon-192.png',
       badge: 'icons/icon-192.png',
-      lang: 'he',
-      dir: 'rtl',
+      ...notifyOptions(lang),
     });
     await write(db, 'settings', { ...settings, notifiedWeek: week });
   } finally {
@@ -208,11 +212,39 @@ self.addEventListener('periodicsync', (event) => {
 // clock. Keep this table in step with REMINDERS in server/push.js (a test
 // checks it).
 const REMINDERS = [
-  { id: 'morning', at: 9 * 60, title: 'בוקר טוב ☀️', body: 'התפריט של היום מוכן. מה אוכלים לארוחת בוקר?' },
-  { id: 'lunch', at: 13 * 60, title: 'ארוחת צהריים 🍽️', body: 'אל תשכחו לעדכן את ארוחת הצהריים שלכם.' },
-  { id: 'afternoon', at: 17 * 60, title: 'איך הולך היום? 💧', body: 'אל תשכחו לשתות מים ולעדכן מה אכלתם.' },
-  { id: 'dinner', at: 20 * 60, title: 'ארוחת ערב 🌙', body: 'אל תשכחו לעדכן את ארוחת הערב שלכם.' },
+  { id: 'morning', at: 9 * 60 },
+  { id: 'lunch', at: 13 * 60 },
+  { id: 'afternoon', at: 17 * 60 },
+  { id: 'dinner', at: 20 * 60 },
 ];
+
+// Notification texts per language: [title, body]. A language not listed here
+// shows English. (Generated from the language packs: tools/notify-texts.)
+const NOTIFY = {
+  en: {
+    weekly: ['Time for your weekly photo 📸', 'A progress photo for week {0} and an update of your weight and body fat.'],
+    morning: ['Good morning ☀️', 'Today\'s menu is ready. What\'s for breakfast?'],
+    lunch: ['Lunch 🍽️', 'Don\'t forget to update your lunch.'],
+    afternoon: ['How is your day going? 💧', 'Don\'t forget to drink water and update what you ate.'],
+    dinner: ['Dinner 🌙', 'Don\'t forget to update your dinner.'],
+  },
+  he: {
+    weekly: ['הגיע זמן הצילום השבועי 📸', 'צילום התקדמות לשבוע {0} ועדכון משקל ואחוז שומן.'],
+    morning: ['בוקר טוב ☀️', 'התפריט של היום מוכן. מה אוכלים לארוחת בוקר?'],
+    lunch: ['ארוחת צהריים 🍽️', 'אל תשכחו לעדכן את ארוחת הצהריים שלכם.'],
+    afternoon: ['איך הולך היום? 💧', 'אל תשכחו לשתות מים ולעדכן מה אכלתם.'],
+    dinner: ['ארוחת ערב 🌙', 'אל תשכחו לעדכן את ארוחת הערב שלכם.'],
+  },
+};
+const RTL = ['he', 'ar', 'fa', 'ur'];
+const notifyOptions = (lang) => ({ lang, dir: RTL.includes(lang) ? 'rtl' : 'ltr' });
+const notifyText = (lang, id) => (NOTIFY[lang] || NOTIFY.en)[id];
+
+async function savedLang() {
+  let db;
+  try { db = await idb('nutri'); } catch { return 'en'; }
+  try { return ((await read(db, 'kv', 'settings')) || {}).lang || 'en'; } catch { return 'en'; } finally { db.close(); }
+}
 
 // The latest reminder time that has passed today (before 09:00: the morning one).
 function pickReminder(date) {
@@ -224,15 +256,18 @@ function pickReminder(date) {
 
 self.addEventListener('push', (event) => {
   const r = pickReminder(new Date());
-  event.waitUntil(self.registration.showNotification(r.title, {
-    body: r.body,
-    tag: `nutri-${r.id}`,
-    icon: 'icons/icon-192.png',
-    badge: 'icons/icon-192.png',
-    lang: 'he',
-    dir: 'rtl',
-    data: { url: './#/today' },
-  }));
+  event.waitUntil((async () => {
+    const lang = await savedLang();
+    const [title, body] = notifyText(lang, r.id);
+    await self.registration.showNotification(title, {
+      body,
+      tag: `nutri-${r.id}`,
+      icon: 'icons/icon-192.png',
+      badge: 'icons/icon-192.png',
+      ...notifyOptions(lang),
+      data: { url: './#/today' },
+    });
+  })());
 });
 
 // The browser dropped the subscription: open the app so it registers a new one.

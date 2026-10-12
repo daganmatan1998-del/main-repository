@@ -3,6 +3,7 @@
 // card and PayPal everywhere). Until a provider is connected in config.js it
 // explains that payment isn't available yet instead of taking money.
 
+import { t as tr } from '../i18n.js';
 import { h, icon, sheet } from '../util.js';
 import { BILLING } from '../config.js';
 import { AI_FEATURES, METHOD_LABEL, paymentMethods, checkoutLink, priceText } from '../billing.js';
@@ -20,13 +21,13 @@ function methodButton(method, onPay) {
     applepay: [appleLogo(), h('span', null, 'Pay')],
     googlepay: [h('span', { class: 'pay-g', 'aria-hidden': 'true' }, 'G'), h('span', null, 'Pay')],
     paypal: [h('span', { class: 'pay-pp' }, 'Pay'), h('span', { class: 'pay-pal' }, 'Pal')],
-    card: [icon('card', 18), h('span', null, 'כרטיס אשראי')],
+    card: [icon('card', 18), h('span', null, tr('Credit card'))],
   }[method];
   return h('button', {
     type: 'button',
     class: `pay-btn pay-${method}`,
     'data-method': method,
-    'aria-label': `תשלום ב-${METHOD_LABEL[method]}`,
+    'aria-label': tr('Pay with {0}', METHOD_LABEL[method]),
     onclick: () => onPay(method),
   }, ...content);
 }
@@ -35,9 +36,9 @@ function methodButton(method, onPay) {
 export function openPaywall(feature = '') {
   const access = aiStatus();
   let plan = BILLING.plans[BILLING.plans.length - 1].id; // the yearly plan is preselected
-  return sheet('נוטרי פלוס', () => {
+  return sheet(tr('Nutri Plus'), () => {
     const status = h('p', { class: 'pay-status small', role: 'status', 'aria-live': 'polite' });
-    const planList = h('div', { class: 'plan-list', role: 'radiogroup', 'aria-label': 'בחירת מנוי' });
+    const planList = h('div', { class: 'plan-list', role: 'radiogroup', 'aria-label': tr('Choose a plan') });
     const drawPlans = () => {
       planList.replaceChildren(...BILLING.plans.map((p) => h('button', {
         type: 'button',
@@ -56,7 +57,7 @@ export function openPaywall(feature = '') {
     const pay = (method) => {
       const url = checkoutLink(plan, method);
       if (!url) {
-        status.textContent = `התשלום ב-${METHOD_LABEL[method]} עוד לא מחובר. ברגע שיחובר ספק תשלומים, הכפתור הזה יעבור לדף התשלום.`;
+        status.textContent = tr('Payment with {0} is not connected yet. Once a payment provider is connected, this button will go to the payment page.', METHOD_LABEL[method]);
         status.classList.add('show');
         return;
       }
@@ -65,22 +66,22 @@ export function openPaywall(feature = '') {
     const methods = paymentMethods({ ua: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints || 0 });
 
     const intro = feature
-      ? `${AI_FEATURES[feature]} ${access.state === 'locked' ? 'זמין/ה במנוי' : 'כלול/ה במנוי'}.`
-      : 'הכלים החכמים של נוטרי במנוי אחד.';
+      ? `${AI_FEATURES[feature]} ${access.state === 'locked' ? tr('is available with a plan') : tr('is included in the plan')}.`
+      : tr('Nutri\'s smart tools in one plan.');
     const trialLine = access.state === 'trial'
-      ? `נשארו ${access.daysLeft} ימים בתקופת הניסיון החינמית.`
-      : access.state === 'locked' ? (BILLING.trialDays ? 'תקופת הניסיון החינמית הסתיימה.' : 'העוזר החכם ומצלמת הקלוריות זמינים במנוי.') : 'המנוי שלך פעיל.';
+      ? tr('{0, plural, one {# day} other {# days}} left in the free trial.', access.daysLeft)
+      : access.state === 'locked' ? (BILLING.trialDays ? tr('The free trial is over.') : tr('The smart assistant and the calorie camera are available with a plan.')) : tr('Your plan is active.');
 
     return h('div', { class: 'paywall', id: 'paywall' },
       h('p', { class: 'lead' }, intro),
       h('p', { class: 'muted small', id: 'pay-trial' }, trialLine),
       h('ul', { class: 'pay-list' },
-        h('li', null, icon('sparkle', 16), 'עוזר תזונה חכם: תחליפים, שאלות ורעיונות למתכונים'),
-        h('li', null, icon('camera', 16), 'מצלמת קלוריות: צילום הצלחת וספירת קלוריות')),
-      h('p', { class: 'muted small' }, 'בחינם תמיד: התפריט, המתכונים, רשימת הקניות, ההחלפות והערכת אחוז השומן.'),
+        h('li', null, icon('sparkle', 16), tr('Smart nutrition assistant: substitutes, questions and recipe ideas')),
+        h('li', null, icon('camera', 16), tr('Calorie camera: photograph your plate and count calories'))),
+      h('p', { class: 'muted small' }, tr('Always free: the menu, recipes, shopping list, swaps and the body fat estimate.')),
       planList,
       h('div', { class: 'pay-methods', id: 'pay-methods' }, ...methods.map((m) => methodButton(m, pay))),
       status,
-      h('p', { class: 'muted tiny' }, 'המחיר כולל מע״מ. המנוי מתחדש אוטומטית ואפשר לבטל אותו בכל עת.'));
+      h('p', { class: 'muted tiny' }, tr('The price includes VAT. The plan renews automatically and you can cancel at any time.')));
   });
 }

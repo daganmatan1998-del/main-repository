@@ -3,6 +3,7 @@
 // fill the device quota within months. We downscale to 1600 px on the long
 // side and re-encode as JPEG, which lands around 150–400 KB.
 
+import { t as tr } from './i18n.js';
 const MAX_SIDE = 1600;
 const TARGET_BYTES = 600 * 1024;
 
@@ -31,19 +32,19 @@ function toBlob(canvas, quality) {
 }
 
 export async function compressImage(file) {
-  if (!file) throw new ImageError('לא נבחר קובץ.');
-  if (file.type && !file.type.startsWith('image/')) throw new ImageError('הקובץ שנבחר אינו תמונה.');
-  if (file.size > 40 * 1024 * 1024) throw new ImageError('התמונה גדולה מדי (מעל 40MB).');
+  if (!file) throw new ImageError(tr('No file was selected.'));
+  if (file.type && !file.type.startsWith('image/')) throw new ImageError(tr('The selected file is not an image.'));
+  if (file.size > 40 * 1024 * 1024) throw new ImageError(tr('The image is too large (over 40MB).'));
 
   let src;
   try {
     src = await decode(file);
   } catch {
-    throw new ImageError('לא ניתן לפתוח את התמונה. נסו לצלם שוב או לבחור תמונה בפורמט JPEG/PNG.');
+    throw new ImageError(tr('Can\'t open the image. Try taking the photo again or choose a JPEG/PNG image.'));
   }
   const w0 = src.width || src.naturalWidth;
   const h0 = src.height || src.naturalHeight;
-  if (!w0 || !h0) throw new ImageError('התמונה ריקה או פגומה.');
+  if (!w0 || !h0) throw new ImageError(tr('The image is empty or damaged.'));
 
   let side = MAX_SIDE;
   let quality = 0.82;
@@ -59,7 +60,7 @@ export async function compressImage(file) {
     ctx.fillRect(0, 0, w, h);
     ctx.drawImage(src, 0, 0, w, h);
     const blob = await toBlob(canvas, quality);
-    if (!blob) throw new ImageError('דחיסת התמונה נכשלה.');
+    if (!blob) throw new ImageError(tr('Compressing the image failed.'));
     if (blob.size <= TARGET_BYTES || attempt === 3) {
       if (src.close) src.close();
       return { blob, width: w, height: h, originalBytes: file.size };
@@ -67,22 +68,22 @@ export async function compressImage(file) {
     side = Math.round(side * 0.8);
     quality = Math.max(0.6, quality - 0.08);
   }
-  throw new ImageError('דחיסת התמונה נכשלה.');
+  throw new ImageError(tr('Compressing the image failed.'));
 }
 
 // Profile picture: centre-cropped square, small enough to sync in a moment.
 export async function squareImage(file, side = 320) {
-  if (!file) throw new ImageError('לא נבחר קובץ.');
-  if (file.type && !file.type.startsWith('image/')) throw new ImageError('הקובץ שנבחר אינו תמונה.');
+  if (!file) throw new ImageError(tr('No file was selected.'));
+  if (file.type && !file.type.startsWith('image/')) throw new ImageError(tr('The selected file is not an image.'));
   let src;
   try {
     src = await decode(file);
   } catch {
-    throw new ImageError('לא ניתן לפתוח את התמונה. נסו תמונה אחרת.');
+    throw new ImageError(tr('Can\'t open the image. Try another one.'));
   }
   const w0 = src.width || src.naturalWidth;
   const h0 = src.height || src.naturalHeight;
-  if (!w0 || !h0) throw new ImageError('התמונה ריקה או פגומה.');
+  if (!w0 || !h0) throw new ImageError(tr('The image is empty or damaged.'));
   const crop = Math.min(w0, h0);
   const out = Math.min(side, crop);
   const canvas = document.createElement('canvas');
@@ -94,6 +95,6 @@ export async function squareImage(file, side = 320) {
   ctx.drawImage(src, (w0 - crop) / 2, (h0 - crop) / 2, crop, crop, 0, 0, out, out);
   if (src.close) src.close();
   const blob = await toBlob(canvas, 0.85);
-  if (!blob) throw new ImageError('עיבוד התמונה נכשל.');
+  if (!blob) throw new ImageError(tr('Processing the image failed.'));
   return { blob, width: out, height: out };
 }

@@ -1,6 +1,7 @@
 // Weekly shopping list screen. A menu week matches a check-in week, so the
 // list covers either the rest of this week or the whole of next week.
 
+import { t as tr } from '../i18n.js';
 import { h, icon, fmtDate, addDays, daysBetween, toast } from '../util.js';
 import { state, today, targets, dayPlan, menuWeek, menuWeekRange, saveShoppingChecks } from '../store.js';
 import { buildShoppingList, shoppingText } from '../shopping.js';
@@ -29,15 +30,15 @@ export function renderShopping(root) {
 
   root.appendChild(h('header', { class: 'page-head' },
     h('div', { class: 'row gap' },
-      h('a', { href: '#/plan', class: 'icon-btn', 'aria-label': 'חזרה לתפריט' }, icon('back')),
+      h('a', { href: '#/plan', class: 'icon-btn', 'aria-label': tr('Back to the menu') }, icon('back')),
       h('div', null,
-        h('h1', null, 'קניות לשבוע'),
-        h('p', { class: 'muted' }, `${fmtDate(r.from)} עד ${fmtDate(r.to)} · ${r.days} ימים · ${total} מוצרים`)))));
+        h('h1', null, tr('Weekly shopping')),
+        h('p', { class: 'muted' }, tr('{0} to {1} · {2} days · {3} items', fmtDate(r.from), fmtDate(r.to), r.days, total))))));
 
   const thisR = range('this');
   const nextR = range('next');
-  const seg = h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': 'איזה שבוע' },
-    ...[['this', `השבוע (עד ${fmtDate(thisR.to)})`], ['next', `שבוע הבא (${fmtDate(nextR.from)} עד ${fmtDate(nextR.to)})`]].map(([id, label]) => h('button', {
+  const seg = h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': tr('Which week') },
+    ...[['this', tr('This week (until {0})', fmtDate(thisR.to))], ['next', tr('Next week ({0} to {1})', fmtDate(nextR.from), fmtDate(nextR.to))]].map(([id, label]) => h('button', {
       type: 'button', role: 'radio', 'aria-checked': choice === id ? 'true' : 'false', class: choice === id ? 'on' : '',
       onclick: () => { choice = id; window.dispatchEvent(new Event('app:rerender')); },
     }, label)));
@@ -45,7 +46,7 @@ export function renderShopping(root) {
 
   const progress = h('p', { class: 'muted small center', id: 'shop-progress' });
   const updateProgress = () => {
-    progress.textContent = `סומנו ${checked.size} מתוך ${total}`;
+    progress.textContent = tr('{0} of {1} ticked', checked.size, total);
   };
 
   const list = h('div', { class: 'shop-list' });
@@ -74,33 +75,33 @@ export function renderShopping(root) {
       h('h2', null, h('span', { 'aria-hidden': 'true' }, `${g.icon} `), g.label),
       ul));
   }
-  if (!groups.length) list.appendChild(h('p', { class: 'empty' }, 'אין ימים בטווח הזה.'));
+  if (!groups.length) list.appendChild(h('p', { class: 'empty' }, tr('There are no days in this range.')));
 
   const share = async () => {
-    const text = shoppingText(groups, `🛒 קניות ${fmtDate(r.from)} עד ${fmtDate(r.to)}`);
+    const text = shoppingText(groups, tr('🛒 Shopping {0} to {1}', fmtDate(r.from), fmtDate(r.to)));
     try {
-      if (navigator.share) { await navigator.share({ title: 'רשימת קניות', text }); return; }
+      if (navigator.share) { await navigator.share({ title: tr('Shopping list'), text }); return; }
     } catch (e) { if (e && e.name === 'AbortError') return; }
     try {
       await navigator.clipboard.writeText(text);
-      toast('הרשימה הועתקה — אפשר להדביק בוואטסאפ');
+      toast(tr('The list was copied — you can paste it in a chat'));
     } catch {
-      toast('לא ניתן לשתף מהדפדפן הזה');
+      toast(tr('Sharing isn\'t available in this browser'));
     }
   };
 
   root.append(
     h('div', { class: 'row gap shop-actions' },
-      h('button', { class: 'btn btn-primary grow', id: 'shop-share', onclick: share }, icon('send', 18), 'שליחה / העתקה'),
+      h('button', { class: 'btn btn-primary grow', id: 'shop-share', onclick: share }, icon('send', 18), tr('Share / copy')),
       h('button', {
         class: 'btn', onclick: async () => {
           checked.clear();
           await saveShoppingChecks(r.key, []);
           window.dispatchEvent(new Event('app:rerender'));
         },
-      }, 'ניקוי סימונים')),
+      }, tr('Clear ticks'))),
     progress,
     list,
-    h('p', { class: 'muted small center' }, 'הכמויות מחושבות מכל הארוחות בטווח, כולל החלפות שבחרת. בשר ודגנים — במשקל לא מבושל. הוספת החלפה או שינוי בתפריט מעדכנים את הרשימה.'));
+    h('p', { class: 'muted small center' }, tr('The amounts are calculated from all of the meals in the range, including the swaps you chose. Meat and grains are by uncooked weight. Adding a swap or changing the menu updates the list.')));
   updateProgress();
 }

@@ -1,6 +1,7 @@
 // Nutrition engine: energy expenditure, safe goal pacing, calories and macros.
 // Pure functions only — no DOM, no storage — so they run under Node tests as-is.
 
+import { t as tr } from './i18n.js';
 import { round, clamp, daysBetween, dayKey } from './util.js';
 
 export const KCAL_PER_KG = 7700;
@@ -8,17 +9,17 @@ export const KCAL_PER_KG = 7700;
 // Daily-life activity outside of workouts. Workouts are added separately below,
 // which avoids the usual double-counting of "moderately active" multipliers.
 export const ACTIVITY = {
-  sedentary: { label: 'יושבני', hint: 'עבודה משרדית, מעט הליכה', f: 1.2 },
-  light: { label: 'פעיל קל', hint: 'הרבה עמידה/הליכה, 7–10 אלף צעדים', f: 1.3 },
-  active: { label: 'פעיל', hint: 'עבודה בתנועה, מעל 10 אלף צעדים', f: 1.4 },
-  very: { label: 'פעיל מאוד', hint: 'עבודה פיזית קשה', f: 1.5 },
+  sedentary: { label: tr('Sedentary'), hint: tr('Office work, little walking'), f: 1.2 },
+  light: { label: tr('Lightly active'), hint: tr('Lots of standing or walking, 7–10 thousand steps'), f: 1.3 },
+  active: { label: tr('Active'), hint: tr('A job on your feet, over 10 thousand steps'), f: 1.4 },
+  very: { label: tr('Very active'), hint: tr('Hard physical work'), f: 1.5 },
 };
 const PER_WORKOUT = 0.035; // multiplier added per weekly workout (~45–60 min)
 
 export const GOALS = {
-  cut: { label: 'חיטוב', sub: 'ירידה בשומן', icon: '↘' },
-  maintain: { label: 'שמירה', sub: 'שמירה על המשקל', icon: '→' },
-  bulk: { label: 'מסה', sub: 'עלייה במסת שריר', icon: '↗' },
+  cut: { label: tr('Cut'), sub: tr('Lose fat'), icon: '↘' },
+  maintain: { label: tr('Save'), sub: tr('Maintain weight'), icon: '→' },
+  bulk: { label: tr('Bulk'), sub: tr('Gain muscle mass'), icon: '↗' },
 };
 
 // Safety limits.
@@ -89,7 +90,7 @@ export function assessGoal({ goal, weeks, weight, bf, targetWeight, targetBf, se
 
   if (!(weeks >= 1) || !(targetWeight > 0)) {
     bump('error');
-    messages.push('יש להזין משך תקופה ומשקל יעד.');
+    messages.push(tr('Enter the length of the period and a target weight.'));
     out.level = level;
     return out;
   }
@@ -100,24 +101,24 @@ export function assessGoal({ goal, weeks, weight, bf, targetWeight, targetBf, se
 
   if (goal === 'cut' && dw >= 0) {
     bump('error');
-    messages.push('במטרת חיטוב משקל היעד צריך להיות נמוך מהמשקל הנוכחי.');
+    messages.push(tr('For a cut, the target weight must be lower than your current weight.'));
   }
   if (goal === 'bulk' && dw <= 0) {
     bump('error');
-    messages.push('במטרת מסה משקל היעד צריך להיות גבוה מהמשקל הנוכחי.');
+    messages.push(tr('For a bulk, the target weight must be higher than your current weight.'));
   }
   if (goal === 'maintain' && Math.abs(dw) / weight > 0.02) {
     bump('warn');
-    messages.push(`בשמירה, משקל היעד בדרך כלל קרוב למשקל הנוכחי (±${(weight * 0.02).toFixed(1)} ק״ג). אם המטרה לרדת או לעלות — עדיף לבחור חיטוב או מסה.`);
+    messages.push(tr('When maintaining, the target weight is usually close to your current weight (±{0} kg). If you want to lose or gain, a cut or a bulk is a better choice.', (weight * 0.02).toFixed(1)));
   }
   if (height && bmi(targetWeight, height) < LIMITS.minBmi) {
     bump('error');
     const minW = LIMITS.minBmi * (height / 100) ** 2;
-    messages.push(`משקל היעד נמוך מטווח המשקל התקין (BMI ${LIMITS.minBmi}). המינימום לגובה שלך הוא כ-${minW.toFixed(1)} ק״ג.`);
+    messages.push(tr('The target weight is below the healthy weight range (BMI {0}). The minimum for your height is about {1} kg.', LIMITS.minBmi, minW.toFixed(1)));
   }
   if (validBf(targetBf) && targetBf < LIMITS.minBf[sex]) {
     bump('error');
-    messages.push(`אחוז שומן יעד של ${targetBf}% נמוך מדי ואינו בריא. המינימום הסביר הוא ${LIMITS.minBf[sex]}%.`);
+    messages.push(tr('A target body fat of {0}% is too low to be healthy. A reasonable minimum is {1}%.', targetBf, LIMITS.minBf[sex]));
   }
 
   if (level !== 'error') {
@@ -130,7 +131,7 @@ export function assessGoal({ goal, weeks, weight, bf, targetWeight, targetBf, se
       const perWeek = (Math.abs(dw) / weeks).toFixed(2);
       const sugWeeks = Math.ceil(Math.abs(dw) / (weight * recPct / 100));
       const sugTarget = Number((weight + Math.sign(dw) * weight * recPct / 100 * weeks).toFixed(1));
-      messages.push(`היעד דורש שינוי של כ-${perWeek} ק״ג בשבוע (${ratePct.toFixed(1)}% ממשקל הגוף), מעל הקצב הבטוח של ${maxPct}% בשבוע. התוכנית תוגבל לקצב בטוח.`);
+      messages.push(tr('The target needs a change of about {0} kg per week ({1}% of body weight), above the safe pace of {2}% per week. The plan will be limited to a safe pace.', perWeek, ratePct.toFixed(1), maxPct));
       out.suggestion = { weeks: sugWeeks, targetWeight: sugTarget };
     }
   }
@@ -141,7 +142,7 @@ export function assessGoal({ goal, weeks, weight, bf, targetWeight, targetBf, se
     const tooAggressive = goal === 'bulk' ? false : targetBf < projected - 2;
     if (tooAggressive) {
       bump('warn');
-      messages.push(`בהינתן משקל היעד, אחוז השומן הצפוי בסוף התקופה הוא כ-${projected}%. יעד של ${targetBf}% דורש תקופה ארוכה יותר או משקל יעד נמוך יותר.`);
+      messages.push(tr('Given the target weight, the expected body fat at the end of the period is about {0}%. A target of {1}% needs a longer period or a lower target weight.', projected, targetBf));
       if (out.suggestion) out.suggestion.targetBf = projected;
       else out.suggestion = { targetBf: projected };
     }
@@ -200,16 +201,16 @@ export function computeTargets(profile, period, current, today = dayKey()) {
   if (calories < floor) {
     calories = floor;
     floorApplied = true;
-    warnings.push(`הקלוריות הוגבלו לרצפה בטוחה של ${Math.round(floor)} קק״ל.`);
+    warnings.push(tr('Calories were limited to a safe floor of {0} kcal.', Math.round(floor)));
   }
   calories = round(calories, 10);
 
   const plannedKgPerWeek = ((calories - e.tdee) * 7) / KCAL_PER_KG;
   const capped = !reached && Math.abs(plannedKgPerWeek) + 0.02 < Math.abs(requiredKgPerWeek);
   if (capped) {
-    warnings.push(`כדי להגיע ליעד בזמן נדרש קצב של ${Math.abs(requiredKgPerWeek).toFixed(2)} ק״ג בשבוע. התוכנית מוגבלת לקצב בטוח של ${Math.abs(plannedKgPerWeek).toFixed(2)} ק״ג בשבוע.`);
+    warnings.push(tr('Reaching the target on time needs a pace of {0} kg per week. The plan is limited to a safe pace of {1} kg per week.', Math.abs(requiredKgPerWeek).toFixed(2), Math.abs(plannedKgPerWeek).toFixed(2)));
   }
-  if (reached) warnings.push('הגעת למשקל היעד של התקופה! הקלוריות הותאמו לשמירה.');
+  if (reached) warnings.push(tr('You reached this period\'s target weight! Calories were adjusted for maintenance.'));
 
   const m = macros(period.goal, calories, weight, bf, profile.prefs?.diet);
   return {

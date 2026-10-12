@@ -748,3 +748,12 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .role-dot.role-drink { background: #4aa3c7; }
 .item.role-drink .role-dot { background: #4aa3c7; }
 @media (prefers-reduced-motion: reduce) { .drinks-chev { transition: none; } }
+
+/* ---------- language picker ---------- */
+.lang-bar { display: flex; justify-content: flex-end; margin: -4px 0 6px; }
+.lang-bar .lang-btn { gap: 6px; }
+.field > .lang-bar { justify-content: flex-start; margin: 0; }
+.lang-list { display: grid; gap: 6px; max-height: 60vh; overflow-y: auto; }
+.lang-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 10px 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm, 12px); background: var(--surface); color: inherit; font: inherit; cursor: pointer; text-align: start; }
+.lang-item.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); font-weight: 600; }

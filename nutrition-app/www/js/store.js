@@ -1,6 +1,7 @@
 // Application state: loaded once from IndexedDB, kept in memory, written through.
 
 import { aiAccess } from './billing.js';
+import { lang } from './i18n.js';
 import * as db from './db.js';
 import { dayKey, addDays, daysBetween } from './util.js';
 import { computeTargets, validBf } from './nutrition.js';
@@ -170,6 +171,9 @@ export async function completeOnboarding({ profile, period, weight, bf, baseline
   state.periods = [{ id: 1, ...period, startDate: regDay, endDate: addDays(regDay, period.weeks * 7), startWeight: weight, startBf: bf, status: 'active' }];
   await db.kv.set('profile', state.profile);
   await db.kv.set('periods', state.periods);
+  // The service worker reads the language from the saved settings.
+  state.settings = { ...state.settings, lang };
+  await db.kv.set('settings', state.settings);
   await addMetrics(weight, bf, 'onboarding', false);
   if (baseline) await saveCheckinPhoto(0, baseline, { weight, bf });
   emit();
@@ -349,7 +353,7 @@ export async function setAvatar(img) {
 
 // ---------- cloud copy (see sync.js) ----------
 // Settings that belong to this device and never travel between devices.
-const DEVICE_SETTINGS = ['reminders', 'installDismissed'];
+const DEVICE_SETTINGS = ['reminders', 'installDismissed', 'lang'];
 
 export function snapshot() {
   const settings = { ...state.settings };
