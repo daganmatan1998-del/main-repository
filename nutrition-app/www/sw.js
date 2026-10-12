@@ -72,6 +72,15 @@ const SHELL = [
   'fonts/rubik-latin-400-normal.woff2',
   'fonts/rubik-latin-500-normal.woff2',
   'fonts/rubik-latin-700-normal.woff2',
+  'fonts/rubik-arabic-400-normal.woff2',
+  'fonts/rubik-arabic-500-normal.woff2',
+  'fonts/rubik-arabic-700-normal.woff2',
+  'fonts/rubik-cyrillic-400-normal.woff2',
+  'fonts/rubik-cyrillic-500-normal.woff2',
+  'fonts/rubik-cyrillic-700-normal.woff2',
+  'fonts/rubik-latin-ext-400-normal.woff2',
+  'fonts/rubik-latin-ext-500-normal.woff2',
+  'fonts/rubik-latin-ext-700-normal.woff2',
 ];
 
 self.addEventListener('install', (event) => {
