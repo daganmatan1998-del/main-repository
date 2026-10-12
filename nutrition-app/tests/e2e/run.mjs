@@ -667,7 +667,7 @@ try {
   check('assistant request carries profile, restrictions and computed equivalents',
     last && last.body.system[1].text.includes('computedEquivalents') && last.body.system[1].text.includes('טונה') && last.body.system[1].text.includes('kosher'));
   check('no name or photo is sent to the assistant', last && !last.body.system[1].text.includes('דנה') && !/data:image|blob:/.test(last.body.system[1].text));
-  check('proxy uses claude-opus-5-5 with server-side fallbacks', last && last.body.model === 'claude-opus-5-5' && last.body.fallbacks === 'default');
+  check('proxy uses claude-sonnet-5-5 with server-side fallbacks', last && last.body.model === 'claude-sonnet-5-5' && last.body.fallbacks === 'default');
   check('API key is added by the server only', last && last.headers.get('x-api-key') === 'sk-ant-e2e-fake');
   const repliesBefore = await page.locator('.msg.assistant:not(.typing)').count();
   await page.fill('#chat-input', 'מה לאכול לפני אימון?');

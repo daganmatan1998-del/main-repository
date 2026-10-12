@@ -11,7 +11,12 @@ import { SYSTEM_PROMPT, BODYFAT_PROMPT, MEAL_PHOTO_PROMPT } from './system-promp
 import { complete, hasEngine, engineList, EngineError } from './engines.js';
 import { handlePush } from './push.js';
 
-const MODEL = 'claude-opus-5-5';
+// Which Anthropic model answers which task. Sonnet for the everyday work (it
+// costs half as much as Opus); Opus only for the body-fat estimate, where
+// accuracy sets the starting calories and is not worth trading away.
+// Override one task with CLAUDE_MODEL_CHAT / _MEALPHOTO / _BODYFAT, or all with CLAUDE_MODEL.
+const MODELS = { chat: 'claude-sonnet-5-5', mealphoto: 'claude-sonnet-5-5', bodyfat: 'claude-opus-5-5' };
+export const anthropicModel = (env, task) => env[`CLAUDE_MODEL_${task.toUpperCase()}`] || env.CLAUDE_MODEL || MODELS[task];
 const MAX_BODY = 64 * 1024;
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 4000;
@@ -168,7 +173,7 @@ export async function handleChat(request, env, { fetchImpl } = {}) {
       // Only runs when the chain reaches Anthropic (the paid engine, last).
       anthropic: async () => {
         const response = await clientFor(env, fetchImpl).beta.messages.create({
-          model: env.CLAUDE_MODEL || MODEL,
+          model: anthropicModel(env, 'chat'),
           max_tokens: 4000,
           // Chat replies are short and routine: low effort keeps them fast and cheap.
           output_config: { effort: 'low' },
@@ -257,7 +262,7 @@ export async function handleBodyFat(request, env, { fetchImpl } = {}) {
         }
         content.push({ type: 'text', text: ask });
         const response = await clientFor(env, fetchImpl).beta.messages.create({
-          model: env.CLAUDE_MODEL || MODEL,
+          model: anthropicModel(env, 'bodyfat'),
           max_tokens: 3000,
           output_config: { effort: 'medium', format: { type: 'json_schema', schema: BODYFAT_SCHEMA } },
           betas: ['server-side-fallback-2026-07-01'],
@@ -364,7 +369,7 @@ export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
       // The last resort: Anthropic is tried only after every free engine has failed.
       anthropic: async () => {
         const response = await clientFor(env, fetchImpl).beta.messages.create({
-          model: env.CLAUDE_MODEL || MODEL,
+          model: anthropicModel(env, 'mealphoto'),
           max_tokens: 1500,
           output_config: { effort: 'low', format: { type: 'json_schema', schema: MEAL_PHOTO_SCHEMA } },
           betas: ['server-side-fallback-2026-07-01'],

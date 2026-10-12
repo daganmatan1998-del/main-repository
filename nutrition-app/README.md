@@ -56,7 +56,7 @@ Open it on a phone on the same network, or use Chrome DevTools' device mode. Eve
 
 The browser never sees a key. The app calls `/api/...` on its own origin, and `server/api.js` adds the right key and calls the AI engine. The e2e test checks that no client file contains a key or calls Anthropic directly.
 
-The proxy uses `claude-opus-5-5` with low effort, since chat answers are short, and server-side refusal fallbacks (`fallbacks: "default"`). Set the `CLAUDE_MODEL` variable to change the model.
+The proxy uses `claude-sonnet-5-5` with low effort, since chat answers are short, and server-side refusal fallbacks (`fallbacks: "default"`). The calorie camera also uses Sonnet when it gets to Anthropic; **only the body-fat estimate runs on `claude-opus-5-5`**, because accuracy there sets the starting calories. Change one task with `CLAUDE_MODEL_CHAT`, `CLAUDE_MODEL_MEALPHOTO` or `CLAUDE_MODEL_BODYFAT`, or all of them with `CLAUDE_MODEL`.
 
 It also guards the endpoint:
 - **Size limits:** request body, message count, message length and context size.
@@ -359,7 +359,7 @@ Accounts are on once `CLOUD.url` and `CLOUD.anonKey` are set (they are, for the 
 ## Tests
 
 ```bash
-npm test              # 100 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy, PKCE
+npm test              # 101 unit tests: formulas, safety caps, gate math, restriction compliance across 126 generated days, swaps, food-group removal, proxy, PKCE
 npm run test:e2e      # 216 browser checks (needs a Playwright Chromium: `npx playwright install chromium`)
 npm run test:cloud    # 37 browser checks: the first screen, Google sign-in, sync across devices, photo backup, conflicts, sign-out, delete; profile picture and nickname
 ```

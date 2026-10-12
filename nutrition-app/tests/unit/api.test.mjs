@@ -46,7 +46,7 @@ test('happy path: key only on the server, model, fallbacks, effort, system promp
   assert.match(c.url, /\/v1\/messages/);
   assert.equal(c.headers.get('x-api-key'), 'sk-ant-test-key');
   assert.match(c.headers.get('anthropic-beta'), /server-side-fallback-2026-07-01/);
-  assert.equal(c.body.model, 'claude-opus-5-5');
+  assert.equal(c.body.model, 'claude-sonnet-5-5', 'chat runs on Sonnet');
   assert.equal(c.body.fallbacks, 'default');
   assert.equal(c.body.output_config.effort, 'low');
   assert.equal(c.body.thinking, undefined);
@@ -254,4 +254,18 @@ test('meal-photo: no food, refusals and bad input', async () => {
     assert.equal((await handleApi(mpReq(body), FREE_ENV, { fetchImpl: stub.fetchImpl })).status, 400);
   }
   assert.equal(stub.calls.length, 0);
+});
+
+test('models: Sonnet for chat and the calorie camera, Opus only for body fat, each overridable', async () => {
+  const { anthropicModel } = await import('../../server/api.js');
+  assert.deepEqual(['chat', 'mealphoto', 'bodyfat'].map((t) => anthropicModel({}, t)), ['claude-sonnet-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5']);
+  assert.equal(anthropicModel({ CLAUDE_MODEL_BODYFAT: 'claude-fable-5-1' }, 'bodyfat'), 'claude-fable-5-1');
+  assert.equal(anthropicModel({ CLAUDE_MODEL: 'claude-haiku-5-5' }, 'chat'), 'claude-haiku-5-5');
+  assert.equal(anthropicModel({ CLAUDE_MODEL: 'claude-haiku-5-5', CLAUDE_MODEL_CHAT: 'claude-sonnet-5-5' }, 'chat'), 'claude-sonnet-5-5', 'per-task beats global');
+  // The camera, served by Anthropic alone, really sends Sonnet.
+  const anth = stubAnthropic({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ ok: true, confidence: 'high', notes: '', issue: '', items: [mpItem({ name: 'עוף', grams: 100 })] }) }] });
+  const res = await handleApi(mpReq(mpBody), { ANTHROPIC_API_KEY: 'sk-ant-x' }, { fetchImpl: anth.fetchImpl });
+  assert.equal(res.status, 200);
+  assert.equal(anth.calls[0].body.model, 'claude-sonnet-5-5');
+  assert.equal(anth.calls[0].body.fallbacks, 'default');
 });
