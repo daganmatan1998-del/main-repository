@@ -27,13 +27,19 @@ if errorlevel 1 (
   echo Node.js is not installed. Get it from https://nodejs.org and run this again.
   goto :fail
 )
-if not exist "dist\index.html" (
-  echo dist\index.html is missing - this file must sit next to the dist folder.
+REM The site is either in a "dist" folder next to this file, or right here
+REM (index.html beside publish.cmd, as in JARVIS-SITE.zip).
+set "SITEDIR="
+if exist "dist\index.html" set "SITEDIR=dist"
+if not defined SITEDIR if exist "index.html" set "SITEDIR=."
+if not defined SITEDIR (
+  echo index.html was not found - it must be in a "dist" folder next to this file, or beside it.
   goto :fail
 )
+echo site folder: %SITEDIR%
 
 echo [1/3] stamping the build...
-node scripts\stamp-version.mjs
+node scripts\stamp-version.mjs %SITEDIR%
 if errorlevel 1 (
   echo stamping failed
   goto :fail
@@ -44,7 +50,18 @@ echo [2/3] writing wrangler.toml...
 >> wrangler.toml echo compatibility_date = "%COMPAT%"
 >> wrangler.toml echo.
 >> wrangler.toml echo [assets]
->> wrangler.toml echo directory = "./dist"
+>> wrangler.toml echo directory = "./%SITEDIR%"
+
+REM With the site beside this file, keep the uploader itself off the site.
+if "%SITEDIR%"=="." (
+  > .assetsignore echo /publish.cmd
+  >> .assetsignore echo /scripts
+  >> .assetsignore echo /wrangler.toml
+  >> .assetsignore echo /.assetsignore
+  >> .assetsignore echo /node_modules
+  >> .assetsignore echo /.wrangler
+  >> .assetsignore echo /README.txt
+)
 
 if not defined CLOUDFLARE_API_TOKEN (
   set /p CLOUDFLARE_API_TOKEN=Cloudflare API token (paste, then Enter):

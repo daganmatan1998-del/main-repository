@@ -7,15 +7,18 @@
    to update.
 
      node scripts/stamp-version.mjs            (from jarvis-desktop/)
+     node scripts/stamp-version.mjs <folder>   (when index.html is in another folder)
 
    Run it again after any change to index.html: the id changes only when the
    page does, so an unchanged page never asks him to update. */
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const dist = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+/* The folder holding index.html: the first argument, else ../dist (the layout
+   in the repository). publish.cmd passes "." when the site sits next to it. */
+const dist = process.argv[2] ? resolve(process.argv[2]) : join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
 const pagePath = join(dist, 'index.html');
 const META = /<meta name="jarvis-build" content="[^"]*">\n?/;
 
