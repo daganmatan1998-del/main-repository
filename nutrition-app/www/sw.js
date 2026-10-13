@@ -19,6 +19,7 @@ const SHELL = [
   'js/lang/es.js',
   'js/lang/fr.js',
   'js/lang/de.js',
+  'js/lang/pt.js',
   'js/screens/language.js',
   'js/config.js',
   'js/util.js',
