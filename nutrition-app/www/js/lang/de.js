@@ -1989,6 +1989,7 @@ export default {
     "Need {0}": "Bedarf: {0}",
     "Cancel": "Abbrechen",
     "{0} {1}‖amount of food": "{0} {1}",
+    "the beans": "Bohnen",
   },
   data: {},
 };

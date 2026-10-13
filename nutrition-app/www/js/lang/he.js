@@ -1155,7 +1155,7 @@ export default {
     "the seitan": "הסייטן",
     "the lentils": "העדשים",
     "the chickpeas": "החומוס",
-    "the black beans": "השעועית",
+    "the beans": "השעועית",
     "the edamame": "האדממה",
     "the turkey pastrami": "הפסטרמה",
     "the rice": "האורז",

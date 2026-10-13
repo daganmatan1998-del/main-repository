@@ -1990,6 +1990,7 @@ export default {
     "Unlock": "Desbloquear",
     "Protein‖role": "Proteína",
     "{0} {1}‖amount of food": "{0} de {1}",
+    "the beans": "los frijoles",
   },
   data: {},
 };
