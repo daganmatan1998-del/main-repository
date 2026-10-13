@@ -18,6 +18,7 @@
 export const LANGS = [
   { code: 'en', name: 'English', dir: 'ltr', locale: 'en-US' },
   { code: 'he', name: 'עברית', dir: 'rtl', locale: 'he-IL' },
+  { code: 'es', name: 'Español', dir: 'ltr', locale: 'es-ES' },
 ];
 
 const KEY = 'nutri-lang';

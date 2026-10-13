@@ -151,8 +151,9 @@ export async function checkPack(lang, { spell = true } = {}) {
     if (/\p{Lu}/u.test(en[0] || '') && ownScripts(lang).includes('latin') && /\p{Ll}/u.test(v[0] || '') && lang !== 'de' && meta.kind !== 'trl' && !/^[a-z]/.test(en)) warnings.push(`starts lowercase, English starts uppercase: ${at} -> ${JSON.stringify(v)}`);
 
     // --- spelling ---
-    if (sp && meta.kind !== 'trl' || sp && meta.kind === 'trl') {
-      const bad = misspelled(sp, lang, v.replaceAll('|', ' '));
+    // Search words are matched, not read: variants without accents or in a second spelling are there on purpose.
+    if (sp && meta.kind !== 'trl') {
+      const bad = misspelled(sp, lang, v);
       if (bad.length) errors.push(`spelling (${[...new Set(bad)].join(', ')}): ${at} -> ${JSON.stringify(v)}`);
     }
   }
