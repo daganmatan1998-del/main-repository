@@ -43,6 +43,8 @@ export const locale = meta.locale;
 export const isRTL = dir === 'rtl';
 // German and a few others write every noun with a capital: never lowercase a name inside a sentence.
 export const capitalNouns = meta.capitalNouns === true;
+// A name or label placed inside a sentence starts lowercase (not in languages that capitalise nouns).
+export const lc = (s) => (capitalNouns || !s ? s : s.charAt(0).toLocaleLowerCase(locale) + s.slice(1));
 
 const EMPTY = { ui: {}, data: {} };
 let pack = EMPTY;

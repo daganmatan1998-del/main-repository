@@ -1,6 +1,6 @@
 // Nutrition assistant chat.
 
-import { t as tr } from '../i18n.js';
+import { t as tr, lc } from '../i18n.js';
 import { h, icon, clear, confirmDialog } from '../util.js';
 import { disclaimer } from '../components.js';
 import { state, saveChat } from '../store.js';
@@ -65,7 +65,7 @@ function renderText(text) {
 function localAnswer(res) {
   if (!res.options.length) return tr('I couldn\'t find a substitute in the database that fits your restrictions.');
   const lines = res.options.map((o) => tr('- **{0}** — {1} g ({2}), {3} kcal', o.name, o.grams, o.household, o.kcal));
-  return tr('Instead of {0} g of {1} ({2} kcal):\n{3}\n\nThe amounts are calculated to give the same amount of {4}.', res.source.grams, res.source.name, res.source.kcal, lines.join('\n'), { p: tr('Protein'), c: tr('Carbs'), f: tr('Fat'), kcal: tr('Calories') }[res.matchedOn]);
+  return tr('Instead of {0} g of {1} ({2} kcal):\n{3}\n\nThe amounts are calculated to give the same amount of {4}.', res.source.grams, res.source.name, res.source.kcal, lines.join('\n'), lc({ p: tr('Protein'), c: tr('Carbs'), f: tr('Fat'), kcal: tr('Calories') }[res.matchedOn]));
 }
 
 export function renderAssistant(root) {
@@ -163,7 +163,7 @@ export function renderAssistant(root) {
     root.appendChild(h('div', { class: `notice ${access.state === 'locked' ? 'warn' : 'ok'} small ai-plan`, id: 'ai-plan' },
       icon(access.state === 'locked' ? 'lock' : 'sparkle', 16),
       h('span', null, access.state === 'locked' ? tr('The smart assistant is available with a Nutri Plus subscription.') : tr('Free trial: {0, plural, one {# more day} other {# more days}} of the smart assistant.', access.daysLeft)),
-      h('button', { class: 'btn btn-small', onclick: () => openPaywall('chat') }, access.state === 'locked' ? tr('Open') : tr('Details'))));
+      h('button', { class: 'btn btn-small', onclick: () => openPaywall('chat') }, access.state === 'locked' ? tr('Unlock') : tr('Details'))));
   }
   root.appendChild(log);
   root.appendChild(h('div', { class: 'quick-row' },

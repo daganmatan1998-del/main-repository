@@ -203,7 +203,7 @@ export const DIET_NOTES = {
   carnivore: tr('Carnivore: animal foods only — meat, poultry, fish, eggs and dairy. No fruit, vegetables or grains. This is an extreme diet, so consulting a doctor is recommended, especially with high cholesterol or kidney problems.'),
 };
 
-export const ROLE_LABEL = { protein: tr('egg white'), carb: tr('Carbs'), fat: tr('Fat'), veg: tr('vegetables'), fruit: tr('fruit') };
+export const ROLE_LABEL = { protein: tr('Protein‖role'), carb: tr('Carbs'), fat: tr('Fat'), veg: tr('vegetables'), fruit: tr('fruit') };
 
 export const DIET_ALLOWED_SRC = {
   omni: ['meat', 'poultry', 'fish', 'shellfish', 'dairy', 'egg', 'plant'],

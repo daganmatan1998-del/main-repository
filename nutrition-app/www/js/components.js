@@ -1,6 +1,6 @@
 // Reusable UI pieces: macro rings/bars, meal cards, the swap sheet, metric forms.
 
-import { t as tr } from './i18n.js';
+import { t as tr, lc } from './i18n.js';
 import { h, icon, sheet, toast, fmt, parseNum, ltr, clear, normText } from './util.js';
 import { FOOD_BY_ID, household, ROLE_LABEL, canExclude, DIET_NOTES } from './foods.js';
 import { alternatives } from './substitutions.js';
@@ -318,7 +318,7 @@ function removalBar(meal, day) {
         }
         await setOverride(day, meal.index, { removed: next });
         if (on) toast(BACK_TEXT[g]);
-        else toast(tr('{0} without {1} — the calories were redistributed', meal.name, MACRO_NAME[g] || { veg: tr('Vegetables'), fruit: tr('Fruit') }[g]));
+        else toast(tr('{0} without {1} — the calories were redistributed', meal.name, lc(MACRO_NAME[g] || { veg: tr('Vegetables'), fruit: tr('Fruit') }[g])));
       },
     }, on ? icon('check', 14) : null, REMOVE_LABEL[g]));
   }

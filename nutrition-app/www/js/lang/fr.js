@@ -1985,6 +1985,10 @@ export default {
     "{0} kg": "{0} kg",
     "Need {0}": "Besoin : {0}",
     "Cancel": "Annuler",
+    "Maintain‖goal": "Maintien",
+    "Start‖week 0": "Départ",
+    "Unlock": "Débloquer",
+    "Protein‖role": "Protéines",
   },
   data: {},
 };

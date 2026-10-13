@@ -18,7 +18,7 @@ const PER_WORKOUT = 0.035; // multiplier added per weekly workout (~45–60 min)
 
 export const GOALS = {
   cut: { label: tr('Cut'), sub: tr('Lose fat'), icon: '↘' },
-  maintain: { label: tr('Save'), sub: tr('Maintain weight'), icon: '→' },
+  maintain: { label: tr('Maintain‖goal'), sub: tr('Maintain weight'), icon: '→' },
   bulk: { label: tr('Bulk'), sub: tr('Gain muscle mass'), icon: '↗' },
 };
 

@@ -44,7 +44,7 @@ export function renderGallery(root) {
       frame.appendChild(h('span', { class: 'missing' }, icon('camera', 26), tr('No photo')));
     }
     tile.append(frame, h('div', { class: 'tile-cap' },
-      h('b', null, s.week === 0 ? tr('Open') : tr('Week {0}', s.week)),
+      h('b', null, s.week === 0 ? tr('Start‖week 0') : tr('Week {0}', s.week)),
       h('span', { class: 'muted num' }, fmtDate(s.date)),
       c && c.weight ? h('span', { class: 'num' }, tr('{0} kg · {1}%', fmt(c.weight, 1), c.bf ?? '—')) : h('span', { class: 'muted' }, '—')));
     grid.appendChild(tile);
@@ -67,7 +67,7 @@ function overlay(cls, label) {
 
 function caption(s) {
   const c = s.checkin;
-  return `${s.week === 0 ? tr('Open') : tr('Week {0}', s.week)} · ${fmtDate(s.date, true)}${c.weight ? tr(' · {0} kg · {1}%', fmt(c.weight, 1), c.bf) : ''}`;
+  return `${s.week === 0 ? tr('Start‖week 0') : tr('Week {0}', s.week)} · ${fmtDate(s.date, true)}${c.weight ? tr(' · {0} kg · {1}%', fmt(c.weight, 1), c.bf) : ''}`;
 }
 
 function openViewer(list, index, urlFor) {

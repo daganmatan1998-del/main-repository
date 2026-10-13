@@ -2,7 +2,7 @@
 // category, tap to exclude. A category can never drop below MIN_PER_ROLE, so
 // every menu item keeps a substitute.
 
-import { t as tr } from '../i18n.js';
+import { t as tr, lc } from '../i18n.js';
 import { h, icon, sheet, toast, clear } from '../util.js';
 import { FOODS, ROLE_LABEL, ROLES, MIN_PER_ROLE, isAllowed } from '../foods.js';
 
@@ -46,7 +46,7 @@ export function openFoodPicker(prefs, onSave) {
                 excluded.delete(f.id);
               } else {
                 if (remaining(role) - 1 < MIN_PER_ROLE) {
-                  toast(tr('At least {0} {1} must stay so there is always a substitute.', MIN_PER_ROLE, ROLE_TITLE[role]));
+                  toast(tr('At least {0} {1} must stay so there is always a substitute.', MIN_PER_ROLE, lc(ROLE_TITLE[role])));
                   return;
                 }
                 excluded.add(f.id);
@@ -67,7 +67,7 @@ export function openFoodPicker(prefs, onSave) {
     draw();
 
     body.append(
-      h('p', { class: 'muted small' }, tr('Tap a food to take it out of the menu (marked in red). Every {0}, carb and fat on your menu always gets a substitute from the remaining foods.', ROLE_LABEL.protein)),
+      h('p', { class: 'muted small' }, tr('Tap a food to take it out of the menu (marked in red). Every {0}, carb and fat on your menu always gets a substitute from the remaining foods.', lc(ROLE_LABEL.protein))),
       search,
       groups,
       h('div', { class: 'picker-actions' },
