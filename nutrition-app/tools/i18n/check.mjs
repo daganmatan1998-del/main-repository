@@ -174,7 +174,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   for (const lang of langs) {
     const r = await checkPack(lang, { spell });
     console.log(`\n== ${lang}: ${r.total} messages, ${r.errors.length} errors, ${r.warnings.length} warnings`);
-    for (const e of r.errors.slice(0, 400)) console.log('  ERROR  ' + e);
+    for (const e of r.errors.slice(0, 5000)) console.log('  ERROR  ' + e);
     for (const w of r.warnings.slice(0, 60)) console.log('  warn   ' + w);
     if (r.errors.length) bad += 1;
   }
