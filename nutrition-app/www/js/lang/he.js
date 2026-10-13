@@ -1984,6 +1984,7 @@ export default {
     "Start‖week 0": "פתיחה",
     "Unlock": "פתיחה",
     "Protein‖role": "חלבון",
+    "{0} {1}‖amount of food": "{0} {1}",
   },
   data: {},
   fn,

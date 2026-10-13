@@ -82,6 +82,8 @@ export async function checkPack(lang, { spell = true } = {}) {
   const { keys } = usedKeys();
   const locale = (await import(pathToFileURL(path.join(ROOT, 'tools/i18n/languages.mjs')).href)).LOCALES[lang] || lang;
   const sp = spell ? await speller(lang) : null;
+  // Repeats that are correct grammar (French "vous vous connectez", German "das das"…): one word per line.
+  const repeatOk = new Set(read(path.join(ROOT, `tools/i18n/repeat-ok/${lang}.txt`)));
   const sameOk = new Set(read(path.join(ROOT, `tools/i18n/same-ok/${lang}.txt`)));
   const cats = pluralCategories(locale);
   const own = ownScripts(lang);
@@ -139,7 +141,7 @@ export async function checkPack(lang, { spell = true } = {}) {
       for (const seg of t.toLocaleLowerCase().split(/[,.;:!?()«»"“”„‘’¡¿—–|·•،؛。、]+/)) {
         const words = seg.split(/\s+/).filter(Boolean);
         for (let i = 1; i < words.length; i++) {
-          if (words[i] === words[i - 1] && words[i].length > 1 && !/^[\d.,/%+−-]+$/.test(words[i])) errors.push(`repeated word "${words[i]}": ${at} -> ${JSON.stringify(v)}`);
+          if (words[i] === words[i - 1] && words[i].length > 1 && !/^[\d.,/%+−-]+$/.test(words[i]) && !repeatOk.has(words[i])) errors.push(`repeated word "${words[i]}": ${at} -> ${JSON.stringify(v)}`);
         }
       }
     }

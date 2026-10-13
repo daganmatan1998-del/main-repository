@@ -40,6 +40,8 @@ const NAME = {
 // Foods without a short name keep their full name, in lowercase inside a sentence (not in languages that capitalise nouns).
 const lowerFirst = (s) => (capitalNouns ? s : s.charAt(0).toLocaleLowerCase(locale) + s.slice(1));
 const upperFirst = (s) => (s ? s.charAt(0).toLocaleUpperCase(locale) + s.slice(1) : s);
+// "150 g chicken breast", "2 slices pastrami": the language decides whether a word joins them ("150 g de pollo").
+const amountOf = (amount, food) => tr('{0} {1}‖amount of food', amount, food);
 const nm = (id) => NAME[id] || lowerFirst(FOOD_BY_ID[id].name);
 
 // Definite forms ("the chicken"). Hebrew puts the article on the second word
@@ -475,7 +477,7 @@ function makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, sides = [], ca
   const pFood = FOOD_BY_ID[p.foodId];
   const amt = pFood.discrete ? household(pFood, p.grams) : tr('{0} g', p.grams);
   // "2 תמרים", not "2 תמרים תמרים": some units already name the food.
-  const amtP = SELF_UNIT.has(p.foodId) || amt.includes(P) ? amt : `${amt} ${P}`;
+  const amtP = SELF_UNIT.has(p.foodId) || amt.includes(P) ? amt : amountOf(amt, P);
   const carbStep = c ? carbPrep(c.foodId, c.grams, !!m.oven) : null;
   const ctx = {
     P, C, kind, flavor, amt, amtP,
@@ -507,7 +509,7 @@ function makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, sides = [], ca
   for (const s of m.steps(ctx)) if (s) steps.push(s);
   if (extra) {
     const hh = household(FOOD_BY_ID[extra.foodId], extra.grams);
-    steps.push(tr('Add {0} on the side to complete the protein', SELF_UNIT.has(extra.foodId) || hh.includes(nm(extra.foodId)) ? hh : `${hh} ${nm(extra.foodId)}`));
+    steps.push(tr('Add {0} on the side to complete the protein', SELF_UNIT.has(extra.foodId) || hh.includes(nm(extra.foodId)) ? hh : amountOf(hh, nm(extra.foodId))));
   }
   for (const sd of sides) steps.push(sideStep(sd));
   // A shake or an overnight jar isn't served hot, whatever the flavour says.
@@ -549,7 +551,7 @@ function sideStep(it) {
   const prep = KIND[it.foodId] && CARB_KINDS.includes(KIND[it.foodId]) ? carbPrep(it.foodId, it.grams, false) : null;
   if (prep) return tr('{0}, and serve alongside', prep);
   const hh = household(f, it.grams);
-  return tr('Serve alongside {0}', SELF_UNIT.has(it.foodId) || hh.includes(nm(it.foodId)) ? hh : `${hh} ${nm(it.foodId)}`);
+  return tr('Serve alongside {0}', SELF_UNIT.has(it.foodId) || hh.includes(nm(it.foodId)) ? hh : amountOf(hh, nm(it.foodId)));
 }
 
 // filters: { cuisines: [], tools: [], maxTime: 0|10|20|40, pantryOnly: bool,

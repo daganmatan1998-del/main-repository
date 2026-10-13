@@ -1989,6 +1989,7 @@ export default {
     "Start‖week 0": "Inicio",
     "Unlock": "Desbloquear",
     "Protein‖role": "Proteína",
+    "{0} {1}‖amount of food": "{0} de {1}",
   },
   data: {},
 };
