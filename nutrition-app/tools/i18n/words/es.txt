@@ -98,3 +98,6 @@ whey
 white
 wrap
 quítalo
+tuéstalo
+chraime
+omelet
