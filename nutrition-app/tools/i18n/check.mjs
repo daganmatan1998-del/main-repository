@@ -27,7 +27,8 @@ const SCRIPT = {
 const OWN = { he: ['hebrew'], ar: ['arabic'], fa: ['arabic'], ru: ['cyrillic'], uk: ['cyrillic'], bg: ['cyrillic'], el: ['greek'], hi: ['devanagari'], th: ['thai'], ko: ['hangul'], ja: ['kana', 'han'], zh: ['han'] };
 const ownScripts = (lang) => OWN[lang] || ['latin'];
 const NONLATIN = (lang) => (OWN[lang] || []).length > 0;
-const SPELL = new Set(['en', 'es', 'fr', 'de', 'pt', 'it', 'ru', 'tr', 'nl', 'pl', 'uk', 'cs', 'el', 'hu', 'ro', 'sv', 'he', 'vi', 'bg', 'da', 'ko']);
+// pt: the Portuguese Hunspell dictionary needs more memory than a small machine has; its text is reviewed by a native-level editor instead.
+const SPELL = new Set(['en', 'es', 'fr', 'de', 'it', 'ru', 'tr', 'nl', 'pl', 'uk', 'cs', 'el', 'hu', 'ro', 'sv', 'he', 'vi', 'bg', 'da', 'ko']);
 
 const read = (p) => (existsSync(p) ? readFileSync(p, 'utf8').split('\n').map((l) => l.trim().toLowerCase()).filter((l) => l && !l.startsWith('#')) : []);
 
