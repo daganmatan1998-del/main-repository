@@ -379,3 +379,7 @@ The e2e run uses a stubbed Claude API, so it needs no key and costs nothing. The
 - **No AI vendor names in the app.** The consent texts say the photos go to external analysis services without naming them, and the assistant is told not to say which model it runs on.
 
 The app shows that it is not medical advice, during onboarding, in the chat and in Profile.
+
+## Languages (v1.14.0)
+
+English is the default (app name, logo text and every string). The language picker is on the first screen and in the profile. Packs: English, Hebrew, Spanish, French, German, Portuguese, Italian, Russian, Arabic (RTL). Packs live in `www/js/lang/`; check one with `node tools/i18n/check.mjs <lang>`; tour every screen with `LANGS=en,he,ar node tests/e2e/i18n.mjs`. Translations were machine-drafted and machine-reviewed, not checked by native speakers.

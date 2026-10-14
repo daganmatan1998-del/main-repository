@@ -42,7 +42,7 @@ const foreign = (lang, s) => Object.entries(SCRIPTS).filter(([name, re]) => !(OW
 const RTL = ['he', 'ar', 'fa', 'ur'];
 
 // Words that repeat on purpose or because the language says so.
-const REPEAT_OK = new Set(['ja', 'nana', 'bye', 'так', 'très', 'muy', 'molto', 'mai', 'chop', '·', '—', '–', '/', '-', 'g', 'kg', 'kcal', 'cm', 'a', 'à']);
+const REPEAT_OK = new Set(['ja', 'nana', 'bye', 'так', 'très', 'muy', 'molto', 'mai', 'chop', '·', '—', '–', '/', '-', 'g', 'kg', 'kcal', 'cm', 'a', 'à', 'vous']);
 function repeatedWord(s) {
   for (const line of s.split('\n')) {
     // Punctuation separates: "worth it: it will" is not a repeated word.
