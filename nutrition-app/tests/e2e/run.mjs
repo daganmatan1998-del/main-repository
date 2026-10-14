@@ -606,7 +606,11 @@ try {
   // =============== recipes ===============
   await page.locator('.meal').first().locator('.rc-open').click();
   await page.waitForSelector('.overlay.recipes .rc-card');
-  const countOf = async () => Number((await page.locator('#rc-count').innerText()).replace(/[^\d]/g, ''));
+  // One recipe is spelled out ("נמצא מתכון אחד"), with no digit.
+  const countOf = async () => {
+    const text = await page.locator('#rc-count').innerText();
+    return /אחד/.test(text) ? 1 : Number(text.replace(/[^\d]/g, ''));
+  };
   const totalRecipes = await countOf();
   check(`meal has a large recipe collection (${totalRecipes})`, totalRecipes >= 40);
   await page.locator('.rc-card .rc-head').first().click();

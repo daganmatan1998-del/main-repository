@@ -161,7 +161,7 @@ const headText = (page) => page.locator('.page-head').first().innerText();
 
 try {
   // ======== no AI vendor names anywhere in the app's code strings ========
-  const vendor = /Anthropic|Claude|Groq|Gemini|Mistral|OpenAI|ChatGPT|GPT-|Llama|NVIDIA|DeepSeek|Cerebras|OpenRouter/i;
+  const vendor = /Anthropic|Claude|Groq|Gemini|Mistral|OpenAI|ChatGPT|GPT-|NVIDIA|DeepSeek|Cerebras|OpenRouter/i;
   const files = [];
   const walk = (d) => { for (const f of readdirSync(d, { withFileTypes: true })) { const p = path.join(d, f.name); if (f.isDirectory()) walk(p); else if (/\.(js|html|webmanifest)$/.test(f.name)) files.push(p); } };
   walk(path.join(here, '../../www'));
@@ -169,7 +169,8 @@ try {
   for (const f of files) {
     readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
       const code = line.replace(/\/\/.*$/, '').replace(/^\s*\*.*$/, '');
-      if (vendor.test(code)) leaks.push(`${path.basename(f)}:${i + 1}`);
+      // "llama" is also the Spanish word for flame, so only check it outside the language packs
+      if (vendor.test(code) || (!/[\\/]lang[\\/]/.test(f) && /Llama/i.test(code))) leaks.push(`${path.basename(f)}:${i + 1}`);
     });
   }
   check('no AI company or model name in any user-facing string', leaks.length === 0, leaks.join(', '));
