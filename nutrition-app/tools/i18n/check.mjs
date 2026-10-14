@@ -113,7 +113,8 @@ export async function checkPack(lang, { spell = true } = {}) {
       }
     }
     for (const p of a.plurals) if (!b.plurals.some((x) => x.name === p.name)) (legacy ? warnings : errors).push(`plural dropped for {${p.name}}: ${at} -> ${JSON.stringify(v)}`);
-    if (/^\s/.test(en) !== /^\s/.test(v) || /\s$/.test(en) !== /\s$/.test(v)) (legacy ? warnings : errors).push(`edge whitespace differs from the English: ${at} -> ${JSON.stringify(v)}`);
+    // Arabic "and" is the prefix و and attaches to the next word, so it has no trailing space.
+    if (!(lang === 'ar' && en === ' and ' && v === ' و') && (/^\s/.test(en) !== /^\s/.test(v) || /\s$/.test(en) !== /\s$/.test(v))) (legacy ? warnings : errors).push(`edge whitespace differs from the English: ${at} -> ${JSON.stringify(v)}`);
     if ((en.match(/\n/g) || []).length !== (v.match(/\n/g) || []).length) errors.push(`line breaks differ: ${at}`);
     if (/ {2,}/.test(v.trim())) errors.push(`double space: ${at} -> ${JSON.stringify(v)}`);
     if (meta.kind !== 'trl' && v.includes('|') && !en.includes('|')) errors.push(`"|" is only for search words (a list): ${at}`);
