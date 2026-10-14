@@ -251,6 +251,55 @@ const NOTIFY = {
     afternoon: ['איך הולך היום? 💧', 'אל תשכחו לשתות מים ולעדכן מה אכלתם.'],
     dinner: ['ארוחת ערב 🌙', 'אל תשכחו לעדכן את ארוחת הערב שלכם.'],
   },
+  es: {
+    weekly: ['Es hora de tu foto semanal 📸', 'Una foto de progreso de la semana {0} y la actualización de tu peso y grasa corporal.'],
+    morning: ['Buenos días ☀️', 'El menú de hoy está listo. ¿Qué hay para desayunar?'],
+    lunch: ['Almuerzo 🍽️', 'No olvides actualizar tu almuerzo.'],
+    afternoon: ['¿Cómo va tu día? 💧', 'No olvides beber agua y anotar lo que has comido.'],
+    dinner: ['Cena 🌙', 'No olvides actualizar tu cena.'],
+  },
+  fr: {
+    weekly: ['C\'est l\'heure de votre photo hebdomadaire 📸', 'Une photo de progression pour la semaine {0} et la mise à jour de votre poids et de votre masse grasse.'],
+    morning: ['Bonjour ☀️', 'Le menu du jour est prêt. Que mangez-vous au petit-déjeuner ?'],
+    lunch: ['Déjeuner 🍽️', 'N\'oubliez pas de mettre à jour votre déjeuner.'],
+    afternoon: ['Comment se passe votre journée ? 💧', 'N\'oubliez pas de boire de l\'eau et de noter ce que vous avez mangé.'],
+    dinner: ['Dîner 🌙', 'N\'oubliez pas de mettre à jour votre dîner.'],
+  },
+  de: {
+    weekly: ['Zeit für dein Wochenfoto 📸', 'Ein Fortschrittsfoto für Woche {0} und die Aktualisierung von Gewicht und Körperfett.'],
+    morning: ['Guten Morgen ☀️', 'Der Tagesplan ist fertig. Was gibt es zum Frühstück?'],
+    lunch: ['Mittagessen 🍽️', 'Vergiss nicht, dein Mittagessen einzutragen.'],
+    afternoon: ['Wie läuft dein Tag? 💧', 'Vergiss nicht, Wasser zu trinken und einzutragen, was du gegessen hast.'],
+    dinner: ['Abendessen 🌙', 'Vergiss nicht, dein Abendessen einzutragen.'],
+  },
+  pt: {
+    weekly: ['Hora da sua foto semanal 📸', 'Uma foto de progresso da semana {0} e a atualização do seu peso e da gordura corporal.'],
+    morning: ['Bom dia ☀️', 'O cardápio de hoje está pronto. O que vai ser no café da manhã?'],
+    lunch: ['Almoço 🍽️', 'Não se esqueça de atualizar o seu almoço.'],
+    afternoon: ['Como está o seu dia? 💧', 'Não se esqueça de beber água e de registrar o que comeu.'],
+    dinner: ['Jantar 🌙', 'Não se esqueça de atualizar o seu jantar.'],
+  },
+  it: {
+    weekly: ['È ora della tua foto settimanale 📸', 'Una foto dei progressi della settimana {0} e l\'aggiornamento di peso e grasso corporeo.'],
+    morning: ['Buongiorno ☀️', 'Il menu di oggi è pronto. Cosa c\'è per colazione?'],
+    lunch: ['Pranzo 🍽️', 'Non dimenticare di aggiornare il tuo pranzo.'],
+    afternoon: ['Come va la giornata? 💧', 'Non dimenticare di bere acqua e di registrare cosa hai mangiato.'],
+    dinner: ['Cena 🌙', 'Non dimenticare di aggiornare la tua cena.'],
+  },
+  ru: {
+    weekly: ['Пора сделать фото недели 📸', 'Фото прогресса за неделю {0} и обновление веса и процента жира.'],
+    morning: ['Доброе утро ☀️', 'Меню на сегодня готово. Что на завтрак?'],
+    lunch: ['Обед 🍽️', 'Не забудьте отметить обед.'],
+    afternoon: ['Как проходит день? 💧', 'Не забудьте выпить воды и записать, что вы съели.'],
+    dinner: ['Ужин 🌙', 'Не забудьте отметить ужин.'],
+  },
+  ar: {
+    weekly: ['حان وقت صورتك الأسبوعية 📸', 'صورة تقدم للأسبوع {0} وتحديث وزنك ونسبة الدهون.'],
+    morning: ['صباح الخير ☀️', 'قائمة اليوم جاهزة. ماذا ستتناول على الإفطار؟'],
+    lunch: ['الغداء 🍽️', 'لا تنس تحديث وجبة الغداء.'],
+    afternoon: ['كيف يسير يومك؟ 💧', 'لا تنس شرب الماء وتسجيل ما تناولته.'],
+    dinner: ['العشاء 🌙', 'لا تنس تحديث وجبة العشاء.'],
+  },
 };
 const RTL = ['he', 'ar', 'fa', 'ur'];
 const notifyOptions = (lang) => ({ lang, dir: RTL.includes(lang) ? 'rtl' : 'ltr' });
