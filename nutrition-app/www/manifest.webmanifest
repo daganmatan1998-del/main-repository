@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "Nutri — your personal nutrition plan",
+  "short_name": "Nutri",
+  "description": "A personal nutrition plan for cutting, maintaining or bulking, with a nutrition assistant and weekly progress tracking.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./#/today",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#f4f7f5",
+  "theme_color": "#2b7a67",
+  "categories": ["health", "fitness", "food"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "My menu", "url": "./#/plan", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Nutrition assistant", "url": "./#/assistant", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
