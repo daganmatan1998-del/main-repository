@@ -48,6 +48,7 @@ export function customBlock(meal, day) {
     const off = shown.filter((e) => e.mode !== 'add').reduce((s, e) => s + e.kcal, 0);
     const on = shown.filter((e) => e.mode === 'add').reduce((s, e) => s + e.kcal, 0);
     if (off) wrap.appendChild(h('p', { class: 'extras-note small' }, icon('info', 16), h('span', null, tr('{0} kcal from your own foods were taken off the rest of the meal, so the meal keeps the same calories.', fmt(off)))));
+    if (off > meal.target.kcal * 0.7) wrap.appendChild(h('p', { class: 'notice warn small custom-over' }, tr('That is more than this meal\'s budget, so the meal goes over its calories.')));
     if (on) wrap.appendChild(h('p', { class: 'extras-note small' }, icon('info', 16), h('span', null, tr('{0} kcal from your own foods were added to the meal.', fmt(on)))));
   }
   wrap.appendChild(h('button', {
