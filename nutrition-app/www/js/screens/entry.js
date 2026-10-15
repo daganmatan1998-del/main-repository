@@ -8,9 +8,11 @@
 // expects data in the account and restores it; creating an account expects
 // none and starts the registration.
 
+import { t as tr } from '../i18n.js';
 import { h, clear } from '../util.js';
 import { cloudReady, signedIn } from '../cloud.js';
 import { googleButton } from './account.js';
+import { languageBar } from './language.js';
 
 const KEY = 'nutri-entry';
 
@@ -33,12 +35,13 @@ export function backToEntry() {
 export function renderEntry(root) {
   clear(root);
   root.appendChild(h('div', { class: 'welcome entry', id: 'entry' },
+    languageBar(),
     h('img', { src: 'icons/icon-512.png', alt: '', class: 'welcome-logo', width: 96, height: 96 }),
-    h('h1', null, 'נוטרי'),
-    h('p', { class: 'lead' }, 'תוכנית תזונה אישית, תפריט יומי ומעקב התקדמות.'),
+    h('h1', null, tr('Nutri')),
+    h('p', { class: 'lead' }, tr('A personal nutrition plan, a daily menu and progress tracking.')),
     h('div', { class: 'entry-actions' },
-      googleButton('התחברות', { intent: 'login', id: 'entry-login', primary: true }),
-      googleButton('יצירת חשבון', { intent: 'signup', id: 'entry-signup' }),
-      h('button', { type: 'button', class: 'btn btn-ghost btn-block', id: 'entry-guest', onclick: chooseGuest }, 'המשך ללא חשבון')),
-    h('p', { class: 'muted small entry-note' }, 'עם חשבון הנתונים שלך נשמרים גם בענן, ואפשר להחליף טלפון בלי לאבד כלום. ההתחברות היא דרך Google. ללא חשבון הכול נשמר רק במכשיר הזה, ותמיד אפשר להתחבר מאוחר יותר מהפרופיל.')));
+      googleButton(tr('Sign in'), { intent: 'login', id: 'entry-login', primary: true }),
+      googleButton(tr('Create an account'), { intent: 'signup', id: 'entry-signup' }),
+      h('button', { type: 'button', class: 'btn btn-ghost btn-block', id: 'entry-guest', onclick: chooseGuest }, tr('Continue without an account'))),
+    h('p', { class: 'muted small entry-note' }, tr('With an account, your data is also kept in the cloud, and you can change phones without losing anything. Sign-in is through Google. Without an account, everything is kept only on this device, and you can always sign in later from Profile.'))));
 }

@@ -1,6 +1,7 @@
 // Application state: loaded once from IndexedDB, kept in memory, written through.
 
 import { aiAccess } from './billing.js';
+import { lang } from './i18n.js';
 import * as db from './db.js';
 import { dayKey, addDays, daysBetween } from './util.js';
 import { computeTargets, validBf } from './nutrition.js';
@@ -170,6 +171,9 @@ export async function completeOnboarding({ profile, period, weight, bf, baseline
   state.periods = [{ id: 1, ...period, startDate: regDay, endDate: addDays(regDay, period.weeks * 7), startWeight: weight, startBf: bf, status: 'active' }];
   await db.kv.set('profile', state.profile);
   await db.kv.set('periods', state.periods);
+  // The service worker reads the language from the saved settings.
+  state.settings = { ...state.settings, lang };
+  await db.kv.set('settings', state.settings);
   await addMetrics(weight, bf, 'onboarding', false);
   if (baseline) await saveCheckinPhoto(0, baseline, { weight, bf });
   emit();
@@ -215,6 +219,17 @@ export async function saveCheckinPhoto(week, img, complete) {
   return checkin;
 }
 
+// The photo is optional: skipping it moves on to step 2 and leaves the week
+// empty in the gallery.
+export async function skipCheckinPhoto(week) {
+  const existing = state.checkins.find((c) => c.week === week);
+  const checkin = { ...(existing || {}), week, dueDay: addDays(state.profile.regDay, week * 7), photoSkipped: true };
+  await db.put('checkins', checkin);
+  state.checkins = state.checkins.filter((c) => c.week !== week).concat(checkin).sort((a, b) => a.week - b.week);
+  emit();
+  return checkin;
+}
+
 // Step 2: weight + body fat. Returns a before/after summary for the user.
 export async function completeCheckin(week, weight, bf) {
   const before = currentMetrics();
@@ -232,12 +247,14 @@ export async function completeCheckin(week, weight, bf) {
 export async function setOverride(day, mealIdx, patch) {
   const d = { ...(state.overrides[day] || {}) };
   const m = { ...(d[mealIdx] || {}) };
-  if (patch.reseed !== undefined) { m.reseed = patch.reseed; m.swaps = {}; }
+  if (patch.reseed !== undefined) { m.reseed = patch.reseed; m.swaps = {}; if (m.custom) m.custom = m.custom.filter((c) => !c.slot); }
   if (patch.swap) m.swaps = { ...(m.swaps || {}), [patch.swap.slot]: { foodId: patch.swap.foodId, grams: patch.swap.grams } };
   // removed: the food groups taken out of this meal (survives "another meal").
   if (patch.removed !== undefined) m.removed = [...patch.removed];
   // extras: sauces / cheese added to this meal ({ foodId, grams }); also survives "another meal".
   if (patch.extras !== undefined) m.extras = patch.extras.map(({ foodId, grams }) => ({ foodId, grams }));
+  // custom: the person's own foods (everyday.js makeCustom entries); survives "another meal" too.
+  if (patch.custom !== undefined) m.custom = patch.custom;
   d[mealIdx] = m;
   state.overrides[day] = d;
   // Keep only the recent past and the future.
@@ -349,7 +366,7 @@ export async function setAvatar(img) {
 
 // ---------- cloud copy (see sync.js) ----------
 // Settings that belong to this device and never travel between devices.
-const DEVICE_SETTINGS = ['reminders', 'installDismissed'];
+const DEVICE_SETTINGS = ['reminders', 'installDismissed', 'lang'];
 
 export function snapshot() {
   const settings = { ...state.settings };

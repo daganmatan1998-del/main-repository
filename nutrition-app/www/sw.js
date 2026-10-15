@@ -6,13 +6,24 @@
 // cached — the assistant needs a live connection, and its answers are personal.
 // All user data lives in IndexedDB, which is unaffected by cache updates.
 
-const VERSION = 'nutri-v1.13.0';
+const VERSION = 'nutri-v1.15.1';
 const SHELL = [
   './',
   'index.html',
   'manifest.webmanifest',
   'css/app.css',
   'js/app.js',
+  'js/i18n.js',
+  'js/server-texts.js',
+  'js/lang/he.js',
+  'js/lang/es.js',
+  'js/lang/fr.js',
+  'js/lang/de.js',
+  'js/lang/pt.js',
+  'js/lang/it.js',
+  'js/lang/ru.js',
+  'js/lang/ar.js',
+  'js/screens/language.js',
   'js/config.js',
   'js/util.js',
   'js/db.js',
@@ -22,6 +33,8 @@ const SHELL = [
   'js/mealplan.js',
   'js/mealphoto.js',
   'js/extras.js',
+  'js/everyday.js',
+  'js/custom-food.js',
   'js/drinks.js',
   'js/push.js',
   'js/billing.js',
@@ -68,6 +81,15 @@ const SHELL = [
   'fonts/rubik-latin-400-normal.woff2',
   'fonts/rubik-latin-500-normal.woff2',
   'fonts/rubik-latin-700-normal.woff2',
+  'fonts/rubik-arabic-400-normal.woff2',
+  'fonts/rubik-arabic-500-normal.woff2',
+  'fonts/rubik-arabic-700-normal.woff2',
+  'fonts/rubik-cyrillic-400-normal.woff2',
+  'fonts/rubik-cyrillic-500-normal.woff2',
+  'fonts/rubik-cyrillic-700-normal.woff2',
+  'fonts/rubik-latin-ext-400-normal.woff2',
+  'fonts/rubik-latin-ext-500-normal.woff2',
+  'fonts/rubik-latin-ext-700-normal.woff2',
 ];
 
 self.addEventListener('install', (event) => {
@@ -184,13 +206,14 @@ async function checkReminder() {
     if (week < 1 || settings.notifiedWeek === week) return;
     const checkins = (await read(db, 'checkins')) || [];
     if (checkins.some((c) => c.week === week && c.completedAt)) return;
-    await self.registration.showNotification('הגיע זמן הצילום השבועי 📸', {
-      body: `צילום התקדמות לשבוע ${week} ועדכון משקל ואחוז שומן.`,
+    const lang = settings.lang || 'en';
+    const [title, body] = notifyText(lang, 'weekly');
+    await self.registration.showNotification(title, {
+      body: body.replace('{0}', week),
       tag: 'weekly-checkin',
       icon: 'icons/icon-192.png',
       badge: 'icons/icon-192.png',
-      lang: 'he',
-      dir: 'rtl',
+      ...notifyOptions(lang),
     });
     await write(db, 'settings', { ...settings, notifiedWeek: week });
   } finally {
@@ -208,11 +231,88 @@ self.addEventListener('periodicsync', (event) => {
 // clock. Keep this table in step with REMINDERS in server/push.js (a test
 // checks it).
 const REMINDERS = [
-  { id: 'morning', at: 9 * 60, title: 'בוקר טוב ☀️', body: 'התפריט של היום מוכן. מה אוכלים לארוחת בוקר?' },
-  { id: 'lunch', at: 13 * 60, title: 'ארוחת צהריים 🍽️', body: 'אל תשכחו לעדכן את ארוחת הצהריים שלכם.' },
-  { id: 'afternoon', at: 17 * 60, title: 'איך הולך היום? 💧', body: 'אל תשכחו לשתות מים ולעדכן מה אכלתם.' },
-  { id: 'dinner', at: 20 * 60, title: 'ארוחת ערב 🌙', body: 'אל תשכחו לעדכן את ארוחת הערב שלכם.' },
+  { id: 'morning', at: 9 * 60 },
+  { id: 'lunch', at: 13 * 60 },
+  { id: 'afternoon', at: 17 * 60 },
+  { id: 'dinner', at: 20 * 60 },
 ];
+
+// Notification texts per language: [title, body]. A language not listed here
+// shows English. (Generated from the language packs: tools/notify-texts.)
+const NOTIFY = {
+  en: {
+    weekly: ['Time for your weekly photo 📸', 'A progress photo for week {0} and an update of your weight and body fat.'],
+    morning: ['Good morning ☀️', 'Today\'s menu is ready. What\'s for breakfast?'],
+    lunch: ['Lunch 🍽️', 'Don\'t forget to update your lunch.'],
+    afternoon: ['How is your day going? 💧', 'Don\'t forget to drink water and update what you ate.'],
+    dinner: ['Dinner 🌙', 'Don\'t forget to update your dinner.'],
+  },
+  he: {
+    weekly: ['הגיע זמן הצילום השבועי 📸', 'צילום התקדמות לשבוע {0} ועדכון משקל ואחוז שומן.'],
+    morning: ['בוקר טוב ☀️', 'התפריט של היום מוכן. מה אוכלים לארוחת בוקר?'],
+    lunch: ['ארוחת צהריים 🍽️', 'אל תשכחו לעדכן את ארוחת הצהריים שלכם.'],
+    afternoon: ['איך הולך היום? 💧', 'אל תשכחו לשתות מים ולעדכן מה אכלתם.'],
+    dinner: ['ארוחת ערב 🌙', 'אל תשכחו לעדכן את ארוחת הערב שלכם.'],
+  },
+  es: {
+    weekly: ['Es hora de tu foto semanal 📸', 'Una foto de progreso de la semana {0} y la actualización de tu peso y grasa corporal.'],
+    morning: ['Buenos días ☀️', 'El menú de hoy está listo. ¿Qué hay para desayunar?'],
+    lunch: ['Almuerzo 🍽️', 'No olvides actualizar tu almuerzo.'],
+    afternoon: ['¿Cómo va tu día? 💧', 'No olvides beber agua y anotar lo que has comido.'],
+    dinner: ['Cena 🌙', 'No olvides actualizar tu cena.'],
+  },
+  fr: {
+    weekly: ['C\'est l\'heure de votre photo hebdomadaire 📸', 'Une photo de progression pour la semaine {0} et la mise à jour de votre poids et de votre masse grasse.'],
+    morning: ['Bonjour ☀️', 'Le menu du jour est prêt. Que mangez-vous au petit-déjeuner ?'],
+    lunch: ['Déjeuner 🍽️', 'N\'oubliez pas de mettre à jour votre déjeuner.'],
+    afternoon: ['Comment se passe votre journée ? 💧', 'N\'oubliez pas de boire de l\'eau et de noter ce que vous avez mangé.'],
+    dinner: ['Dîner 🌙', 'N\'oubliez pas de mettre à jour votre dîner.'],
+  },
+  de: {
+    weekly: ['Zeit für dein Wochenfoto 📸', 'Ein Fortschrittsfoto für Woche {0} und die Aktualisierung von Gewicht und Körperfett.'],
+    morning: ['Guten Morgen ☀️', 'Der Tagesplan ist fertig. Was gibt es zum Frühstück?'],
+    lunch: ['Mittagessen 🍽️', 'Vergiss nicht, dein Mittagessen einzutragen.'],
+    afternoon: ['Wie läuft dein Tag? 💧', 'Vergiss nicht, Wasser zu trinken und einzutragen, was du gegessen hast.'],
+    dinner: ['Abendessen 🌙', 'Vergiss nicht, dein Abendessen einzutragen.'],
+  },
+  pt: {
+    weekly: ['Hora da sua foto semanal 📸', 'Uma foto de progresso da semana {0} e a atualização do seu peso e da gordura corporal.'],
+    morning: ['Bom dia ☀️', 'O cardápio de hoje está pronto. O que vai ser no café da manhã?'],
+    lunch: ['Almoço 🍽️', 'Não se esqueça de atualizar o seu almoço.'],
+    afternoon: ['Como está o seu dia? 💧', 'Não se esqueça de beber água e de registrar o que comeu.'],
+    dinner: ['Jantar 🌙', 'Não se esqueça de atualizar o seu jantar.'],
+  },
+  it: {
+    weekly: ['È ora della tua foto settimanale 📸', 'Una foto dei progressi della settimana {0} e l\'aggiornamento di peso e grasso corporeo.'],
+    morning: ['Buongiorno ☀️', 'Il menu di oggi è pronto. Cosa c\'è per colazione?'],
+    lunch: ['Pranzo 🍽️', 'Non dimenticare di aggiornare il tuo pranzo.'],
+    afternoon: ['Come va la giornata? 💧', 'Non dimenticare di bere acqua e di registrare cosa hai mangiato.'],
+    dinner: ['Cena 🌙', 'Non dimenticare di aggiornare la tua cena.'],
+  },
+  ru: {
+    weekly: ['Пора сделать фото недели 📸', 'Фото прогресса за неделю {0} и обновление веса и процента жира.'],
+    morning: ['Доброе утро ☀️', 'Меню на сегодня готово. Что на завтрак?'],
+    lunch: ['Обед 🍽️', 'Не забудьте отметить обед.'],
+    afternoon: ['Как проходит день? 💧', 'Не забудьте выпить воды и записать, что вы съели.'],
+    dinner: ['Ужин 🌙', 'Не забудьте отметить ужин.'],
+  },
+  ar: {
+    weekly: ['حان وقت صورتك الأسبوعية 📸', 'صورة تقدم للأسبوع {0} وتحديث وزنك ونسبة الدهون.'],
+    morning: ['صباح الخير ☀️', 'قائمة اليوم جاهزة. ماذا ستتناول على الإفطار؟'],
+    lunch: ['الغداء 🍽️', 'لا تنس تحديث وجبة الغداء.'],
+    afternoon: ['كيف يسير يومك؟ 💧', 'لا تنس شرب الماء وتسجيل ما تناولته.'],
+    dinner: ['العشاء 🌙', 'لا تنس تحديث وجبة العشاء.'],
+  },
+};
+const RTL = ['he', 'ar', 'fa', 'ur'];
+const notifyOptions = (lang) => ({ lang, dir: RTL.includes(lang) ? 'rtl' : 'ltr' });
+const notifyText = (lang, id) => (NOTIFY[lang] || NOTIFY.en)[id];
+
+async function savedLang() {
+  let db;
+  try { db = await idb('nutri'); } catch { return 'en'; }
+  try { return ((await read(db, 'kv', 'settings')) || {}).lang || 'en'; } catch { return 'en'; } finally { db.close(); }
+}
 
 // The latest reminder time that has passed today (before 09:00: the morning one).
 function pickReminder(date) {
@@ -224,15 +324,18 @@ function pickReminder(date) {
 
 self.addEventListener('push', (event) => {
   const r = pickReminder(new Date());
-  event.waitUntil(self.registration.showNotification(r.title, {
-    body: r.body,
-    tag: `nutri-${r.id}`,
-    icon: 'icons/icon-192.png',
-    badge: 'icons/icon-192.png',
-    lang: 'he',
-    dir: 'rtl',
-    data: { url: './#/today' },
-  }));
+  event.waitUntil((async () => {
+    const lang = await savedLang();
+    const [title, body] = notifyText(lang, r.id);
+    await self.registration.showNotification(title, {
+      body,
+      tag: `nutri-${r.id}`,
+      icon: 'icons/icon-192.png',
+      badge: 'icons/icon-192.png',
+      ...notifyOptions(lang),
+      data: { url: './#/today' },
+    });
+  })());
 });
 
 // The browser dropped the subscription: open the app so it registers a new one.

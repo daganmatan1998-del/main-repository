@@ -1,6 +1,7 @@
 // Dashboard: today's meals, calorie/macro progress, period progress and the
 // weight / body-fat chart.
 
+import { t as tr, locale } from '../i18n.js';
 import { h, icon, fmt, fmtDate, dayNumber, daysBetween, signed, ltr } from '../util.js';
 import { ring, macroBar, mealCard, avatar } from '../components.js';
 import { lineChart } from '../chart.js';
@@ -26,21 +27,21 @@ export function renderToday(root, { askAbout }) {
   const p = activePeriod();
   const cur = currentMetrics();
   const hour = new Date().getHours();
-  const hello = hour < 12 ? 'בוקר טוב' : hour < 18 ? 'צהריים טובים' : 'ערב טוב';
+  const hello = hour < 12 ? tr('Good morning') : hour < 18 ? tr('Good afternoon') : tr('Good evening');
 
   root.appendChild(h('header', { class: 'page-head' },
-    h('a', { class: 'head-avatar', href: '#/profile', 'aria-label': 'פרופיל' }, avatar(44)),
+    h('a', { class: 'head-avatar', href: '#/profile', 'aria-label': tr('Profile') }, avatar(44)),
     h('div', { class: 'grow' },
       h('h1', null, `${hello}, ${state.profile.nickname || state.profile.name}`),
-      h('p', { class: 'muted' }, new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' }))),
-    h('a', { class: 'checkin-chip', href: '#/gallery', 'aria-label': 'הצילום השבועי הבא' },
-      icon('camera', 16), g.daysToNext <= 0 ? 'היום' : g.daysToNext === 1 ? 'צילום מחר' : `צילום בעוד ${g.daysToNext} ימים`)));
+      h('p', { class: 'muted' }, new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' }))),
+    h('a', { class: 'checkin-chip', href: '#/gallery', 'aria-label': tr('Next weekly photo') },
+      icon('camera', 16), g.daysToNext <= 0 ? tr('Today') : g.daysToNext === 1 ? tr('Photo tomorrow') : tr('{0, plural, one {Photo in # day} other {Photo in # days}}', g.daysToNext))));
 
   if (periodEnded(p, day)) {
     root.appendChild(h('section', { class: 'card highlight', id: 'period-ended' },
-      h('h2', null, `תקופת ה${GOALS[p.goal].label} הסתיימה 🎉`),
-      h('p', null, 'זה הזמן לסכם תוצאות ולהגדיר את התקופה הבאה.'),
-      h('button', { class: 'btn btn-primary btn-block', onclick: () => openPeriodReview() }, 'סיכום והגדרת תקופה חדשה')));
+      h('h2', null, tr('Your {0} period is over 🎉', GOALS[p.goal].label)),
+      h('p', null, tr('Time to review your results and set up the next period.')),
+      h('button', { class: 'btn btn-primary btn-block', onclick: () => openPeriodReview() }, tr('Review and set a new period'))));
   }
 
   const ic = installCard();
@@ -50,16 +51,16 @@ export function renderToday(root, { askAbout }) {
   const remaining = t.calories - consumed.kcal;
   root.appendChild(h('section', { class: 'card progress-card' },
     h('div', { class: 'progress-top' },
-      ring(consumed.kcal, t.calories, 'קק״ל נאכלו', `מתוך ${fmt(t.calories)}`),
+      ring(consumed.kcal, t.calories, tr('kcal eaten'), tr('of {0}', fmt(t.calories))),
       h('div', { class: 'macros' },
-        macroBar('חלבון', 'protein', consumed.p, t.protein),
-        macroBar('פחמימה', 'carb', consumed.c, t.carbs),
-        macroBar('שומן', 'fat', consumed.f, t.fat))),
+        macroBar(tr('Protein'), 'protein', consumed.p, t.protein),
+        macroBar(tr('Carbs‖checkin'), 'carb', consumed.c, t.carbs),
+        macroBar(tr('Fat'), 'fat', consumed.f, t.fat))),
     h('p', { class: 'muted small center' },
-      remaining >= 0 ? `נותרו ${fmt(remaining)} קק״ל להיום · מים: ${t.water} ליטר` : `חריגה של ${fmt(-remaining)} קק״ל`)));
+      remaining >= 0 ? tr('{0} kcal left for today · water: {1} liters', fmt(remaining), t.water) : tr('Over by {0} kcal', fmt(-remaining)))));
 
   // ---- meals ----
-  root.appendChild(h('h2', { class: 'section-title' }, 'הארוחות של היום'));
+  root.appendChild(h('h2', { class: 'section-title' }, tr('Today\'s meals')));
   for (const m of plan) {
     root.appendChild(mealCard(m, { day, eaten: eaten.has(m.index), onToggle: () => toggleEaten(day, m.index), onAsk: askAbout }));
   }
@@ -72,17 +73,17 @@ export function renderToday(root, { askAbout }) {
     const done = span !== 0 ? Math.max(0, Math.min(1, (cur.weight - p.startWeight) / span)) : 1;
     root.appendChild(h('section', { class: 'card', id: 'period-card' },
       h('div', { class: 'row space' },
-        h('h2', null, `תקופת ${GOALS[p.goal].label}`),
-        h('span', { class: 'muted small num' }, `שבוע ${Math.min(Math.floor(passed / 7) + 1, Math.ceil(total / 7))} מתוך ${Math.ceil(total / 7)}`)),
-      h('div', { class: 'bar time', 'aria-label': 'זמן שעבר בתקופה' }, h('i', { style: { width: `${(passed / total) * 100}%` } })),
+        h('h2', null, tr('{0} period', GOALS[p.goal].label)),
+        h('span', { class: 'muted small num' }, tr('Week {0} of {1}', Math.min(Math.floor(passed / 7) + 1, Math.ceil(total / 7)), Math.ceil(total / 7)))),
+      h('div', { class: 'bar time', 'aria-label': tr('Time elapsed in the period') }, h('i', { style: { width: `${(passed / total) * 100}%` } })),
       h('div', { class: 'period-stats' },
-        h('div', null, h('small', null, 'התחלה'), h('b', { class: 'num' }, `${fmt(p.startWeight, 1)}`), h('small', null, `${p.startBf ?? '—'}%`)),
-        h('div', null, h('small', null, 'עכשיו'), h('b', { class: 'num' }, `${fmt(cur.weight, 1)}`), h('small', null, `${cur.bf ?? '—'}%`)),
-        h('div', null, h('small', null, 'יעד'), h('b', { class: 'num' }, `${fmt(p.targetWeight, 1)}`), h('small', null, `${p.targetBf ?? '—'}%`))),
-      h('div', { class: 'bar goal', 'aria-label': 'התקדמות ליעד המשקל' }, h('i', { style: { width: `${done * 100}%` } })),
+        h('div', null, h('small', null, tr('Start')), h('b', { class: 'num' }, `${fmt(p.startWeight, 1)}`), h('small', null, `${p.startBf ?? '—'}%`)),
+        h('div', null, h('small', null, tr('now')), h('b', { class: 'num' }, `${fmt(cur.weight, 1)}`), h('small', null, `${cur.bf ?? '—'}%`)),
+        h('div', null, h('small', null, tr('Target')), h('b', { class: 'num' }, `${fmt(p.targetWeight, 1)}`), h('small', null, `${p.targetBf ?? '—'}%`))),
+      h('div', { class: 'bar goal', 'aria-label': tr('Progress toward the target weight') }, h('i', { style: { width: `${done * 100}%` } })),
       h('p', { class: 'muted small' },
         ltr(signed(cur.weight - p.startWeight)),
-        ` ק״ג מתחילת התקופה · ${t.deltaKcal < 0 ? 'גירעון' : t.deltaKcal > 0 ? 'עודף' : 'מאזן'} ${Math.abs(t.deltaKcal)} קק״ל ליום · מסתיימת ב-${fmtDate(p.endDate)}`),
+        tr(' kg since the start of the period · {0} {1} kcal a day · ends on {2}', t.deltaKcal < 0 ? tr('Deficit') : t.deltaKcal > 0 ? tr('Surplus') : tr('Balance'), Math.abs(t.deltaKcal), fmtDate(p.endDate))),
       ...t.warnings.map((w) => h('p', { class: 'notice warn small' }, w))));
   }
 
@@ -97,11 +98,11 @@ export function renderToday(root, { askAbout }) {
     const byDay = new Map(pts.map((pt) => [pt.x, pt]));
     const series = [...byDay.values()];
     const target = p ? (chartMode === 'weight' ? p.targetWeight : p.targetBf) : null;
-    chartBox.appendChild(lineChart(series, { target: target ?? null, unit: chartMode === 'weight' ? ' ק״ג' : '%' }));
-    if (series.length < 2) chartBox.appendChild(h('p', { class: 'muted small center' }, 'הגרף יתמלא עם כל צילום שבועי.'));
+    chartBox.appendChild(lineChart(series, { target: target ?? null, unit: chartMode === 'weight' ? tr(' kg') : '%' }));
+    if (series.length < 2) chartBox.appendChild(h('p', { class: 'muted small center' }, tr('The chart fills in with every weekly photo.')));
   };
-  const toggle = h('div', { class: 'segmented small', role: 'radiogroup', 'aria-label': 'סוג גרף' },
-    ...[['weight', 'משקל'], ['bf', '% שומן']].map(([id, label]) => h('button', {
+  const toggle = h('div', { class: 'segmented small', role: 'radiogroup', 'aria-label': tr('Chart type') },
+    ...[['weight', tr('Weight')], ['bf', tr('% fat')]].map(([id, label]) => h('button', {
       type: 'button', role: 'radio', 'aria-checked': chartMode === id ? 'true' : 'false', class: chartMode === id ? 'on' : '',
       onclick: (e) => {
         chartMode = id;
@@ -113,7 +114,7 @@ export function renderToday(root, { askAbout }) {
     }, label)));
   drawChart();
   root.appendChild(h('section', { class: 'card' },
-    h('div', { class: 'row space' }, h('h2', null, 'מגמה'), toggle),
+    h('div', { class: 'row space' }, h('h2', null, tr('Trend')), toggle),
     chartBox));
 }
 

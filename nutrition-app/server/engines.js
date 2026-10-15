@@ -77,7 +77,7 @@ export function engineList(env) {
   if (env.AI && typeof env.AI.run === 'function') {
     out.push({ id: 'workers-ai', kind: 'workers-ai', free: true, model: env.WORKERS_AI_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast', visionModel: null });
   }
-  if (env.ANTHROPIC_API_KEY) out.push({ id: 'anthropic', kind: 'anthropic', free: false, model: env.CLAUDE_MODEL || 'claude-opus-5-5', visionModel: 'claude-opus-5-5' });
+  if (env.ANTHROPIC_API_KEY) out.push({ id: 'anthropic', kind: 'anthropic', free: false, model: 'anthropic', visionModel: 'anthropic' }); // the model itself is chosen per task in api.js
   return out;
 }
 

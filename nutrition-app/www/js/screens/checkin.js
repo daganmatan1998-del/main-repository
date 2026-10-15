@@ -2,18 +2,19 @@
 // then a short summary. While the gate is active nothing else renders —
 // app.js routes every navigation here until the check-in is complete.
 
+import { t as tr } from '../i18n.js';
 import { h, icon, clear, fmt, signed, fmtDate, ltr } from '../util.js';
 import { metricsForm } from '../components.js';
-import { state, saveCheckinPhoto, completeCheckin, getPhoto, currentMetrics } from '../store.js';
+import { state, saveCheckinPhoto, skipCheckinPhoto, completeCheckin, getPhoto, currentMetrics } from '../store.js';
 import { photoButtons } from './photo-picker.js';
 
 let summary = null;
 export const hasSummary = () => !!summary;
 
 function steps(active) {
-  return h('ol', { class: 'gate-steps', 'aria-label': 'שלבי הצילום השבועי' },
-    h('li', { class: active === 1 ? 'on' : 'done' }, h('span', { class: 'num' }, active > 1 ? '✓' : '1'), 'תמונה'),
-    h('li', { class: active === 2 ? 'on' : active > 2 ? 'done' : '' }, h('span', { class: 'num' }, active > 2 ? '✓' : '2'), 'משקל ואחוז שומן'));
+  return h('ol', { class: 'gate-steps', 'aria-label': tr('Weekly photo steps') },
+    h('li', { class: active === 1 ? 'on' : 'done' }, h('span', { class: 'num' }, active > 1 ? '✓' : '1'), tr('Photo')),
+    h('li', { class: active === 2 ? 'on' : active > 2 ? 'done' : '' }, h('span', { class: 'num' }, active > 2 ? '✓' : '2'), tr('Weight and body fat')));
 }
 
 function missedWeeks(week) {
@@ -28,39 +29,42 @@ export function renderGate(root, gate) {
   const wrap = h('div', { class: 'gate', id: 'gate', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'gate-title' });
   root.appendChild(wrap);
 
-  wrap.appendChild(h('div', { class: 'gate-badge' }, icon('lock', 18), 'נדרש צילום שבועי'));
-  wrap.appendChild(h('h1', { id: 'gate-title' }, `צילום התקדמות — שבוע ${gate.week}`));
+  wrap.appendChild(h('div', { class: 'gate-badge' }, icon('camera', 18), tr('Weekly check-in')));
+  wrap.appendChild(h('h1', { id: 'gate-title' }, tr('Progress photo — week {0}', gate.week)));
   wrap.appendChild(steps(gate.state === 'needsPhoto' ? 1 : 2));
 
   if (gate.state === 'needsPhoto') {
     const missed = missedWeeks(gate.week);
     wrap.append(...[
-      h('p', { class: 'lead' }, `הגיע הזמן לתמונה השבועית (מאז ${fmtDate(gate.dueDay)}). כדי להמשיך להשתמש באפליקציה יש להעלות תמונה ואז לעדכן משקל ואחוז שומן.`),
-      missed.length ? h('p', { class: 'notice warn small' }, `שבועות ${missed.join(', ')} לא צולמו — הם יופיעו ריקים בגלריה. עכשיו מצלמים את שבוע ${gate.week}.`) : null,
+      h('p', { class: 'lead' }, tr('It\'s time for your weekly check-in (since {0}). Add a progress photo, or skip it, then update your weight and body fat.', fmtDate(gate.dueDay))),
+      missed.length ? h('p', { class: 'notice warn small' }, tr('No photos for weeks {0} — they will appear empty in the gallery. Now taking week {1}.', missed.join(', '), gate.week)) : null,
       h('ul', { class: 'tips' },
-        h('li', null, 'אותה תאורה, אותו מקום ואותה תנוחה בכל שבוע'),
-        h('li', null, 'רצוי בבוקר, לפני אוכל'),
-        h('li', null, 'התמונה נשמרת רק במכשיר — לא נדרש אינטרנט')),
-      photoButtons(async (img) => { await saveCheckinPhoto(gate.week, img); }, { busyText: 'דוחס ושומר את התמונה…' }),
+        h('li', null, tr('The same light, the same place and the same pose every week')),
+        h('li', null, tr('Preferably in the morning, before eating')),
+        h('li', null, tr('The photo is saved only on your device — no internet needed'))),
+      photoButtons(async (img) => { await saveCheckinPhoto(gate.week, img); }, { busyText: tr('Compressing and saving the photo…') }),
+      h('button', { class: 'btn btn-block', id: 'skip-photo', type: 'button', onclick: () => skipCheckinPhoto(gate.week) }, tr('Skip the photo')),
     ].filter(Boolean));
   } else {
     const c = state.checkins.find((x) => x.week === gate.week);
     const prev = currentMetrics();
     const thumb = h('div', { class: 'gate-thumb' });
-    getPhoto(c.photoId).then((p) => {
+    if (c.photoId) getPhoto(c.photoId).then((p) => {
       if (!p) return;
       const url = URL.createObjectURL(p.blob);
-      thumb.appendChild(h('img', { src: url, alt: `תמונת שבוע ${gate.week}`, onload: () => setTimeout(() => URL.revokeObjectURL(url), 1000) }));
+      thumb.appendChild(h('img', { src: url, alt: tr('Week {0} photo', gate.week), onload: () => setTimeout(() => URL.revokeObjectURL(url), 1000) }));
     });
     const replace = h('details', { class: 'replace' },
-      h('summary', null, 'להחליף את התמונה?'),
+      h('summary', null, c.photoId ? tr('Replace the photo?') : tr('Add a photo')),
       photoButtons(async (img) => { await saveCheckinPhoto(gate.week, img); }));
     wrap.append(...[
-      h('div', { class: 'row gap center-y' }, thumb, h('p', { class: 'small' }, icon('check', 16), ' התמונה נשמרה. נשאר רק לעדכן מדדים.')),
+      c.photoId
+        ? h('div', { class: 'row gap center-y' }, thumb, h('p', { class: 'small' }, icon('check', 16), tr(' The photo is saved. Only your measurements are left to update.')))
+        : h('p', { class: 'small' }, tr('No photo this week. Only your measurements are left to update.')),
       replace,
-      prev ? h('p', { class: 'muted small' }, `המדידה הקודמת: ${fmt(prev.weight, 1)} ק״ג, ${prev.bf ?? '—'}% שומן.`) : null,
+      prev ? h('p', { class: 'muted small' }, tr('Previous measurement: {0} kg, {1}% body fat.', fmt(prev.weight, 1), prev.bf ?? '—')) : null,
       metricsForm({
-        submitLabel: 'שמירה ופתיחת האפליקציה',
+        submitLabel: tr('Save and open the app'),
         previous: prev,
         person: () => ({ sex: state.profile.sex, age: state.profile.age, height: state.profile.height }),
         onSubmit: async (w, b) => {
@@ -85,29 +89,29 @@ export function renderSummary(root, onContinue) {
   const tb = s.targetsBefore;
   const ta = s.targetsAfter;
   const goal = state.periods.find((p) => p.status === 'active')?.goal;
-  let msg = 'המשך כך — עקביות היא המפתח.';
-  if (goal === 'cut' && dw < 0) msg = 'ירידה יפה! ממשיכים באותו קצב.';
-  if (goal === 'cut' && dw >= 0) msg = 'השבוע בלי ירידה — זה קורה (מים, מלח, מחזור). אם זה חוזר שבועיים, התוכנית תתאים את עצמה.';
-  if (goal === 'bulk' && dw > 0) msg = 'עלייה במשקל כמתוכנן. 💪';
-  if (goal === 'bulk' && dw <= 0) msg = 'השבוע בלי עלייה — הקפידו לאכול את כל הארוחות.';
+  let msg = tr('Keep it up — consistency is key.');
+  if (goal === 'cut' && dw < 0) msg = tr('Nice drop! You\'re keeping a steady pace.');
+  if (goal === 'cut' && dw >= 0) msg = tr('No drop this week — it happens (water, salt, cycle). If it repeats for two weeks, the plan will adjust automatically.');
+  if (goal === 'bulk' && dw > 0) msg = tr('Weight gain as planned. 💪');
+  if (goal === 'bulk' && dw <= 0) msg = tr('No gain this week — make sure you eat all of your meals.');
 
   const row = (label, ...val) => h('div', { class: 'sum-row' }, h('span', null, label), h('b', null, ...val));
   const change = (a, b, unit = '') => [ltr(`${a} → ${b}`), unit];
   root.appendChild(h('div', { class: 'gate', id: 'checkin-summary' },
-    h('div', { class: 'gate-badge ok' }, icon('check', 18), 'הצילום השבועי הושלם'),
-    h('h1', null, `סיכום שבוע ${s.week}`),
+    h('div', { class: 'gate-badge ok' }, icon('check', 18), tr('The weekly photo is done')),
+    h('h1', null, tr('Week {0} summary', s.week)),
     h('p', { class: 'lead' }, msg),
     h('div', { class: 'card' },
-      row('משקל', `${fmt(s.after.weight, 1)} ק״ג `, ltr(`(${signed(dw)})`, 'num delta')),
-      row('אחוז שומן', ltr(`${fmt(s.after.bf, 1)}%`), ' ', ltr(`(${signed(dbf)})`, 'num delta')),
-      dFat !== null ? row('מסת שומן', ltr(signed(dFat)), ' ק״ג') : null,
-      dLean !== null ? row('מסה רזה', ltr(signed(dLean)), ' ק״ג') : null),
+      row(tr('Weight'), tr('{0} kg ', fmt(s.after.weight, 1)), ltr(`(${signed(dw)})`, 'num delta')),
+      row(tr('Body fat'), ltr(`${fmt(s.after.bf, 1)}%`), ' ', ltr(`(${signed(dbf)})`, 'num delta')),
+      dFat !== null ? row(tr('Fat mass'), ltr(signed(dFat)), tr(' kg')) : null,
+      dLean !== null ? row(tr('Lean mass'), ltr(signed(dLean)), tr(' kg')) : null),
     tb && ta ? h('div', { class: 'card' },
-      h('h3', null, 'התוכנית עודכנה'),
-      row('קלוריות', ...change(fmt(tb.calories), fmt(ta.calories))),
-      row('חלבון', ...change(tb.protein, ta.protein, ' ג׳')),
-      row('פחמימה', ...change(tb.carbs, ta.carbs, ' ג׳')),
-      row('שומן', ...change(tb.fat, ta.fat, ' ג׳')),
+      h('h3', null, tr('The plan was updated')),
+      row(tr('Calories'), ...change(fmt(tb.calories), fmt(ta.calories))),
+      row(tr('Protein'), ...change(tb.protein, ta.protein, tr(' g'))),
+      row(tr('Carbs‖checkin'), ...change(tb.carbs, ta.carbs, tr(' g'))),
+      row(tr('Fat'), ...change(tb.fat, ta.fat, tr(' g'))),
       ...ta.warnings.map((w) => h('p', { class: 'notice warn small' }, w))) : null,
-    h('button', { class: 'btn btn-primary btn-lg btn-block', id: 'summary-continue', onclick: () => { summary = null; onContinue(); } }, 'המשך לאפליקציה')));
+    h('button', { class: 'btn btn-primary btn-lg btn-block', id: 'summary-continue', onclick: () => { summary = null; onContinue(); } }, tr('Continue to the app'))));
 }

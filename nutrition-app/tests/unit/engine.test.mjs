@@ -70,6 +70,9 @@ test('weekly gate: due from day 7n, needs photo then metrics', () => {
   assert.equal(gateStatus(reg, [], '2026-03-08').state, 'needsPhoto');
   assert.equal(gateStatus(reg, [{ week: 1, photoId: 'x' }], '2026-03-08').state, 'needsMetrics');
   assert.equal(gateStatus(reg, [{ week: 1, photoId: 'x', completedAt: 1 }], '2026-03-14').state, 'none');
+  // The photo is optional: a skipped photo goes straight to the weigh-in.
+  assert.equal(gateStatus(reg, [{ week: 1, photoSkipped: true }], '2026-03-08').state, 'needsMetrics');
+  assert.equal(gateStatus(reg, [{ week: 1, photoSkipped: true, completedAt: 1 }], '2026-03-14').state, 'none');
   // Missed week 2: only the current week (3) is required.
   const g = gateStatus(reg, [{ week: 1, photoId: 'x', completedAt: 1 }], '2026-03-22');
   assert.equal(g.week, 3);

@@ -6,4 +6,5 @@ tests/e2e/screenshots/
 android/
 ios/
 APP-LINK.txt
+tests/e2e/screenshots-i18n/
 build/

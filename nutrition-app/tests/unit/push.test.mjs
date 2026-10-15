@@ -142,9 +142,17 @@ test('the service worker\'s reminder table matches the server\'s', async () => {
   const sw = readFileSync(new URL('../../www/sw.js', import.meta.url), 'utf8');
   const table = new Function(`${sw.match(/const REMINDERS = \[[\s\S]*?\n\];/)[0]}; return REMINDERS;`)();
   assert.deepEqual(table.map((r) => [r.id, r.at]), REMINDERS.map((r) => [r.id, r.at]));
-  assert.ok(table.every((r) => r.title && r.body));
-  assert.match(table.find((r) => r.id === 'lunch').body, /ארוחת הצהריים/);
-  assert.match(table.find((r) => r.id === 'dinner').body, /ארוחת הערב/);
+  // every language has a title and a body for every reminder and the weekly photo
+  const NOTIFY = new Function(`${sw.match(/const NOTIFY = \{[\s\S]*?\n\};/)[0]}; return NOTIFY;`)();
+  const ids = [...table.map((r) => r.id), 'weekly'];
+  assert.ok(NOTIFY.en && NOTIFY.he);
+  for (const [code, texts] of Object.entries(NOTIFY)) {
+    for (const id of ids) assert.ok(texts[id] && texts[id][0] && texts[id][1], `${code}/${id}`);
+    assert.ok(texts.weekly[1].includes('{0}'), `${code}: the weekly text carries the week number`);
+  }
+  assert.match(NOTIFY.he.lunch[1], /ארוחת הצהריים/);
+  assert.match(NOTIFY.he.dinner[1], /ארוחת הערב/);
+  assert.match(NOTIFY.en.lunch[1], /lunch/);
   // which text a device shows at which hour
   const pick = new Function(`${sw.match(/function pickReminder\(date\) \{[\s\S]*?\n\}/)[0]}; const REMINDERS = ${sw.match(/const REMINDERS = (\[[\s\S]*?\n\]);/)[1]}; return (h, m) => pickReminder({ getHours: () => h, getMinutes: () => m }).id;`)();
   assert.equal(pick(8, 0), 'morning');

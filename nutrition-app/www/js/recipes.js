@@ -6,6 +6,7 @@
 // A typical meal yields hundreds to thousands of distinct recipes, all offline.
 // Pure module: no DOM, unit-tested directly.
 
+import { t as tr, trl, locale, capitalNouns } from './i18n.js';
 import { FOOD_BY_ID, household, isAllowed } from './foods.js';
 import { SHOP } from './shopping.js';
 import { alternatives } from './substitutions.js';
@@ -13,61 +14,68 @@ import { rng, hashStr } from './util.js';
 
 // ---------- short names used inside recipe titles ----------
 const NAME = {
-  chicken_breast: 'חזה עוף', turkey_breast: 'חזה הודו', chicken_thigh: 'פרגיות', lean_beef: 'בשר טחון',
-  beef_20: 'בשר טחון', entrecote: 'אנטריקוט', salmon: 'סלמון', white_fish: 'פילה דג לבן', tuna: 'טונה',
-  sardines: 'סרדינים', shrimp: 'שרימפס', eggs: 'ביצים', egg_whites: 'חלבונים', cottage: "קוטג'",
-  white_cheese: 'גבינה לבנה', labane: 'לבנה', greek_yogurt: 'יוגורט', yellow_cheese: 'גבינה צהובה',
-  whey: 'אבקת חלבון', pea_protein: 'אבקת חלבון צמחית', tofu: 'טופו', tempeh: 'טמפה', seitan: 'סייטן',
-  lentils: 'עדשים', chickpeas: 'חומוס', black_beans: 'שעועית שחורה', edamame: 'אדממה', turkey_pastrami: 'פסטרמה',
-  white_rice: 'אורז', brown_rice: 'אורז מלא', quinoa: 'קינואה', pasta: 'פסטה', sweet_potato: 'בטטה',
-  potato: 'תפוחי אדמה', buckwheat: 'כוסמת', bulgur: 'בורגול', couscous: 'קוסקוס', freekeh: 'פריקי',
-  wholewheat_bread: 'לחם מלא', rye_bread: 'לחם שיפון', gf_bread: 'לחם ללא גלוטן', pita: 'פיתה',
-  tortilla: 'טורטייה', oats: 'שיבולת שועל', rice_cakes: 'פריכיות אורז', corn: 'תירס',
-  banana: 'בננה', apple: 'תפוח', berries: 'פירות יער', orange: 'תפוז', dates: 'תמרים', grapes: 'ענבים', pear: 'אגס', kiwi: 'קיווי',
-  ground_chicken: 'עוף טחון', ground_turkey: 'הודו טחון', sirloin: 'סינטה', trout: 'פורל', hake: 'הייק',
-  bulgarian: 'גבינה בולגרית', skyr: 'סקייר', pro_pudding: 'מעדן חלבון', soy_chunks: 'גרגירי סויה', white_beans: 'שעועית לבנה',
-  barley: 'גריסים', millet: 'דוחן', ptitim: 'פתיתים', whole_pasta: 'פסטה מלאה', gf_pasta: 'פסטה ללא גלוטן',
-  rice_noodles: 'אטריות אורז', green_peas: 'אפונה', whole_bun: 'לחמנייה מלאה', crispbread: 'פת פריכה',
-  mango: 'מנגו', watermelon: 'אבטיח', melon: 'מלון', peach: 'אפרסק', pineapple: 'אננס', plums: 'שזיפים',
-  pomegranate: 'גרגרי רימון', clementine: 'קלמנטינות', strawberries: 'תותים',
-  persimmon: 'אפרסמון', figs: 'תאנים', apricot: 'משמשים', cherries: 'דובדבנים', nectarine: 'נקטרינה',
-  grapefruit: 'אשכולית', pomelo: 'פומלה', lychee: "ליצ'י", passion_fruit: 'פסיפלורה', guava: 'גויאבה',
-  papaya: 'פפאיה', blueberries: 'אוכמניות', raspberries: 'פטל', loquat: 'שסק', raisins: 'צימוקים',
-  dried_apricots: 'משמש מיובש', prunes: 'שזיפים מיובשים',
+  chicken_breast: tr('chicken breast'), turkey_breast: tr('turkey breast‖short'), chicken_thigh: tr('chicken thighs'), lean_beef: tr('ground meat'),
+  beef_20: tr('ground meat'), entrecote: tr('entrecote'), salmon: tr('salmon'), white_fish: tr('white fish fillet'), tuna: tr('tuna'),
+  sardines: tr('sardines'), shrimp: tr('shrimp'), eggs: tr('eggs‖short'), egg_whites: tr('egg whites'), cottage: tr('cottage cheese‖name'),
+  white_cheese: tr('white cheese'), labane: tr('labneh'), greek_yogurt: tr('yogurt'), yellow_cheese: tr('yellow cheese'),
+  whey: tr('protein powder'), pea_protein: tr('plant protein powder‖short'), tofu: tr('tofu'), tempeh: tr('tempeh‖short'), seitan: tr('seitan‖short'),
+  lentils: tr('lentils'), chickpeas: tr('hummus'), black_beans: tr('black beans'), edamame: tr('edamame'), turkey_pastrami: tr('pastrami'),
+  white_rice: tr('rice'), brown_rice: tr('brown rice'), quinoa: tr('quinoa'), pasta: tr('pasta'), sweet_potato: tr('sweet potato'),
+  potato: tr('potatoes'), buckwheat: tr('buckwheat'), bulgur: tr('bulgur'), couscous: tr('couscous'), freekeh: tr('freekeh‖name'),
+  wholewheat_bread: tr('whole wheat bread‖short'), rye_bread: tr('rye bread‖short'), gf_bread: tr('gluten-free bread‖short'), pita: tr('pita'),
+  tortilla: tr('tortilla'), oats: tr('oats‖short'), rice_cakes: tr('rice cakes‖short'), corn: tr('corn'),
+  banana: tr('banana‖short'), apple: tr('apple'), berries: tr('berries‖short'), orange: tr('orange‖short'), dates: tr('dates'), grapes: tr('grapes‖short'), pear: tr('pear‖short'), kiwi: tr('kiwi‖short'),
+  ground_chicken: tr('ground chicken'), ground_turkey: tr('ground turkey'), sirloin: tr('sirloin'), trout: tr('trout'), hake: tr('hake'),
+  bulgarian: tr('Bulgarian cheese'), skyr: tr('skyr'), pro_pudding: tr('protein dessert'), soy_chunks: tr('soy granules'), white_beans: tr('white beans'),
+  barley: tr('barley groats'), millet: tr('millet'), ptitim: tr('ptitim'), whole_pasta: tr('whole wheat pasta'), gf_pasta: tr('gluten-free pasta'),
+  rice_noodles: tr('rice noodles'), green_peas: tr('peas'), whole_bun: tr('whole wheat bun'), crispbread: tr('crispbread'),
+  mango: tr('mango‖short'), watermelon: tr('watermelon‖short'), melon: tr('melon‖short'), peach: tr('peach‖short'), pineapple: tr('pineapple‖short'), plums: tr('plums‖short'),
+  pomegranate: tr('pomegranate seeds‖short'), clementine: tr('clementines‖short'), strawberries: tr('strawberries‖short'),
+  persimmon: tr('persimmon‖short'), figs: tr('figs'), apricot: tr('apricots'), cherries: tr('cherries‖short'), nectarine: tr('nectarine‖short'),
+  grapefruit: tr('grapefruit‖short'), pomelo: tr('pomelo‖short'), lychee: tr('lychee‖short'), passion_fruit: tr('passion fruit‖short'), guava: tr('guava‖short'),
+  papaya: tr('papaya‖short'), blueberries: tr('blueberries‖short'), raspberries: tr('raspberries‖short'), loquat: tr('loquat‖short'), raisins: tr('raisins‖short'),
+  dried_apricots: tr('dried apricot‖short'), prunes: tr('prunes‖short'),
 };
-const nm = (id) => NAME[id] || FOOD_BY_ID[id].name;
+// Titles and steps are built from lowercase names: start each with a capital (no effect in Hebrew).
+// Foods without a short name keep their full name, in lowercase inside a sentence (not in languages that capitalise nouns).
+const lowerFirst = (s) => (capitalNouns ? s : s.charAt(0).toLocaleLowerCase(locale) + s.slice(1));
+const upperFirst = (s) => (s ? s.charAt(0).toLocaleUpperCase(locale) + s.slice(1) : s);
+// "150 g chicken breast", "2 slices pastrami": the language decides whether a word joins them ("150 g de pollo").
+const amountOf = (amount, food) => tr('{0} {1}‖amount of food', amount, food);
+const nm = (id) => NAME[id] || lowerFirst(FOOD_BY_ID[id].name);
 
 // Definite forms ("the chicken"). Hebrew puts the article on the second word
 // of a construct (חזה העוף) and on both words of noun + adjective (הגבינה
 // הלבנה), so these are spelled out rather than built with a prefix.
 const DEF = {
-  chicken_breast: 'חזה העוף', turkey_breast: 'חזה ההודו', chicken_thigh: 'הפרגיות', lean_beef: 'הבשר הטחון',
-  beef_20: 'הבשר הטחון', entrecote: 'האנטריקוט', salmon: 'הסלמון', white_fish: 'הדג', tuna: 'הטונה',
-  sardines: 'הסרדינים', shrimp: 'השרימפס', eggs: 'הביצים', egg_whites: 'החלבונים', cottage: "הקוטג'",
-  white_cheese: 'הגבינה הלבנה', labane: 'הלבנה', greek_yogurt: 'היוגורט', yellow_cheese: 'הגבינה הצהובה',
-  whey: 'אבקת החלבון', pea_protein: 'אבקת החלבון', tofu: 'הטופו', tempeh: 'הטמפה', seitan: 'הסייטן',
-  lentils: 'העדשים', chickpeas: 'החומוס', black_beans: 'השעועית', edamame: 'האדממה', turkey_pastrami: 'הפסטרמה',
-  white_rice: 'האורז', brown_rice: 'האורז', quinoa: 'הקינואה', pasta: 'הפסטה', sweet_potato: 'הבטטה',
-  potato: 'תפוחי האדמה', buckwheat: 'הכוסמת', bulgur: 'הבורגול', couscous: 'הקוסקוס', freekeh: 'הפריקי',
-  wholewheat_bread: 'הלחם', rye_bread: 'הלחם', gf_bread: 'הלחם', pita: 'הפיתה', tortilla: 'הטורטייה',
-  oats: 'שיבולת השועל', rice_cakes: 'הפריכיות', corn: 'התירס', banana: 'הבננה', apple: 'התפוח',
-  berries: 'פירות היער', orange: 'התפוז', dates: 'התמרים', grapes: 'הענבים', pear: 'האגס', kiwi: 'הקיווי',
-  ground_chicken: 'העוף הטחון', ground_turkey: 'ההודו הטחון', sirloin: 'הסינטה', trout: 'הפורל', hake: 'ההייק',
-  bulgarian: 'הגבינה הבולגרית', skyr: 'הסקייר', pro_pudding: 'מעדן החלבון', soy_chunks: 'גרגירי הסויה', white_beans: 'השעועית',
-  barley: 'הגריסים', millet: 'הדוחן', ptitim: 'הפתיתים', whole_pasta: 'הפסטה', gf_pasta: 'הפסטה',
-  rice_noodles: 'אטריות האורז', green_peas: 'האפונה', whole_bun: 'הלחמנייה', crispbread: 'הפת הפריכה',
-  mango: 'המנגו', watermelon: 'האבטיח', melon: 'המלון', peach: 'האפרסק', pineapple: 'האננס', plums: 'השזיפים',
-  pomegranate: 'גרגרי הרימון', clementine: 'הקלמנטינות', strawberries: 'התותים',
-  persimmon: 'האפרסמון', figs: 'התאנים', apricot: 'המשמשים', cherries: 'הדובדבנים', nectarine: 'הנקטרינה',
-  grapefruit: 'האשכולית', pomelo: 'הפומלה', lychee: "הליצ'י", passion_fruit: 'הפסיפלורה', guava: 'הגויאבה',
-  papaya: 'הפפאיה', blueberries: 'האוכמניות', raspberries: 'הפטל', loquat: 'השסק', raisins: 'הצימוקים',
-  dried_apricots: 'המשמש המיובש', prunes: 'השזיפים המיובשים',
+  chicken_breast: tr('the chicken breast'), turkey_breast: tr('the turkey breast'), chicken_thigh: tr('the chicken thighs'), lean_beef: tr('the ground beef'),
+  beef_20: tr('the ground beef'), entrecote: tr('the entrecote'), salmon: tr('the salmon'), white_fish: tr('the fish'), tuna: tr('the tuna'),
+  sardines: tr('the sardines'), shrimp: tr('the shrimp'), eggs: tr('the eggs'), egg_whites: tr('the egg whites'), cottage: tr('the cottage cheese'),
+  white_cheese: tr('the white cheese'), labane: tr('the labneh'), greek_yogurt: tr('the yogurt'), yellow_cheese: tr('the yellow cheese'),
+  whey: tr('the protein powder'), pea_protein: tr('the protein powder'), tofu: tr('the tofu'), tempeh: tr('the tempeh'), seitan: tr('the seitan'),
+  lentils: tr('the lentils'), chickpeas: tr('the chickpeas'), black_beans: tr('the beans'), edamame: tr('the edamame'), turkey_pastrami: tr('the turkey pastrami'),
+  white_rice: tr('the rice'), brown_rice: tr('the rice'), quinoa: tr('the quinoa'), pasta: tr('the pasta'), sweet_potato: tr('the sweet potato'),
+  potato: tr('the potatoes'), buckwheat: tr('the buckwheat'), bulgur: tr('the bulgur'), couscous: tr('the couscous'), freekeh: tr('the freekeh'),
+  wholewheat_bread: tr('the bread'), rye_bread: tr('the bread'), gf_bread: tr('the bread'), pita: tr('the pita'), tortilla: tr('the tortilla'),
+  oats: tr('the oats'), rice_cakes: tr('the rice cakes'), corn: tr('the corn'), banana: tr('the banana'), apple: tr('the apple'),
+  berries: tr('the berries'), orange: tr('the orange'), dates: tr('the dates'), grapes: tr('the grapes'), pear: tr('the pear'), kiwi: tr('the kiwi'),
+  ground_chicken: tr('the ground chicken'), ground_turkey: tr('the ground turkey'), sirloin: tr('the sirloin'), trout: tr('the trout'), hake: tr('the hake'),
+  bulgarian: tr('the Bulgarian cheese'), skyr: tr('the skyr'), pro_pudding: tr('the protein dessert'), soy_chunks: tr('the soy granules'), white_beans: tr('the beans'),
+  barley: tr('the barley'), millet: tr('the millet'), ptitim: tr('the ptitim'), whole_pasta: tr('the pasta'), gf_pasta: tr('the pasta'),
+  rice_noodles: tr('the rice noodles'), green_peas: tr('the peas'), whole_bun: tr('the bun'), crispbread: tr('the crispbread'),
+  mango: tr('the mango'), watermelon: tr('the watermelon'), melon: tr('the melon'), peach: tr('the peach'), pineapple: tr('the pineapple'), plums: tr('the plums'),
+  pomegranate: tr('the pomegranate seeds'), clementine: tr('the clementines'), strawberries: tr('the strawberries'),
+  persimmon: tr('the persimmon'), figs: tr('the figs'), apricot: tr('the apricots'), cherries: tr('the cherries'), nectarine: tr('the nectarine'),
+  grapefruit: tr('the grapefruit'), pomelo: tr('the pomelo'), lychee: tr('the lychee'), passion_fruit: tr('the passion fruit'), guava: tr('the guava'),
+  papaya: tr('the papaya'), blueberries: tr('the blueberries'), raspberries: tr('the raspberries'), loquat: tr('the loquat'), raisins: tr('the raisins'),
+  dried_apricots: tr('the dried apricots'), prunes: tr('the prunes'),
 };
-const def = (id) => DEF[id] || `ה${nm(id)}`;
-// ב / ל + the article merge: "בפסטרמה", not "בהפסטרמה".
-const inDef = (id) => { const d = def(id); return `ב${d.startsWith('ה') ? d.slice(1) : d}`; };
+const def = (id) => DEF[id] || tr('the {0}', nm(id));
 // Foods whose household unit already names the food ("2 ביצים").
 const SELF_UNIT = new Set(['eggs', 'egg_whites']);
+
+const SERVE_WARM = tr('Serve warm');
+const SERVE_COLD = tr('Serve cold');
 
 // Cold dishes only make sense with fresh flavours.
 const FRESH = ['zaatar', 'herbs', 'greek', 'lemon_garlic', 'harissa', 'italian', 'mustard', 'mexican'];
@@ -105,59 +113,62 @@ const COOKED_CARBS = ['grain', 'pasta', 'tuber', 'corn'];
 // rub: how the main ingredient is seasoned; finish: the last touch.
 // pantry: what the user needs at home (salt & pepper are assumed).
 export const FLAVORS = [
-  { id: 'lemon_garlic', label: 'לימון ושום', phrase: 'ברוטב לימון ושום', cuisine: 'med', taste: 'savory', rub: 'שום כתוש, גרידת לימון, מלח ופלפל', finish: 'סוחטים מעל חצי לימון', pantry: ['שום', 'לימון'] },
-  { id: 'moroccan', label: 'מרוקאי', phrase: 'בתיבול מרוקאי', cuisine: 'mizrahi', taste: 'savory', rub: 'פפריקה מתוקה, כמון, שום כתוש ומלח', finish: 'מפזרים כוסברה קצוצה', pantry: ['פפריקה', 'כמון', 'שום', 'כוסברה'] },
-  { id: 'shawarma', label: 'שווארמה', phrase: 'בתיבול שווארמה', cuisine: 'mizrahi', taste: 'savory', rub: 'תבלין שווארמה (או כורכום, כמון ופפריקה), מלח ופלפל', finish: 'מוסיפים טבעות בצל סגול', pantry: ['תבלין שווארמה', 'בצל'] },
-  { id: 'zaatar', label: 'זעתר ולימון', phrase: 'בזעתר ולימון', cuisine: 'mizrahi', taste: 'savory', rub: 'זעתר, מעט לימון ומלח', finish: 'מפזרים עוד קורט זעתר', pantry: ['זעתר', 'לימון'] },
-  { id: 'hawaij', label: "חוואייג' תימני", phrase: "בחוואייג' תימני", cuisine: 'mizrahi', taste: 'savory', rub: "חוואייג' למרק, כורכום ומלח", finish: 'מפזרים פטרוזיליה', pantry: ["חוואייג'", 'פטרוזיליה'] },
-  { id: 'harissa', label: 'הריסה חריפה', phrase: 'בהריסה חריפה', cuisine: 'mizrahi', taste: 'savory', spicy: true, rub: 'כפית הריסה, שום ומלח', finish: 'מפזרים כוסברה', pantry: ['הריסה', 'שום', 'כוסברה'] },
-  { id: 'tomato', label: 'רוטב עגבניות פיקנטי', phrase: 'ברוטב עגבניות פיקנטי', cuisine: 'mizrahi', taste: 'savory', sauce: true, rub: 'פפריקה, כמון ושום', finish: 'מפזרים פטרוזיליה', pantry: ['עגבניות מרוסקות', 'פפריקה', 'כמון', 'שום'] },
-  { id: 'greek', label: 'יווני', phrase: 'בסגנון יווני', cuisine: 'med', taste: 'savory', rub: 'אורגנו, שום, לימון ומלח', finish: 'סוחטים לימון ומפזרים אורגנו', pantry: ['אורגנו', 'לימון', 'שום'] },
-  { id: 'italian', label: 'איטלקי', phrase: 'בסגנון איטלקי', cuisine: 'italian', taste: 'savory', rub: 'בזיליקום, אורגנו, שום ומלח', finish: 'מפזרים עלי בזיליקום', pantry: ['בזיליקום', 'אורגנו', 'שום'] },
-  { id: 'pizzaiola', label: 'פיצאיולה', phrase: 'ברוטב פיצאיולה', cuisine: 'italian', taste: 'savory', sauce: true, rub: 'שום, אורגנו ומלח', finish: 'מפזרים בזיליקום', pantry: ['עגבניות מרוסקות', 'אורגנו', 'שום'] },
-  { id: 'herbs', label: 'עשבי תיבול', phrase: 'בעשבי תיבול', cuisine: 'med', taste: 'savory', rub: 'פטרוזיליה, שמיר, שום ומלח', finish: 'מפזרים עוד עשבים טריים', pantry: ['פטרוזיליה', 'שמיר', 'שום'] },
-  { id: 'mustard', label: 'חרדל וטימין', phrase: 'בחרדל וטימין', cuisine: 'euro', taste: 'savory', rub: 'כפית חרדל דיז׳ון, טימין ומלח', finish: 'מפזרים טימין טרי', pantry: ['חרדל', 'טימין'] },
-  { id: 'bbq', label: 'ברביקיו מעושן', phrase: 'בתיבול ברביקיו מעושן', cuisine: 'american', taste: 'savory', rub: 'פפריקה מעושנת, שום גבישי, מעט חרדל ומלח', finish: 'מפזרים בצל ירוק', pantry: ['פפריקה מעושנת', 'שום', 'חרדל'] },
-  { id: 'mexican', label: 'מקסיקני', phrase: 'בסגנון מקסיקני', cuisine: 'mexican', taste: 'savory', spicy: true, rub: 'כמון, פפריקה מעושנת, צ׳ילי ומלח', finish: 'סוחטים ליים ומפזרים כוסברה', pantry: ['כמון', 'פפריקה מעושנת', 'צ׳ילי', 'ליים', 'כוסברה'] },
-  { id: 'asian', label: 'אסייתי', phrase: 'בסגנון אסייתי', cuisine: 'asian', taste: 'savory', allergens: ['soy', 'gluten'], rub: 'כף רוטב סויה, ג׳ינג׳ר מגורר ושום', finish: 'מפזרים בצל ירוק ושומשום (אם אין אלרגיה)', pantry: ['רוטב סויה', 'ג׳ינג׳ר', 'שום'] },
-  { id: 'thai', label: 'תאילנדי', phrase: 'בסגנון תאילנדי', cuisine: 'asian', taste: 'savory', spicy: true, rub: 'ג׳ינג׳ר, שום, צ׳ילי וגרידת ליים', finish: 'סוחטים ליים ומפזרים כוסברה', pantry: ['ג׳ינג׳ר', 'שום', 'צ׳ילי', 'ליים', 'כוסברה'] },
-  { id: 'curry', label: 'קארי הודי', phrase: 'בקארי הודי', cuisine: 'indian', taste: 'savory', rub: 'אבקת קארי, כורכום, ג׳ינג׳ר ושום', finish: 'מפזרים כוסברה', pantry: ['אבקת קארי', 'כורכום', 'ג׳ינג׳ר', 'שום'] },
-  { id: 'tandoori', label: 'טנדורי', phrase: 'בתיבול טנדורי', cuisine: 'indian', taste: 'savory', rub: 'פפריקה, כמון, גרם מסאלה ושום', finish: 'סוחטים לימון', pantry: ['פפריקה', 'כמון', 'גרם מסאלה', 'שום', 'לימון'] },
-  { id: 'cinnamon', label: 'קינמון', phrase: 'בקינמון', cuisine: 'sweet', taste: 'sweet', rub: 'קינמון וממתיק לפי הטעם', finish: 'מפזרים עוד קורט קינמון', pantry: ['קינמון'] },
-  { id: 'vanilla', label: 'וניל', phrase: 'בניחוח וניל', cuisine: 'sweet', taste: 'sweet', rub: 'כמה טיפות תמצית וניל וממתיק לפי הטעם', finish: 'מגישים קר', pantry: ['תמצית וניל'] },
-  { id: 'cocoa', label: 'קקאו', phrase: 'בקקאו', cuisine: 'sweet', taste: 'sweet', rub: 'כפית אבקת קקאו וממתיק לפי הטעם', finish: 'מפזרים מעט קקאו מעל', pantry: ['אבקת קקאו'] },
-  { id: 'cardamom', label: 'הל וקינמון', phrase: 'בהל וקינמון', cuisine: 'sweet', taste: 'sweet', rub: 'הל טחון, קינמון וממתיק', finish: 'מגישים חם', pantry: ['הל', 'קינמון'] },
-  { id: 'coffee', label: 'קפה', phrase: 'בטעם קפה', cuisine: 'sweet', taste: 'sweet', rub: 'כפית קפה נמס מומס בכף מים חמים וממתיק לפי הטעם', finish: 'מגישים קר', pantry: ['קפה נמס'] },
-  { id: 'coconut', label: 'קוקוס', phrase: 'בניחוח קוקוס', cuisine: 'sweet', taste: 'sweet', rub: 'כמה טיפות תמצית קוקוס וממתיק לפי הטעם', finish: 'מגישים קר', pantry: ['תמצית קוקוס'] },
-  { id: 'gingerbread', label: 'עוגיית ג׳ינג׳ר', phrase: 'בתיבול עוגיית ג׳ינג׳ר', cuisine: 'sweet', taste: 'sweet', rub: 'ג׳ינג׳ר טחון, קינמון, קורט ציפורן וממתיק', finish: 'מפזרים קורט קינמון', pantry: ['ג׳ינג׳ר טחון', 'קינמון', 'ציפורן'] },
-  { id: 'orange_blossom', label: 'מי זהר', phrase: 'במי זהר', cuisine: 'sweet', taste: 'sweet', rub: 'כפית מי זהר וממתיק לפי הטעם', finish: 'מגישים קר', pantry: ['מי זהר'] },
-  { id: 'mint', label: 'נענע', phrase: 'בנענע טרייה', cuisine: 'sweet', taste: 'sweet', rub: 'כמה עלי נענע קצוצים וממתיק לפי הטעם', finish: 'מקשטים בעלה נענע', pantry: ['נענע'] },
-  { id: 'lemon_zest', label: 'גרידת לימון', phrase: 'בגרידת לימון', cuisine: 'sweet', taste: 'sweet', rub: 'גרידת לימון וממתיק לפי הטעם', finish: 'מגררים מעל עוד מעט גרידה', pantry: ['לימון'] },
+  { id: 'lemon_garlic', label: tr('Lemon and garlic'), phrase: tr('in lemon-garlic sauce'), cuisine: 'med', taste: 'savory', rub: tr('crushed garlic, lemon zest, salt and pepper'), finish: tr('Squeeze half a lemon over the top'), pantry: [...trl('garlic'), ...trl('lemon')] },
+  { id: 'moroccan', label: tr('Moroccan'), phrase: tr('with Moroccan seasoning'), cuisine: 'mizrahi', taste: 'savory', rub: tr('sweet paprika, cumin, crushed garlic and salt'), finish: tr('Sprinkle with chopped cilantro'), pantry: [tr('paprika'), tr('cumin'), ...trl('garlic'), tr('cilantro')] },
+  { id: 'shawarma', label: tr('Shawarma'), phrase: tr('with shawarma seasoning'), cuisine: 'mizrahi', taste: 'savory', rub: tr('shawarma spice mix (or turmeric, cumin and paprika), salt and pepper'), finish: tr('Add red onion rings'), pantry: [tr('shawarma spice mix'), ...trl('onion')] },
+  { id: 'zaatar', label: tr('Za\'atar and lemon'), phrase: tr('with za\'atar and lemon'), cuisine: 'mizrahi', taste: 'savory', rub: tr('za\'atar, a little lemon and salt'), finish: tr('Sprinkle with a little more za\'atar'), pantry: [tr('za\'atar'), ...trl('lemon')] },
+  { id: 'hawaij', label: tr('Yemenite hawaij'), phrase: tr('with Yemenite hawaij'), cuisine: 'mizrahi', taste: 'savory', rub: tr('hawaij for soup, turmeric and salt'), finish: tr('Sprinkle with parsley'), pantry: [tr('hawaij'), tr('parsley')] },
+  { id: 'harissa', label: tr('Spicy harissa'), phrase: tr('in spicy harissa'), cuisine: 'mizrahi', taste: 'savory', spicy: true, rub: tr('a teaspoon of harissa, garlic and salt'), finish: tr('Sprinkle with cilantro'), pantry: [tr('harissa'), ...trl('garlic'), tr('cilantro')] },
+  { id: 'tomato', label: tr('Spicy tomato sauce'), phrase: tr('in spicy tomato sauce'), cuisine: 'mizrahi', taste: 'savory', sauce: true, rub: tr('paprika, cumin and garlic'), finish: tr('Sprinkle with parsley'), pantry: [tr('crushed tomatoes'), tr('paprika'), tr('cumin'), ...trl('garlic')] },
+  { id: 'greek', label: tr('Greek'), phrase: tr('Greek-style'), cuisine: 'med', taste: 'savory', rub: tr('oregano, garlic, lemon and salt'), finish: tr('Squeeze lemon over the top and sprinkle with oregano'), pantry: [tr('oregano'), ...trl('lemon'), ...trl('garlic')] },
+  { id: 'italian', label: tr('Italian'), phrase: tr('Italian-style'), cuisine: 'italian', taste: 'savory', rub: tr('basil, oregano, garlic and salt'), finish: tr('Scatter fresh basil leaves over the top'), pantry: [tr('basil'), tr('oregano'), ...trl('garlic')] },
+  { id: 'pizzaiola', label: tr('Pizzaiola'), phrase: tr('in pizzaiola sauce'), cuisine: 'italian', taste: 'savory', sauce: true, rub: tr('garlic, oregano and salt'), finish: tr('Sprinkle with basil'), pantry: [tr('crushed tomatoes'), tr('oregano'), ...trl('garlic')] },
+  { id: 'herbs', label: tr('Herbs'), phrase: tr('with herbs'), cuisine: 'med', taste: 'savory', rub: tr('parsley, dill, garlic and salt'), finish: tr('Sprinkle with more fresh herbs'), pantry: [tr('parsley'), tr('dill'), ...trl('garlic')] },
+  { id: 'mustard', label: tr('Mustard and thyme'), phrase: tr('with mustard and thyme'), cuisine: 'euro', taste: 'savory', rub: tr('a teaspoon of Dijon mustard, thyme and salt'), finish: tr('Sprinkle with fresh thyme'), pantry: [tr('Mustard'), tr('thyme')] },
+  { id: 'bbq', label: tr('Smoky barbecue'), phrase: tr('with smoky barbecue seasoning'), cuisine: 'american', taste: 'savory', rub: tr('smoked paprika, garlic granules, a little mustard and salt'), finish: tr('Sprinkle with green onion'), pantry: [tr('smoked paprika'), ...trl('garlic'), tr('Mustard')] },
+  { id: 'mexican', label: tr('Mexican'), phrase: tr('Mexican-style'), cuisine: 'mexican', taste: 'savory', spicy: true, rub: tr('cumin, smoked paprika, chili and salt'), finish: tr('Squeeze lime over the top and sprinkle with cilantro'), pantry: [tr('cumin'), tr('smoked paprika'), tr('chili'), tr('lime'), tr('cilantro')] },
+  { id: 'asian', label: tr('Asian'), phrase: tr('Asian-style'), cuisine: 'asian', taste: 'savory', allergens: ['soy', 'gluten'], rub: tr('a tablespoon of soy sauce, grated ginger and garlic'), finish: tr('Sprinkle with green onion and sesame seeds (if not allergic)'), pantry: [tr('Soy sauce'), tr('ginger'), ...trl('garlic')] },
+  { id: 'thai', label: tr('Thai'), phrase: tr('Thai-style'), cuisine: 'asian', taste: 'savory', spicy: true, rub: tr('ginger, garlic, chili and lime zest'), finish: tr('Squeeze lime over the top and sprinkle with cilantro'), pantry: [tr('ginger'), ...trl('garlic'), tr('chili'), tr('lime'), tr('cilantro')] },
+  { id: 'curry', label: tr('Indian curry'), phrase: tr('in Indian curry'), cuisine: 'indian', taste: 'savory', rub: tr('curry powder, turmeric, ginger and garlic'), finish: tr('Sprinkle with cilantro'), pantry: [tr('curry powder'), tr('turmeric'), tr('ginger'), ...trl('garlic')] },
+  { id: 'tandoori', label: tr('Tandoori'), phrase: tr('with tandoori seasoning'), cuisine: 'indian', taste: 'savory', rub: tr('paprika, cumin, garam masala and garlic'), finish: tr('Squeeze lemon over the top'), pantry: [tr('paprika'), tr('cumin'), tr('garam masala'), ...trl('garlic'), ...trl('lemon')] },
+  { id: 'cinnamon', label: tr('Cinnamon'), phrase: tr('with cinnamon'), cuisine: 'sweet', taste: 'sweet', rub: tr('cinnamon and sweetener to taste'), finish: tr('Sprinkle with a little more cinnamon'), pantry: [tr('Cinnamon')] },
+  { id: 'vanilla', label: tr('Vanilla'), phrase: tr('with vanilla'), cuisine: 'sweet', taste: 'sweet', rub: tr('a few drops of vanilla extract and sweetener to taste'), finish: tr('Serve cold'), pantry: [tr('vanilla extract')] },
+  { id: 'cocoa', label: tr('Cocoa‖label'), phrase: tr('with cocoa'), cuisine: 'sweet', taste: 'sweet', rub: tr('a teaspoon of cocoa powder and sweetener to taste'), finish: tr('Sprinkle a little cocoa over the top'), pantry: [tr('cocoa powder')] },
+  { id: 'cardamom', label: tr('Cardamom and cinnamon'), phrase: tr('with cardamom and cinnamon'), cuisine: 'sweet', taste: 'sweet', rub: tr('ground cardamom, cinnamon and sweetener'), finish: tr('Serve warm'), pantry: [tr('cardamom'), tr('Cinnamon')] },
+  { id: 'coffee', label: tr('Coffee‖label'), phrase: tr('with coffee'), cuisine: 'sweet', taste: 'sweet', rub: tr('a teaspoon of instant coffee dissolved in a tablespoon of hot water and sweetener to taste'), finish: tr('Serve cold'), pantry: [...trl('instant coffee')] },
+  { id: 'coconut', label: tr('Coconut'), phrase: tr('with coconut'), cuisine: 'sweet', taste: 'sweet', rub: tr('a few drops of coconut extract and sweetener to taste'), finish: tr('Serve cold'), pantry: [tr('coconut extract')] },
+  { id: 'gingerbread', label: tr('Gingerbread'), phrase: tr('with gingerbread spices'), cuisine: 'sweet', taste: 'sweet', rub: tr('ground ginger, cinnamon, a pinch of cloves and sweetener'), finish: tr('Sprinkle with a pinch of cinnamon'), pantry: [tr('ground ginger'), tr('Cinnamon'), tr('cloves')] },
+  { id: 'orange_blossom', label: tr('Orange blossom water'), phrase: tr('with orange blossom water'), cuisine: 'sweet', taste: 'sweet', rub: tr('a teaspoon of orange blossom water and sweetener to taste'), finish: tr('Serve cold'), pantry: [tr('Orange blossom water')] },
+  { id: 'mint', label: tr('Mint'), phrase: tr('with fresh mint'), cuisine: 'sweet', taste: 'sweet', rub: tr('a few chopped mint leaves and sweetener to taste'), finish: tr('Garnish with a mint leaf'), pantry: [tr('Mint')] },
+  { id: 'lemon_zest', label: tr('Lemon zest'), phrase: tr('with lemon zest'), cuisine: 'sweet', taste: 'sweet', rub: tr('lemon zest and sweetener to taste'), finish: tr('Grate a little more zest over the top'), pantry: [...trl('lemon')] },
 ];
 
+// Pantry items are listed in lowercase, whatever the translation's casing.
+for (const f of FLAVORS) f.pantry = f.pantry.map(lowerFirst);
+
 export const CUISINES = [
-  { id: 'mizrahi', label: 'מזרחי / ישראלי' },
-  { id: 'med', label: 'ים-תיכוני' },
-  { id: 'italian', label: 'איטלקי' },
-  { id: 'asian', label: 'אסייתי' },
-  { id: 'mexican', label: 'מקסיקני' },
-  { id: 'indian', label: 'הודי' },
-  { id: 'american', label: 'ברביקיו' },
-  { id: 'euro', label: 'אירופאי' },
-  { id: 'sweet', label: 'מתוק' },
+  { id: 'mizrahi', label: tr('Middle Eastern / Israeli') },
+  { id: 'med', label: tr('Mediterranean') },
+  { id: 'italian', label: tr('Italian') },
+  { id: 'asian', label: tr('Asian') },
+  { id: 'mexican', label: tr('Mexican') },
+  { id: 'indian', label: tr('Indian') },
+  { id: 'american', label: tr('Barbecue‖label') },
+  { id: 'euro', label: tr('European') },
+  { id: 'sweet', label: tr('Sweet') },
 ];
 
 export const TOOLS = [
-  { id: 'pan', label: 'מחבת' },
-  { id: 'oven', label: 'תנור' },
-  { id: 'pot', label: 'סיר' },
-  { id: 'airfryer', label: 'אייר פרייר' },
-  { id: 'grill', label: 'גריל / פסים' },
-  { id: 'blender', label: 'בלנדר' },
-  { id: 'nocook', label: 'בלי בישול' },
+  { id: 'pan', label: tr('Frying pan') },
+  { id: 'oven', label: tr('Oven') },
+  { id: 'pot', label: tr('Pot') },
+  { id: 'airfryer', label: tr('Air fryer') },
+  { id: 'grill', label: tr('Grill / grill pan') },
+  { id: 'blender', label: tr('Blender') },
+  { id: 'nocook', label: tr('No cooking') },
 ];
 
-export const PANTRY = [...new Set(FLAVORS.flatMap((f) => f.pantry).concat(['בצל', 'עגבניות מרוסקות', 'חומץ', 'פטרוזיליה']))].sort((a, b) => a.localeCompare(b, 'he'));
+export const PANTRY = [...new Set(FLAVORS.flatMap((f) => f.pantry).concat([...trl('onion'), tr('crushed tomatoes'), ...trl('vinegar'), tr('parsley')]))].sort((a, b) => a.localeCompare(b, locale));
 
 // ---------- how each side is used ----------
 function carbPrep(id, grams, inOven) {
@@ -165,68 +176,68 @@ function carbPrep(id, grams, inOven) {
   const info = SHOP[id] || {};
   const dry = info.raw && info.raw < 1 ? Math.round(grams * info.raw / 5) * 5 : null;
   const n = nm(id);
-  if (k === 'grain') return `מבשלים כ-${dry} ג׳ ${n} יבש${n.endsWith('ים') ? 'ים' : n.endsWith('ה') ? 'ה' : ''} לפי ההוראות (יוצא ${grams} ג׳ מבושל)`;
-  if (id === 'rice_noodles') return `משרים או מבשלים כ-${dry} ג׳ אטריות אורז יבשות לפי ההוראות, ומסננים`;
-  if (k === 'pasta') return `מבשלים כ-${dry} ג׳ ${n} יבשה במים רותחים ומלוחים לפי ההוראות, ומסננים`;
-  if (k === 'tuber') return inOven ? `חותכים ${grams} ג׳ ${n} לפלחים, ואופים על אותה תבנית כ-25 דקות` : `חותכים ${grams} ג׳ ${n} לקוביות ומבשלים במים מלוחים כ-15 דקות`;
-  if (id === 'green_peas') return `מחממים ${grams} ג׳ אפונה ירוקה (קפואה) 3–4 דקות`;
-  if (k === 'corn') return `מסננים ${grams} ג׳ תירס`;
-  if (k === 'oats') return `מבשלים ${grams} ג׳ שיבולת שועל עם כוס מים כ-3 דקות, עד שמסמיך`;
-  if (k === 'crackers') return `מגישים לצד ${household(FOOD_BY_ID[id], grams)}${id === 'rice_cakes' ? ' אורז' : ''}`;
-  if (id === 'whole_bun') return `חוצים וקולים ${household(FOOD_BY_ID[id], grams)} מקמח מלא`;
-  if (k === 'bread') return `קולים ${household(FOOD_BY_ID[id], grams)} ${n}`;
-  if (k === 'pita') return `מחממים ${household(FOOD_BY_ID[id], grams)} במחבת יבשה או בטוסטר`;
-  if (k === 'tortilla') return `מחממים ${household(FOOD_BY_ID[id], grams)} במחבת יבשה 20 שניות מכל צד`;
+  if (k === 'grain') return tr('Cook about {0} g of dry {1} according to the package directions (yields {2} g cooked)', dry, n, grams);
+  if (id === 'rice_noodles') return tr('Soak or cook about {0} g of dry rice noodles according to the package directions, then drain', dry);
+  if (k === 'pasta') return tr('Cook about {0} g of dry {1} in boiling salted water according to the package directions, then drain', dry, n);
+  if (k === 'tuber') return inOven ? tr('Cut {0} g of {1} into wedges and bake on the same tray for about 25 minutes', grams, n) : tr('Cut {0} g of {1} into cubes and boil in salted water for about 15 minutes', grams, n);
+  if (id === 'green_peas') return tr('Heat {0} g of green peas (frozen) for 3–4 minutes', grams);
+  if (k === 'corn') return tr('Drain {0} g of corn', grams);
+  if (k === 'oats') return tr('Cook {0} g of oats with a cup of water for about 3 minutes, until thick', grams);
+  if (k === 'crackers') return (id === 'rice_cakes' ? tr('Serve alongside {0}‖rice cakes', household(FOOD_BY_ID[id], grams)) : tr('Serve alongside {0}', household(FOOD_BY_ID[id], grams)));
+  if (id === 'whole_bun') return tr('Split and toast the whole wheat bun ({0})', household(FOOD_BY_ID[id], grams));
+  if (k === 'bread') return tr('Toast {0} of {1}', household(FOOD_BY_ID[id], grams), n);
+  if (k === 'pita') return tr('Warm {0} in a dry pan or in a toaster', household(FOOD_BY_ID[id], grams));
+  if (k === 'tortilla') return tr('Warm {0} in a dry pan for 20 seconds on each side', household(FOOD_BY_ID[id], grams));
   if (k === 'fruit') {
     // Berries and grapes are washed, citrus and lychee peeled, dried fruit
     // added as is; the rest is cut.
-    if (['berries', 'blueberries', 'raspberries', 'grapes', 'cherries', 'strawberries'].includes(id)) return `שוטפים ${grams} ג׳ ${n}`;
-    if (['orange', 'clementine', 'grapefruit', 'pomelo', 'lychee'].includes(id)) return `מקלפים ${grams} ג׳ ${n}`;
-    if (id === 'passion_fruit') return `חוצים ${household(FOOD_BY_ID[id], grams)} וגורפים את התוכן בכפית`;
-    if (id === 'pomegranate') return `מפרידים ${grams} ג׳ גרגרי רימון`;
-    if (['raisins', 'dried_apricots', 'prunes', 'dates'].includes(id)) return `מוסיפים ${grams} ג׳ ${n}`;
-    return `חותכים ${grams} ג׳ ${n}`;
+    if (['berries', 'blueberries', 'raspberries', 'grapes', 'cherries', 'strawberries'].includes(id)) return tr('Rinse {0} g of {1}', grams, n);
+    if (['orange', 'clementine', 'grapefruit', 'pomelo', 'lychee'].includes(id)) return tr('Peel {0} g of {1}', grams, n);
+    if (id === 'passion_fruit') return tr('Halve {0} and scoop out the pulp with a spoon', household(FOOD_BY_ID[id], grams));
+    if (id === 'pomegranate') return tr('Separate {0} g of pomegranate seeds', grams);
+    if (['raisins', 'dried_apricots', 'prunes', 'dates'].includes(id)) return tr('Add {0} g of {1}', grams, n);
+    return tr('Cut {0} g of {1}', grams, n);
   }
   return null;
 }
 
 function vegPrep(id, grams, inOven) {
   if (!id) return null;
-  if (id === 'salad') return `קוצצים סלט: עגבנייה, מלפפון ופלפל (${grams} ג׳ בסך הכול)`;
-  if (id === 'leafy') return `מניחים מצע של ${grams} ג׳ עלים ירוקים`;
-  if (id === 'carrot') return `קולפים ${grams} ג׳ גזר וחותכים למקלות`;
-  if (id === 'spinach') return `מאדים ${grams} ג׳ תרד 2–3 דקות, עד שמצטמק`;
-  if (id === 'mushrooms') return `פורסים ${grams} ג׳ פטריות ומקפיצים 5 דקות במחבת`;
-  if (id === 'cucumber') return `חותכים ${grams} ג׳ מלפפון לפרוסות או למקלות`;
-  if (id === 'tomato') return `פורסים ${grams} ג׳ עגבניות`;
-  if (id === 'peppers') return `חותכים ${grams} ג׳ פלפלים צבעוניים לרצועות`;
-  if (id === 'cabbage') return `קוצצים דק ${grams} ג׳ כרוב ומתבלים בלימון ומלח`;
-  if (id === 'beets') return `חותכים ${grams} ג׳ סלק מבושל לקוביות`;
-  if (id === 'eggplant') return inOven ? `חוצים חציל (${grams} ג׳) ואופים על אותה תבנית עד שמתרכך` : `קולים חציל (${grams} ג׳) על הגז או בתנור, וקוצצים את הבשר`;
-  const name = { broccoli: 'ברוקולי', green_beans: 'שעועית ירוקה', cauliflower: 'כרובית', roasted_veg: 'קישוא, פלפל ובצל', zucchini: 'קישואים', asparagus: 'אספרגוס', brussels: 'כרוב ניצנים', pumpkin: 'דלעת' }[id] || FOOD_BY_ID[id].name;
-  return inOven ? `מניחים ${grams} ג׳ ${name} על התבנית ואופים יחד` : `מאדים או מקפיצים ${grams} ג׳ ${name} 6–8 דקות`;
+  if (id === 'salad') return tr('Chop a salad of tomato, cucumber and pepper ({0} g in total)', grams);
+  if (id === 'leafy') return tr('Lay down a bed of {0} g of leafy greens', grams);
+  if (id === 'carrot') return tr('Peel {0} g of carrots and cut into sticks', grams);
+  if (id === 'spinach') return tr('Steam {0} g of spinach for 2–3 minutes, until wilted', grams);
+  if (id === 'mushrooms') return tr('Slice {0} g of mushrooms and sauté for 5 minutes in a pan', grams);
+  if (id === 'cucumber') return tr('Cut {0} g of cucumber into slices or sticks', grams);
+  if (id === 'tomato') return tr('Slice {0} g of tomatoes', grams);
+  if (id === 'peppers') return tr('Cut {0} g of colorful peppers into strips', grams);
+  if (id === 'cabbage') return tr('Finely shred {0} g of cabbage and dress with lemon and salt', grams);
+  if (id === 'beets') return tr('Cut {0} g of cooked beets into cubes', grams);
+  if (id === 'eggplant') return inOven ? tr('Halve an eggplant ({0} g) and bake it on the same tray until soft', grams) : tr('Char an eggplant ({0} g) over the flame or in the oven, then chop the flesh', grams);
+  const name = { broccoli: tr('broccoli'), green_beans: tr('green beans'), cauliflower: tr('cauliflower'), roasted_veg: tr('zucchini, pepper and onion'), zucchini: tr('Zucchini'), asparagus: tr('asparagus'), brussels: tr('brussels sprouts'), pumpkin: tr('pumpkin') }[id] || FOOD_BY_ID[id].name;
+  return inOven ? tr('Place {0} g of {1} on the tray and bake together', grams, name) : tr('Steam or sauté {0} g of {1} for 6–8 minutes', grams, name);
 }
 
 function fatUse(id, grams, cooking) {
   if (!id) return null;
   const f = FOOD_BY_ID[id];
   const hh = household(f, grams);
-  if (id === 'olive_oil') return cooking ? `משמנים במעט מתוך ${hh} שמן זית, ואת השאר מזליפים מעל בהגשה` : `מזליפים מעל ${hh} שמן זית`;
-  if (id === 'canola_oil') return cooking ? `משמנים את המחבת או התבנית במעט מתוך ${hh} שמן קנולה, ואת השאר מוסיפים בבישול` : `מזליפים מעל ${hh} שמן קנולה`;
-  if (id === 'butter') return cooking ? `ממיסים ${hh} חמאה במחבת` : `מורחים ${hh} חמאה`;
-  if (id === 'ghee') return cooking ? `ממיסים ${hh} גהי במחבת` : `מזליפים מעל ${hh} גהי מומס`;
-  if (id === 'almond_butter') return `מוסיפים ${hh} חמאת שקדים`;
-  if (id === 'hummus_spread') return `מגישים לצד ${hh} ממרח חומוס`;
-  if (id === 'cream_cheese') return `מורחים או מערבבים פנימה ${hh} גבינת שמנת`;
-  if (id === 'feta') return `מפוררים מעל ${grams} ג׳ גבינת פטה`;
-  if (id === 'mozzarella') return cooking ? `מניחים מעל ${grams} ג׳ מוצרלה קרועה ומניחים לה להימס` : `קורעים ${grams} ג׳ מוצרלה ומוסיפים`;
-  if (id === 'tahini') return `מערבבים ${hh} טחינה גולמית עם מים ומעט לימון לרוטב, ומזליפים מעל`;
-  if (id === 'peanut_butter') return `מוסיפים ${hh} חמאת בוטנים`;
-  if (id === 'avocado') return `פורסים או מועכים ${hh} ומניחים בצד`;
-  if (id === 'olives') return `מוסיפים ${hh}`;
-  if (id === 'hard_cheese') return `מגררים מעל ${grams} ג׳ גבינה קשה`;
-  if (['chia', 'flaxseed', 'sesame_seeds'].includes(id)) return `מערבבים פנימה ${hh} ${f.name}`;
-  return `קולים קלות ${grams} ג׳ ${f.name} ומפזרים מעל`;
+  if (id === 'olive_oil') return cooking ? tr('Grease lightly with a little of the {0} of olive oil and drizzle the rest over the dish when serving', hh) : tr('Drizzle {0} of olive oil over the top', hh);
+  if (id === 'canola_oil') return cooking ? tr('Grease the pan or tray with a little of the {0} of canola oil and add the rest while cooking', hh) : tr('Drizzle {0} of canola oil over the top', hh);
+  if (id === 'butter') return cooking ? tr('Melt {0} of butter in the pan', hh) : tr('Spread {0} of butter', hh);
+  if (id === 'ghee') return cooking ? tr('Melt {0} of ghee in the pan', hh) : tr('Drizzle {0} of melted ghee over the top', hh);
+  if (id === 'almond_butter') return tr('Add {0} of almond butter', hh);
+  if (id === 'hummus_spread') return tr('Serve alongside {0} of hummus spread', hh);
+  if (id === 'cream_cheese') return tr('Spread or mix in {0} of cream cheese', hh);
+  if (id === 'feta') return tr('Crumble {0} g of feta cheese over the top', grams);
+  if (id === 'mozzarella') return cooking ? tr('Top with {0} g of torn mozzarella and let it melt', grams) : tr('Tear {0} g of mozzarella and add it', grams);
+  if (id === 'tahini') return tr('Mix {0} of raw tahini with water and a little lemon into a sauce, and drizzle over the top', hh);
+  if (id === 'peanut_butter') return tr('Add {0} of peanut butter', hh);
+  if (id === 'avocado') return tr('Slice or mash {0} and set aside', hh);
+  if (id === 'olives') return tr('Add {0}', hh);
+  if (id === 'hard_cheese') return tr('Grate {0} g of hard cheese over the top', grams);
+  if (['chia', 'flaxseed', 'sesame_seeds'].includes(id)) return tr('Mix in {0} of {1}', hh, nm(id));
+  return tr('Lightly toast {0} g of {1} and sprinkle over the top', grams, nm(id));
 }
 
 // ---------- cooking methods ----------
@@ -236,151 +247,151 @@ const T = (o) => ({ meals: 'blds', carbs: null, absorbs: false, taste: 'savory',
 const METHODS = [
   // poultry & steak
   T({ id: 'oven', kinds: ['poultry', 'steak', 'fish', 'tofu'], meals: 'ld', tool: 'oven', time: 35, cooking: true, oven: true,
-    title: (c) => `${c.P} בתנור ${c.flavor.phrase}`,
-    steps: (c) => [`מחממים תנור ל-200°`, `מתבלים ${c.amtP} ב${c.flavor.rub}`, c.fatStep, `אופים כ-${c.kind === 'fish' ? 15 : c.kind === 'tofu' ? 25 : 22} דקות, עד שמוכן`] }),
+    title: (c) => tr('{0} in the oven {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Preheat the oven to 200°C'), tr('Season {0} with {1}', c.amtP, c.flavor.rub), c.fatStep, tr('Bake for about {0} minutes, until done', c.kind === 'fish' ? 15 : c.kind === 'tofu' ? 25 : 22)] }),
   T({ id: 'pan', kinds: ['poultry', 'steak', 'fish', 'tofu', 'shrimp'], meals: 'ld', tool: 'pan', time: 20, cooking: true,
-    title: (c) => `${c.P} במחבת ${c.flavor.phrase}`,
-    steps: (c) => [`${c.kind === 'poultry' ? 'פורסים' : 'מייבשים'} ${c.amtP}${c.kind === 'poultry' ? ' לסטייקים דקים' : ''}, ומתבלים ב${c.flavor.rub}`, c.fatStep, `צורבים במחבת חמה ${c.kind === 'steak' ? '3–4' : c.kind === 'shrimp' ? '2' : '4–5'} דקות מכל צד`, `מניחים לנוח דקה`] }),
+    title: (c) => tr('{0} in a pan {1}', c.P, c.flavor.phrase),
+    steps: (c) => [(c.kind === 'poultry' ? tr('Slice {0} into thin steaks and season with {1}', c.amtP, c.flavor.rub) : tr('Pat {0} dry and season with {1}', c.amtP, c.flavor.rub)), c.fatStep, tr('Sear in a hot pan for {0} minutes on each side', c.kind === 'steak' ? '3–4' : c.kind === 'shrimp' ? '2' : '4–5'), tr('Let rest for a minute')] }),
   T({ id: 'airfryer', kinds: ['poultry', 'fish', 'tofu', 'shrimp'], meals: 'ld', tool: 'airfryer', time: 20, cooking: true,
-    title: (c) => `${c.P} באייר פרייר ${c.flavor.phrase}`,
-    steps: (c) => [`מתבלים ${c.amtP} ב${c.flavor.rub}`, c.fatStep, `מכניסים לאייר פרייר ב-190° ל-${c.kind === 'fish' || c.kind === 'shrimp' ? '10' : '15–18'} דקות, והופכים באמצע`] }),
+    title: (c) => tr('{0} in the air fryer {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Season {0} with {1}', c.amtP, c.flavor.rub), c.fatStep, tr('Place in the air fryer at 190°C for {0} minutes, turning halfway', c.kind === 'fish' || c.kind === 'shrimp' ? '10' : '15–18')] }),
   T({ id: 'grill', kinds: ['poultry', 'steak', 'fish', 'tofu'], meals: 'ld', tool: 'grill', time: 25, cooking: true,
-    title: (c) => `${c.P} על הפסים ${c.flavor.phrase}`,
-    steps: (c) => [`משרים ${c.amtP} ב${c.flavor.rub} לפחות 10 דקות`, c.fatStep, `צולים במחבת פסים חמה ${c.kind === 'fish' ? '3' : '5'} דקות מכל צד`] }),
+    title: (c) => tr('{0} on the grill pan {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Marinate {0} in {1} for at least 10 minutes', c.amtP, c.flavor.rub), c.fatStep, tr('Grill in a hot grill pan for {0} minutes on each side', c.kind === 'fish' ? '3' : '5')] }),
   T({ id: 'skewers', kinds: ['poultry', 'steak', 'tofu', 'shrimp'], meals: 'ld', tool: 'oven', time: 30, cooking: true, oven: true,
-    title: (c) => `שיפודי ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [`חותכים ${c.amtP} לקוביות ומשחילים על שיפודים`, `מתבלים ב${c.flavor.rub}`, c.fatStep, `צולים בתנור על גריל עליון 12–15 דקות, והופכים פעם אחת`] }),
+    title: (c) => tr('{0} skewers {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Cut {0} into cubes and thread onto skewers', c.amtP), tr('Season with {0}', c.flavor.rub), c.fatStep, tr('Broil in the oven for 12–15 minutes, turning once')] }),
   T({ id: 'stirfry', kinds: ['poultry', 'steak', 'tofu', 'shrimp', 'legume'], meals: 'ld', tool: 'pan', time: 15, cooking: true,
-    title: (c) => `${c.kind === 'legume' ? `${c.P} מוקפץ` : `רצועות ${c.P} מוקפצות`} ${c.flavor.phrase}${c.absorbedCarb}`, absorbsIf: ['grain', 'pasta'],
-    steps: (c) => [`פורסים ${c.amtP} לרצועות`, c.fatStep, `מקפיצים על אש גבוהה 5–6 דקות עם ${c.flavor.rub}`, c.veg ? 'מוסיפים את הירקות ומקפיצים עוד 2 דקות' : null, c.absorbed ? `מוסיפים את ${c.Cd} ומערבבים` : null] }),
+    title: (c) => `${c.kind === 'legume' ? tr('Stir-fried {0}', c.P) : tr('Stir-fried {0} strips', c.P)} ${c.flavor.phrase}${c.absorbedCarb}`, absorbsIf: ['grain', 'pasta'],
+    steps: (c) => [tr('Slice {0} into strips', c.amtP), c.fatStep, tr('Stir-fry over high heat for 5–6 minutes with {0}', c.flavor.rub), c.veg ? tr('Add the vegetables and stir-fry for another 2 minutes') : null, c.absorbed ? tr('Add {0} and mix', c.Cd) : null] }),
   T({ id: 'sauce', kinds: ['poultry', 'fish', 'tofu', 'legume', 'ground', 'eggs'], meals: 'ld', tool: 'pot', time: 30, cooking: true, needsSauce: true,
-    title: (c) => (c.kind === 'eggs' ? `ביצים ${c.flavor.phrase}` : c.kind === 'fish' && c.flavor.id === 'tomato' ? `חריימה של ${c.P}` : `${c.P} ${c.flavor.phrase}`),
-    steps: (c) => [c.fatStep, `מבשלים 5 דקות חצי פחית עגבניות מרוסקות עם ${c.flavor.rub}`, c.kind === 'eggs' ? `שוברים פנימה ${c.amtP}, מכסים ומבשלים 6–8 דקות` : `מוסיפים ${c.amtP} ומבשלים מכוסה ${c.kind === 'fish' ? 10 : c.kind === 'ground' ? 15 : 20} דקות`] }),
+    title: (c) => (c.kind === 'eggs' ? tr('Eggs {0}', c.flavor.phrase) : c.kind === 'fish' && c.flavor.id === 'tomato' ? tr('Chraime-style {0}', c.P) : `${c.P} ${c.flavor.phrase}`),
+    steps: (c) => [c.fatStep, tr('Simmer half a can of crushed tomatoes with {0} for 5 minutes', c.flavor.rub), c.kind === 'eggs' ? tr('Crack {0} in, cover and cook for 6–8 minutes', c.amtP) : tr('Add {0} and cook covered for {1} minutes', c.amtP, c.kind === 'fish' ? 10 : c.kind === 'ground' ? 15 : 20)] }),
   T({ id: 'bowl', excludeFoods: ['egg_whites'], kinds: ['poultry', 'steak', 'fish', 'tofu', 'legume', 'canfish', 'shrimp', 'eggs'], meals: 'ld', tool: 'pan', time: 25, cooking: true, carbs: ['grain', 'tuber', 'corn', 'pasta'], absorbs: true,
-    title: (c) => `קערת ${c.P} ו${c.C} ${c.flavor.phrase}`,
-    steps: (c) => [c.kind === 'canfish' ? `מסננים ${c.amtP}` : c.kind === 'eggs' ? `מבשלים ${c.amtP} 8 דקות (קשות)` : `מתבלים ${c.amtP} ב${c.flavor.rub} ומבשלים במחבת`, `מסדרים בקערה את ${c.Cd}, את ${c.Pd} ואת הירקות`, c.fatStep] }),
+    title: (c) => tr('{0} and {1} bowl {2}', c.P, c.C, c.flavor.phrase),
+    steps: (c) => [c.kind === 'canfish' ? tr('Drain {0}', c.amtP) : c.kind === 'eggs' ? tr('Boil {0} for 8 minutes (hard-boiled)', c.amtP) : tr('Season {0} with {1} and cook in a pan', c.amtP, c.flavor.rub), tr('Arrange {0}, {1} and the vegetables in a bowl', c.Cd, c.Pd), c.fatStep] }),
   // ground meat
   T({ id: 'meatballs', kinds: ['ground'], meals: 'ld', tool: 'oven', time: 35, cooking: true, oven: true,
-    title: (c) => `קציצות ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [`מערבבים ${c.amtP} עם ${c.flavor.rub} ובצל קצוץ דק`, `יוצרים 6–8 קציצות`, c.fatStep, `אופים ב-200° כ-18 דקות`] }),
+    title: (c) => tr('{0} meatballs {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Mix {0} with {1} and finely chopped onion', c.amtP, c.flavor.rub), tr('Shape 6–8 meatballs'), c.fatStep, tr('Bake at 200°C for about 18 minutes')] }),
   T({ id: 'bolognese', kinds: ['ground'], meals: 'ld', tool: 'pot', time: 30, cooking: true, carbs: ['pasta'], absorbs: true, needsSauce: true,
-    title: (c) => `פסטה בולונז ${c.flavor.phrase}`,
-    steps: (c) => [c.fatStep, `מטגנים בצל קצוץ ו${c.amtP} עד שמשחים`, `מוסיפים חצי פחית עגבניות מרוסקות ו${c.flavor.rub}, ומבשלים 15 דקות`, `מערבבים עם הפסטה`] }),
+    title: (c) => tr('Pasta bolognese {0}', c.flavor.phrase),
+    steps: (c) => [c.fatStep, tr('Fry chopped onion and {0} until browned', c.amtP), tr('Add half a can of crushed tomatoes and {0}, and simmer for 15 minutes', c.flavor.rub), tr('Mix with the pasta')] }),
   T({ id: 'stuffed_peppers', kinds: ['ground', 'legume', 'tofu'], meals: 'ld', tool: 'oven', time: 45, cooking: true, oven: true, carbs: ['grain'], absorbs: true,
-    title: (c) => `פלפלים ממולאים ב${c.P} ו${c.C} ${c.flavor.phrase}`,
-    steps: (c) => [`מערבבים ${c.amtP} עם ${c.Cd} ועם ${c.flavor.rub}`, `ממלאים 2 פלפלים חצויים`, c.fatStep, `אופים מכוסה ב-190° כ-30 דקות`] }),
+    title: (c) => tr('Stuffed peppers with {0} and {1} {2}', c.P, c.C, c.flavor.phrase),
+    steps: (c) => [tr('Mix {0} with {1} and {2}', c.amtP, c.Cd, c.flavor.rub), tr('Fill 2 halved peppers'), c.fatStep, tr('Bake covered at 190°C for about 30 minutes')] }),
   T({ id: 'taco', kinds: ['ground', 'poultry', 'fish', 'tofu', 'legume', 'shrimp', 'eggs'], meals: 'bld', tool: 'pan', time: 20, cooking: true, carbs: ['tortilla'], absorbs: true,
-    title: (c) => `טאקו ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [`מתבלים ${c.amtP} ב${c.flavor.rub} ומבשלים במחבת`, c.fatStep, `ממלאים את הטורטייה ${c.inPd} ובירקות`] }),
+    title: (c) => tr('{0} tacos {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Season {0} with {1} and cook in a pan', c.amtP, c.flavor.rub), c.fatStep, tr('Fill the tortilla with {0} and the vegetables', c.Pd)] }),
   // fish & canned fish
   T({ id: 'papillote', kinds: ['fish', 'shrimp'], meals: 'ld', tool: 'oven', time: 25, cooking: true, oven: true,
-    title: (c) => `${c.P} בנייר אפייה ${c.flavor.phrase}`,
-    steps: (c) => [`מניחים ${c.amtP} על נייר אפייה`, `מתבלים ב${c.flavor.rub}`, c.fatStep, `סוגרים לחבילה ואופים ב-200° כ-15 דקות`] }),
+    title: (c) => tr('{0} in parchment {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Place {0} on a sheet of parchment paper', c.amtP), tr('Season with {0}', c.flavor.rub), c.fatStep, tr('Seal into a packet and bake at 200°C for about 15 minutes')] }),
   T({ id: 'canfish_salad', excludeFoods: ['egg_whites'], flavors: FRESH, kinds: ['canfish', 'eggs', 'legume', 'tofu', 'saltycheese'], meals: 'blds', tool: 'nocook', time: 10,
-    title: (c) => `סלט ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [c.kind === 'eggs' ? `מבשלים ${c.amtP} 9 דקות, מקררים וקוצצים` : c.kind === 'saltycheese' ? `מפוררים ${c.amtP} לקוביות קטנות` : `מסננים ${c.amtP}`, `מערבבים עם הירקות הקצוצים ו${c.flavor.rub}`, c.fatStep] }),
+    title: (c) => tr('{0} salad {1}', c.P, c.flavor.phrase),
+    steps: (c) => [c.kind === 'eggs' ? tr('Boil {0} for 9 minutes, cool and chop', c.amtP) : c.kind === 'saltycheese' ? tr('Cut {0} into small cubes', c.amtP) : tr('Drain {0}', c.amtP), tr('Mix with the chopped vegetables and {0}', c.flavor.rub), c.fatStep] }),
   T({ id: 'sandwich', flavors: FRESH, kinds: ['canfish', 'slices', 'softcheese', 'saltycheese', 'eggs', 'poultry', 'tofu', 'legume'], meals: 'bls', tool: 'nocook', time: 10, carbs: ['bread', 'pita', 'crackers', 'tortilla'], absorbs: true,
-    title: (c) => `${{ pita: 'פיתה', tortilla: 'רול', crackers: 'פריכיות', bread: 'כריך' }[c.carbKind]} ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [c.carbStep, c.kind === 'eggs' ? (c.pid === 'egg_whites' ? `מכינים חביתה מ-${c.amtP}` : `מכינים ${c.amtP} (חביתה או קשות)`) : c.kind === 'canfish' ? `מסננים ${c.amtP} ומתבלים ב${c.flavor.rub}` : `מתבלים ${c.amtP} ב${c.flavor.rub}`, c.fatStep, `ממלאים ${c.inPd} ובירקות`] }),
+    title: (c) => tr('{0} with {1} {2}‖sandwich title', { pita: tr('pita'), tortilla: tr('wrap'), crackers: tr('rice cakes'), bread: tr('sandwich') }[c.carbKind], c.P, c.flavor.phrase),
+    steps: (c) => [c.carbStep, c.kind === 'eggs' ? (c.pid === 'egg_whites' ? tr('Make an omelet from {0}', c.amtP) : tr('Prepare {0} (omelet or hard-boiled)', c.amtP)) : c.kind === 'canfish' ? tr('Drain {0} and season with {1}', c.amtP, c.flavor.rub) : tr('Season {0} with {1}', c.amtP, c.flavor.rub), c.fatStep, tr('Fill with {0} and the vegetables', c.Pd)] }),
   // eggs
   T({ id: 'omelette', kinds: ['eggs'], meals: 'bld', tool: 'pan', time: 10, cooking: true,
-    title: (c) => `חביתה ${c.flavor.phrase}`,
-    steps: (c) => [`טורפים ${c.amtP} עם ${c.flavor.rub}`, c.fatStep, `מטגנים במחבת על אש בינונית 2–3 דקות מכל צד`] }),
+    title: (c) => tr('Omelet {0}', c.flavor.phrase),
+    steps: (c) => [tr('Beat {0} with {1}', c.amtP, c.flavor.rub), c.fatStep, tr('Fry in a pan over medium heat for 2–3 minutes on each side')] }),
   T({ id: 'scramble', kinds: ['eggs', 'tofu'], meals: 'bl', tool: 'pan', time: 10, cooking: true,
-    title: (c) => (c.kind === 'tofu' ? `קשקושת ${c.P} ${c.flavor.phrase}` : `ביצים מקושקשות ${c.flavor.phrase}`),
-    steps: (c) => [c.kind === 'tofu' ? `מפוררים ${c.amtP} ביד` : `טורפים ${c.amtP}`, c.fatStep, `מקשקשים על אש נמוכה עם ${c.flavor.rub} עד שמוכן`] }),
+    title: (c) => (c.kind === 'tofu' ? tr('{0} scramble {1}', c.P, c.flavor.phrase) : tr('Scrambled eggs {0}', c.flavor.phrase)),
+    steps: (c) => [c.kind === 'tofu' ? tr('Crumble {0} by hand', c.amtP) : tr('Beat {0}', c.amtP), c.fatStep, tr('Scramble over low heat with {0} until done', c.flavor.rub)] }),
   T({ id: 'frittata', kinds: ['eggs'], meals: 'bld', tool: 'oven', time: 30, cooking: true, oven: true,
-    title: (c) => `פריטטה בתנור ${c.flavor.phrase}`,
-    steps: (c) => [`מחממים תנור ל-180°`, `טורפים ${c.amtP} עם הירקות הקצוצים ו${c.flavor.rub}`, c.fatStep, `אופים בתבנית קטנה 20 דקות, עד שמתייצב`] }),
+    title: (c) => tr('Baked frittata {0}', c.flavor.phrase),
+    steps: (c) => [tr('Preheat the oven to 180°C'), tr('Beat {0} with the chopped vegetables and {1}', c.amtP, c.flavor.rub), c.fatStep, tr('Bake in a small dish for 20 minutes, until set')] }),
   T({ id: 'muffins', kinds: ['eggs'], meals: 'bs', tool: 'oven', time: 25, cooking: true, oven: true,
-    title: (c) => `מאפינס ביצים ${c.flavor.phrase}`,
-    steps: (c) => [`טורפים ${c.amtP} עם ירקות קצוצים ו${c.flavor.rub}`, `יוצקים לתבנית מאפינס משומנת`, `אופים ב-180° כ-18 דקות. מחזיק במקרר 3 ימים`] }),
+    title: (c) => tr('Egg muffins {0}', c.flavor.phrase),
+    steps: (c) => [tr('Beat {0} with chopped vegetables and {1}', c.amtP, c.flavor.rub), tr('Pour into a greased muffin tin'), tr('Bake at 180°C for about 18 minutes. Keeps in the fridge for 3 days')] }),
   // dairy & powders
   T({ id: 'savory_bowl', excludeFoods: ['pro_pudding'], flavors: FRESH, kinds: ['softcheese', 'yogurt'], meals: 'bsd', tool: 'nocook', time: 5,
-    title: (c) => `קערת ${c.P} מלוחה ${c.flavor.phrase}`,
-    steps: (c) => [`מניחים בקערה ${c.amtP}`, `מתבלים ב${c.flavor.rub}`, `מוסיפים את הירקות הקצוצים`, c.fatStep] }),
+    title: (c) => tr('Savory {0} bowl {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Place {0} in a bowl', c.amtP), tr('Season with {0}', c.flavor.rub), tr('Add the chopped vegetables'), c.fatStep] }),
   T({ id: 'spread', flavors: FRESH, kinds: ['softcheese', 'saltycheese'], meals: 'bsd', tool: 'nocook', time: 5, carbs: ['bread', 'pita', 'crackers', 'tortilla'], absorbs: true,
-    title: (c) => `${c.C} עם ממרח ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [c.carbStep, `מערבבים ${c.amtP} עם ${c.flavor.rub}`, `מורחים ומניחים מעל את הירקות`, c.fatStep] }),
+    title: (c) => tr('{0} with {1} spread {2}', c.C, c.P, c.flavor.phrase),
+    steps: (c) => [c.carbStep, tr('Mix {0} with {1}', c.amtP, c.flavor.rub), tr('Spread it on and top with the vegetables'), c.fatStep] }),
   T({ id: 'parfait', carbsAllowed: ['fruit', 'oats'], kinds: ['yogurt', 'softcheese'], meals: 'bs', tool: 'nocook', time: 5, taste: 'sweet',
-    title: (c) => `פרפה ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [`מערבבים ${c.amtP} עם ${c.flavor.rub}`, `בונים שכבות בכוס: ${c.Pd}${c.carbId ? ` ו${c.Cd}` : ''}`, c.fatStep] }),
+    title: (c) => tr('{0} parfait {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Mix {0} with {1}', c.amtP, c.flavor.rub), (c.carbId ? tr('Layer {0} and {1} in a glass', c.Pd, c.Cd) : tr('Layer {0} in a glass', c.Pd)), c.fatStep] }),
   T({ id: 'shake', carbsAllowed: ['fruit', 'oats'], kinds: ['powder', 'yogurt', 'softcheese'], meals: 'bs', tool: 'blender', time: 5, taste: 'sweet',
-    title: (c) => `שייק ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [`טוחנים בבלנדר ${c.amtP} עם כוס מים קרים וקרח`, c.carbId ? `מוסיפים את ${c.Cd}` : null, `מוסיפים ${c.flavor.rub}`, c.fatStep] }),
+    title: (c) => tr('{0} shake {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Blend {0} in a blender with a cup of cold water and ice', c.amtP), c.carbId ? tr('Add {0}‖recipes:tpl', c.Cd) : null, tr('Add {0}', c.flavor.rub), c.fatStep] }),
   T({ id: 'protein_oats', kinds: ['powder', 'yogurt', 'softcheese', 'eggs'], meals: 'bs', tool: 'pot', time: 10, taste: 'sweet', carbs: ['oats'], absorbs: true,
-    title: (c) => `דייסת שיבולת שועל עם ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [c.carbStep, c.kind === 'eggs' ? `מוסיפים ${c.amtP} טרופים ומערבבים על אש נמוכה דקה` : `מורידים מהאש ומערבבים פנימה ${c.amtP}`, `מתבלים ב${c.flavor.rub}`, c.fatStep] }),
+    title: (c) => tr('{2} oatmeal with {0}‖title', c.P, c.flavor.phrase, c.flavor.label),
+    steps: (c) => [c.carbStep, c.kind === 'eggs' ? tr('Add {0}, beaten, and stir over low heat for a minute', c.amtP) : tr('Take off the heat and stir in {0}', c.amtP), tr('Season with {0}', c.flavor.rub), c.fatStep] }),
   T({ id: 'overnight', kinds: ['powder', 'yogurt', 'softcheese'], meals: 'bs', tool: 'nocook', time: 5, taste: 'sweet', carbs: ['oats'], absorbs: true,
-    title: (c) => `שיבולת שועל של לילה עם ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [`מערבבים בצנצנת ${c.carbGrams} ג׳ שיבולת שועל, ${c.amtP} וחצי כוס מים`, `מוסיפים ${c.flavor.rub}`, c.fatStep, `מכסים ומשאירים במקרר לילה`] }),
+    title: (c) => tr('{2} overnight oats with {0}‖title', c.P, c.flavor.phrase, c.flavor.label),
+    steps: (c) => [tr('In a jar, mix {0} g of oats, {1} and half a cup of water', c.carbGrams, c.amtP), tr('Add {0}', c.flavor.rub), c.fatStep, tr('Cover and leave in the fridge overnight')] }),
   T({ id: 'pancakes', excludeFoods: ['pro_pudding'], kinds: ['powder', 'eggs', 'softcheese', 'yogurt'], meals: 'bs', tool: 'pan', time: 15, cooking: true, taste: 'sweet', carbs: ['oats', 'fruit'], absorbs: true,
-    title: (c) => `פנקייק ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [`טוחנים לבלילה ${c.amtP} עם ${c.Cd} ועם ${c.flavor.rub}${c.kind !== 'eggs' ? ' ומעט מים' : ''}`, c.fatStep, `מטגנים פנקייקים קטנים במחבת 2 דקות מכל צד`] }),
+    title: (c) => tr('{0} pancakes {1}', c.P, c.flavor.phrase),
+    steps: (c) => [(c.kind !== 'eggs' ? tr('Blend {0} with {1}, {2} and a little water into a batter', c.amtP, c.Cd, c.flavor.rub) : tr('Blend {0} with {1} and {2} into a batter', c.amtP, c.Cd, c.flavor.rub)), c.fatStep, tr('Fry small pancakes in a pan for 2 minutes on each side')] }),
   // plant
   T({ id: 'stew', kinds: ['legume'], meals: 'ld', tool: 'pot', time: 35, cooking: true,
-    title: (c) => `תבשיל ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [c.fatStep, `מטגנים בצל ושום 3 דקות`, `מוסיפים ${c.amtP} (במשקל מבושל), ${c.flavor.rub} וכוס מים`, `מבשלים 15 דקות עד שמסמיך`] }),
+    title: (c) => tr('{0} stew {1}', c.P, c.flavor.phrase),
+    steps: (c) => [c.fatStep, tr('Fry onion and garlic for 3 minutes'), tr('Add {0} (cooked weight), {1} and a cup of water', c.amtP, c.flavor.rub), tr('Cook for 15 minutes, until thick')] }),
   T({ id: 'soup', kinds: ['legume', 'poultry'], meals: 'ld', tool: 'pot', time: 40, cooking: true,
-    title: (c) => `מרק ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [c.fatStep, `מטגנים בצל קצוץ`, `מוסיפים ${c.amtP}, את הירקות, ${c.flavor.rub} ו-3 כוסות מים`, `מבשלים 25 דקות`] }),
+    title: (c) => tr('{0} soup {1}', c.P, c.flavor.phrase),
+    steps: (c) => [c.fatStep, tr('Fry chopped onion'), tr('Add {0}, the vegetables, {1} and 3 cups of water', c.amtP, c.flavor.rub), tr('Cook for 25 minutes')] }),
   T({ id: 'majadra', kinds: ['legume'], meals: 'ld', tool: 'pot', time: 35, cooking: true, carbs: ['grain'], absorbs: true,
-    title: (c) => `מג׳דרה של ${c.P} ו${c.C} ${c.flavor.phrase}`,
-    steps: (c) => [c.fatStep, `מטגנים בצל עד שמשחים`, `מערבבים ${c.amtP} (במשקל מבושל) עם ${c.Cd} ועם ${c.flavor.rub}`, `מחממים יחד 5 דקות`] }),
+    title: (c) => tr('Majadra with {0} and {1} {2}', c.P, c.C, c.flavor.phrase),
+    steps: (c) => [c.fatStep, tr('Fry onion until browned'), tr('Mix {0} (cooked weight) with {1} and {2}', c.amtP, c.Cd, c.flavor.rub), tr('Heat together for 5 minutes')] }),
   T({ id: 'patties', kinds: ['legume', 'tofu', 'canfish'], meals: 'blds', tool: 'airfryer', time: 30, cooking: true,
-    title: (c) => `לביבות ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [`מועכים ${c.amtP} עם ${c.flavor.rub}`, `יוצרים 4–5 לביבות שטוחות`, c.fatStep, `אופים באייר פרייר ב-190° כ-12 דקות, או בתנור 20 דקות`] }),
+    title: (c) => tr('{0} patties {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Mash {0} with {1}', c.amtP, c.flavor.rub), tr('Shape 4–5 flat patties'), c.fatStep, tr('Bake in the air fryer at 190°C for about 12 minutes, or in the oven for 20 minutes')] }),
   T({ id: 'spread_legume', kinds: ['legume'], meals: 'blds', tool: 'blender', time: 10, flavors: [...FRESH, 'moroccan', 'curry', 'hawaij'],
-    title: (c) => `ממרח ${c.P} ביתי ${c.flavor.phrase}`,
-    steps: (c) => [`טוחנים ${c.amtP} (במשקל מבושל) עם 3–4 כפות מים, מעט לימון ו${c.flavor.rub} עד שחלק`, c.fatStep, `מגישים עם הירקות`] }),
+    title: (c) => tr('Homemade {0} spread {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Blend {0} (cooked weight) with 3–4 tablespoons of water, a little lemon and {1} until smooth', c.amtP, c.flavor.rub), c.fatStep, tr('Serve with the vegetables')] }),
   T({ id: 'warm_bowl', kinds: ['legume'], meals: 'bls', tool: 'pot', time: 10, cooking: true, flavors: [...FRESH, 'moroccan', 'hawaij', 'curry'],
-    title: (c) => `קערת ${c.P} חמה ${c.flavor.phrase}`,
-    steps: (c) => [`מחממים ${c.amtP} (במשקל מבושל) בסיר קטן עם חצי כוס מים ו${c.flavor.rub}`, `מועכים חלק מהקטניות במזלג כדי שיסמיך`, c.fatStep] }),
+    title: (c) => tr('Warm {0} bowl {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Warm {0} (cooked weight) in a small pot with half a cup of water and {1}', c.amtP, c.flavor.rub), tr('Mash some of the legumes with a fork to thicken'), c.fatStep] }),
   T({ id: 'baked_tofu', kinds: ['tofu'], meals: 'ld', tool: 'oven', time: 35, cooking: true, oven: true,
-    title: (c) => `קוביות ${c.P} פריכות ${c.flavor.phrase}`,
-    steps: (c) => [`מייבשים ${c.amtP} במגבת וחותכים לקוביות`, `מתבלים ב${c.flavor.rub}`, c.fatStep, `אופים ב-210° כ-25 דקות`] }),
+    title: (c) => tr('Crispy {0} cubes {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Pat {0} dry with a towel and cut into cubes', c.amtP), tr('Season with {0}', c.flavor.rub), c.fatStep, tr('Bake at 210°C for about 25 minutes')] }),
   // cold cuts / slices
   T({ id: 'rolls', flavors: FRESH, kinds: ['slices'], meals: 'bls', tool: 'nocook', time: 5,
-    title: (c) => `רולים של ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [`פורשים ${c.amtP}`, `מתבלים ב${c.flavor.rub}`, `מגלגלים עם הירקות`, c.fatStep] }),
+    title: (c) => tr('{0} roll-ups {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Lay out {0}', c.amtP), tr('Season with {0}', c.flavor.rub), tr('Roll up with the vegetables'), c.fatStep] }),
   T({ id: 'toast', kinds: ['slices', 'softcheese', 'saltycheese', 'eggs', 'canfish'], meals: 'bls', tool: 'oven', time: 10, cooking: true, carbs: ['bread', 'pita', 'tortilla'], absorbs: true,
-    title: (c) => `טוסט ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [`ממלאים את ${c.Cd} ${c.inAmt} ומתבלים ב${c.flavor.rub}`, c.fatStep, `קולים בטוסטר או במחבת עד שזהוב`] }),
+    title: (c) => tr('{0} toasted sandwich {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Fill {0} with {1} and season with {2}', c.Cd, c.amtP, c.flavor.rub), c.fatStep, tr('Toast in a toaster or a pan until golden')] }),
 
   // ---- built on the carb: for a meal the user took the protein out of ----
   T({ id: 'carb_stirfry', kinds: ['grain', 'pasta'], meals: 'ld', tool: 'pan', time: 25, cooking: true,
-    title: (c) => `מוקפץ ${c.P} וירקות ${c.flavor.phrase}`,
-    steps: (c) => [c.mainPrep, c.fatStep, `מקפיצים את הירקות 5 דקות עם ${c.flavor.rub}`, `מוסיפים את ${c.Pd} ומערבבים על האש עוד 2 דקות`] }),
+    title: (c) => tr('Stir-fried {0} and vegetables {1}', c.P, c.flavor.phrase),
+    steps: (c) => [c.mainPrep, c.fatStep, tr('Stir-fry the vegetables for 5 minutes with {0}', c.flavor.rub), tr('Add {0} and stir over the heat for another 2 minutes', c.Pd)] }),
   T({ id: 'carb_salad', flavors: FRESH, kinds: ['grain', 'pasta', 'corn'], meals: 'blds', tool: 'nocook', time: 20,
-    title: (c) => `סלט ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [c.mainPrep, `מקררים ומערבבים עם הירקות הקצוצים ו${c.flavor.rub}`, c.fatStep] }),
+    title: (c) => tr('{0} salad {1}', c.P, c.flavor.phrase),
+    steps: (c) => [c.mainPrep, tr('Cool and mix with the chopped vegetables and {0}', c.flavor.rub), c.fatStep] }),
   T({ id: 'carb_sauce', kinds: ['pasta', 'grain'], meals: 'ld', tool: 'pot', time: 25, cooking: true, needsSauce: true,
     title: (c) => `${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [c.mainPrep, c.fatStep, `מבשלים 10 דקות חצי פחית עגבניות מרוסקות עם ${c.flavor.rub}`, `מערבבים פנימה את ${c.Pd} ומחממים יחד`] }),
+    steps: (c) => [c.mainPrep, c.fatStep, tr('Simmer half a can of crushed tomatoes with {0} for 10 minutes', c.flavor.rub), tr('Stir in {0} and heat together', c.Pd)] }),
   T({ id: 'baked_tuber', kinds: ['tuber'], meals: 'ld', tool: 'oven', time: 40, cooking: true, oven: true,
-    title: (c) => `${c.P} אפוי ${c.flavor.phrase}`,
-    steps: (c) => [`מחממים תנור ל-200°`, `חותכים ${c.amtP} לפלחים ומתבלים ב${c.flavor.rub}`, c.fatStep, `אופים 30–35 דקות, עד שזהוב ורך`] }),
+    title: (c) => tr('Baked {0} {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Preheat the oven to 200°C'), tr('Cut {0} into wedges and season with {1}', c.amtP, c.flavor.rub), c.fatStep, tr('Bake for 30–35 minutes, until golden and tender')] }),
   T({ id: 'tuber_mash', kinds: ['tuber'], meals: 'ld', tool: 'pot', time: 25, cooking: true,
-    title: (c) => `פירה ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [c.mainPrep, `מסננים ומועכים עם ${c.flavor.rub}`, c.fatStep] }),
+    title: (c) => tr('Mashed {0} {1}', c.P, c.flavor.phrase),
+    steps: (c) => [c.mainPrep, tr('Drain and mash with {0}', c.flavor.rub), c.fatStep] }),
   T({ id: 'veg_wrap', flavors: FRESH, kinds: ['bread', 'pita', 'tortilla', 'crackers'], meals: 'bls', tool: 'nocook', time: 10,
-    title: (c) => `${{ pita: 'פיתה', tortilla: 'רול', crackers: 'פריכיות', bread: 'כריך' }[c.kind]} עם ירקות ${c.flavor.phrase}`,
-    steps: (c) => [c.mainPrep, `מתבלים את הירקות ב${c.flavor.rub}`, c.fatStep, `ממלאים או מניחים מעל את הירקות`] }),
+    title: (c) => tr('{0} with vegetables {1}', { pita: tr('pita'), tortilla: tr('wrap'), crackers: tr('rice cakes'), bread: tr('sandwich') }[c.kind], c.flavor.phrase),
+    steps: (c) => [c.mainPrep, tr('Season the vegetables with {0}', c.flavor.rub), c.fatStep, tr('Fill with, or top with, the vegetables')] }),
   T({ id: 'veg_toast', kinds: ['bread', 'pita', 'tortilla'], meals: 'bls', tool: 'oven', time: 15, cooking: true,
-    title: (c) => `טוסט ירקות ${c.flavor.phrase}`,
-    steps: (c) => [`ממלאים את ${c.Pd} בירקות פרוסים דק ומתבלים ב${c.flavor.rub}`, c.fatStep, `קולים בטוסטר או במחבת עד שזהוב`] }),
+    title: (c) => tr('Vegetable toasted sandwich {0}', c.flavor.phrase),
+    steps: (c) => [tr('Fill {0} with thinly sliced vegetables and season with {1}', c.Pd, c.flavor.rub), c.fatStep, tr('Toast in a toaster or a pan until golden')] }),
   T({ id: 'porridge', kinds: ['oats'], meals: 'bs', tool: 'pot', time: 10, taste: 'sweet',
-    title: (c) => `דייסת שיבולת שועל ${c.flavor.phrase}`,
-    steps: (c) => [c.mainPrep, `מתבלים ב${c.flavor.rub}`, c.fatStep] }),
+    title: (c) => tr('Oatmeal {0}', c.flavor.phrase),
+    steps: (c) => [c.mainPrep, tr('Season with {0}', c.flavor.rub), c.fatStep] }),
   T({ id: 'oat_jar', kinds: ['oats'], meals: 'bs', tool: 'nocook', time: 5, taste: 'sweet',
-    title: (c) => `צנצנת שיבולת שועל של לילה ${c.flavor.phrase}`,
-    steps: (c) => [`מערבבים בצנצנת ${c.amtP} עם חצי כוס מים או משקה צמחי`, `מוסיפים ${c.flavor.rub}`, c.fatStep, `מכסים ומשאירים במקרר לילה`] }),
+    title: (c) => tr('Overnight oats jar {0}', c.flavor.phrase),
+    steps: (c) => [tr('In a jar, mix {0} with half a cup of water or plant milk', c.amtP), tr('Add {0}', c.flavor.rub), c.fatStep, tr('Cover and leave in the fridge overnight')] }),
   T({ id: 'fruit_bowl', kinds: ['fruit'], meals: 'bs', tool: 'nocook', time: 5, taste: 'sweet',
-    title: (c) => `קערת ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [c.mainPrep, `מתבלים ב${c.flavor.rub}`, c.fatStep] }),
+    title: (c) => tr('{0} bowl {1}', c.P, c.flavor.phrase),
+    steps: (c) => [c.mainPrep, tr('Season with {0}', c.flavor.rub), c.fatStep] }),
   T({ id: 'smoothie', kinds: ['fruit', 'oats'], meals: 'bs', tool: 'blender', time: 5, taste: 'sweet',
-    title: (c) => `סמוטי ${c.P} ${c.flavor.phrase}`,
-    steps: (c) => [`טוחנים בבלנדר ${c.amtP} עם כוס מים קרים וקרח`, `מוסיפים ${c.flavor.rub}`, c.fatStep] }),
+    title: (c) => tr('{0} smoothie {1}', c.P, c.flavor.phrase),
+    steps: (c) => [tr('Blend {0} in a blender with a cup of cold water and ice', c.amtP), tr('Add {0}', c.flavor.rub), c.fatStep] }),
 ];
 
 // ---------- building recipes ----------
@@ -464,16 +475,14 @@ function makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, sides = [], ca
   const P = nm(p.foodId);
   const C = c ? nm(c.foodId) : '';
   const pFood = FOOD_BY_ID[p.foodId];
-  const amt = pFood.discrete ? household(pFood, p.grams) : `${p.grams} ג׳`;
+  const amt = pFood.discrete ? household(pFood, p.grams) : tr('{0} g', p.grams);
   // "2 תמרים", not "2 תמרים תמרים": some units already name the food.
-  const amtP = SELF_UNIT.has(p.foodId) || amt.includes(P) ? amt : `${amt} ${P}`;
+  const amtP = SELF_UNIT.has(p.foodId) || amt.includes(P) ? amt : amountOf(amt, P);
   const carbStep = c ? carbPrep(c.foodId, c.grams, !!m.oven) : null;
   const ctx = {
     P, C, kind, flavor, amt, amtP,
     pid: p.foodId,
-    inAmt: /^[\d½¼¾]/.test(amtP) ? `ב-${amtP}` : `ב${amtP}`,
     Pd: def(p.foodId),
-    inPd: inDef(p.foodId),
     Cd: c ? def(c.foodId) : '',
     carbId: c ? c.foodId : null,
     carbKind,
@@ -481,15 +490,15 @@ function makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, sides = [], ca
     carbStep,
     mainPrep: CARB_KINDS.includes(kind) ? carbPrep(p.foodId, p.grams, !!m.oven) : null,
     absorbed,
-    absorbedCarb: absorbed && c ? ` עם ${C}` : '',
+    absorbedCarb: absorbed && c ? tr(' with {0}', C) : '',
     veg: vItem ? vItem.foodId : null,
     fatStep: fItem ? fatUse(fItem.foodId, fItem.grams, !!m.cooking) : null,
   };
   let title = m.title(ctx);
   // Fruit beside a savoury dish is dessert, not part of the dish's name.
   const fruitDessert = c && carbKind === 'fruit' && m.taste === 'savory' && !absorbed;
-  if (c && !absorbed && !fruitDessert && !m.carbs && !title.includes(C)) title += ` עם ${C}`;
-  title = title.replace(/\s+/g, ' ').trim();
+  if (c && !absorbed && !fruitDessert && !m.carbs && !title.includes(C)) title += tr(', served with {0}', C);
+  title = upperFirst(title.replace(/\s+/g, ' ').trim());
 
   const steps = [];
   if (c && !absorbed && carbStep && !fruitDessert) steps.push(carbStep);
@@ -500,13 +509,13 @@ function makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, sides = [], ca
   for (const s of m.steps(ctx)) if (s) steps.push(s);
   if (extra) {
     const hh = household(FOOD_BY_ID[extra.foodId], extra.grams);
-    steps.push(`מוסיפים לצד ${SELF_UNIT.has(extra.foodId) || hh.includes(nm(extra.foodId)) ? hh : `${hh} ${nm(extra.foodId)}`} להשלמת החלבון`);
+    steps.push(tr('Add {0} on the side to complete the protein', SELF_UNIT.has(extra.foodId) || hh.includes(nm(extra.foodId)) ? hh : amountOf(hh, nm(extra.foodId))));
   }
   for (const sd of sides) steps.push(sideStep(sd));
   // A shake or an overnight jar isn't served hot, whatever the flavour says.
-  const finish = flavor.finish === 'מגישים חם' && ['blender', 'nocook'].includes(m.tool) ? 'מגישים קר' : flavor.finish;
-  steps.push(finish.startsWith('מגישים') ? finish : `${finish}, ומגישים`);
-  if (fruitDessert) steps.push(`לקינוח: ${c.grams} ג׳ ${nm(c.foodId)}`);
+  const finish = flavor.finish === SERVE_WARM && ['blender', 'nocook'].includes(m.tool) ? SERVE_COLD : flavor.finish;
+  steps.push(finish === SERVE_WARM || finish === SERVE_COLD ? finish : tr('{0}, and serve', finish));
+  if (fruitDessert) steps.push(tr('For dessert: {0} g {1}', c.grams, nm(c.foodId)));
 
   const ingredients = [{ foodId: p.foodId, grams: p.grams }];
   if (c) ingredients.push({ foodId: c.foodId, grams: c.grams });
@@ -515,7 +524,7 @@ function makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, sides = [], ca
   if (fItem) ingredients.push({ foodId: fItem.foodId, grams: fItem.grams });
   if (vItem) ingredients.push({ foodId: vItem.foodId, grams: vItem.grams });
 
-  const pantry = [...new Set([...flavor.pantry, ...(m.needsSauce ? ['עגבניות מרוסקות'] : []), ...(['meatballs', 'stew', 'soup', 'majadra', 'bolognese'].includes(m.id) ? ['בצל'] : [])])];
+  const pantry = [...new Set([...flavor.pantry, ...(m.needsSauce ? [tr('crushed tomatoes')] : []), ...(['meatballs', 'stew', 'soup', 'majadra', 'bolognese'].includes(m.id) ? [...trl('onion')] : [])])];
   const swaps = [p, c].filter((x) => x && x.swapped).map((x) => ({ slot: x.slot, foodId: x.foodId, grams: x.grams }));
   return {
     id: `${meal.type}|${p.foodId}|${c ? c.foodId : '-'}|${m.id}|${flavor.id}`,
@@ -529,7 +538,7 @@ function makeRecipe({ meal, m, flavor, p, c, fItem, vItem, extra, sides = [], ca
     spicy: !!flavor.spicy,
     ingredients: ingredients.map((i) => ({ ...i, name: FOOD_BY_ID[i.foodId].name, household: household(FOOD_BY_ID[i.foodId], i.grams) })),
     pantry,
-    steps,
+    steps: steps.map(upperFirst),
     swaps,
   };
 }
@@ -540,9 +549,9 @@ function sideStep(it) {
   if (f.role === 'fat') return fatUse(it.foodId, it.grams, false);
   if (f.role === 'veg') return vegPrep(it.foodId, it.grams, false);
   const prep = KIND[it.foodId] && CARB_KINDS.includes(KIND[it.foodId]) ? carbPrep(it.foodId, it.grams, false) : null;
-  if (prep) return `${prep}, ומגישים לצד`;
+  if (prep) return tr('{0}, and serve alongside', prep);
   const hh = household(f, it.grams);
-  return `מגישים לצד ${SELF_UNIT.has(it.foodId) || hh.includes(nm(it.foodId)) ? hh : `${hh} ${nm(it.foodId)}`}`;
+  return tr('Serve alongside {0}', SELF_UNIT.has(it.foodId) || hh.includes(nm(it.foodId)) ? hh : amountOf(hh, nm(it.foodId)));
 }
 
 // filters: { cuisines: [], tools: [], maxTime: 0|10|20|40, pantryOnly: bool,

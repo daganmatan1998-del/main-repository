@@ -1,8 +1,8 @@
 {
   "name": "public",
   "appId": "app.nutri.planner",
-  "appName": "נוטרי",
-  "title": "נוטרי — תוכנית תזונה אישית",
+  "appName": "Nutri",
+  "title": "Nutri — your personal nutrition plan",
   "workerName": "nutri-public",
   "apiBase": "",
   "allowedOrigins": "capacitor://localhost,https://localhost",

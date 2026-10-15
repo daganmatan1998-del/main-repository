@@ -7,21 +7,23 @@
 // counts 9/4 of a gram of carbs). Discrete foods (eggs, bread slices) are
 // rounded to whole units and the rest re-solved around them.
 
+import { t as tr } from './i18n.js';
 import { allowedFoods, kosherCompatible, macrosFor, FOOD_BY_ID, isAllowed } from './foods.js';
 import { rng, hashStr, clamp } from './util.js';
 import { extraFood, extraMacros, MAX_EXTRAS } from './extras.js';
+import { customValid, MAX_CUSTOM } from './everyday.js';
 
 const MEAL_NAMES = {
-  b: 'ארוחת בוקר',
-  l: 'ארוחת צהריים',
-  d: 'ארוחת ערב',
+  b: tr('Breakfast'),
+  l: tr('Lunch'),
+  d: tr('Dinner'),
 };
 
 const TEMPLATES = {
   3: [['b', 0.28], ['l', 0.4], ['d', 0.32]],
-  4: [['b', 0.25], ['l', 0.35], ['s', 0.15, 'ארוחת ביניים'], ['d', 0.25]],
-  5: [['b', 0.22], ['s', 0.12, 'ביניים בוקר'], ['l', 0.3], ['s', 0.12, 'ביניים אחר הצהריים'], ['d', 0.24]],
-  6: [['b', 0.2], ['s', 0.1, 'ביניים בוקר'], ['l', 0.27], ['s', 0.11, 'ביניים אחר הצהריים'], ['d', 0.22], ['s', 0.1, 'ארוחת לילה']],
+  4: [['b', 0.25], ['l', 0.35], ['s', 0.15, tr('Snack')], ['d', 0.25]],
+  5: [['b', 0.22], ['s', 0.12, tr('Mid-morning snack')], ['l', 0.3], ['s', 0.12, tr('Afternoon snack')], ['d', 0.24]],
+  6: [['b', 0.2], ['s', 0.1, tr('Mid-morning snack')], ['l', 0.27], ['s', 0.11, tr('Afternoon snack')], ['d', 0.22], ['s', 0.1, tr('Evening snack')]],
 };
 
 // Every meal comes with one fruit (it can be taken out like any group).
@@ -616,21 +618,40 @@ export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 
         if (at >= 0) items[at] = replacement;
       }
     }
+    // The person's own foods (see everyday.js). One that replaces a plan item
+    // (from the swap sheet) takes that item out of the meal; one without macros
+    // gets them from the item it replaced, or else spread like the meal's aim.
+    const customs = (ov.custom || []).filter(customValid).slice(0, MAX_CUSTOM).map((c) => {
+      const at = c.slot ? items.findIndex((i) => i.slot === c.slot) : -1;
+      const gone = at >= 0 ? items.splice(at, 1)[0] : null;
+      let { p, c: carb, f } = c;
+      if (!(p || carb || f)) {
+        const ref = gone ? macrosFor(FOOD_BY_ID[gone.foodId], gone.grams) : { kcal: target.kcal, p: target.p, c: target.c, f: target.f };
+        const k = ref.kcal > 0 ? c.kcal / ref.kcal : 0;
+        p = ref.p * k; carb = ref.c * k; f = ref.f * k;
+      }
+      return { ...c, p: round1(p), c: round1(carb), f: round1(f), replaced: !!gone };
+    });
+    const offsetCustoms = customs.filter((c) => c.mode !== 'add');
+    const addCustoms = customs.filter((c) => c.mode === 'add');
+    const sum = (list) => list.reduce((s, e) => ({ kcal: s.kcal + e.kcal, p: s.p + e.p, c: s.c + e.c, f: s.f + e.f }), { kcal: 0, p: 0, c: 0, f: 0 });
     // Sauces and cheese the person added: their calories come off the rest of
     // the meal, so the meal keeps its calorie budget. The macros they carry
     // are taken off the macro aim too, the calories off the total.
     const extras = (ov.extras || []).filter((e) => e && extraFood(e.foodId) && e.grams > 0).slice(0, MAX_EXTRAS)
       .map((e) => ({ foodId: e.foodId, grams: Math.round(e.grams * 2) / 2, ...extraMacros(e.foodId, e.grams) }));
-    const ex = extras.reduce((s, e) => ({ kcal: s.kcal + e.kcal, p: s.p + e.p, c: s.c + e.c, f: s.f + e.f }), { kcal: 0, p: 0, c: 0, f: 0 });
-    const aimTarget = extras.length
-      ? { kcal: Math.max(target.kcal * 0.3, target.kcal - ex.kcal), p: Math.max(0, target.p - ex.p), c: Math.max(0, target.c - ex.c), f: Math.max(0, target.f - ex.f) }
+    const exOffset = sum([...extras, ...offsetCustoms]);
+    const exAdd = sum(addCustoms);
+    const ex = { kcal: exOffset.kcal + exAdd.kcal, p: exOffset.p + exAdd.p, c: exOffset.c + exAdd.c, f: exOffset.f + exAdd.f };
+    const aimTarget = extras.length || offsetCustoms.length
+      ? { kcal: Math.max(target.kcal * 0.3, target.kcal - exOffset.kcal), p: Math.max(0, target.p - exOffset.p), c: Math.max(0, target.c - exOffset.c), f: Math.max(0, target.f - exOffset.f) }
       : target;
     // What's left of the meal grows to carry the removed group's calories:
     // same foods, bigger portions, nothing added in its place.
-    if (removed.length || extras.length) {
+    if (removed.length || extras.length || offsetCustoms.length) {
       // Vegetables and the meal's fruit keep their serving; the rest grows.
       const set = (it) => it.role === 'veg' || it.slot === 'fruit';
-      items = solveWithout(items.map(({ slot, role, foodId, grams }) => ({ slot, role, foodId, grams: set({ slot, role }) ? grams : 0, fixed: set({ slot, role }) })), aimTarget, removed, extras.length ? 0.5 : 1);
+      items = solveWithout(items.map(({ slot, role, foodId, grams }) => ({ slot, role, foodId, grams: set({ slot, role }) ? grams : 0, fixed: set({ slot, role }) })), aimTarget, removed, extras.length || offsetCustoms.length ? 0.5 : 1);
     }
     items = items.map(itemWithMacros);
     const t = totals(items);
@@ -647,6 +668,7 @@ export function generateDay(dateKey, targets, prefs, overrides = {}, userSeed = 
       target: { kcal: Math.round(target.kcal), p: Math.round(aim.p), c: Math.round(aim.c), f: Math.round(aim.f) },
       items,
       extras: extras.map((e) => ({ foodId: e.foodId, grams: e.grams, kcal: Math.round(e.kcal), p: round1(e.p), c: round1(e.c), f: round1(e.f) })),
+      custom: customs,
       totals: { kcal: Math.round(t.kcal), p: round1(t.p), c: round1(t.c), f: round1(t.f) },
     };
   });

@@ -102,6 +102,7 @@ const pageErrors = [];
 async function device(name) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'he-IL', timezoneId: 'Asia/Jerusalem' });
   await ctx.route(`${SUPA}/**`, supabase);
+  await ctx.addInitScript(() => { try { if (!localStorage.getItem('nutri-lang')) localStorage.setItem('nutri-lang', 'he'); } catch {} });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => pageErrors.push(`${name}: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error' && !/status of (400|401|404)/.test(m.text())) pageErrors.push(`${name}: ${m.text()}`); });
@@ -160,7 +161,7 @@ const headText = (page) => page.locator('.page-head').first().innerText();
 
 try {
   // ======== no AI vendor names anywhere in the app's code strings ========
-  const vendor = /Anthropic|Claude|Groq|Gemini|Mistral|OpenAI|ChatGPT|GPT-|Llama|NVIDIA|DeepSeek|Cerebras|OpenRouter/i;
+  const vendor = /Anthropic|Claude|Groq|Gemini|Mistral|OpenAI|ChatGPT|GPT-|NVIDIA|DeepSeek|Cerebras|OpenRouter/i;
   const files = [];
   const walk = (d) => { for (const f of readdirSync(d, { withFileTypes: true })) { const p = path.join(d, f.name); if (f.isDirectory()) walk(p); else if (/\.(js|html|webmanifest)$/.test(f.name)) files.push(p); } };
   walk(path.join(here, '../../www'));
@@ -168,7 +169,8 @@ try {
   for (const f of files) {
     readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
       const code = line.replace(/\/\/.*$/, '').replace(/^\s*\*.*$/, '');
-      if (vendor.test(code)) leaks.push(`${path.basename(f)}:${i + 1}`);
+      // "llama" is also the Spanish word for flame, so only check it outside the language packs
+      if (vendor.test(code) || (!/[\\/]lang[\\/]/.test(f) && /Llama/i.test(code))) leaks.push(`${path.basename(f)}:${i + 1}`);
     });
   }
   check('no AI company or model name in any user-facing string', leaks.length === 0, leaks.join(', '));
@@ -178,7 +180,7 @@ try {
   await A.page.goto(BASE + '/');
   await A.page.waitForSelector('#entry');
   const entryBtns = await A.page.locator('#entry button').evaluateAll((els) => els.map((e) => e.id));
-  check(`the first screen offers exactly sign in / create account / guest (${entryBtns})`, entryBtns.join() === 'entry-login,entry-signup,entry-guest');
+  check(`the first screen offers the language picker, then exactly sign in / create account / guest (${entryBtns})`, entryBtns.join() === 'lang-btn,entry-login,entry-signup,entry-guest');
   check('no registration field or tab bar behind the first screen', (await A.page.locator('#ob-next').count()) === 0 && !(await A.page.locator('#tabbar').isVisible()));
   await A.page.screenshot({ path: path.join(SHOTS, 'c01-entry.png') });
   await A.page.click('#entry-guest');

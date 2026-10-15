@@ -6,6 +6,7 @@
 // shows the check-in instead. Removing the gate from the DOM by hand is
 // detected and the gate is re-rendered.
 
+import { t as tr, lang } from './i18n.js';
 import { h, icon, clear, toast } from './util.js';
 import * as store from './store.js';
 import { renderOnboarding } from './screens/onboarding.js';
@@ -23,12 +24,23 @@ import { startPush } from './push.js';
 import { maybeAskReminders } from './screens/reminders.js';
 import { openConflict } from './screens/account.js';
 
+// The static page is English; this puts the active language into its texts.
+if (document.documentElement.lang !== 'en') {
+  document.title = tr('Nutri — your personal nutrition plan');
+  document.querySelector('meta[name="description"]')?.setAttribute('content', tr('A personal nutrition plan for cutting, maintaining or bulking, with a nutrition assistant and weekly progress tracking.'));
+  document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute('content', tr('Nutri'));
+  document.getElementById('skip-link').textContent = tr('Skip to content');
+  document.getElementById('offline-banner').textContent = tr('No internet connection — your data and menu are available on this device');
+  document.getElementById('splash')?.setAttribute('aria-label', tr('Loading'));
+  document.getElementById('tabbar').setAttribute('aria-label', tr('Main navigation'));
+}
+
 const ROUTES = {
-  today: { label: 'היום', icon: 'today', render: renderToday },
-  plan: { label: 'תפריט', icon: 'plan', render: renderPlan },
-  assistant: { label: 'עוזר', icon: 'chat', render: renderAssistant },
-  gallery: { label: 'גלריה', icon: 'gallery', render: renderGallery },
-  profile: { label: 'פרופיל', icon: 'profile', render: renderProfile },
+  today: { label: tr('Today'), icon: 'today', render: renderToday },
+  plan: { label: tr('Menu'), icon: 'plan', render: renderPlan },
+  assistant: { label: tr('Assistant'), icon: 'chat', render: renderAssistant },
+  gallery: { label: tr('Gallery'), icon: 'gallery', render: renderGallery },
+  profile: { label: tr('Profile'), icon: 'profile', render: renderProfile },
   // Not a tab: opened from the menu screen, which stays highlighted.
   shopping: { render: renderShopping, tab: 'plan' },
 };
@@ -138,7 +150,7 @@ export function render(force = false) {
     cleanup = ROUTES[name].render(page, ctx) || null;
   } catch (e) {
     console.error(e);
-    page.appendChild(h('div', { class: 'card notice warn' }, 'אירעה שגיאה בטעינת המסך. נסו לרענן.'));
+    page.appendChild(h('div', { class: 'card notice warn' }, tr('Something went wrong loading this screen. Try refreshing.')));
   }
   page.classList.add('enter');
   if (name === 'today') setTimeout(() => { if (lastKey === 'route:today') window.dispatchEvent(new Event('app:ready-for-reminders')); }, 1500);
@@ -173,11 +185,13 @@ async function boot() {
   } catch (e) {
     console.error(e);
     clear(view).appendChild(h('div', { class: 'boot-error' },
-      h('h1', null, 'לא ניתן לפתוח את האחסון'),
-      h('p', null, 'האפליקציה שומרת נתונים במכשיר ודורשת אחסון מקומי. במצב גלישה פרטית חלק מהדפדפנים חוסמים אותו — נסו בחלון רגיל.')));
+      h('h1', null, tr('Can\'t open storage')),
+      h('p', null, tr('The app keeps its data on your device and needs local storage. In private browsing mode some browsers block it — try a regular window.'))));
     return;
   }
   applyTheme(store.state.settings.theme);
+  // The service worker reads the language from the saved settings (it has no localStorage).
+  if (store.isOnboarded() && store.state.settings.lang !== lang) store.saveSettings({ lang }).catch(() => {});
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(store.state.settings.theme));
 
   store.onChange(rerender);
@@ -195,8 +209,8 @@ async function boot() {
     if (g && g.state !== 'none' && !lastKey.startsWith('gate:')) render(true);
   }, 30000);
 
-  window.addEventListener('online', () => { updateOnline(); toast('חזרת לאינטרנט'); });
-  window.addEventListener('offline', () => { updateOnline(); toast('אין חיבור — האפליקציה ממשיכה לעבוד במכשיר'); });
+  window.addEventListener('online', () => { updateOnline(); toast(tr('You\'re back online')); });
+  window.addEventListener('offline', () => { updateOnline(); toast(tr('No connection — the app keeps working on your device')); });
   updateOnline();
   onInstallChange(() => { if (lastKey === 'route:today' || lastKey === 'route:profile') rerender(); });
 
@@ -218,12 +232,12 @@ async function boot() {
   // (not over the weekly photo, the summary or a half-finished form).
   window.addEventListener('app:ready-for-reminders', () => maybeAskReminders());
 
-  if (signIn && signIn.error) toast(signIn.error === 'denied' ? 'ההתחברות בוטלה.' : 'ההתחברות נכשלה. נסו שוב.');
+  if (signIn && signIn.error) toast(signIn.error === 'denied' ? tr('Sign-in was canceled.') : tr('Sign-in failed. Try again.'));
   if (signIn && signIn.ok) {
     if (first && first.conflict) openConflict();
-    else if (first && first.restored) toast(signIn.intent === 'signup' ? 'כבר היה לך חשבון — הנתונים נטענו.' : 'הנתונים שלך נטענו מהחשבון');
-    else if (!store.isOnboarded()) toast(signIn.intent === 'signup' ? 'החשבון נוצר! בואו נבנה את התוכנית שלך.' : 'לא נמצא חשבון עם נתונים — נתחיל ביצירת תוכנית חדשה.');
-    else toast('התחברת — הנתונים מגובים בחשבון');
+    else if (first && first.restored) toast(signIn.intent === 'signup' ? tr('You already have an account — your data was loaded.') : tr('Your data was loaded from your account'));
+    else if (!store.isOnboarded()) toast(signIn.intent === 'signup' ? tr('Account created! Let\'s build your plan.') : tr('No account with data was found — let\'s start a new plan.'));
+    else toast(tr('Signed in — your data is backed up to your account'));
   } else {
     syncNow().then((r) => { if (r && r.conflict) openConflict(); });
   }
@@ -255,8 +269,8 @@ function registerSW() {
 function showUpdate(worker) {
   if (document.getElementById('update-bar')) return;
   document.body.appendChild(h('div', { id: 'update-bar', role: 'status' },
-    h('span', null, 'גרסה חדשה זמינה'),
-    h('button', { class: 'btn btn-small btn-primary', onclick: () => worker.postMessage({ type: 'SKIP_WAITING' }) }, 'עדכון')));
+    h('span', null, tr('A new version is available')),
+    h('button', { class: 'btn btn-small btn-primary', onclick: () => worker.postMessage({ type: 'SKIP_WAITING' }) }, tr('Update'))));
 }
 
 boot();

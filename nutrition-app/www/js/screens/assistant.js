@@ -1,5 +1,6 @@
 // Nutrition assistant chat.
 
+import { t as tr, lc } from '../i18n.js';
 import { h, icon, clear, confirmDialog } from '../util.js';
 import { disclaimer } from '../components.js';
 import { state, saveChat } from '../store.js';
@@ -13,10 +14,10 @@ let pendingAsk = null; // { text, extra, local } queued by a "replace" button el
 let inFlight = false;
 
 const QUICK = [
-  'מה אפשר לאכול במקום הפחמימה בארוחת הצהריים?',
-  'רעיון לארוחת ערב מהירה שמתאימה לתפריט שלי',
-  'מה כדאי לאכול לפני אימון?',
-  'איך לעמוד ביעד החלבון היומי?',
+  tr('What can I eat instead of the carb at lunch?'),
+  tr('An idea for a quick dinner that fits my menu'),
+  tr('What should I eat before a workout?'),
+  tr('How do I reach my daily protein target?'),
 ];
 
 // Called from meal cards: opens the assistant with a pre-filled substitution
@@ -30,7 +31,7 @@ export function queueAsk(text, extra = {}) {
 export function queueSubstitution(item, meal, res) {
   const role = ROLE_LABEL[item.role];
   pendingAsk = {
-    text: `תן לי תחליפים ל-${res.source.grams} ג׳ ${res.source.name} (${role}) ב${meal.name}, עם כמויות מדויקות.`,
+    text: tr('Give me substitutes for {0} g of {1} ({2}) at {3}, with exact amounts.', res.source.grams, res.source.name, role, meal.name),
     extra: { substitutionRequest: { meal: meal.name, item: res.source, matchedOn: res.matchedOn, computedEquivalents: res.options.map(({ score, ...o }) => o) } },
     local: res,
   };
@@ -62,22 +63,22 @@ function renderText(text) {
 }
 
 function localAnswer(res) {
-  if (!res.options.length) return 'לא מצאתי תחליף מתאים במאגר עבור ההגבלות שלך.';
-  const lines = res.options.map((o) => `- **${o.name}** — ${o.grams} ג׳ (${o.household}), ${o.kcal} קק״ל`);
-  return `במקום ${res.source.grams} ג׳ ${res.source.name} (${res.source.kcal} קק״ל):\n${lines.join('\n')}\n\nהכמויות מחושבות לפי אותה כמות ${{ p: 'חלבון', c: 'פחמימות', f: 'שומן', kcal: 'קלוריות' }[res.matchedOn]}.`;
+  if (!res.options.length) return tr('I couldn\'t find a substitute in the database that fits your restrictions.');
+  const lines = res.options.map((o) => tr('- **{0}** — {1} g ({2}), {3} kcal', o.name, o.grams, o.household, o.kcal));
+  return tr('Instead of {0} g of {1} ({2} kcal):\n{3}\n\nThe amounts are calculated to give the same amount of {4}.', res.source.grams, res.source.name, res.source.kcal, lines.join('\n'), lc({ p: tr('Protein'), c: tr('Carbs'), f: tr('Fat'), kcal: tr('Calories') }[res.matchedOn]));
 }
 
 export function renderAssistant(root) {
   const messages = state.chat.slice();
   const log = h('div', { class: 'chat-log', id: 'chat-log', 'aria-live': 'polite' });
-  const input = h('textarea', { id: 'chat-input', rows: 1, placeholder: 'שאלו על תחליפים, ארוחות, כמויות…', 'aria-label': 'הודעה לעוזר', enterkeyhint: 'send' });
-  const sendBtn = h('button', { class: 'send-btn', id: 'chat-send', 'aria-label': 'שליחה' }, icon('send'));
+  const input = h('textarea', { id: 'chat-input', rows: 1, placeholder: tr('Ask about substitutes, meals, amounts…'), 'aria-label': tr('Message the assistant'), enterkeyhint: 'send' });
+  const sendBtn = h('button', { class: 'send-btn', id: 'chat-send', 'aria-label': tr('Send') }, icon('send'));
 
   const bubble = (m) => {
     const b = h('div', { class: `msg ${m.role}${m.error ? ' error' : ''}${m.local ? ' local' : ''}` });
     if (m.role === 'assistant') b.innerHTML = renderText(m.content);
     else b.textContent = m.content;
-    if (m.local) b.appendChild(h('small', { class: 'muted' }, 'חושב במכשיר (העוזר המקוון לא זמין)'));
+    if (m.local) b.appendChild(h('small', { class: 'muted' }, tr('Answering on your device (the online assistant is unavailable)')));
     return b;
   };
 
@@ -86,11 +87,11 @@ export function renderAssistant(root) {
     if (!messages.length) {
       log.appendChild(h('div', { class: 'chat-empty' },
         h('div', { class: 'chat-avatar' }, icon('sparkle', 28)),
-        h('p', null, 'שלום! אני העוזר התזונתי שלך. אני מכיר את התפריט, היעדים וההגבלות שלך.'),
-        h('p', { class: 'muted small' }, 'אפשר גם ללחוץ על "החלף" ליד כל פריט בתפריט.')));
+        h('p', null, tr('Hi! I\'m your nutrition assistant. I know your menu, targets and restrictions.')),
+        h('p', { class: 'muted small' }, tr('You can also tap "Swap" next to any item on the menu.'))));
     }
     messages.forEach((m) => log.appendChild(bubble(m)));
-    if (inFlight) log.appendChild(h('div', { class: 'msg assistant typing', 'aria-label': 'העוזר כותב' }, h('i'), h('i'), h('i')));
+    if (inFlight) log.appendChild(h('div', { class: 'msg assistant typing', 'aria-label': tr('The assistant is typing') }, h('i'), h('i'), h('i')));
     requestAnimationFrame(() => { log.scrollTop = log.scrollHeight; window.scrollTo(0, document.body.scrollHeight); });
   };
 
@@ -120,11 +121,11 @@ export function renderAssistant(root) {
       if (local) {
         messages.push({ role: 'assistant', content: localAnswer(local), at: Date.now(), local: true });
       } else {
-        const why = e.code === 'offline' ? 'אין חיבור לאינטרנט — העוזר זמין רק אונליין. התפריט וההחלפות בכפתורי "החלף" עובדים גם בלי חיבור.'
-          : e.code === 'not_configured' ? 'העוזר עוד לא זמין. נסו שוב מאוחר יותר.'
-            : e.code === 'rate_limited' ? 'יותר מדי בקשות. נסו שוב בעוד דקה.'
-              : e.code === 'all_engines_busy' ? 'העוזר עמוס כרגע. נסו שוב בעוד כמה דקות.'
-              : 'העוזר לא זמין כרגע. נסו שוב בעוד רגע.';
+        const why = e.code === 'offline' ? tr('No internet connection — the assistant works only online. The menu and the "Swap" buttons still work without a connection.')
+          : e.code === 'not_configured' ? tr('The assistant is not available yet. Try again later.')
+            : e.code === 'rate_limited' ? tr('Too many requests. Try again in a minute.')
+              : e.code === 'all_engines_busy' ? tr('The assistant is busy right now. Try again in a few minutes.')
+              : tr('The assistant is unavailable right now. Try again in a moment.');
         messages.push({ role: 'assistant', content: why, at: Date.now(), error: true });
       }
     } finally {
@@ -143,13 +144,13 @@ export function renderAssistant(root) {
   input.addEventListener('input', autosize);
 
   root.appendChild(h('header', { class: 'page-head' },
-    h('div', null, h('h1', null, 'עוזר תזונה'), h('p', { class: 'muted' }, 'תשובות קצרות ומעשיות')),
+    h('div', null, h('h1', null, tr('Nutrition assistant')), h('p', { class: 'muted' }, tr('Short, practical answers'))),
     h('button', {
       class: 'icon-btn',
-      'aria-label': 'ניקוי השיחה',
+      'aria-label': tr('Clear the chat'),
       onclick: async () => {
         if (!messages.length) return;
-        if (await confirmDialog('ניקוי השיחה', 'למחוק את היסטוריית השיחה?', 'מחיקה', true)) {
+        if (await confirmDialog(tr('Clear the chat'), tr('Delete the chat history?'), tr('Delete'), true)) {
           messages.length = 0;
           await saveChat([]);
           drawLog();
@@ -161,8 +162,8 @@ export function renderAssistant(root) {
   if (access.state !== 'active') {
     root.appendChild(h('div', { class: `notice ${access.state === 'locked' ? 'warn' : 'ok'} small ai-plan`, id: 'ai-plan' },
       icon(access.state === 'locked' ? 'lock' : 'sparkle', 16),
-      h('span', null, access.state === 'locked' ? 'העוזר החכם זמין במנוי נוטרי פלוס.' : `תקופת ניסיון: עוד ${access.daysLeft} ימים של עוזר חכם בחינם.`),
-      h('button', { class: 'btn btn-small', onclick: () => openPaywall('chat') }, access.state === 'locked' ? 'פתיחה' : 'פרטים')));
+      h('span', null, access.state === 'locked' ? tr('The smart assistant is available with a Nutri Plus subscription.') : tr('Free trial: {0, plural, one {# more day} other {# more days}} of the smart assistant.', access.daysLeft)),
+      h('button', { class: 'btn btn-small', onclick: () => openPaywall('chat') }, access.state === 'locked' ? tr('Unlock') : tr('Details'))));
   }
   root.appendChild(log);
   root.appendChild(h('div', { class: 'quick-row' },

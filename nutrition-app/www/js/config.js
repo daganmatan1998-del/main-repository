@@ -5,9 +5,10 @@
 //          and the local dev server does the same).
 //   'https://nutri-api.<you>.workers.dev' -> when the app is hosted elsewhere,
 //          or wrapped with Capacitor (native apps have no same-origin server).
+import { t as tr } from './i18n.js';
 export const API_BASE = '';
 
-export const APP_VERSION = '1.13.0';
+export const APP_VERSION = '1.15.1';
 
 // Cloud accounts (Supabase): sign in with Google, data kept in the user's own
 // private row. Both empty = no accounts; everything stays on the device.
@@ -27,8 +28,8 @@ export const BILLING = {
   trialDays: 0, // free AI days from registration; 0 = no trial (off while testing; was 7)
   currency: '₪',
   plans: [
-    { id: 'monthly', label: 'חודשי', price: 29.9, per: 'לחודש' },
-    { id: 'yearly', label: 'שנתי', price: 249, per: 'לשנה', note: 'חיסכון של כ-30%' },
+    { id: 'monthly', label: tr('Monthly'), price: 29.9, per: tr('per month') },
+    { id: 'yearly', label: tr('Yearly'), price: 249, per: tr('per year'), note: tr('Saves about 30%') },
   ],
   provider: '', // e.g. 'stripe' | 'paypal' | 'payplus' — not connected yet
   checkoutUrl: '', // the provider's hosted checkout page, once connected

@@ -2,6 +2,7 @@
 // which we keep and replay from our own button. iOS Safari has no such event,
 // so there we show the manual Share → Add to Home Screen instructions.
 
+import { t as tr } from './i18n.js';
 import { h, icon, toast, sheet } from './util.js';
 import { saveSettings } from './store.js';
 
@@ -15,7 +16,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 window.addEventListener('appinstalled', () => {
   deferred = null;
-  toast('האפליקציה הותקנה 🎉');
+  toast(tr('The app is installed 🎉'));
   listeners.forEach((fn) => fn());
 });
 
@@ -39,13 +40,13 @@ export async function promptInstall() {
     return outcome;
   }
   if (isIOS()) {
-    sheet('התקנה באייפון', h('ol', { class: 'ios-steps' },
-      h('li', null, 'לחצו על כפתור השיתוף ', h('b', null, '⬆︎'), ' בתחתית Safari'),
-      h('li', null, 'בחרו ', h('b', null, '"הוספה למסך הבית"')),
-      h('li', null, 'לחצו ', h('b', null, '"הוסף"'), ' — והאפליקציה תופיע כאייקון')));
+    sheet(tr('Install on iPhone'), h('ol', { class: 'ios-steps' },
+      h('li', null, tr('Tap the share button '), h('b', null, '⬆︎'), tr(' at the bottom of Safari')),
+      h('li', null, tr('Choose '), h('b', null, tr('"Add to Home Screen"'))),
+      h('li', null, tr('Tap '), h('b', null, tr('"Add"')), tr(' — the app will appear as an icon'))));
     return 'ios';
   }
-  toast('ההתקנה זמינה מתפריט הדפדפן ← "התקנת אפליקציה"');
+  toast(tr('Installation is available from the browser menu → "Install app"'));
   return 'manual';
 }
 
@@ -55,9 +56,9 @@ export function installCard() {
     h('div', { class: 'row gap center-y' },
       h('img', { src: 'icons/icon-192.png', alt: '', width: 44, height: 44, class: 'app-icon' }),
       h('div', { class: 'grow' },
-        h('strong', null, 'התקינו את האפליקציה'),
-        h('p', { class: 'muted small' }, 'גישה מהירה ממסך הבית, מסך מלא ועבודה גם בלי אינטרנט.'))),
+        h('strong', null, tr('Install the app')),
+        h('p', { class: 'muted small' }, tr('Quick access from your home screen, full-screen view, and offline use.')))),
     h('div', { class: 'row gap' },
-      h('button', { class: 'btn btn-primary', onclick: () => promptInstall() }, icon('download', 18), 'התקנה'),
-      h('button', { class: 'btn btn-ghost', onclick: () => saveSettings({ installDismissed: true }) }, 'לא עכשיו')));
+      h('button', { class: 'btn btn-primary', onclick: () => promptInstall() }, icon('download', 18), tr('Install')),
+      h('button', { class: 'btn btn-ghost', onclick: () => saveSettings({ installDismissed: true }) }, tr('Not now'))));
 }

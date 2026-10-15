@@ -3,10 +3,11 @@
 // fallback when camera permission is denied or there is no camera.
 // (With Capacitor, replace with @capacitor/camera's getPhoto().)
 
+import { t as tr } from '../i18n.js';
 import { h, icon, sheet, toast } from '../util.js';
 import { compressImage, ImageError } from '../image.js';
 
-export function photoButtons(onPicked, { busyText = 'מעבד תמונה…', process = compressImage, front = false, hint = true } = {}) {
+export function photoButtons(onPicked, { busyText = tr('Processing the photo…'), process = compressImage, front = false, hint = true } = {}) {
   const status = h('p', { class: 'muted small center', 'aria-live': 'polite' });
   const make = (capture) => {
     const input = h('input', { type: 'file', accept: 'image/*', class: 'visually-hidden', tabindex: '-1', 'aria-hidden': 'true' });
@@ -22,7 +23,7 @@ export function photoButtons(onPicked, { busyText = 'מעבד תמונה…', pr
         status.textContent = '';
         await onPicked(img);
       } catch (e) {
-        status.textContent = e instanceof ImageError ? e.message : 'משהו השתבש בעיבוד התמונה. נסו שוב.';
+        status.textContent = e instanceof ImageError ? e.message : tr('Something went wrong processing the photo. Try again.');
         if (!(e instanceof ImageError)) console.error(e);
       } finally {
         wrap.classList.remove('busy');
@@ -33,9 +34,9 @@ export function photoButtons(onPicked, { busyText = 'מעבד תמונה…', pr
   const cam = make(true);
   const gal = make(false);
   const wrap = h('div', { class: 'photo-buttons' },
-    h('button', { type: 'button', class: 'btn btn-primary btn-lg btn-block', id: 'btn-camera', onclick: () => cam.click() }, icon('camera'), 'צילום עכשיו'),
-    h('button', { type: 'button', class: 'btn btn-lg btn-block', id: 'btn-gallery', onclick: () => gal.click() }, icon('image'), 'בחירה מהגלריה'),
-    hint ? h('p', { class: 'muted small center' }, 'אין גישה למצלמה? אפשר לבחור תמונה קיימת מהגלריה.') : null,
+    h('button', { type: 'button', class: 'btn btn-primary btn-lg btn-block', id: 'btn-camera', onclick: () => cam.click() }, icon('camera'), tr('Take a photo now')),
+    h('button', { type: 'button', class: 'btn btn-lg btn-block', id: 'btn-gallery', onclick: () => gal.click() }, icon('image'), tr('Choose from the gallery')),
+    hint ? h('p', { class: 'muted small center' }, tr('No access to the camera? You can choose an existing photo from the gallery.')) : null,
     status, cam, gal);
   return wrap;
 }
@@ -43,11 +44,11 @@ export function photoButtons(onPicked, { busyText = 'מעבד תמונה…', pr
 export function pickPhoto() {
   return new Promise((resolve) => {
     let done = false;
-    sheet('תמונת התקדמות', (close) => photoButtons(async (img) => {
+    sheet(tr('Progress photo'), (close) => photoButtons(async (img) => {
       done = true;
       resolve(img);
       close();
-      toast('התמונה נוספה');
+      toast(tr('The photo was added'));
     }), { onClose: () => { if (!done) resolve(null); } });
   });
 }

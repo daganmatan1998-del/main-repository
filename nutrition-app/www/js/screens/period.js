@@ -1,5 +1,6 @@
 // End-of-period review and setting up the next period (cut → maintain → bulk …).
 
+import { t as tr } from '../i18n.js';
 import { h, icon, clear, sheet, fmt, signed, parseNum, toast, ltr } from '../util.js';
 import { segmented, assessmentBox } from '../components.js';
 import { GOALS, assessGoal, projectBf, nextGoalSuggestions, validBf } from '../nutrition.js';
@@ -22,7 +23,7 @@ export function openPeriodReview({ early = false } = {}) {
   };
   defaults();
 
-  sheet(early ? 'סיום התקופה מוקדם' : 'סיכום התקופה', (close) => {
+  sheet(early ? tr('End the period early') : tr('Period summary'), (close) => {
     const body = h('div');
     const draw = () => {
       clear(body);
@@ -30,30 +31,30 @@ export function openPeriodReview({ early = false } = {}) {
       const dbf = cur.bf != null && p.startBf != null ? cur.bf - p.startBf : null;
       body.append(
         h('div', { class: 'card flat' },
-          h('h3', null, `תקופת ${GOALS[p.goal].label}`),
-          h('div', { class: 'sum-row' }, h('span', null, 'משקל'), h('b', null, ltr(`${fmt(p.startWeight, 1)} → ${fmt(cur.weight, 1)} (${signed(dw)})`))),
-          dbf !== null ? h('div', { class: 'sum-row' }, h('span', null, 'אחוז שומן'), h('b', null, ltr(`${p.startBf}% → ${cur.bf}% (${signed(dbf)})`))) : null,
-          h('div', { class: 'sum-row' }, h('span', null, 'יעד'), h('b', { class: 'num' }, `${fmt(p.targetWeight, 1)} ק״ג, ${p.targetBf ?? '—'}%`))),
-        h('h3', null, 'התקופה הבאה'),
-        h('p', { class: 'muted small' }, `מומלץ אחרי ${GOALS[p.goal].label}: ${suggestions.map((g) => GOALS[g].label).join(' או ')}.`),
-        h('div', { class: 'field' }, h('span', null, 'מטרה'),
-          segmented(Object.entries(GOALS).map(([id, g]) => ({ id, label: g.label })), d.goal, (v) => { d.goal = v; d.touched = false; defaults(); draw(); }, 'מטרה')),
-        h('div', { class: 'field' }, h('span', null, 'משך (שבועות)'),
-          segmented([4, 8, 12, 16].map((n) => ({ id: n, label: String(n) })), d.weeks, (v) => { d.weeks = v; defaults(); draw(); }, 'משך')),
+          h('h3', null, tr('{0} period', GOALS[p.goal].label)),
+          h('div', { class: 'sum-row' }, h('span', null, tr('Weight')), h('b', null, ltr(`${fmt(p.startWeight, 1)} → ${fmt(cur.weight, 1)} (${signed(dw)})`))),
+          dbf !== null ? h('div', { class: 'sum-row' }, h('span', null, tr('Body fat')), h('b', null, ltr(`${p.startBf}% → ${cur.bf}% (${signed(dbf)})`))) : null,
+          h('div', { class: 'sum-row' }, h('span', null, tr('Target')), h('b', { class: 'num' }, tr('{0} kg, {1}%', fmt(p.targetWeight, 1), p.targetBf ?? '—')))),
+        h('h3', null, tr('The next period')),
+        h('p', { class: 'muted small' }, tr('Recommended after {0}: {1}.', GOALS[p.goal].label, suggestions.map((g) => GOALS[g].label).join(tr(' or ')))),
+        h('div', { class: 'field' }, h('span', null, tr('Goal')),
+          segmented(Object.entries(GOALS).map(([id, g]) => ({ id, label: g.label })), d.goal, (v) => { d.goal = v; d.touched = false; defaults(); draw(); }, tr('Goal'))),
+        h('div', { class: 'field' }, h('span', null, tr('Length (weeks)')),
+          segmented([4, 8, 12, 16].map((n) => ({ id: n, label: String(n) })), d.weeks, (v) => { d.weeks = v; defaults(); draw(); }, tr('Length'))),
         h('div', { class: 'grid2' },
-          h('label', { class: 'field' }, h('span', null, 'משקל יעד'), h('input', { inputmode: 'decimal', value: d.targetWeight, oninput: (e) => { d.targetWeight = e.target.value; d.touched = true; refresh(); } })),
-          h('label', { class: 'field' }, h('span', null, '% שומן יעד'), h('input', { inputmode: 'decimal', value: d.targetBf, oninput: (e) => { d.targetBf = e.target.value; d.touched = true; refresh(); } }))),
+          h('label', { class: 'field' }, h('span', null, tr('Target weight')), h('input', { inputmode: 'decimal', value: d.targetWeight, oninput: (e) => { d.targetWeight = e.target.value; d.touched = true; refresh(); } })),
+          h('label', { class: 'field' }, h('span', null, tr('Target body fat %')), h('input', { inputmode: 'decimal', value: d.targetBf, oninput: (e) => { d.targetBf = e.target.value; d.touched = true; refresh(); } }))),
         assess,
         h('button', {
           class: 'btn btn-primary btn-block',
           onclick: async () => {
             const a = assessment();
-            if (a.level === 'error' || !validBf(parseNum(d.targetBf))) { toast('יש לתקן את היעד.'); return; }
+            if (a.level === 'error' || !validBf(parseNum(d.targetBf))) { toast(tr('Fix the target.')); return; }
             await startNextPeriod({ goal: d.goal, weeks: d.weeks, targetWeight: parseNum(d.targetWeight), targetBf: parseNum(d.targetBf) });
             close();
-            toast('התקופה החדשה התחילה. התפריט עודכן.');
+            toast(tr('The new period has started. The menu was updated.'));
           },
-        }, icon('check', 18), 'התחלת התקופה החדשה'));
+        }, icon('check', 18), tr('Start the new period')));
       refresh();
     };
     const assess = h('div');

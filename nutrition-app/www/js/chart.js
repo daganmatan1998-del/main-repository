@@ -1,5 +1,6 @@
 // Minimal dependency-free SVG line chart for weight / body-fat history.
 
+import { t as tr } from './i18n.js';
 const NS = 'http://www.w3.org/2000/svg';
 
 function el(tag, attrs) {
@@ -45,7 +46,7 @@ export function lineChart(points, { target = null, unit = '', height = 180, digi
     svg.appendChild(el('line', { x1: pad.l, x2: W - pad.r, y1: y, y2: y, class: 'target' }));
     // RTL label anchored at its right edge, so Hebrew text never runs off the chart.
     const t = el('text', { x: W - pad.r, y: y - 5, 'text-anchor': 'start', direction: 'rtl', class: 'axis target-label' });
-    t.textContent = `יעד ${target}${unit}`;
+    t.textContent = tr('Target {0}{1}', target, unit);
     svg.appendChild(t);
   }
 

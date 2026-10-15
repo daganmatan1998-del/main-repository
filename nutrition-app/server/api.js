@@ -7,18 +7,23 @@
 // is Anthropic only.
 
 import Anthropic from '@anthropic-ai/sdk';
-import { SYSTEM_PROMPT, BODYFAT_PROMPT, MEAL_PHOTO_PROMPT } from './system-prompt.js';
+import { SYSTEM_PROMPT, BODYFAT_PROMPT, MEAL_PHOTO_PROMPT, withLanguage, cleanLang } from './system-prompt.js';
 import { complete, hasEngine, engineList, EngineError } from './engines.js';
 import { handlePush } from './push.js';
 
-const MODEL = 'claude-opus-5-5';
+// Which Anthropic model answers which task. Sonnet for the everyday work (it
+// costs half as much as Opus); Opus only for the body-fat estimate, where
+// accuracy sets the starting calories and is not worth trading away.
+// Override one task with CLAUDE_MODEL_CHAT / _MEALPHOTO / _BODYFAT, or all with CLAUDE_MODEL.
+const MODELS = { chat: 'claude-sonnet-5-5', mealphoto: 'claude-sonnet-5-5', bodyfat: 'claude-opus-5-5' };
+export const anthropicModel = (env, task) => env[`CLAUDE_MODEL_${task.toUpperCase()}`] || env.CLAUDE_MODEL || MODELS[task];
 const MAX_BODY = 64 * 1024;
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 4000;
 const MAX_CONTEXT_CHARS = 20000;
 const MAX_PHOTO_BODY = 4 * 1024 * 1024; // four compressed photos, base64
 const MAX_PHOTO_B64 = 900 * 1024;
-const ANGLES = { front: 'מקדימה', left: 'צד שמאל', back: 'מאחור', right: 'צד ימין' };
+const ANGLES = { front: 'front', left: 'left side', back: 'back', right: 'right side' };
 
 // Best-effort per-instance limiter. For production on Cloudflare, also bind the
 // Workers Rate Limiting API as RATE_LIMITER (see wrangler.toml) — it is used
@@ -162,13 +167,13 @@ export async function handleChat(request, env, { fetchImpl } = {}) {
 
   try {
     const r = await complete(env, 'chat', {
-      system: `${SYSTEM_PROMPT}\n\nUSER CONTEXT (JSON, from the app):\n${context}`,
+      system: `${withLanguage(SYSTEM_PROMPT, body.lang)}\n\nUSER CONTEXT (JSON, from the app):\n${context}`,
       messages,
       maxTokens: 4000,
       // Only runs when the chain reaches Anthropic (the paid engine, last).
       anthropic: async () => {
         const response = await clientFor(env, fetchImpl).beta.messages.create({
-          model: env.CLAUDE_MODEL || MODEL,
+          model: anthropicModel(env, 'chat'),
           max_tokens: 4000,
           // Chat replies are short and routine: low effort keeps them fast and cheap.
           output_config: { effort: 'low' },
@@ -177,7 +182,7 @@ export async function handleChat(request, env, { fetchImpl } = {}) {
           betas: ['server-side-fallback-2026-07-01'],
           fallbacks: 'default',
           system: [
-            { type: 'text', text: SYSTEM_PROMPT },
+            { type: 'text', text: withLanguage(SYSTEM_PROMPT, body.lang) },
             { type: 'text', text: `USER CONTEXT (JSON, from the app):\n${context}` },
           ],
           messages,
@@ -188,7 +193,7 @@ export async function handleChat(request, env, { fetchImpl } = {}) {
     }, { fetchImpl });
 
     if (r.refusal) {
-      return json(200, { text: 'לא אוכל לעזור בשאלה הזו. אפשר לשאול על התפריט, תחליפים ומזון.', refusal: true }, cors);
+      return json(200, { text: 'I can\'t help with that question. You can ask about the menu, substitutions and food.', refusal: true }, cors);
     }
     if (!r.text) return json(502, { error: 'empty_reply' }, cors);
     return json(200, { text: r.text, truncated: !!r.truncated, engine: r.engine }, cors);
@@ -243,7 +248,7 @@ export async function handleBodyFat(request, env, { fetchImpl } = {}) {
 
   try {
     const r = await complete(env, 'bodyfat', {
-      system: BODYFAT_PROMPT,
+      system: withLanguage(BODYFAT_PROMPT, body.lang),
       messages: [{ role: 'user', content: ask }],
       images,
       json: true,
@@ -257,12 +262,12 @@ export async function handleBodyFat(request, env, { fetchImpl } = {}) {
         }
         content.push({ type: 'text', text: ask });
         const response = await clientFor(env, fetchImpl).beta.messages.create({
-          model: env.CLAUDE_MODEL || MODEL,
+          model: anthropicModel(env, 'bodyfat'),
           max_tokens: 3000,
           output_config: { effort: 'medium', format: { type: 'json_schema', schema: BODYFAT_SCHEMA } },
           betas: ['server-side-fallback-2026-07-01'],
           fallbacks: 'default',
-          system: BODYFAT_PROMPT,
+          system: withLanguage(BODYFAT_PROMPT, body.lang),
           messages: [{ role: 'user', content }],
         });
         if (response.stop_reason === 'refusal') return { refusal: true, text: '' };
@@ -270,12 +275,12 @@ export async function handleBodyFat(request, env, { fetchImpl } = {}) {
       },
     }, { fetchImpl });
     if (r.refusal) {
-      return json(200, { ok: false, issue: 'לא ניתן לנתח את התמונות האלה. נסו תמונות אחרות או הזינו ערך ידנית.' }, cors);
+      return json(200, { ok: false, issue: 'These photos can\'t be analyzed. Try other photos or enter a value manually.' }, cors);
     }
     const text = r.text;
     let out;
     try { out = JSON.parse(text); } catch { return json(502, { error: 'bad_model_output' }, cors); }
-    if (!out.ok) return json(200, { ok: false, issue: String(out.issue || 'התמונות לא מתאימות לניתוח.').slice(0, 300) }, cors);
+    if (!out.ok) return json(200, { ok: false, issue: String(out.issue || 'The photos are not suitable for analysis.').slice(0, 300) }, cors);
     const clampPct = (v) => Math.round(Math.min(60, Math.max(3, Number(v) || 0)) * 10) / 10;
     const estimate = clampPct(out.estimate);
     const low = Math.min(estimate, clampPct(out.low));
@@ -324,7 +329,7 @@ const MEAL_PHOTO_SCHEMA = {
   additionalProperties: false,
 };
 // What the model is shown instead of the full JSON Schema (a fifth of the tokens).
-const MEAL_PHOTO_EXAMPLE = '{"ok":true,"items":[{"name":"אורז","grams":150,"kcal":195,"p":4,"c":42,"f":0.5,"foodId":"white_rice","confidence":"high"}],"confidence":"medium","notes":"","issue":""}';
+const MEAL_PHOTO_EXAMPLE = '{"ok":true,"items":[{"name":"rice","grams":150,"kcal":195,"p":4,"c":42,"f":0.5,"foodId":"white_rice","confidence":"high"}],"confidence":"medium","notes":"","issue":""}';
 const MAX_MEAL_BODY = 1.5 * 1024 * 1024; // one photo plus the food ids
 
 // /api/meal-photo — "calorie camera": one top-down photo of a plate, returned
@@ -353,7 +358,7 @@ export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
 
   try {
     const r = await complete(env, 'mealphoto', {
-      system: MEAL_PHOTO_PROMPT,
+      system: withLanguage(MEAL_PHOTO_PROMPT, body.lang),
       messages: [{ role: 'user', content: ask }],
       image: photo,
       json: true,
@@ -364,12 +369,12 @@ export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
       // The last resort: Anthropic is tried only after every free engine has failed.
       anthropic: async () => {
         const response = await clientFor(env, fetchImpl).beta.messages.create({
-          model: env.CLAUDE_MODEL || MODEL,
+          model: anthropicModel(env, 'mealphoto'),
           max_tokens: 1500,
           output_config: { effort: 'low', format: { type: 'json_schema', schema: MEAL_PHOTO_SCHEMA } },
           betas: ['server-side-fallback-2026-07-01'],
           fallbacks: 'default',
-          system: MEAL_PHOTO_PROMPT,
+          system: withLanguage(MEAL_PHOTO_PROMPT, body.lang),
           messages: [{ role: 'user', content: [
             { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: photo } },
             { type: 'text', text: ask },
@@ -380,11 +385,11 @@ export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
       },
     }, { fetchImpl });
     if (r.refusal) {
-      return json(200, { ok: false, issue: 'לא ניתן לנתח את התמונה הזאת. נסו לצלם שוב.' }, cors);
+      return json(200, { ok: false, issue: 'This photo can\'t be analyzed. Try taking it again.' }, cors);
     }
     let out;
     try { out = JSON.parse(r.text); } catch { return json(502, { error: 'bad_model_output' }, cors); }
-    if (!out.ok) return json(200, { ok: false, issue: str(out.issue, 300) || 'לא זוהה אוכל בתמונה.' }, cors);
+    if (!out.ok) return json(200, { ok: false, issue: str(out.issue, 300) || 'No food was recognized in the photo.' }, cors);
     const known = new Set(foods);
     const num = (v, hi) => Math.round(Math.min(hi, Math.max(0, Number(v) || 0)) * 10) / 10;
     const conf = (v) => (['low', 'medium', 'high'].includes(v) ? v : 'low');
@@ -409,7 +414,7 @@ export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
         }
         return i;
       });
-    if (!items.length) return json(200, { ok: false, issue: 'לא זוהה אוכל בתמונה. צלמו את כל הצלחת מלמעלה.' }, cors);
+    if (!items.length) return json(200, { ok: false, issue: 'No food was recognized in the photo. Photograph the whole plate from above.' }, cors);
     // Free engines never report better than "medium".
     const overall = r.engine !== 'anthropic' && conf(out.confidence) === 'high' ? 'medium' : conf(out.confidence);
     return json(200, { ok: true, items, confidence: overall, notes: str(out.notes, 400), engine: r.engine }, cors);

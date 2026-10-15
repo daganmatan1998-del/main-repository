@@ -10,12 +10,13 @@
 // locked. NOTE: this check runs on the device. Once payments are live, the
 // Worker must check the subscription too, or the limit can be bypassed.
 
+import { t as tr, locale } from './i18n.js';
 import { BILLING } from './config.js';
 import { daysBetween } from './util.js';
 
 export const AI_FEATURES = {
-  chat: 'העוזר החכם',
-  camera: 'מצלמת הקלוריות',
+  chat: tr('The smart assistant'),
+  camera: tr('The calorie camera'),
 };
 
 // { state: 'active' | 'trial' | 'locked', daysLeft?, until? }
@@ -43,7 +44,7 @@ export function paymentMethods({ ua = '', maxTouchPoints = 0 } = {}) {
   ];
 }
 
-export const METHOD_LABEL = { applepay: 'Apple Pay', googlepay: 'Google Pay', card: 'כרטיס אשראי', paypal: 'PayPal' };
+export const METHOD_LABEL = { applepay: 'Apple Pay', googlepay: 'Google Pay', card: tr('Credit card'), paypal: 'PayPal' };
 
 // The one place a payment provider plugs in: send the buyer to the provider's
 // hosted checkout with the plan and the chosen method. Card details never pass
@@ -59,4 +60,4 @@ export function checkoutLink(planId, method, { billing = BILLING, ref = '' } = {
   return u.toString();
 }
 
-export const priceText = (plan, billing = BILLING) => `${billing.currency}${plan.price.toLocaleString('he-IL', { maximumFractionDigits: 2 })} ${plan.per}`;
+export const priceText = (plan, billing = BILLING) => `${billing.currency}${plan.price.toLocaleString(locale, { maximumFractionDigits: 2 })} ${plan.per}`;

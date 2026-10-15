@@ -1,10 +1,10 @@
 {
   "id": "./",
-  "name": "נוטרי — תוכנית תזונה אישית",
-  "short_name": "נוטרי",
-  "description": "תוכנית תזונה אישית לחיטוב, שמירה ומסה, עם עוזר תזונה ומעקב התקדמות שבועי.",
-  "lang": "he",
-  "dir": "rtl",
+  "name": "Nutri — your personal nutrition plan",
+  "short_name": "Nutri",
+  "description": "A personal nutrition plan for cutting, maintaining or bulking, with a nutrition assistant and weekly progress tracking.",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "./#/today",
   "scope": "./",
   "display": "standalone",
@@ -20,7 +20,7 @@
     { "src": "icons/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ],
   "shortcuts": [
-    { "name": "התפריט שלי", "url": "./#/plan", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "עוזר תזונה", "url": "./#/assistant", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+    { "name": "My menu", "url": "./#/plan", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Nutrition assistant", "url": "./#/assistant", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

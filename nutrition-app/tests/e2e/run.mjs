@@ -88,6 +88,7 @@ const ctx = await browser.newContext({
 });
 await ctx.clock.setFixedTime(at(0));
 await ctx.grantPermissions(['camera', 'notifications']);
+await ctx.addInitScript((lang) => { try { if (!localStorage.getItem('nutri-lang')) localStorage.setItem('nutri-lang', lang); } catch {} }, process.env.E2E_LANG || 'he'); // the checks below were written against Hebrew
 // There is no push service in the test browser: a stand-in that behaves like one subscription.
 await ctx.addInitScript(() => {
   const sub = { endpoint: 'https://fcm.googleapis.com/fcm/send/e2e-device', unsubscribe: async () => { window.__pushUnsubscribed = true; return true; } };
@@ -176,8 +177,8 @@ try {
   check('app boots to onboarding for a new user', await visible('.welcome'));
 
   const manifest = await (await page.request.get(BASE + '/manifest.webmanifest')).json();
-  check('manifest: standalone, rtl, he, start_url, icons 192/512/maskable',
-    manifest.display === 'standalone' && manifest.dir === 'rtl' && manifest.lang === 'he' && manifest.start_url
+  check('manifest: standalone, ltr, en, start_url, icons 192/512/maskable',
+    manifest.display === 'standalone' && manifest.dir === 'ltr' && manifest.lang === 'en' && manifest.start_url
     && manifest.icons.some((i) => i.sizes === '192x192') && manifest.icons.some((i) => i.sizes === '512x512') && manifest.icons.some((i) => i.purpose === 'maskable'));
   for (const icon of manifest.icons) {
     const r = await page.request.get(`${BASE}/${icon.src}`);
@@ -371,6 +372,69 @@ try {
   await mealA().screenshot({ path: path.join(SHOTS, '39-extras-meal.png') });
   while (await mealA().locator('.extra-del').count()) { await mealA().locator('.extra-del').first().click(); await wait(400); }
   check('removing the additions returns the meal', (await mealA().locator('.extras-list').count()) === 0 && (await mealA().locator('.item').count()) === itemsBefore);
+
+  // =============== your own foods: everyday foods and typed ones ===============
+  const planned = await mealKcal();
+  const customRows = () => mealA().locator('.custom-row');
+  const clearCustom = async () => { while (await customRows().count()) { await customRows().first().locator('.extra-del').click(); await wait(350); } };
+  await mealA().locator('.custom-add').click();
+  await page.waitForSelector('#custom-search');
+  const everydayCount = await page.locator('.custom-opts .extra-opt').count();
+  check(`the sheet lists the everyday foods (${everydayCount})`, everydayCount >= 30 && (await page.locator('.custom-opts [data-food="fries"]').count()) === 1);
+  check('the sheet offers both ways of counting the calories', (await page.locator('.custom-mode-btn').count()) === 2 && (await page.locator('.custom-mode-btn.on').getAttribute('data-mode')) === 'offset');
+  await shot('40-custom-sheet');
+  await page.locator('.custom-form').scrollIntoViewIfNeeded();
+  await shot('42-custom-form');
+  await page.locator('.custom-opts [data-food="popsicle"] .btn').click();
+  await wait(600);
+  const withPop = await mealKcal();
+  check(`a light food taken off the rest of the meal keeps the budget (${withPop} vs ${target0})`, (await customRows().count()) === 1 && Math.abs(withPop - target0) <= target0 * 0.12 && (await mealA().locator('.extras-note').allInnerTexts()).join(' ').length > 0 && (await mealA().locator('.custom-over').count()) === 0);
+  await mealA().locator('.custom-row .extra-plus').click();
+  await wait(500);
+  check('more servings keep the budget too', Math.abs((await mealKcal()) - target0) <= target0 * 0.12);
+  await clearCustom();
+  // A food bigger than the whole meal: the meal goes over, and it says so.
+  await mealA().locator('.custom-add').click();
+  await page.waitForSelector('#custom-search');
+  await page.locator('.custom-opts [data-food="fries"] .btn').click();
+  await wait(600);
+  check('a food bigger than the meal budget warns that the meal goes over', (await mealA().locator('.custom-over').count()) === 1 && (await mealKcal()) > target0);
+  await mealA().screenshot({ path: path.join(SHOTS, '41-custom-meal.png') });
+  await clearCustom();
+  check('removing it returns the meal', (await customRows().count()) === 0 && (await mealKcal()) === planned && (await mealA().locator('.item').count()) === itemsBefore);
+  // On top: the meal goes up by the food's calories.
+  await mealA().locator('.custom-add').click();
+  await page.waitForSelector('#custom-search');
+  await page.locator('.custom-mode-btn[data-mode="add"]').click();
+  await page.locator('.custom-opts [data-food="fries"] .btn').click();
+  await wait(600);
+  const onTop = await mealKcal();
+  check(`"add on top" raises the meal by the food (${planned} → ${onTop})`, onTop - planned >= 440 && onTop - planned <= 500);
+  await clearCustom();
+  // Typed by hand.
+  await mealA().locator('.custom-add').click();
+  await page.waitForSelector('#custom-search');
+  await page.locator('.custom-mode-btn[data-mode="offset"]').click();
+  await page.click('.custom-typed-add');
+  check('a typed food needs a name and calories', (await customRows().count()) === 0 && await visible('.custom-form'));
+  await page.fill('.custom-name', 'עוגת שוקולד');
+  await page.fill('.custom-kcal', '60');
+  await page.fill('.custom-p', '4');
+  await page.click('.custom-typed-add');
+  await wait(600);
+  check('a typed food shows under the meal and keeps the budget', (await customRows().count()) === 1 && (await customRows().innerText()).includes('עוגת שוקולד') && (await customRows().innerText()).includes('60') && Math.abs((await mealKcal()) - planned) <= planned * 0.12);
+  await clearCustom();
+  // From the swap sheet: replaces that item.
+  await mealA().locator('.chip-btn').first().click();
+  await page.waitForSelector('#btn-custom');
+  await page.click('#btn-custom');
+  await page.waitForSelector('#custom-search');
+  check('opened from a swap, it says which item it replaces', await visible('.custom-instead'));
+  await page.locator('.custom-opts [data-food="popsicle"] .btn').click();
+  await wait(700);
+  check('the replaced item leaves the meal', (await customRows().count()) === 1 && (await mealA().locator('.item').count()) === itemsBefore - 1 && Math.abs((await mealKcal()) - planned) <= planned * 0.15, `${await mealA().locator('.item').count()} items, ${await mealKcal()} kcal`);
+  await clearCustom();
+  check('removing it brings the item back', (await mealA().locator('.item').count()) === itemsBefore);
 
   // =============== Plan & swaps ===============
   await page.click('a[href="#/plan"]');
@@ -605,7 +669,11 @@ try {
   // =============== recipes ===============
   await page.locator('.meal').first().locator('.rc-open').click();
   await page.waitForSelector('.overlay.recipes .rc-card');
-  const countOf = async () => Number((await page.locator('#rc-count').innerText()).replace(/[^\d]/g, ''));
+  // One recipe is spelled out ("נמצא מתכון אחד"), with no digit.
+  const countOf = async () => {
+    const text = await page.locator('#rc-count').innerText();
+    return /אחד/.test(text) ? 1 : Number(text.replace(/[^\d]/g, ''));
+  };
   const totalRecipes = await countOf();
   check(`meal has a large recipe collection (${totalRecipes})`, totalRecipes >= 40);
   await page.locator('.rc-card .rc-head').first().click();
@@ -667,7 +735,7 @@ try {
   check('assistant request carries profile, restrictions and computed equivalents',
     last && last.body.system[1].text.includes('computedEquivalents') && last.body.system[1].text.includes('טונה') && last.body.system[1].text.includes('kosher'));
   check('no name or photo is sent to the assistant', last && !last.body.system[1].text.includes('דנה') && !/data:image|blob:/.test(last.body.system[1].text));
-  check('proxy uses claude-opus-5-5 with server-side fallbacks', last && last.body.model === 'claude-opus-5-5' && last.body.fallbacks === 'default');
+  check('proxy uses claude-sonnet-5-5 with server-side fallbacks', last && last.body.model === 'claude-sonnet-5-5' && last.body.fallbacks === 'default');
   check('API key is added by the server only', last && last.headers.get('x-api-key') === 'sk-ant-e2e-fake');
   const repliesBefore = await page.locator('.msg.assistant:not(.typing)').count();
   await page.fill('#chat-input', 'מה לאכול לפני אימון?');
@@ -721,7 +789,7 @@ try {
   check('day 7: weekly photo gate appears', await visible('#gate'));
   check('gate hides the tab bar', !(await visible('#tabbar')));
   const gateButtons = await page.locator('#gate button').allInnerTexts();
-  check('gate has no skip / later / close option', !gateButtons.some((b) => /דלג|אחר כך|מאוחר|סגור|ביטול|הזכר/.test(b)), gateButtons.join('|'));
+  check('gate offers skipping the photo but no later / close option', await visible('#skip-photo') && !gateButtons.some((b) => /אחר כך|מאוחר|סגור|ביטול|הזכר/.test(b)), gateButtons.join('|'));
   await shot('10-gate-photo');
 
   for (const hash of ['#/today', '#/plan', '#/assistant', '#/gallery', '#/profile']) {
@@ -854,8 +922,10 @@ try {
   await setDay(23);
   check('rolling the clock back 5 days does not lift a due gate', await visible('#gate'));
   await setDay(28);
-  await page.locator('#gate .photo-buttons input[type=file]:not([capture])').setInputFiles(await makeImage('w4.jpg', { w: 900, h: 1200, slim: 0.85, hue: 150 }));
+  // Week 4: the photo is optional — skip it and still do the weigh-in.
+  await page.click('#skip-photo');
   await page.waitForSelector('#m-weight');
+  check('skipping the photo goes on to the weigh-in', !(await visible('#skip-photo')) && (await page.locator('#gate').innerText()).includes('אין תמונה'));
   await page.fill('#m-weight', '65.6');
   await page.fill('#m-bf', '27.8');
   await page.click('#gate button[type=submit]');
@@ -1068,7 +1138,7 @@ try {
       const g = kv.get('profile');
       g.onsuccess = () => {
         kv.put({ ...g.result, regDay }, 'profile');
-        kv.put({ theme: 'light', reminders: true, installDismissed: false }, 'settings');
+        kv.put({ theme: 'light', reminders: true, installDismissed: false, lang: 'he' }, 'settings');
       };
       t.oncomplete = () => { r.result.close(); resolve(); };
     };

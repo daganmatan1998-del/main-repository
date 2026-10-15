@@ -7,6 +7,7 @@
 //  2. A weekly recurring calendar event (.ics) — works everywhere, including iOS.
 // When wrapped with Capacitor, swap this module for @capacitor/local-notifications.
 
+import { t as tr } from './i18n.js';
 import { saveSettings } from './store.js';
 import { addDays } from './util.js';
 
@@ -58,11 +59,11 @@ export function downloadCalendar(regDay, currentWeek) {
     `DTSTART;VALUE=DATE:${icsDate(first)}`,
     `DTEND;VALUE=DATE:${icsDate(end)}`,
     'RRULE:FREQ=WEEKLY',
-    'SUMMARY:צילום התקדמות שבועי + שקילה',
-    'DESCRIPTION:פתחו את האפליקציה, צלמו תמונת התקדמות ועדכנו משקל ואחוז שומן.',
+    'SUMMARY:' + tr('Weekly progress photo + weigh-in'),
+    'DESCRIPTION:' + tr('Open the app, take a progress photo and update your weight and body fat.'),
     'BEGIN:VALARM',
     'ACTION:DISPLAY',
-    'DESCRIPTION:צילום התקדמות שבועי',
+    'DESCRIPTION:' + tr('Weekly progress photo'),
     'TRIGGER:PT9H',
     'END:VALARM',
     'END:VEVENT',

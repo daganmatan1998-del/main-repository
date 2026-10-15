@@ -48,9 +48,9 @@ function build(name) {
   if (f.billing === false) patch(join(www, 'js/config.js'), '  enabled: true,', '  enabled: false,');
 
   // Names the user sees.
-  patch(join(www, 'index.html'), '<title>נוטרי — תוכנית תזונה אישית</title>', `<title>${f.title}</title>`);
-  patch(join(www, 'index.html'), 'name="apple-mobile-web-app-title" content="נוטרי"', `name="apple-mobile-web-app-title" content="${f.appName}"`);
-  patch(join(www, 'js/screens/onboarding.js'), "'ברוכים הבאים לנוטרי'", `'ברוכים הבאים ל${f.appName}'`);
+  patch(join(www, 'index.html'), '<title>Nutri — your personal nutrition plan</title>', `<title>${f.title}</title>`);
+  patch(join(www, 'index.html'), 'name="apple-mobile-web-app-title" content="Nutri"', `name="apple-mobile-web-app-title" content="${f.appName}"`);
+  // The in-app welcome text is keyed by tr('Welcome to Nutri') in every language pack, so it stays.
 
   const manifest = JSON.parse(read(join(www, 'manifest.webmanifest')));
   manifest.id = `./?app=${f.name}`;
