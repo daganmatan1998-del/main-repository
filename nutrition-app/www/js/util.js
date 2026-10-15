@@ -227,4 +227,11 @@ export function parseNum(v) {
 
 // Search-friendly text: lower case, without quotes/geresh/hyphens/niqqud, so
 // "קוטג'" matches "קוטג" and "סריראצ׳ה" matches "סריראצה".
+// Does the (normText-ed) haystack match what was typed? Every word must be found;
+// a word of 4+ letters also matches without its last one or two letters, so a
+// plural or another ending still finds the food (sausages → sausage, נקניקיות → נקניקייה).
+export function searchMatch(hay, query) {
+  return normText(query).split(' ').filter(Boolean).every((w) => hay.includes(w) || (w.length >= 4 && hay.includes(w.slice(0, -1))) || (w.length >= 5 && hay.includes(w.slice(0, -2))));
+}
+
 export const normText = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/[֑-ׇ'"׳״`´’‘\-–—.,()/]/g, '').replace(/\s+/g, ' ').trim();

@@ -5,7 +5,7 @@
 // meal planner (mealplan.js) turns them into meal.custom.
 
 import { t as tr } from './i18n.js';
-import { h, icon, sheet, toast, fmt, parseNum, clear, normText } from './util.js';
+import { h, icon, sheet, toast, fmt, parseNum, clear, normText, searchMatch } from './util.js';
 import { state, setOverride } from './store.js';
 import { everydayOptions, EVERYDAY_BY_ID, makeCustom, withServings, MAX_CUSTOM } from './everyday.js';
 import { household, FOOD_BY_ID } from './foods.js';
@@ -100,7 +100,7 @@ export function openCustomSheet(meal, day, { item = null } = {}) {
     const draw = () => {
       clear(list);
       const q = normText(search.value);
-      const hit = options.filter((o) => !q || normText(`${o.food.name} ${o.food.aliases.join(' ')}`).includes(q));
+      const hit = options.filter((o) => !q || searchMatch(normText(`${o.food.name} ${o.food.aliases.join(' ')}`), q));
       if (!hit.length) { list.appendChild(h('p', { class: 'empty' }, tr('Nothing found. Try another word.'))); return; }
       for (const o of hit) {
         list.appendChild(h('div', { class: 'alt extra-opt', 'data-food': o.food.id },

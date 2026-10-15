@@ -70,3 +70,12 @@ test('invalid entries are ignored and the number is capped', () => {
   const many = Array.from({ length: 9 }, (_, i) => makeCustom({ name: `f${i}`, kcal: 50, mode: 'add' }));
   assert.equal(day(many).custom.length, MAX_CUSTOM);
 });
+
+test('searching a plural or another ending still finds the food (sausages, נקניקיות)', async () => {
+  const { searchMatch, normText } = await import('../../www/js/util.js');
+  const he = normText('נקניקייה / נקניק נקניקייה|נקניקיה|נקניק|הוט דוג');
+  for (const q of ['נקניקיות', 'נקניקים', 'נקניקייה', 'נקניק']) assert.ok(searchMatch(he, q), q);
+  assert.ok(searchMatch(normText('hot dog / sausage hot dog|frankfurter|sausage'), 'sausages'));
+  assert.ok(!searchMatch(normText('pizza'), 'sausages') && !searchMatch(he, 'סלמי'));
+  assert.ok(searchMatch(normText('french fries fries|chips'), 'chip') && searchMatch(normText('french fries fries|chips'), 'fries fre'));
+});

@@ -1,7 +1,7 @@
 // Reusable UI pieces: macro rings/bars, meal cards, the swap sheet, metric forms.
 
 import { t as tr, lc } from './i18n.js';
-import { h, icon, sheet, toast, fmt, parseNum, ltr, clear, normText } from './util.js';
+import { h, icon, sheet, toast, fmt, parseNum, ltr, clear, normText, searchMatch } from './util.js';
 import { FOOD_BY_ID, household, ROLE_LABEL, canExclude, DIET_NOTES } from './foods.js';
 import { alternatives } from './substitutions.js';
 import { state, setOverride, excludeFood, today, clearPhotoMeal, aiStatus, addDrink, updateDrink, removeDrink } from './store.js';
@@ -221,7 +221,7 @@ function openExtrasSheet(meal, day) {
     const draw = () => {
       clear(list);
       const q = normText(search.value);
-      const hit = opts.filter((o) => !q || normText(`${o.food.name} ${(o.food.aliases || []).join(' ')}`).includes(q));
+      const hit = opts.filter((o) => !q || searchMatch(normText(`${o.food.name} ${(o.food.aliases || []).join(' ')}`), q));
       if (!hit.length) { list.appendChild(h('p', { class: 'empty' }, tr('Nothing found. Try another word.'))); return; }
       let lastGroup = '';
       for (const o of hit) {
@@ -385,7 +385,7 @@ export function openSwapSheet(item, meal, day, onAsk) {
       clear(list);
       const q = normText(search.value);
       const names = (o) => normText(`${o.name} ${(FOOD_BY_ID[o.foodId] && FOOD_BY_ID[o.foodId].aliases || []).join(' ')}`);
-      const hit = q ? res.options.filter((o) => names(o).includes(q)) : expanded ? res.options : res.options.slice(0, SHOWN);
+      const hit = q ? res.options.filter((o) => searchMatch(names(o), q)) : expanded ? res.options : res.options.slice(0, SHOWN);
       for (const o of hit) list.appendChild(row(o));
       if (!hit.length) list.appendChild(h('li', { class: 'empty' }, tr('No such food among the substitutes. Try another word.')));
       if (expanded) more.remove();
