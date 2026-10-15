@@ -184,7 +184,7 @@ export function renderOnboarding(root) {
           h('p', { class: 'lead' }, tr('A personal nutrition plan for your goal — cut, maintain or bulk — with a daily menu, a smart nutrition assistant and weekly progress tracking.')),
           h('ul', { class: 'bullets' },
             h('li', null, icon('lock', 18), tr('Your data is kept on your device and, if you want, in a private account in the cloud.')),
-            h('li', null, icon('camera', 18), tr('Once a week: a progress photo and a weigh-in — it is required, and it is what makes the difference.')),
+            h('li', null, icon('camera', 18), tr('Once a week: a progress photo (optional) and a weigh-in, so you can see your progress and keep your plan accurate.')),
             h('li', null, icon('chat', 18), tr('A nutrition assistant that knows your menu and restrictions.'))),
           cloudReady() && !currentUser() ? h('button', { type: 'button', class: 'btn btn-ghost', id: 'entry-back', onclick: backToEntry }, tr('I have an account or want to create one')) : null,
           disclaimer());
@@ -362,7 +362,7 @@ export function renderOnboarding(root) {
             ...t.warnings.map((w) => h('p', { class: 'notice warn small' }, w)),
             protOk < 3 ? h('p', { class: 'notice warn small' }, tr('Your restrictions leave few protein sources. The menu will work, but it will be less varied.')) : null),
           h('h3', null, tr('Starting photo (week 0)')),
-          h('p', { class: 'muted small' }, tr('Optional, but worth it: it will be your point of comparison in the gallery. Starting next week, the weekly photo is required.')),
+          h('p', { class: 'muted small' }, tr('Optional, but worth it: it will be your point of comparison in the gallery.')),
           photoBox);
       }
       default:

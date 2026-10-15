@@ -219,6 +219,17 @@ export async function saveCheckinPhoto(week, img, complete) {
   return checkin;
 }
 
+// The photo is optional: skipping it moves on to step 2 and leaves the week
+// empty in the gallery.
+export async function skipCheckinPhoto(week) {
+  const existing = state.checkins.find((c) => c.week === week);
+  const checkin = { ...(existing || {}), week, dueDay: addDays(state.profile.regDay, week * 7), photoSkipped: true };
+  await db.put('checkins', checkin);
+  state.checkins = state.checkins.filter((c) => c.week !== week).concat(checkin).sort((a, b) => a.week - b.week);
+  emit();
+  return checkin;
+}
+
 // Step 2: weight + body fat. Returns a before/after summary for the user.
 export async function completeCheckin(week, weight, bf) {
   const before = currentMetrics();

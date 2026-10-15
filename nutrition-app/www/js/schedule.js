@@ -1,7 +1,8 @@
 // Weekly check-in schedule, counted from the registration day.
 // Week n is due on day 7n after registration (week 0 = registration day itself,
 // an optional baseline). From day 7n until the check-in for week n is complete,
-// the app is locked.
+// the app is locked. The photo is optional: skipping it (photoSkipped) still
+// leaves the weigh-in, which is what keeps the plan accurate.
 //
 // Pure functions: the clock is passed in, which is what lets the tests (and the
 // anti-rollback guard in store.js) control it.
@@ -30,7 +31,7 @@ export function gateStatus(regDay, checkins, today = dayKey()) {
   };
   if (week < 1) return { ...base, state: 'none' };
   const c = byWeek.get(week);
-  if (!c || !c.photoId) return { ...base, state: 'needsPhoto' };
+  if (!c || (!c.photoId && !c.photoSkipped)) return { ...base, state: 'needsPhoto' };
   if (!c.completedAt) return { ...base, state: 'needsMetrics' };
   return { ...base, state: 'none' };
 }

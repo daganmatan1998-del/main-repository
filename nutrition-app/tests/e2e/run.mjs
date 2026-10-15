@@ -726,7 +726,7 @@ try {
   check('day 7: weekly photo gate appears', await visible('#gate'));
   check('gate hides the tab bar', !(await visible('#tabbar')));
   const gateButtons = await page.locator('#gate button').allInnerTexts();
-  check('gate has no skip / later / close option', !gateButtons.some((b) => /דלג|אחר כך|מאוחר|סגור|ביטול|הזכר/.test(b)), gateButtons.join('|'));
+  check('gate offers skipping the photo but no later / close option', await visible('#skip-photo') && !gateButtons.some((b) => /אחר כך|מאוחר|סגור|ביטול|הזכר/.test(b)), gateButtons.join('|'));
   await shot('10-gate-photo');
 
   for (const hash of ['#/today', '#/plan', '#/assistant', '#/gallery', '#/profile']) {
@@ -859,8 +859,10 @@ try {
   await setDay(23);
   check('rolling the clock back 5 days does not lift a due gate', await visible('#gate'));
   await setDay(28);
-  await page.locator('#gate .photo-buttons input[type=file]:not([capture])').setInputFiles(await makeImage('w4.jpg', { w: 900, h: 1200, slim: 0.85, hue: 150 }));
+  // Week 4: the photo is optional — skip it and still do the weigh-in.
+  await page.click('#skip-photo');
   await page.waitForSelector('#m-weight');
+  check('skipping the photo goes on to the weigh-in', !(await visible('#skip-photo')) && (await page.locator('#gate').innerText()).includes('אין תמונה'));
   await page.fill('#m-weight', '65.6');
   await page.fill('#m-bf', '27.8');
   await page.click('#gate button[type=submit]');

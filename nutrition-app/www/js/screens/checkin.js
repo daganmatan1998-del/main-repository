@@ -5,7 +5,7 @@
 import { t as tr } from '../i18n.js';
 import { h, icon, clear, fmt, signed, fmtDate, ltr } from '../util.js';
 import { metricsForm } from '../components.js';
-import { state, saveCheckinPhoto, completeCheckin, getPhoto, currentMetrics } from '../store.js';
+import { state, saveCheckinPhoto, skipCheckinPhoto, completeCheckin, getPhoto, currentMetrics } from '../store.js';
 import { photoButtons } from './photo-picker.js';
 
 let summary = null;
@@ -29,35 +29,38 @@ export function renderGate(root, gate) {
   const wrap = h('div', { class: 'gate', id: 'gate', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'gate-title' });
   root.appendChild(wrap);
 
-  wrap.appendChild(h('div', { class: 'gate-badge' }, icon('lock', 18), tr('A weekly photo is required')));
+  wrap.appendChild(h('div', { class: 'gate-badge' }, icon('camera', 18), tr('Weekly check-in')));
   wrap.appendChild(h('h1', { id: 'gate-title' }, tr('Progress photo — week {0}', gate.week)));
   wrap.appendChild(steps(gate.state === 'needsPhoto' ? 1 : 2));
 
   if (gate.state === 'needsPhoto') {
     const missed = missedWeeks(gate.week);
     wrap.append(...[
-      h('p', { class: 'lead' }, tr('It\'s time for the weekly photo (since {0}). To keep using the app, upload a photo and then update your weight and body fat.', fmtDate(gate.dueDay))),
+      h('p', { class: 'lead' }, tr('It\'s time for your weekly check-in (since {0}). Add a progress photo, or skip it, then update your weight and body fat.', fmtDate(gate.dueDay))),
       missed.length ? h('p', { class: 'notice warn small' }, tr('No photos for weeks {0} — they will appear empty in the gallery. Now taking week {1}.', missed.join(', '), gate.week)) : null,
       h('ul', { class: 'tips' },
         h('li', null, tr('The same light, the same place and the same pose every week')),
         h('li', null, tr('Preferably in the morning, before eating')),
         h('li', null, tr('The photo is saved only on your device — no internet needed'))),
       photoButtons(async (img) => { await saveCheckinPhoto(gate.week, img); }, { busyText: tr('Compressing and saving the photo…') }),
+      h('button', { class: 'btn btn-block', id: 'skip-photo', type: 'button', onclick: () => skipCheckinPhoto(gate.week) }, tr('Skip the photo')),
     ].filter(Boolean));
   } else {
     const c = state.checkins.find((x) => x.week === gate.week);
     const prev = currentMetrics();
     const thumb = h('div', { class: 'gate-thumb' });
-    getPhoto(c.photoId).then((p) => {
+    if (c.photoId) getPhoto(c.photoId).then((p) => {
       if (!p) return;
       const url = URL.createObjectURL(p.blob);
       thumb.appendChild(h('img', { src: url, alt: tr('Week {0} photo', gate.week), onload: () => setTimeout(() => URL.revokeObjectURL(url), 1000) }));
     });
     const replace = h('details', { class: 'replace' },
-      h('summary', null, tr('Replace the photo?')),
+      h('summary', null, c.photoId ? tr('Replace the photo?') : tr('Add a photo')),
       photoButtons(async (img) => { await saveCheckinPhoto(gate.week, img); }));
     wrap.append(...[
-      h('div', { class: 'row gap center-y' }, thumb, h('p', { class: 'small' }, icon('check', 16), tr(' The photo is saved. Only your measurements are left to update.'))),
+      c.photoId
+        ? h('div', { class: 'row gap center-y' }, thumb, h('p', { class: 'small' }, icon('check', 16), tr(' The photo is saved. Only your measurements are left to update.')))
+        : h('p', { class: 'small' }, tr('No photo this week. Only your measurements are left to update.')),
       replace,
       prev ? h('p', { class: 'muted small' }, tr('Previous measurement: {0} kg, {1}% body fat.', fmt(prev.weight, 1), prev.bf ?? '—')) : null,
       metricsForm({
