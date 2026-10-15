@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="970db363c60e">
+<meta name="jarvis-build" content="cf4bc7573cd6">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -3540,6 +3540,34 @@ const bloomPass = new THREE.UnrealBloomPass(
   0.12    // threshold
 );
 composer.addPass(bloomPass);
+
+/* NO BACKDROP AT ALL ON THE DESKTOP (2.35.0). The orb window is transparent,
+   but the hologram was still drawn over a faint dark haze: the glow is a
+   blur, a blur averages the light with the transparent black around it,
+   and the canvas composites straight (not premultiplied) colour - so every
+   pixel the glow touched came out as dark colour with partial alpha, a black
+   translucent disc around the orb. This last pass decides transparency from
+   the light itself: a pixel is as opaque as it is bright, through a soft
+   threshold (smoothstep 0.17 to 0.55 of its brightest channel) that turns the
+   glow's faint far wash fully transparent and leaves the core, the rings and
+   the stars as they were; its colour is un-darkened to match (colour / its
+   brightest channel). Black is fully transparent; the hologram is drawn as
+   light over the desktop, with no dark and no haze anywhere. Desktop only: the website
+   has an opaque background of its own and is unchanged. */
+if(IS_DESKTOP && THREE.ShaderPass){
+  composer.addPass(new THREE.ShaderPass({
+    uniforms: { tDiffuse: { value: null } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader:
+      'uniform sampler2D tDiffuse; varying vec2 vUv;' +
+      'void main(){' +
+      '  vec4 c = texture2D(tDiffuse, vUv);' +
+      '  float m = max(max(c.r, c.g), c.b);' +
+      '  float a = smoothstep(0.17, 0.55, m);' +
+      '  gl_FragColor = (m > 0.002 && a > 0.0) ? vec4(c.rgb / m, a) : vec4(0.0);' +
+      '}'
+  }));
+}
 
 /* ---------------------------------------------------------------------
    MOUSE / CAMERA PARALLAX
