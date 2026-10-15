@@ -373,6 +373,60 @@ try {
   while (await mealA().locator('.extra-del').count()) { await mealA().locator('.extra-del').first().click(); await wait(400); }
   check('removing the additions returns the meal', (await mealA().locator('.extras-list').count()) === 0 && (await mealA().locator('.item').count()) === itemsBefore);
 
+  // =============== your own foods: everyday foods and typed ones ===============
+  const planned = await mealKcal();
+  const customRows = () => mealA().locator('.custom-row');
+  const clearCustom = async () => { while (await customRows().count()) { await customRows().first().locator('.extra-del').click(); await wait(350); } };
+  await mealA().locator('.custom-add').click();
+  await page.waitForSelector('#custom-search');
+  const everydayCount = await page.locator('.custom-opts .extra-opt').count();
+  check(`the sheet lists the everyday foods (${everydayCount})`, everydayCount >= 50 && (await page.locator('.custom-opts [data-food="fries"]').count()) === 1 && (await page.locator('.custom-opts [data-food="hot_dog"]').count()) === 1);
+  check('the sheet offers both ways of counting the calories', (await page.locator('.custom-mode-btn').count()) === 2 && (await page.locator('.custom-mode-btn.on').getAttribute('data-mode')) === 'offset');
+  await shot('40-custom-sheet');
+  await page.locator('.custom-opts [data-food="fries"] .btn').click();
+  await wait(600);
+  const withFries = await mealKcal();
+  check(`fries taken off the rest of the meal keep the budget (${withFries} vs ${target0})`, (await customRows().count()) === 1 && Math.abs(withFries - target0) <= target0 * 0.12 && (await mealA().locator('.extras-note').allInnerTexts()).join(' ').length > 0);
+  await mealA().locator('.custom-row .extra-plus').click();
+  await wait(500);
+  check('more servings keep the budget too', Math.abs((await mealKcal()) - target0) <= target0 * 0.12);
+  await mealA().screenshot({ path: path.join(SHOTS, '41-custom-meal.png') });
+  await clearCustom();
+  check('removing it returns the meal', (await customRows().count()) === 0 && (await mealKcal()) === planned && (await mealA().locator('.item').count()) === itemsBefore);
+  // On top: the meal goes up by the food's calories.
+  await mealA().locator('.custom-add').click();
+  await page.waitForSelector('#custom-search');
+  await page.locator('.custom-mode-btn[data-mode="add"]').click();
+  await page.locator('.custom-opts [data-food="fries"] .btn').click();
+  await wait(600);
+  const onTop = await mealKcal();
+  check(`"add on top" raises the meal by the food (${planned} → ${onTop})`, onTop - planned >= 440 && onTop - planned <= 500);
+  await clearCustom();
+  // Typed by hand.
+  await mealA().locator('.custom-add').click();
+  await page.waitForSelector('#custom-search');
+  await page.locator('.custom-mode-btn[data-mode="offset"]').click();
+  await page.click('.custom-typed-add');
+  check('a typed food needs a name and calories', (await customRows().count()) === 0 && await visible('.custom-form'));
+  await page.fill('.custom-name', 'עוגת שוקולד');
+  await page.fill('.custom-kcal', '300');
+  await page.fill('.custom-p', '4');
+  await page.click('.custom-typed-add');
+  await wait(600);
+  check('a typed food shows under the meal and keeps the budget', (await customRows().count()) === 1 && (await customRows().innerText()).includes('עוגת שוקולד') && (await customRows().innerText()).includes('300') && Math.abs((await mealKcal()) - planned) <= planned * 0.12);
+  await clearCustom();
+  // From the swap sheet: replaces that item.
+  await mealA().locator('.chip-btn').first().click();
+  await page.waitForSelector('#btn-custom');
+  await page.click('#btn-custom');
+  await page.waitForSelector('#custom-search');
+  check('opened from a swap, it says which item it replaces', await visible('.custom-instead'));
+  await page.locator('.custom-opts [data-food="hot_dog"] .btn').click();
+  await wait(700);
+  check('the replaced item leaves the meal', (await customRows().count()) === 1 && (await mealA().locator('.item').count()) === itemsBefore - 1 && Math.abs((await mealKcal()) - planned) <= planned * 0.15, `${await mealA().locator('.item').count()} items, ${await mealKcal()} kcal`);
+  await clearCustom();
+  check('removing it brings the item back', (await mealA().locator('.item').count()) === itemsBefore);
+
   // =============== Plan & swaps ===============
   await page.click('a[href="#/plan"]');
   await page.waitForSelector('.page-plan');

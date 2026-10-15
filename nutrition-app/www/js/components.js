@@ -6,6 +6,7 @@ import { FOOD_BY_ID, household, ROLE_LABEL, canExclude, DIET_NOTES } from './foo
 import { alternatives } from './substitutions.js';
 import { state, setOverride, excludeFood, today, clearPhotoMeal, aiStatus, addDrink, updateDrink, removeDrink } from './store.js';
 import { extraFood, extraOptions, MAX_EXTRAS } from './extras.js';
+import { customBlock, openCustomSheet } from './custom-food.js';
 import { makeDrink, drinkTotals, DRINK_NAMES, SUGAR_TSP_KCAL } from './drinks.js';
 import { validBf } from './nutrition.js';
 import { openBodyFatEstimator } from './screens/bodyfat.js';
@@ -92,6 +93,7 @@ export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {
   }
   card.appendChild(list);
   if (day && swaps) card.appendChild(extrasBlock(meal, day));
+  if (day && swaps) card.appendChild(customBlock(meal, day));
   if (day && swaps && meal.removable) card.appendChild(removalBar(meal, day));
   if (day) {
     card.appendChild(h('button', {
@@ -392,6 +394,12 @@ export function openSwapSheet(item, meal, day, onAsk) {
     search.addEventListener('input', draw);
     draw();
     body.appendChild(more);
+    // Not on the list: type what was eaten, or pick an everyday food (fries, sausage…).
+    body.appendChild(h('button', {
+      class: 'btn btn-block',
+      id: 'btn-custom',
+      onclick: () => { close(); openCustomSheet(meal, day, { item }); },
+    }, icon('plus', 18), tr('Eating something else? Add your own food')));
     body.appendChild(h('button', {
       class: 'btn btn-ghost btn-block danger-text',
       id: 'btn-never',

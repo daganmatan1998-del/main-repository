@@ -247,12 +247,14 @@ export async function completeCheckin(week, weight, bf) {
 export async function setOverride(day, mealIdx, patch) {
   const d = { ...(state.overrides[day] || {}) };
   const m = { ...(d[mealIdx] || {}) };
-  if (patch.reseed !== undefined) { m.reseed = patch.reseed; m.swaps = {}; }
+  if (patch.reseed !== undefined) { m.reseed = patch.reseed; m.swaps = {}; if (m.custom) m.custom = m.custom.filter((c) => !c.slot); }
   if (patch.swap) m.swaps = { ...(m.swaps || {}), [patch.swap.slot]: { foodId: patch.swap.foodId, grams: patch.swap.grams } };
   // removed: the food groups taken out of this meal (survives "another meal").
   if (patch.removed !== undefined) m.removed = [...patch.removed];
   // extras: sauces / cheese added to this meal ({ foodId, grams }); also survives "another meal".
   if (patch.extras !== undefined) m.extras = patch.extras.map(({ foodId, grams }) => ({ foodId, grams }));
+  // custom: the person's own foods (everyday.js makeCustom entries); survives "another meal" too.
+  if (patch.custom !== undefined) m.custom = patch.custom;
   d[mealIdx] = m;
   state.overrides[day] = d;
   // Keep only the recent past and the future.

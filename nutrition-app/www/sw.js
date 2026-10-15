@@ -33,6 +33,8 @@ const SHELL = [
   'js/mealplan.js',
   'js/mealphoto.js',
   'js/extras.js',
+  'js/everyday.js',
+  'js/custom-food.js',
   'js/drinks.js',
   'js/push.js',
   'js/billing.js',

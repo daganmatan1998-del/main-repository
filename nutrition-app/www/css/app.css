@@ -720,7 +720,7 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 
 /* ---------- search, drinks, sauces ---------- */
 .search { width: 100%; margin: 4px 0 10px; }
-.drinks { margin: 10px 0 8px; padding: 10px 12px; border-radius: var(--radius-sm, 12px); background: var(--surface-2); }
+.drinks { margin: 10px 0 8px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); }
 .drinks-title { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: .9rem; margin-bottom: 6px; }
 .drink-row { display: flex; align-items: center; gap: 8px; font-size: .9rem; padding: 4px 0; }
 .drink-text { flex: 1; min-width: 0; }
@@ -744,6 +744,19 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .extras-add { min-height: 40px; }
 .extra-group { margin: 14px 0 6px; font-size: .85rem; color: var(--muted); }
 .extra-opts { max-height: 55vh; overflow: auto; padding-bottom: 8px; }
+.custom-foods { margin-top: 4px; }
+.custom-add { min-height: 40px; }
+.custom-instead { margin: 0 0 8px; font-weight: 600; }
+.custom-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 6px; }
+.custom-mode-btn { min-height: 44px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.custom-mode-btn.on { border-color: var(--primary); background: var(--primary-weak); color: var(--text); }
+.custom-mode-note { margin: 0 0 10px; }
+.custom-opts { margin-top: 8px; }
+.custom-form { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 4px; display: grid; gap: 8px; }
+.custom-form input[type=text] { width: 100%; }
+.custom-nums { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.custom-nums label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
+.custom-nums input { width: 100%; }
 
 /* drinks as a collapsible heading, like the food groups */
 .drinks { padding: 0; background: none; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; margin: 10px 0 4px; }
@@ -765,5 +778,5 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .field > .lang-bar { justify-content: flex-start; margin: 0; }
 .lang-list { display: grid; gap: 6px; max-height: 60vh; overflow-y: auto; }
 .lang-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 10px 14px;
-  border: 1px solid var(--border); border-radius: var(--radius-sm, 12px); background: var(--surface); color: inherit; font: inherit; cursor: pointer; text-align: start; }
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: inherit; font: inherit; cursor: pointer; text-align: start; }
 .lang-item.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); font-weight: 600; }
