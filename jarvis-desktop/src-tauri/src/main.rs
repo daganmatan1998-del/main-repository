@@ -4089,6 +4089,114 @@ async fn type_text(
     Err("typing for him is only available on Windows".into())
 }
 
+/* WRITING IN NOTES (2.36.0).
+
+   "Hey Jarvis, write that prompt in Notes": a NEW note, opened in Notepad,
+   with the text typed into it - never into a note he already has open.
+
+   How it stays a new note and not somebody's old one: a fresh empty file is
+   made first, "Note <date> <time>.txt" in Documents\JARVIS Notes (starting
+   with a UTF-8 mark, so Hebrew is kept as it is typed), and that file is what
+   Notepad is told to open. Whatever Notepad does with its old tabs, this one
+   is empty and is the one in front. Its window is found by that file's name,
+   and the text goes in through the same checked typing as type_text (the
+   window verified in front before every batch, stopping the moment anything
+   else comes forward). Then Ctrl+S, only while that window is still in
+   front: the file is real and saved, nothing is left "unsaved".
+
+   Without text it just opens the new note. The text is only ever typed, never
+   written to any other place, and 4000 characters is the limit of type_text. */
+#[cfg(target_os = "windows")]
+fn write_note_blocking(own: Vec<(String, isize)>, text: Option<String>) -> Result<serde_json::Value, String> {
+    use std::{thread::sleep, time::{Duration, Instant}};
+    use windows_sys::Win32::Foundation::SYSTEMTIME;
+    use windows_sys::Win32::System::SystemInformation::GetLocalTime;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_CONTROL,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+
+    let text = text.unwrap_or_default().trim().to_string();
+    let dir = dirs_next::document_dir()
+        .ok_or("could not find the Documents folder")?
+        .join("JARVIS Notes");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("could not make the notes folder: {e}"))?;
+    let now: SYSTEMTIME = unsafe {
+        let mut st: SYSTEMTIME = std::mem::zeroed();
+        GetLocalTime(&mut st);
+        st
+    };
+    let stem = format!(
+        "Note {:04}-{:02}-{:02} {:02}.{:02}.{:02}",
+        now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond
+    );
+    let path = dir.join(format!("{stem}.txt"));
+    std::fs::write(&path, [0xEFu8, 0xBB, 0xBF]).map_err(|e| format!("could not make the note: {e}"))?;
+    let shown_path = path.display().to_string();
+    if !shell_run("notepad.exe", Some(&format!("\"{}\"", shown_path))) {
+        return Ok(serde_json::json!({ "ok": false, "code": "launch_failed", "path": shown_path }));
+    }
+
+    let needle = stem.to_lowercase();
+    let started = Instant::now();
+    let mut found: Option<BringCandidate> = None;
+    while started.elapsed() < Duration::from_secs(8) {
+        sleep(Duration::from_millis(200));
+        found = bring_app_windows(&own)
+            .into_iter()
+            .find(|c| c.exe == "notepad" && c.title.to_lowercase().contains(&needle));
+        if found.is_some() {
+            break;
+        }
+    }
+    let Some(win) = found else {
+        return Ok(serde_json::json!({ "ok": false, "code": "no_window", "path": shown_path }));
+    };
+    if text.is_empty() {
+        return Ok(serde_json::json!({ "ok": true, "opened": true, "typed": 0, "path": shown_path }));
+    }
+    sleep(Duration::from_millis(350));
+
+    let mut typed = type_text_blocking(own, text, Some(stem), None, false)?;
+    if typed["ok"] != serde_json::Value::Bool(true) {
+        if let Some(o) = typed.as_object_mut() {
+            o.insert("path".into(), serde_json::Value::String(shown_path));
+        }
+        return Ok(typed);
+    }
+
+    let mut saved = false;
+    if unsafe { GetForegroundWindow() } as isize == win.hwnd {
+        let key = |vk: u16, up: bool| INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT { wVk: vk, wScan: 0, dwFlags: if up { KEYEVENTF_KEYUP } else { 0 }, time: 0, dwExtraInfo: 0 },
+            },
+        };
+        let mut keys = [key(VK_CONTROL, false), key(0x53, false), key(0x53, true), key(VK_CONTROL, true)];
+        saved = unsafe { SendInput(keys.len() as u32, keys.as_mut_ptr(), std::mem::size_of::<INPUT>() as i32) } as usize == keys.len();
+        sleep(Duration::from_millis(200));
+    }
+    Ok(serde_json::json!({
+        "ok": true, "typed": typed["typed"].clone(), "saved": saved, "path": shown_path
+    }))
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+async fn write_note(app: tauri::AppHandle, text: Option<String>) -> Result<serde_json::Value, String> {
+    let own = zoom_own_windows(&app);
+    tauri::async_runtime::spawn_blocking(move || write_note_blocking(own, text))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+async fn write_note(_text: Option<String>) -> Result<serde_json::Value, String> {
+    Err("notes are only available on Windows".into())
+}
+
 /* ON THE SCREEN, NOT IN THE TASKBAR (2.24.0). A window this app creates
    while another program is in front is shown BEHIND that program: Windows
    will not let a background process take the foreground, so "let's start
@@ -5203,7 +5311,8 @@ fn main() {
             launch_installed_app,
             take_launch_actions,
             minimize_camera_window,
-            open_jarvis_folder
+            open_jarvis_folder,
+            write_note
         ])
         .setup(|app| {
             let window = app

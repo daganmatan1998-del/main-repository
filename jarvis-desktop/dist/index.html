@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="cf4bc7573cd6">
+<meta name="jarvis-build" content="12d761613825">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -6638,6 +6638,24 @@ async function handleTranscript(rawText, sawSpeech, spokeAt, ptt){
       return;
     }
 
+    /* WHILE A NOTE IS BEING DICTATED (2.36.0): he was asked what to write, so
+       what comes next is the note: all of it, as he said it, with no name
+       needed and nothing sent to the model. With the push-to-talk key that is
+       everything until he lets go (the key press already stopped JARVIS
+       talking, so it always counts); hands-free, what he says up to his pause,
+       but not while JARVIS is still talking (that is his own question coming
+       back). Not past two minutes. */
+    if(IS_DESKTOP && noteDictation && text){
+      if(Date.now() > noteDictation.until){ noteDictation = null; }
+      else if(ptt || !(typeof isSpeaking !== 'undefined' && isSpeaking)){
+        noteDictation = null;
+        noteActivity();
+        await finishNoteDictation(text);
+        if(conversationMode && !isThinking && typeof startListening === 'function') setTimeout(startListening, 250);
+        return;
+      }
+    }
+
     /* Asleep ("go down"). His name, or a wake phrase, brings him back — and
        whatever he asked for in the same breath is then done, so "hey Jarvis,
        open the camera" does not have to be said twice. Anything else is
@@ -11969,6 +11987,8 @@ const STUDY_NOTE_3D =
    keeps it an ordinary 3D request. */
 function wantsModelOfSeen(text){
   const s = String(text || '');
+  /* A request, not a sentence that happens to hold "3D" and "it" (2.36.0). */
+  if(!wantsNew3dModel(s) && !/^\s*(?:please\s+|jarvis\s+)?model\s+(?:it|this|that)\b/i.test(s)) return false;
   const threeD = /\b(?:3\s*-?\s*d|three[\s-]?d(?:imensional)?)\b/i.test(s) || /תלת[\s-]?מימד/.test(s);
   const ofIt = /\b(?:it|this|that|these|those|what you see|what i'?m (?:holding|showing))\b/i.test(s) ||
                /(?:מזה|את זה|ממנו|ממנה|אותו|אותה|של זה|מה שאתה רואה)/.test(s);
@@ -13614,6 +13634,12 @@ const FLOW_RULES = [
   /* "Open the jarvis folder" (2.32.0): "ג'רוויס קבצים" on his desktop. */
   { flow: 'jarvis_folder', strong: [ { test: (s) => isJarvisFolderOpen(s) } ], bare: [] },
 
+  /* Notes (2.36.0), and "go to sleep" as a command of its own, so it can be
+     one part of a longer sentence ("close my camera and go to sleep"). */
+  { flow: 'note_new', strong: [ { test: (s) => isNewNoteOpen(s) } ], bare: [] },
+  { flow: 'note_dictate', strong: [ { test: (s) => isNoteDictate(s) } ], bare: [] },
+  { flow: 'sleep', strong: [ { test: (s) => isSleepPart(s) } ], bare: [] },
+
   /* "Open your base app" (2.31.0): the Cloudflare site in its own Chrome window. */
   { flow: 'base_app', strong: [ { test: (s) => isBaseAppOpen(s) } ], bare: [] },
 
@@ -13907,7 +13933,7 @@ const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'fullscreen', '
                                       'live_full', 'live_full_exit', 'workspace', 'open_site', 'bring_window',
                                       'workspace3d', 'workspace3d_project', 'agent_atlas', 'music_on', 'music_off',
                                       'webshooter_on', 'webshooter_off', 'adjust_window', 'close_thing', 'browser_write',
-                                      'base_app', 'open_app', 'jarvis_folder']);
+                                      'base_app', 'open_app', 'jarvis_folder', 'note_new', 'note_dictate', 'sleep']);
 
 /* { steps: [{flow, part}], rest: [parts for the model] }, or null when the
    sentence is one request (or none) and the ordinary path should have it. */
@@ -13929,6 +13955,8 @@ function planRequests(text, state){
             WAKE_FILLER.indexOf(w) < 0 && !LANG_COURTESY.has(w)) && looseTokens(part).length) rest.push(part);
   }
   if(!steps.length) return null;
+  /* Going to sleep ends the conversation: whatever else he asked is done first. */
+  steps.sort((a, b) => (a.flow === 'sleep') - (b.flow === 'sleep'));
   /* One command with a word or two hanging off it — "open shopify and
      instagram" — is still one command. */
   const restWords = rest.join(' ').split(/\s+/).filter(Boolean).length;
@@ -14876,6 +14904,32 @@ async function runWorkflowCommand(flow, text){
     return true;
   }
 
+  /* "Go to sleep" (2.36.0), alone or as the last part of a longer sentence. */
+  if(flow === 'sleep'){
+    if(!IS_DESKTOP) return false;
+    say(he ? 'נכנס למצב שינה.' : 'Going down, sir.');
+    afterSpeech(() => { if(window.__orbSleep) window.__orbSleep(); }, 700, 6000);
+    return true;
+  }
+
+  /* Notes (2.36.0). */
+  if(flow === 'note_new'){
+    if(!IS_DESKTOP) return false;
+    const entry = logActionStart('write_note', { chars: 0 }, 'local');
+    const res = await callWriteNoteTool({ text: '' });
+    logActionEnd(entry, res);
+    if(res && res.ok) say(he ? 'פתחתי פתק חדש.' : 'New note is open.');
+    else noteReply(noteFailureLine(res, he));
+    return true;
+  }
+  if(flow === 'note_dictate'){
+    if(!IS_DESKTOP) return false;
+    noteDictation = { until: Date.now() + 120000 };
+    say(he ? 'מה אתה רוצה שאכתוב?' : 'What do you want me to write?');
+    addMessage('system', he ? '\u25B8 תגיד את זה (עם מקש הדיבור: החזק, דבר, ושחרר). אני כותב הכול.' : '\u25B8 Say it: hold the talk key and speak, then let go. I write everything.');
+    return true;
+  }
+
   /* "Open the jarvis folder" (2.32.0). */
   if(flow === 'jarvis_folder'){
     const entry = logActionStart('open_jarvis_folder', {}, 'local');
@@ -15738,6 +15792,103 @@ async function callOpenJarvisFolderTool(){
     return { ok: false, error: msg };
   }
 }
+
+/* "GO TO SLEEP" AS ONE STEP OF A LONGER SENTENCE (2.36.0).
+
+   "Close my camera and go to sleep" is two commands. The sentence is split,
+   the camera part is a local command and was done - and "go to sleep" was
+   not one: it was only ever caught by a shortcut for a lone short utterance
+   (six words at most, so the whole sentence never matched it), so it went to
+   the model as "the rest", which has no way to put the orb to sleep. Now it
+   is a local command like the others, run LAST (whatever else was asked is
+   done and said first), and only once he has finished speaking. "Shut down"
+   and "כיבוי" are not sleep here: those are for the computer. */
+function isSleepPart(text){
+  if(!isSleepCommand(text)) return false;
+  return !/\bshut\s*down\b|כיבוי/.test(normaliseHeard(text));
+}
+function afterSpeech(fn, minMs, maxMs){
+  const t0 = Date.now();
+  const tick = () => {
+    const busy = (typeof isSpeaking !== 'undefined' && isSpeaking) || (typeof speechQueue !== 'undefined' && speechQueue && speechQueue.length);
+    const waited = Date.now() - t0;
+    if(waited >= (maxMs || 6000) || (waited >= (minMs || 600) && !busy)) fn(); else setTimeout(tick, 150);
+  };
+  setTimeout(tick, 150);
+}
+
+/* NOTES (2.36.0). A NEW note in Notepad, written in. Three ways in:
+     - "open a new note": just the empty note;
+     - "I want you to write something" / "write something" / "take a note":
+       he asks "What do you want me to write?" and what comes next is
+       written, whole, as he said it: with the push-to-talk key, everything
+       until he lets go of it (hands-free: what he says up to his pause);
+     - the model's own tool, write_note, for "write a prompt for it in notes":
+       it composes the text from the conversation and writes it.
+   The note is a real file, Documents\JARVIS Notes\Note <date> <time>.txt,
+   saved. Rust's write_note does the opening and the typing. */
+function noteSentence(text){
+  let words = normaliseHeard(text).split(' ').filter(Boolean);
+  if(!words.length || words.length > 14) return '';
+  while(words.length > 1 && (wordIsName(words[0]) || WAKE_FILLER.indexOf(words[0]) >= 0)) words = words.slice(1);
+  return words.join(' ');
+}
+const NOTE_DICT_EN = /^(?:please )?(?:(?:i |we )?(?:want|need|would like) you to |lets |id like you to )?(?:write|take|jot|type|dictate|make)(?: down)? (?:something|a note|some notes?|a new note|a few words|a message)(?: (?:down|in|on|into) (?:my |the )?(?:notes?|notepad))?(?: (?:please|now|for me|jarvis))*$/;
+const NOTE_DICT_HE = /^(?:בבקשה )?(?:(?:אני|אנחנו) (?:רוצה|רוצים|צריך|צריכה) ש)?(?:תכתוב|תרשום|תקליד|תכתבי|תרשמי|לכתוב|לרשום)(?: לי)? (?:משהו|פתק|הערה|הודעה)(?: (?:בפתקים|בפנקס רשימות|בפנקס|בנוטפד))?(?: (?:בבקשה|עכשיו))*$/;
+const NOTE_NEW_EN = /^(?:please )?(?:open|start|create|add)(?: me)?(?: up)? (?:a |an |the )?(?:new )?(?:note|notes|notepad|note pad)(?: page| file| window)?(?: (?:please|now|for me))*$/;
+const NOTE_NEW_HE = /^(?:בבקשה )?(?:תפתח|פתח|תיצור|תפתחי|תתחיל)(?: לי)?(?: את)? (?:פתק חדש|פנקס רשימות חדש|פתק|פנקס רשימות|פתקים|נוטפד)(?: חדש)?(?: (?:בבקשה|עכשיו))*$/;
+function isNoteDictate(text){ const s = noteSentence(text); return !!s && (NOTE_DICT_EN.test(s) || NOTE_DICT_HE.test(s)); }
+function isNewNoteOpen(text){ const s = noteSentence(text); return !!s && (NOTE_NEW_EN.test(s) || NOTE_NEW_HE.test(s)); }
+
+let noteDictation = null;     // { until }: the next thing he says is the note
+const NOTE_CANCEL = /^(?:cancel|never ?mind|forget it|forget about it|skip it|stop|nothing|no)(?:[\s,.!]|$)|^(?:בטל|עזוב|תעזוב|לא משנה|שכח מזה|תשכח מזה)(?:[\s,.!]|$)/i;
+
+async function callWriteNoteTool(input){
+  if(!IS_DESKTOP) return { ok: false, error: 'notes are only available in the desktop app' };
+  const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+  if(!invoke) return { ok: false, error: 'the desktop bridge is unavailable' };
+  const text = String((input && input.text) || '').replace(/\r/g, '').trim();
+  if(text.length > 4000) return { ok: false, code: 'too_long', limit: 4000, tell_the_user: 'That is longer than one note can be typed in: say it in two parts.' };
+  let r;
+  try{ r = await invoke('write_note', { text: text || null }); }
+  catch(err){
+    const msg = String((err && err.message) || err);
+    if(/not found|unknown command|not allowed|write_note/i.test(msg)) return { ok: false, code: 'old_app', tell_the_user: 'Writing in Notes needs the rebuilt desktop app (2.36.0).' };
+    return { ok: false, error: msg };
+  }
+  if(r && r.ok){
+    addMessage('system', text ? '\u25B8 written in a new note (' + (r.typed || text.length) + ' characters)' : '\u25B8 opened a new note');
+    return { ok: true, typed: r.typed || 0, saved: !!r.saved, note: text ? 'It is written in a new note and saved. Say so in a few words; do not read the text back.' : 'A new empty note is open.' };
+  }
+  return { ok: false, code: (r && r.code) || 'failed', typed: (r && r.typed) || 0,
+           tell_the_user: r && r.code === 'focus_lost' ? 'He switched windows while it was being written, so it stopped part-way: say so.' : 'The note could not be written: say so plainly.' };
+}
+function noteFailureLine(res, he){
+  if(res && res.code === 'old_app') return he ? 'כדי לכתוב בפתקים צריך לבנות מחדש את האפליקציה.' : 'Writing in Notes needs the rebuilt desktop app.';
+  if(res && res.code === 'too_long') return he ? 'זה ארוך מדי לפתק אחד. תגיד את זה בשני חלקים.' : 'That is too long for one note: say it in two parts.';
+  if(res && res.code === 'focus_lost') return he ? 'עברת לחלון אחר באמצע, אז עצרתי.' : 'You switched windows part-way, so I stopped.';
+  return he ? 'לא הצלחתי לכתוב בפתק.' : 'I could not write in the note.';
+}
+function noteReply(line){
+  addMessage('assistant', line);
+  chatHistory.push({ role:'assistant', content: line });
+  persistCurrentSession();
+  if(IS_DESKTOP && typeof speak === 'function') speak(line);
+}
+async function finishNoteDictation(text){
+  const he = typeof langMode !== 'undefined' && langMode !== 'en';
+  if(NOTE_CANCEL.test(text.trim())){ noteReply(he ? 'בסדר, לא כתבתי כלום.' : 'Okay, nothing written.'); return; }
+  const entry = logActionStart('write_note', { chars: text.length }, 'local');
+  const res = await callWriteNoteTool({ text });
+  logActionEnd(entry, res);
+  noteReply(res && res.ok ? (he ? 'כתבתי את זה בפתק חדש.' : 'Written in a new note.') : noteFailureLine(res, he));
+}
+
+const WRITE_NOTE_TOOL = {
+  name: 'write_note',
+  description: "Open a NEW note in Notepad and write text into it, saved as a file. Desktop only, Windows only. Use it when he asks you to put something in his notes: \"write that in notes\", \"write a prompt for it in notes\", \"put what we talked about in a note\", \"תכתוב את זה בפתקים\". YOU compose the text from the conversation: when he asks for a prompt, write the full finished prompt; when he asks for what you discussed, write it out clearly (a short title, then the content). text: exactly what goes in the note, in his language, plain text (no markdown symbols), at most 4000 characters. Never put passwords, keys or other secrets in it. It always makes a new note and never touches one he has open. Do not read the text back to him: say in a few words that it is in a new note. For \"I want you to write something\" with nothing said yet, do not call this: ask what he wants written. If it answers old_app, the desktop app needs rebuilding.",
+  input_schema: { type: 'object', properties: { text: { type: 'string', description: 'The whole note, as it should appear.' } }, required: ['text'] }
+};
 
 const OPEN_BASE_APP_TOOL = {
   name: 'open_base_app',
@@ -17002,7 +17153,7 @@ async function readMessageStream(response, onText){
    the last one. Never both: a look replaces the note it is about to write. */
 function cameraSystemExtras(){
   return (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + mailServiceNote() + (compactCodeNote || '') +
-         (turnWants3d ? never3dNote() : '');
+         (turnWants3d ? never3dNote() : '') + (turn3dMentionOnly ? QUIET_3D_NOTE : '');
 }
 /* SET ONLY AFTER A CUT-OFF (2.22.1): the last attempt ran out of room in the
    middle of a tool call, so nothing was built. Cleared at the start of each
@@ -17019,24 +17170,93 @@ let turnCutOffTool = false;
    recognisable version; then the app itself asks the 3D service with his
    own words; and if even that is not possible, a rough stand-in, said to be
    one. A sentence that refuses is never spoken in such a turn. */
-let turnWants3d = false, turnModelShown = false;
+let turnWants3d = false, turnModelShown = false, turn3dMentionOnly = false;
+/* The last thing JARVIS said, if it was said in the last `back` messages (so
+   "yes" answers what was just asked, not something from an hour ago). */
+function lastAssistantText(back){
+  const h = typeof chatHistory !== 'undefined' ? chatHistory : [];
+  for(let i = h.length - 1, seen = 0; i >= 0 && seen < (back || 2); i--, seen++){
+    const m = h[i];
+    if(m && m.role === 'assistant'){
+      const c = m.content;
+      return typeof c === 'string' ? c : Array.isArray(c) ? c.map(b => (b && b.text) || '').join(' ') : '';
+    }
+  }
+  return '';
+}
+const QUIET_3D_NOTE = '\n\nHE MENTIONED 3D, BUT THIS MESSAGE DOES NOT ASK YOU FOR A MODEL. Answer what he actually said, in conversation. ' +
+  'Do not call build_3d_model, generate_3d_model or photo_to_3d this turn and do not start making one on your own: a model is made when he asks for one ' +
+  'or says yes to your offer. If he might want one you may offer it in a single short sentence and wait for his answer. ' +
+  'The one exception: if his words really are a plain request to make a 3D model of something, make it.';
 const NEW3D_PRONOUN = /\b(?:of|from|out of)\s+(?:it|this|that|these|those|them)\b|\b(?:it|this|that)\s+(?:into|in)\s+(?:a\s+)?(?:3\s?d|three)|(?:^|\s)(?:\u05de\u05d6\u05d4|\u05e9\u05dc \u05d6\u05d4|\u05d0\u05ea \u05d6\u05d4|\u05de\u05de\u05e0\u05d5|\u05de\u05de\u05e0\u05d4|\u05e9\u05dc\u05d5|\u05e9\u05dc\u05d4)(?=\s|$)/i;
 const NEW3D_MARK = /\b3\s?-?d\b|\bthree[\s-]?d(?:imensional)?\b|\u05ea\u05dc\u05ea[\s-]?\u05de\u05d9?\u05de\u05d3/i;
-const NEW3D_VERB = /\b(?:make|create|build|generate|design|model|render|sculpt|craft|produce|give me|show me|draw|do)\b|(?:^|[\s,])(?:\u05ea\u05e2\u05e9\u05d4|\u05ea\u05e2\u05e9\u05d9|\u05e2\u05e9\u05d4|\u05ea\u05d9\u05e6\u05d5\u05e8|\u05ea\u05e6\u05d5\u05e8|\u05e6\u05d5\u05e8|\u05dc\u05d9\u05e6\u05d5\u05e8|\u05ea\u05d1\u05e0\u05d4|\u05d1\u05e0\u05d4|\u05dc\u05d1\u05e0\u05d5\u05ea|\u05ea\u05db\u05d9\u05df|\u05dc\u05d4\u05db\u05d9\u05df|\u05ea\u05d9\u05d9\u05e6\u05e8|\u05dc\u05d9\u05d9\u05e6\u05e8|\u05ea\u05e2\u05e6\u05d1|\u05ea\u05df \u05dc\u05d9|\u05ea\u05e8\u05d0\u05d4 \u05dc\u05d9)(?=[\s,]|$)/i;
+/* WHEN HE ASKS FOR A 3D MODEL, AND WHEN HE ONLY SAYS 3D (2.36.0).
+
+   It used to be: the sentence has "3D" in it and one of a loose list of verbs
+   ("do", "model", "show me") anywhere in it. So "I saw a 3D model yesterday",
+   "do you know anything about 3D", "the 3D model you made looks nice" and even
+   "don't make a 3D model" all ordered a model, and an order here is forced:
+   the turn is told he has asked, never to decline, and re-prompted until a
+   model is on screen.
+
+   Now it takes a REQUEST. A clause counts only if it is built like one:
+     - starts with an instruction or a polite lead into one ("make", "can you
+       build", "I want you to design", "let's create", "please give me an"),
+       or says what he wants ("I want a ... 3D model"); the same in Hebrew;
+     - the 3D comes after that verb, in the same clause, close to it;
+     - nothing in the clause turns it round: not "don't", "never", "without",
+       not a question ("how do I", "why did you"), and not 3D as a subject
+       ("3D printing", "3D software", "3D movies", "tips for 3D design").
+   Everything else is conversation. And one more way in: a plain "yes" to an
+   offer JARVIS just made to build one. */
+const NEW3D_MARK_SRC = '(?:\\b3\\s?-?d\\b|\\bthree[\\s-]?d(?:imensional)?\\b|תלת[\\s-]?מי?מד)';
+const NEW3D_LEAD_EN = '^(?:(?:please|hey|hi|ok|okay|so|and|then|now|well|jarvis|javis|jervis|listen)[\\s,]+)*';
+const NEW3D_ASK_EN = "(?:(?:can|could|would|will)\\s+you(?:\\s+please)?\\s+|(?:i|we)\\s+(?:want|need|would\\s+like|wanna)\\s+you\\s+to\\s+|i'?d\\s+like\\s+you\\s+to\\s+|let'?s\\s+|please\\s+|go\\s+ahead\\s+and\\s+)?";
+const NEW3D_VERB_EN = '(?:make(?!\\s+(?:sure|sense|up|use|it\\s+(?:bigger|smaller|larger)))|create|build|generate|design|render|sculpt|craft|produce|draw|model|turn|convert|(?:give|show)\\s+me(?=\\s+(?:an?|some)\\s)|do(?=\\s+(?:me\\s+)?(?:an?|one)\\b))';
+const NEW3D_REQ_EN = new RegExp(NEW3D_LEAD_EN + NEW3D_ASK_EN + NEW3D_VERB_EN + '\\b[^.?!;]{0,70}?' + NEW3D_MARK_SRC, 'i');
+const NEW3D_WANT_EN = new RegExp(NEW3D_LEAD_EN + "(?:i|we)\\s+(?:want|need|would\\s+like|wanna|'?d\\s+like)\\s+(?:an?|the|some|my|one)\\b[^.?!;]{0,30}?" + NEW3D_MARK_SRC, 'i');
+const NEW3D_LEAD_HE = "^(?:(?:היי|הי|בבקשה|ג'?רוויס|גרוויס|נו|אז|טוב|אוקיי|יאללה|תקשיב|ו)[\\s,]+)*";
+const NEW3D_ASK_HE = '(?:(?:אתה|את)\\s+יכול(?:ה)?\\s+(?:בבקשה\\s+)?|תוכל\\s+(?:בבקשה\\s+)?|אפשר\\s+(?:בבקשה\\s+)?|(?:אני|אנחנו)\\s+רוצ(?:ה|ים)\\s+ש|בא\\s+לי\\s+ש)?';
+const NEW3D_VERB_HE = '(?:תעשה|תעשי|עשה|לעשות|תיצור|תיצרי|צור|ליצור|תבנה|תבני|בנה|לבנות|תכין|תכיני|הכן|להכין|תייצר|ייצר|לייצר|תעצב|לעצב|תן\\s+לי|תראה\\s+לי)';
+const NEW3D_REQ_HE = new RegExp(NEW3D_LEAD_HE + NEW3D_ASK_HE + NEW3D_VERB_HE + '(?:\\s+לי)?[\\s,][^.?!;]{0,70}?' + NEW3D_MARK_SRC);
+const NEW3D_WANT_HE = new RegExp(NEW3D_LEAD_HE + '(?:אני|אנחנו)\\s+(?:רוצה|רוצים|צריך|צריכה|צריכים)\\s+(?:ממך\\s+)?(?:מודל|דגם|אובייקט|גרסה|עיצוב)?[^.?!;]{0,40}?' + NEW3D_MARK_SRC);
+const NEW3D_NEGATED = /\b(?:don'?t|do\s+not|didn'?t|did\s+not|never|stop|without|no\s+need|not)\b|(?:^|\s)(?:לא|אל|בלי|תפסיק)(?=\s|$)/i;
+/* 3D as a subject, not an object to make. */
+const NEW3D_TOPIC = new RegExp(NEW3D_MARK_SRC + '\\s+(?:design(?:er|ers|ing)?|model(?:l)?ing|print(?:er|ers|ing)?|animat\\w+|movies?|films?|games?|gaming|software|programs?|courses?|tutorials?|projects?|art|artists?|graphics|engines?|effects|scanners?|tv|glasses|world|industry|jobs?|career|apps?)\\b|' + NEW3D_MARK_SRC + '\\s+(?:הדפסה|מדפסת|אנימציה|סרט|סרטים|משחק|משחקים|תוכנה|קורס|פרויקט|עיצוב|מידול)', 'i');
+const NEW3D_ADVICE = /\b(?:tips?|advice|ideas?|suggestions?|recommend\w*|how\s+to|learn\w*|teach\w*)\b|(?:טיפים|עצות|רעיונות|ללמוד|לימוד)/i;
+/* "of a printer", "for my program": something to model, not the subject. */
+const NEW3D_OBJECT_OF = /\b(?:of|for)\s+(?:an?|the|my|our)\s+(?:3\s?-?d\s+)?(?:print(?:er|ing)?|program|software|course|game|movie|project)\b/gi;
+
+function clauseAsks3dModel(c){
+  c = c.trim().replace(/\s+/g, ' ');
+  if(!c || NEW3D_NEGATED.test(c) || NEW3D_ADVICE.test(c)) return false;
+  const bare = c.replace(NEW3D_OBJECT_OF, ' ');
+  if(NEW3D_TOPIC.test(bare)) return false;
+  if(/\b(?:print(?:er|ing)?|tutorial|course|software|program)\b|מדפסת|הדפסה|קורס/i.test(bare)) return false;
+  return NEW3D_REQ_EN.test(c) || NEW3D_WANT_EN.test(c) || NEW3D_REQ_HE.test(c) || NEW3D_WANT_HE.test(c);
+}
+
 function wantsNew3dModel(text){
   const s = String(text || '').trim();
-  if(!s || s.length > 1500 || !NEW3D_MARK.test(s) || !NEW3D_VERB.test(s)) return false;
-  /* A question about 3D, or 3D printing, is not a request for a model. */
-  if(/^(?:how|what|why|when|where|which|who|is|are|does|did|explain|tell me about)\b|^(?:\u05d0\u05d9\u05da|\u05de\u05d4|\u05dc\u05de\u05d4|\u05de\u05ea\u05d9|\u05d0\u05d9\u05e4\u05d4|\u05d4\u05d0\u05dd|\u05ea\u05e1\u05d1\u05d9\u05e8)(?![\u0590-\u05FF])/i.test(s)) return false;
+  if(!s || s.length > 1500 || !NEW3D_MARK.test(s)) return false;
   /* "Make the 3D model window bigger" arranges the viewer on his screen; it
      does not ask for a model (2.28.0). A size or a place, aimed at the
      window or at "the model" (not "a model of ..."). */
-  if(/\b(?:bigger|larger|smaller|wider|taller|narrower|shorter|enlarge|shrink|resize|move|corner|left|right|top|bottom|centre|center|middle)\b|\u05ea\u05d2\u05d3\u05d9\u05dc|\u05ea\u05e7\u05d8\u05d9\u05df|\u05ea\u05d6\u05d9\u05d6|\u05ea\u05e2\u05d1\u05d9\u05e8|\u05e9\u05de\u05d0\u05dc|\u05d9\u05de\u05d9\u05df|\u05e4\u05d9\u05e0\u05d4/i.test(s) &&
-     (/\b(?:window|viewer|pane)\b|\u05d7\u05dc\u05d5\u05df/i.test(s) || /\b(?:the|my|this|that)\s+(?:3\s?-?d\s+|three[\s-]?d\s+)?model\b/i.test(s)) &&
+  if(/\b(?:bigger|larger|smaller|wider|taller|narrower|shorter|enlarge|shrink|resize|move|corner|left|right|top|bottom|centre|center|middle)\b|תגדיל|תקטין|תזיז/i.test(s) &&
+     (/\b(?:window|viewer|pane)\b|חלון/i.test(s) || /\b(?:the|my|this|that)\s+(?:3\s?-?d\s+|three[\s-]?d\s+)?model\b/i.test(s)) &&
      !/\b(?:models?|objects?|figures?)\s+(?:of|for)\b|\bof\s+an?\b/i.test(s)) return false;
-  if(/\b(?:print(?:er|ing)?|tutorial|course|learn|teach|software|program)\b|\u05de\u05d3\u05e4\u05e1\u05ea|\u05d4\u05d3\u05e4\u05e1\u05d4|\u05e7\u05d5\u05e8\u05e1/i.test(s)) return false;
-  return true;
+  return s.split(/[.?!;\n]+|,\s*|\s+(?:and|but|then)\s+/i).some(clauseAsks3dModel);
 }
+
+/* A "yes" to an offer he was just made. */
+const NEW3D_OFFER = /\b(?:want|like|shall|should)\b[^.?!]{0,50}\b(?:make|build|create|generate|model|sculpt)\b[^.?!]{0,80}(?:\b3\s?-?d\b|\bthree[\s-]?d\b|תלת)|(?:\b3\s?-?d\b|\bthree[\s-]?d\b)[^.?!]{0,80}\b(?:want|like)\b[^.?!]{0,40}\b(?:me|it)\b|(?:רוצה|תרצה)[^.?!]{0,30}ש(?:אעשה|אבנה|אצור|אכין|אייצר)[^.?!]{0,80}תלת/i;
+const NEW3D_YES = new Set(['yes','yeah','yep','yup','sure','ok','okay','go ahead','do it','please do','make it','build it','go for it','sounds good','why not','lets do it','yes please','yes do it','sure go ahead','yes go ahead','yeah go ahead','yep go ahead','כן','בטח','אוקיי','יאללה','תעשה את זה','תבנה את זה','תעשה','סבבה','בכיף','כן בבקשה','כן תעשה']);
+function affirmsOffer3d(text, assistantText){
+  const t = String(text || '').toLowerCase().replace(/[.,!?'"׳״-]/g, '').replace(/\s+/g, ' ').trim()
+    .replace(/^(?:hey |ok )?jarvis /, '').replace(/ (?:please|jarvis)$/, '');
+  return NEW3D_YES.has(t) && NEW3D_OFFER.test(String(assistantText || ''));
+}
+
 function model3dServiceUp(){
   const c = backendCapabilities;
   return !!(c && c.model3d && c.model3d_key !== 'missing') && !turnToolFailures.some(f => /^(?:generate_3d_model|photo_to_3d)$/.test(f.tool));
@@ -17265,7 +17485,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     requestBody.tools = fullCapability()
       ? [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL, MAKE_ZIP_TOOL, BUILD3D_TOOL]
       : [RUN_CODE_TOOL, REMEMBER_TOOL, SHOW_HTML_TOOL];
-    if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, OPEN_APP_TOOL, OPEN_JARVIS_FOLDER_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
+    if(IS_DESKTOP) requestBody.tools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, OPEN_APP_TOOL, OPEN_JARVIS_FOLDER_TOOL, WRITE_NOTE_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                           TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                           WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
                                           NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL, WEB_SHOOTER_TOOL,
@@ -17286,7 +17506,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     /* Desktop only, and not gated behind ULTRON: opening a link is an everyday
        errand, not heavy work. In the browser the capability does not exist at
        all, so offering it there would only invite a promise it cannot keep. */
-    if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, OPEN_APP_TOOL, OPEN_JARVIS_FOLDER_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
+    if(IS_DESKTOP) everydayTools.push(buildOpenUrlTool(), CLOSE_WINDOW_TOOL, CLOSE_NAMED_TOOL, CLOSE_APP_TOOL, OPEN_BASE_APP_TOOL, OPEN_APP_TOOL, OPEN_JARVIS_FOLDER_TOOL, WRITE_NOTE_TOOL, CLOSE_TAB_TOOL, SCREENSHOT_TOOL, WATCH_SCREEN_TOOL, CAMERA_TOOL,
                                       TASK_TOOL, TASK_LIST_TOOL, TASK_CANCEL_TOOL,
                                       WORKSPACE_TOOL, FULLSCREEN_TOOL, LIVE_FULL_TOOL,
                                       NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL, WEB_SHOOTER_TOOL,
@@ -17727,8 +17947,10 @@ async function askJarvis(userText, images, onText, tag){
   turnBuildReviews = 0;
   /* "Make a 3D model of it" with nothing shown and no picture: "it" is
      unknown, and asking is right; a model is not invented for it. */
-  turnWants3d = wantsNew3dModel(userText) &&
+  turnWants3d = (wantsNew3dModel(userText) || affirmsOffer3d(userText, lastAssistantText(2))) &&
                 (!NEW3D_PRONOUN.test(userText) || !!(images && images.length) || somethingToModel() || !!lastDescribedPicture);
+  /* He said 3D but did not ask for a model: a conversation, not an order. */
+  turn3dMentionOnly = !turnWants3d && NEW3D_MARK.test(String(userText || ''));
   turnModelShown = false;
   turnIsLook = !!(images && images.some(a => a && a.kind !== 'pdf' && a.kind !== 'text'));
   turnPicture = pictureOfTurn(images);
@@ -17992,6 +18214,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callOpenAppTool(tu.input || {});
           } else if(tu.name === 'open_jarvis_folder'){
             payload = await callOpenJarvisFolderTool();
+          } else if(tu.name === 'write_note'){
+            payload = await callWriteNoteTool(tu.input || {});
           } else if(tu.name === 'close_this_window'){
             payload = await callCloseWindowTool();
           } else if(tu.name === 'search_web' || tu.name === 'web_search'){
