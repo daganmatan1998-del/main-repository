@@ -4117,6 +4117,9 @@ fn write_note_blocking(own: Vec<(String, isize)>, text: Option<String>) -> Resul
     use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
     let text = text.unwrap_or_default().trim().to_string();
+    if !text.is_empty() && !text.chars().any(|c| c.is_alphanumeric()) {
+        return Ok(serde_json::json!({ "ok": false, "code": "no_content" }));
+    }
     let dir = dirs_next::document_dir()
         .ok_or("could not find the Documents folder")?
         .join("JARVIS Notes");

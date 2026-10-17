@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="12d761613825">
+<meta name="jarvis-build" content="abd4b78ce93f">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -15833,7 +15833,7 @@ function noteSentence(text){
   while(words.length > 1 && (wordIsName(words[0]) || WAKE_FILLER.indexOf(words[0]) >= 0)) words = words.slice(1);
   return words.join(' ');
 }
-const NOTE_DICT_EN = /^(?:please )?(?:(?:i |we )?(?:want|need|would like) you to |lets |id like you to )?(?:write|take|jot|type|dictate|make)(?: down)? (?:something|a note|some notes?|a new note|a few words|a message)(?: (?:down|in|on|into) (?:my |the )?(?:notes?|notepad))?(?: (?:please|now|for me|jarvis))*$/;
+const NOTE_DICT_EN = /^(?:please )?(?:(?:can|could|will|would) you )?(?:(?:i |we )?(?:want|need|would like) you to |lets |id like you to )?(?:write|take|jot|type|dictate|make)(?: down)? (?:something|a note|some notes?|a new note|a few words|a message)(?: (?:down|in|on|into) (?:my |the )?(?:notes?|notepad))?(?: (?:please|now|for me|jarvis))*$/;
 const NOTE_DICT_HE = /^(?:בבקשה )?(?:(?:אני|אנחנו) (?:רוצה|רוצים|צריך|צריכה) ש)?(?:תכתוב|תרשום|תקליד|תכתבי|תרשמי|לכתוב|לרשום)(?: לי)? (?:משהו|פתק|הערה|הודעה)(?: (?:בפתקים|בפנקס רשימות|בפנקס|בנוטפד))?(?: (?:בבקשה|עכשיו))*$/;
 const NOTE_NEW_EN = /^(?:please )?(?:open|start|create|add)(?: me)?(?: up)? (?:a |an |the )?(?:new )?(?:note|notes|notepad|note pad)(?: page| file| window)?(?: (?:please|now|for me))*$/;
 const NOTE_NEW_HE = /^(?:בבקשה )?(?:תפתח|פתח|תיצור|תפתחי|תתחיל)(?: לי)?(?: את)? (?:פתק חדש|פנקס רשימות חדש|פתק|פנקס רשימות|פתקים|נוטפד)(?: חדש)?(?: (?:בבקשה|עכשיו))*$/;
@@ -15848,6 +15848,9 @@ async function callWriteNoteTool(input){
   const invoke = window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
   if(!invoke) return { ok: false, error: 'the desktop bridge is unavailable' };
   const text = String((input && input.text) || '').replace(/\r/g, '').trim();
+  /* Nothing but punctuation ("...", a Whisper hiccup, a model placeholder) is
+     not a note: typing it is the "row of dots" bug. */
+  if(text && !/[\p{L}\p{N}]/u.test(text)) return { ok: false, code: 'no_content', tell_the_user: 'There were no words to write. Ask him what he wants written; do not call write_note again until he has said it.' };
   if(text.length > 4000) return { ok: false, code: 'too_long', limit: 4000, tell_the_user: 'That is longer than one note can be typed in: say it in two parts.' };
   let r;
   try{ r = await invoke('write_note', { text: text || null }); }
@@ -15857,7 +15860,7 @@ async function callWriteNoteTool(input){
     return { ok: false, error: msg };
   }
   if(r && r.ok){
-    addMessage('system', text ? '\u25B8 written in a new note (' + (r.typed || text.length) + ' characters)' : '\u25B8 opened a new note');
+    addMessage('system', text ? '\u25B8 written in a new note (' + (r.typed || text.length) + ' characters): ' + text.slice(0, 60).replace(/\s+/g, ' ') + (text.length > 60 ? '\u2026' : '') : '\u25B8 opened a new note');
     return { ok: true, typed: r.typed || 0, saved: !!r.saved, note: text ? 'It is written in a new note and saved. Say so in a few words; do not read the text back.' : 'A new empty note is open.' };
   }
   return { ok: false, code: (r && r.code) || 'failed', typed: (r && r.typed) || 0,
@@ -15865,6 +15868,7 @@ async function callWriteNoteTool(input){
 }
 function noteFailureLine(res, he){
   if(res && res.code === 'old_app') return he ? 'כדי לכתוב בפתקים צריך לבנות מחדש את האפליקציה.' : 'Writing in Notes needs the rebuilt desktop app.';
+  if(res && res.code === 'no_content') return he ? 'לא שמעתי מילים לכתוב. מה לכתוב?' : 'I did not catch any words to write. What should I write?';
   if(res && res.code === 'too_long') return he ? 'זה ארוך מדי לפתק אחד. תגיד את זה בשני חלקים.' : 'That is too long for one note: say it in two parts.';
   if(res && res.code === 'focus_lost') return he ? 'עברת לחלון אחר באמצע, אז עצרתי.' : 'You switched windows part-way, so I stopped.';
   return he ? 'לא הצלחתי לכתוב בפתק.' : 'I could not write in the note.';
@@ -15881,6 +15885,7 @@ async function finishNoteDictation(text){
   const entry = logActionStart('write_note', { chars: text.length }, 'local');
   const res = await callWriteNoteTool({ text });
   logActionEnd(entry, res);
+  if(res && res.code === 'no_content') noteDictation = { until: Date.now() + 120000 };   // nothing usable heard: ask again
   noteReply(res && res.ok ? (he ? 'כתבתי את זה בפתק חדש.' : 'Written in a new note.') : noteFailureLine(res, he));
 }
 
