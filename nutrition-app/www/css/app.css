@@ -798,3 +798,32 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .lang-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 10px 14px;
   border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: inherit; font: inherit; cursor: pointer; text-align: start; }
 .lang-item.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); font-weight: 600; }
+
+/* ---- inbox, bell, friends ---- */
+.bell-link { position: relative; flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--text); background: var(--surface-2); text-decoration: none; }
+.bell-badge { position: absolute; top: -2px; inset-inline-end: -2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff; font-size: .7rem; font-weight: 700; line-height: 18px; text-align: center; }
+.bell-badge[hidden] { display: none; }
+.inbox-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+.inbox-tab { min-height: 44px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.inbox-tab.on { border-color: var(--primary); background: var(--primary-weak); }
+.inbox-tab .count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--primary); color: var(--primary-ink); font-size: .75rem; line-height: 20px; }
+.inbox-list, .friend-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.inbox-item { display: flex; align-items: flex-start; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.inbox-item.unread { border-color: var(--primary); background: var(--primary-weak); }
+.inbox-main { flex: 1; min-width: 0; display: grid; gap: 2px; color: inherit; text-decoration: none; }
+.friend { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px dashed var(--border); }
+.friend:first-child { border-top: 0; }
+.friend-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+.friend-text { display: grid; min-width: 0; }
+.friend-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.avatar.initial { background: var(--primary-weak); color: var(--text); font-weight: 700; }
+.share-row { margin: 4px 0 8px; }
+.share-row a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.user-head { display: grid; justify-items: center; gap: 4px; text-align: center; }
+.user-head h1 { margin: 6px 0 0; }
+.user-head p { margin: 0; }
+.user-stats { display: grid; justify-items: center; gap: 2px; margin: 14px 0; text-align: center; }
+.user-stats strong { font-size: 1.6rem; }
+.user-stats p { margin: 0; }
+.user-actions { display: grid; gap: 8px; }
+.user-actions > p { margin: 0; text-align: center; }

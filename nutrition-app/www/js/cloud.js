@@ -174,6 +174,7 @@ async function api(path, { method = 'GET', headers = {}, body } = {}) {
 }
 
 const uid = () => session.user.id;
+export const userId = () => (session ? session.user.id : null);
 
 // ---------- data (one row per user) ----------
 
@@ -191,6 +192,19 @@ export async function pushState(data) {
     body: JSON.stringify({ user_id: uid(), data, updated_at: new Date(data.savedAt || Date.now()).toISOString() }),
   });
   if (!res.ok) throw new CloudError('unavailable', res.status);
+}
+
+// ---------- tables other than the user's own row (friends, see social.js) ----------
+
+// A PostgREST call. Returns { ok, status, data } and never throws on an HTTP
+// error status (the caller decides); a lost connection or a dead session throws.
+export async function rest(path, { method = 'GET', body, prefer } = {}) {
+  const headers = {};
+  if (body !== undefined) headers['content-type'] = 'application/json';
+  if (prefer) headers.prefer = prefer;
+  const res = await api(`/rest/v1/${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const data = await res.json().catch(() => null);
+  return { ok: res.ok, status: res.status, data };
 }
 
 // ---------- files (the user's own folder) ----------

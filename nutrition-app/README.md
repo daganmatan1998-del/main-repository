@@ -387,3 +387,8 @@ English is the default (app name, logo text and every string). The language pick
 ## Barcode scanner (v1.16.0)
 
 "Add your own food" has a **Scan a barcode** button: the camera (or a photo, or typed digits) reads the code with ZBar (WebAssembly, vendored in `www/vendor/zbar`, LGPL-2.1), `/api/barcode` looks the product up in [Open Food Facts](https://world.openfoodfacts.org) (ODbL; credited in the product sheet) and caches it for a day, and the person picks grams, servings or the whole package. The CSP gained `'wasm-unsafe-eval'` for the reader. `node tests/e2e/barcode.mjs` tests the reader on a real video (needs ffmpeg).
+
+## Inbox and friends (v1.17.0)
+
+- **Inbox** (bell on Today): app messages kept on the device, and — in a separate folder — friend requests.
+- **Friends**: a public profile with a username (`@name`), invite link `#/u/<username>` (WhatsApp / copy), search by username, requests to accept or decline. Needs the new tables: **re-run `supabase/setup.sql`** in the Supabase SQL editor (adds `nutri_profiles` and `nutri_friend_requests` with row-level security; wins/losses can only be changed by the server). Tested against an in-memory fake of the PostgREST calls (`tests/e2e/cloud.mjs`), not against a real project.

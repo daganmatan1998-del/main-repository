@@ -20,6 +20,7 @@ import { aiStatus } from '../store.js';
 import { photoButtons } from './photo-picker.js';
 import { squareImage } from '../image.js';
 import { accountCard } from './account.js';
+import { friendsCard } from './friends.js';
 import * as cloud from '../cloud.js';
 
 export function renderProfile(root) {
@@ -47,6 +48,8 @@ export function renderProfile(root) {
 
   // ---- cloud account ----
   root.appendChild(accountCard());
+  const friends = friendsCard();
+  if (friends) root.appendChild(friends);
 
   // ---- plan for the AI features ----
   if (BILLING.enabled) {

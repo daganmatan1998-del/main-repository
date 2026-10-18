@@ -23,6 +23,11 @@ import { startSync, syncNow } from './sync.js';
 import { startPush } from './push.js';
 import { maybeAskReminders } from './screens/reminders.js';
 import { openConflict } from './screens/account.js';
+import { renderInbox } from './screens/inbox.js';
+import { renderUserProfile } from './screens/friends.js';
+import { usernameFromHash } from './social.js';
+import { startSocial } from './social-sync.js';
+import { loadInbox, addMessage } from './inbox.js';
 
 // The static page is English; this puts the active language into its texts.
 if (document.documentElement.lang !== 'en') {
@@ -43,8 +48,12 @@ const ROUTES = {
   profile: { label: tr('Profile'), icon: 'profile', render: renderProfile },
   // Not a tab: opened from the menu screen, which stays highlighted.
   shopping: { render: renderShopping, tab: 'plan' },
+  // Friends: the inbox (opened from the bell on Today) and a person's public profile (invite links).
+  inbox: { render: renderInbox, tab: 'today' },
+  u: { render: renderUserProfile, tab: 'profile' },
 };
 
+const PENDING_LINK = 'nutri-pending-link';
 const view = document.getElementById('view');
 const tabbar = document.getElementById('tabbar');
 let cleanup = null;
@@ -107,6 +116,7 @@ export function render(force = false) {
   if (gate.state !== 'none') {
     // Any navigation while the gate is due lands here.
     const key = `gate:${gate.week}:${gate.state}`;
+    addMessage('checkin-due', { id: `checkin-due-${gate.week}`, args: [gate.week] });
     setLocked(true);
     if (force || lastKey !== key || !document.getElementById('gate')) {
       lastKey = key;
@@ -135,6 +145,12 @@ export function render(force = false) {
   }
 
   setLocked(false);
+  addMessage('welcome', { id: 'welcome' });
+  // An invite link opened before the account existed: go there now.
+  try {
+    const wanted = localStorage.getItem(PENDING_LINK);
+    if (wanted) { localStorage.removeItem(PENDING_LINK); if (usernameFromHash(wanted) && location.hash !== wanted) { location.hash = wanted; return; } }
+  } catch { /* storage unavailable */ }
   const name = route();
   lastKey = `route:${name}`;
   runCleanup();
@@ -190,6 +206,9 @@ async function boot() {
     return;
   }
   applyTheme(store.state.settings.theme);
+  await loadInbox();
+  // An invite link (#/u/name) opened by someone who is still setting up: keep it for after.
+  try { if (!store.isOnboarded() && usernameFromHash(location.hash)) localStorage.setItem(PENDING_LINK, location.hash); } catch { /* storage unavailable */ }
   // The service worker reads the language from the saved settings (it has no localStorage).
   if (store.isOnboarded() && store.state.settings.lang !== lang) store.saveSettings({ lang }).catch(() => {});
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(store.state.settings.theme));
@@ -228,6 +247,7 @@ async function boot() {
   render(true);
   registerSW();
   startPush();
+  startSocial();
   // After setup is finished: offer daily reminders once, from the Today screen
   // (not over the weekly photo, the summary or a half-finished form).
   window.addEventListener('app:ready-for-reminders', () => maybeAskReminders());

@@ -29,7 +29,10 @@ function check(name, cond, detail = '') {
 // ---------- fake Supabase ----------
 const SUPA = 'https://e2e.supabase.co';
 const USER = { id: '6f1c0e1a-0000-4000-8000-000000000001', email: 'tester@example.com', user_metadata: { full_name: 'מתן בודק' } };
-const fake = { row: null, files: new Map(), challenges: new Map(), calls: [], deletedAccount: false, badAuth: 0 };
+// Friends: two other people and a request from one of them, as PostgREST would hold them.
+const BOB = { user_id: '6f1c0e1a-0000-4000-8000-0000000000b0', username: 'bob', display_name: 'Bob', wins: 3, losses: 1 };
+const CAROL = { user_id: '6f1c0e1a-0000-4000-8000-0000000000c0', username: 'carol', display_name: 'Carol', wins: 0, losses: 0 };
+const fake = { profiles: [BOB, CAROL], requests: [{ id: 'req-1', from_user: CAROL.user_id, to_user: USER.id, status: 'pending', created_at: '2026-10-10T08:00:00Z', updated_at: '2026-10-10T08:00:00Z' }], row: null, files: new Map(), challenges: new Map(), calls: [], deletedAccount: false, badAuth: 0 };
 
 async function supabase(route) {
   const req = route.request();
@@ -68,6 +71,49 @@ async function supabase(route) {
     fake.row = body;
     return json(201);
   }
+  // ---- friends (RLS in short: profiles readable by all, own row writable; requests visible to both sides) ----
+  if (p === '/rest/v1/nutri_profiles') {
+    const q = url.searchParams;
+    if (req.method() === 'GET') {
+      let rows = fake.profiles;
+      const f = (k) => q.get(k);
+      if (f('user_id') && f('user_id').startsWith('eq.')) rows = rows.filter((x) => x.user_id === f('user_id').slice(3));
+      if (f('user_id') && f('user_id').startsWith('in.(')) { const ids = f('user_id').slice(4, -1).split(','); rows = rows.filter((x) => ids.includes(x.user_id)); }
+      if (f('username') && f('username').startsWith('eq.')) rows = rows.filter((x) => x.username === f('username').slice(3));
+      return json(200, rows);
+    }
+    if (req.method() === 'POST') {
+      const body = JSON.parse(req.postData());
+      if (body.user_id !== USER.id) return json(403, { message: 'rls' });
+      if (!/^[a-z0-9_]{3,20}$/.test(body.username)) return json(400, { code: '23514' });
+      if (fake.profiles.some((x) => x.username === body.username && x.user_id !== USER.id)) return json(409, { code: '23505', message: 'duplicate key' });
+      const mine = fake.profiles.find((x) => x.user_id === USER.id);
+      const row = { wins: 0, losses: 0, ...(mine || {}), user_id: USER.id, username: body.username, display_name: body.display_name };
+      fake.profiles = [...fake.profiles.filter((x) => x.user_id !== USER.id), row];
+      return json(201, [row]);
+    }
+  }
+  if (p === '/rest/v1/nutri_friend_requests') {
+    const q = url.searchParams;
+    const mineRow = (r) => r.from_user === USER.id || r.to_user === USER.id;
+    if (req.method() === 'GET') return json(200, fake.requests.filter(mineRow));
+    if (req.method() === 'POST') {
+      const b = JSON.parse(req.postData());
+      if (b.from_user !== USER.id || b.to_user === USER.id) return json(403, { message: 'rls' });
+      if (fake.requests.some((r) => r.from_user === b.from_user && r.to_user === b.to_user)) return json(409, { code: '23505' });
+      fake.requests.push({ id: `req-${fake.requests.length + 1}`, from_user: b.from_user, to_user: b.to_user, status: 'pending', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+      return json(201);
+    }
+    const id = (q.get('id') || '').replace('eq.', '');
+    const target = fake.requests.find((r) => r.id === id && mineRow(r));
+    if (!target) return json(204);
+    if (req.method() === 'PATCH') {
+      if (target.to_user !== USER.id) return json(403, { message: 'rls' });
+      Object.assign(target, { status: JSON.parse(req.postData()).status, updated_at: new Date().toISOString() });
+      return json(204);
+    }
+    if (req.method() === 'DELETE') { fake.requests = fake.requests.filter((r) => r !== target); return json(204); }
+  }
   if (p === '/rest/v1/rpc/delete_my_account') { fake.row = null; fake.deletedAccount = true; return json(204); }
 
   const prefix = `/storage/v1/object/nutri/${USER.id}/`;
@@ -105,7 +151,7 @@ async function device(name) {
   await ctx.addInitScript(() => { try { if (!localStorage.getItem('nutri-lang')) localStorage.setItem('nutri-lang', 'he'); } catch {} });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => pageErrors.push(`${name}: ${e.message}`));
-  page.on('console', (m) => { if (m.type() === 'error' && !/status of (400|401|404)/.test(m.text())) pageErrors.push(`${name}: ${m.text()}`); });
+  page.on('console', (m) => { if (m.type() === 'error' && !/status of (400|401|404|409)/.test(m.text())) pageErrors.push(`${name}: ${m.text()}`); });
   return { ctx, page };
 }
 
@@ -247,6 +293,85 @@ try {
     const logs = fake.row && fake.row.data.logs;
     return logs && Object.values(logs).some((l) => l.eaten && l.eaten.length);
   }));
+
+  // ======== friends: username, invite link, requests, inbox ========
+  await A.page.click('a[href="#/profile"]');
+  await A.page.waitForSelector('#friends-card');
+  check('Profile has a Friends card after the account card', (await A.page.locator('.page-profile > *').evaluateAll((els) => els.map((e) => e.id))).join().includes('account-card,friends-card'));
+  await A.page.waitForSelector('#username-form');
+  await A.page.fill('#username-input', 'ab');
+  await A.page.click('#username-save');
+  check('a too short username is refused before asking the server', (await A.page.locator('#username-msg').innerText()).length > 5 && !fake.profiles.some((x) => x.user_id === USER.id));
+  await A.page.fill('#username-input', 'Bob');
+  await A.page.click('#username-save');
+  await until(async () => (await A.page.locator('#username-msg').innerText()).length > 5 && !(await A.page.locator('#username-msg').innerText()).includes('…'));
+  check('a taken username is refused', await A.page.locator('#username-form').isVisible() && !fake.profiles.some((x) => x.user_id === USER.id));
+  await A.page.fill('#username-input', '@Matan_Test');
+  await A.page.click('#username-save');
+  await A.page.waitForSelector('#my-username');
+  check('the username is saved lower case, without the @ typed', (await A.page.locator('#my-username').innerText()) === '@matan_test' && fake.profiles.find((x) => x.user_id === USER.id).username === 'matan_test');
+  const wa = await A.page.locator('#share-whatsapp').getAttribute('href');
+  check('the WhatsApp button carries the invite link to the profile', wa.startsWith('https://wa.me/?text=') && decodeURIComponent(wa).includes('#/u/matan_test') && decodeURIComponent(wa).includes(BASE));
+  await A.ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
+  await A.page.click('#share-copy');
+  check('"copy link" puts the same link on the clipboard', (await A.page.evaluate(() => navigator.clipboard.readText())).endsWith('#/u/matan_test'));
+  await A.page.screenshot({ path: path.join(SHOTS, 'c05-friends-card.png'), fullPage: true });
+
+  // The bell: the welcome message and Carol's request.
+  await A.page.click('a[href="#/today"]');
+  await A.page.waitForSelector('#bell');
+  await until(async () => (await A.page.locator('.bell-badge').innerText()) === '2');
+  check('the bell counts the welcome message and the waiting friend request', (await A.page.locator('.bell-badge').innerText()) === '2');
+  await A.page.click('#bell');
+  await A.page.waitForSelector('#inbox-list');
+  check('the inbox opens on the app messages: the welcome is there', (await A.page.locator('.inbox-item[data-kind="welcome"]').count()) === 1);
+  await until(async () => (await A.page.locator('#tab-requests .count').count()) === 1);
+  check('friend requests are a separate folder with their own count', (await A.page.locator('#tab-requests .count').innerText()) === '1');
+  await A.page.screenshot({ path: path.join(SHOTS, 'c06-inbox.png') });
+  await A.page.click('#tab-requests');
+  await A.page.waitForSelector('#requests-in');
+  check("Carol's request is in the requests folder, not among the messages", (await A.page.locator('#requests-in').innerText()).includes('Carol') && (await A.page.locator('.inbox-item[data-kind]').count()) === 0);
+  await A.page.screenshot({ path: path.join(SHOTS, 'c07-requests.png') });
+  await A.page.click('#requests-in [data-act="accept"]');
+  await until(() => fake.requests.find((r) => r.id === 'req-1').status === 'accepted');
+  check('accepting updates the request on the server', fake.requests.find((r) => r.id === 'req-1').status === 'accepted');
+  await A.page.waitForSelector('#requests-empty');
+  await A.page.click('a.tab[href="#/today"]');
+  await A.page.waitForSelector('.page-today');
+  check('the badge drops once the messages were read and the request answered', await until(async () => (await A.page.locator('.bell-badge').isHidden())));
+
+  // Find Bob by username, ask him, take it back.
+  await A.page.click('a.tab[href="#/profile"]');
+  await A.page.waitForSelector('#friend-search');
+  check('the accepted friend is on the list', (await A.page.locator('#friend-list').innerText()).includes('Carol'));
+  await A.page.fill('#friend-search', '@Bob');
+  await A.page.click('#friend-find');
+  await A.page.waitForSelector('#user-name');
+  check("searching goes to the person's profile with name, @username and win rate", (await A.page.locator('#user-name').innerText()) === 'Bob' && (await A.page.locator('#user-handle').innerText()) === '@bob' && (await A.page.locator('#user-stats').innerText()).includes('75'));
+  await A.page.screenshot({ path: path.join(SHOTS, 'c08-user-profile.png') });
+  await A.page.click('#friend-add');
+  await A.page.waitForSelector('#friend-sent');
+  check('"send friend request" posts one request', fake.requests.some((r) => r.from_user === USER.id && r.to_user === BOB.user_id && r.status === 'pending'));
+  await A.page.click('#friend-cancel');
+  await A.page.waitForSelector('#friend-add');
+  check('cancelling removes it', !fake.requests.some((r) => r.to_user === BOB.user_id));
+
+  // An invite link opened directly.
+  await A.page.goto(`${BASE}/#/u/carol`);
+  await A.page.reload();
+  await A.page.waitForSelector('#user-name');
+  check("an invite link opens that person's profile, already friends", (await A.page.locator('#user-name').innerText()) === 'Carol' && (await A.page.locator('#friend-badge').count()) === 1);
+  await A.page.goto(`${BASE}/#/u/nobody_here`);
+  await A.page.reload();
+  await A.page.waitForSelector('#user-missing');
+  check('a link to a username that does not exist says so', true);
+  await A.page.goto(`${BASE}/#/u/matan_test`);
+  await A.page.reload();
+  await A.page.waitForSelector('#share-whatsapp');
+  check('your own link opens your profile with the share buttons', (await A.page.locator('#user-handle').innerText()) === '@matan_test');
+  await A.page.goto(`${BASE}/#/today`);
+  await A.page.reload();
+  await A.page.waitForSelector('.page-today');
 
   // ======== device B: new phone, "sign in" on the first screen ========
   const B = await device('B');

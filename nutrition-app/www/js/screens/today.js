@@ -11,8 +11,20 @@ import { GOALS } from '../nutrition.js';
 import { state, today, targets, dayPlan, toggleEaten, gate, activePeriod, currentMetrics, periodEnded, saveSettings } from '../store.js';
 import { openPeriodReview } from './period.js';
 import { installCard } from '../install.js';
+import { badgeCount, addMessage } from '../inbox.js';
 
 let chartMode = 'weight';
+
+// The bell: opens the inbox; the badge counts unread messages and waiting friend requests.
+function bellLink() {
+  const n = badgeCount();
+  return h('a', { class: 'bell-link', id: 'bell', href: '#/inbox', 'aria-label': tr('Inbox') },
+    icon('bell', 22), h('span', { class: 'bell-badge', hidden: !n }, n > 99 ? '99+' : String(n)));
+}
+window.addEventListener('app:inbox', () => {
+  const n = badgeCount();
+  document.querySelectorAll('.bell-badge').forEach((el) => { el.hidden = !n; el.textContent = n > 99 ? '99+' : String(n); });
+});
 
 export function renderToday(root, { askAbout }) {
   const day = today();
@@ -34,10 +46,12 @@ export function renderToday(root, { askAbout }) {
     h('div', { class: 'grow' },
       h('h1', null, `${hello}, ${state.profile.nickname || state.profile.name}`),
       h('p', { class: 'muted' }, new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' }))),
+    bellLink(),
     h('a', { class: 'checkin-chip', href: '#/gallery', 'aria-label': tr('Next weekly photo') },
       icon('camera', 16), g.daysToNext <= 0 ? tr('Today') : g.daysToNext === 1 ? tr('Photo tomorrow') : tr('{0, plural, one {Photo in # day} other {Photo in # days}}', g.daysToNext))));
 
   if (periodEnded(p, day)) {
+    addMessage('period-ended', { id: `period-ended-${p.id}`, args: [p.goal] });
     root.appendChild(h('section', { class: 'card highlight', id: 'period-ended' },
       h('h2', null, tr('Your {0} period is over 🎉', GOALS[p.goal].label)),
       h('p', null, tr('Time to review your results and set up the next period.')),

@@ -57,3 +57,64 @@ as $$
 $$;
 revoke all on function public.delete_my_account() from public, anon;
 grant execute on function public.delete_my_account() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Friends (v1.17): public profiles, friend requests.
+-- Re-run this file to add them; everything is "if not exists" / "or replace".
+-- ---------------------------------------------------------------------------
+
+-- A public profile: only what other people are meant to see. The username is
+-- the handle people search for and put in invite links. wins / losses count
+-- finished challenges and can be changed only by the server, never by the app.
+create table if not exists public.nutri_profiles (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  username text not null unique check (username ~ '^[a-z0-9_]{3,20}$'),
+  display_name text not null default '' check (char_length(display_name) <= 40),
+  wins integer not null default 0,
+  losses integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table public.nutri_profiles enable row level security;
+drop policy if exists "nutri_profiles read" on public.nutri_profiles;
+drop policy if exists "nutri_profiles own insert" on public.nutri_profiles;
+drop policy if exists "nutri_profiles own update" on public.nutri_profiles;
+drop policy if exists "nutri_profiles own delete" on public.nutri_profiles;
+create policy "nutri_profiles read" on public.nutri_profiles for select to authenticated using (true);
+create policy "nutri_profiles own insert" on public.nutri_profiles for insert to authenticated with check (user_id = (select auth.uid()));
+create policy "nutri_profiles own update" on public.nutri_profiles for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+create policy "nutri_profiles own delete" on public.nutri_profiles for delete to authenticated using (user_id = (select auth.uid()));
+-- The app may write the handle and the name — not the score.
+revoke insert, update on public.nutri_profiles from authenticated;
+grant insert (user_id, username, display_name) on public.nutri_profiles to authenticated;
+grant update (username, display_name) on public.nutri_profiles to authenticated;
+
+-- A friend request from one user to another. accepted = they are friends.
+create table if not exists public.nutri_friend_requests (
+  id uuid primary key default gen_random_uuid(),
+  from_user uuid not null references auth.users (id) on delete cascade,
+  to_user uuid not null references auth.users (id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'declined')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (from_user, to_user),
+  check (from_user <> to_user)
+);
+create index if not exists nutri_friend_requests_to on public.nutri_friend_requests (to_user, status);
+
+alter table public.nutri_friend_requests enable row level security;
+drop policy if exists "nutri_requests parties select" on public.nutri_friend_requests;
+drop policy if exists "nutri_requests sender insert" on public.nutri_friend_requests;
+drop policy if exists "nutri_requests recipient update" on public.nutri_friend_requests;
+drop policy if exists "nutri_requests parties delete" on public.nutri_friend_requests;
+create policy "nutri_requests parties select" on public.nutri_friend_requests for select to authenticated
+  using (from_user = (select auth.uid()) or to_user = (select auth.uid()));
+create policy "nutri_requests sender insert" on public.nutri_friend_requests for insert to authenticated
+  with check (from_user = (select auth.uid()) and status = 'pending');
+create policy "nutri_requests recipient update" on public.nutri_friend_requests for update to authenticated
+  using (to_user = (select auth.uid())) with check (to_user = (select auth.uid()));
+create policy "nutri_requests parties delete" on public.nutri_friend_requests for delete to authenticated
+  using (from_user = (select auth.uid()) or to_user = (select auth.uid()));
+revoke insert, update on public.nutri_friend_requests from authenticated;
+grant insert (from_user, to_user) on public.nutri_friend_requests to authenticated;
+grant update (status, updated_at) on public.nutri_friend_requests to authenticated;
