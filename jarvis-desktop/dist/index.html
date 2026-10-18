@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="abd4b78ce93f">
+<meta name="jarvis-build" content="6e340457c077">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -15851,7 +15851,7 @@ async function callWriteNoteTool(input){
   /* Nothing but punctuation ("...", a Whisper hiccup, a model placeholder) is
      not a note: typing it is the "row of dots" bug. */
   if(text && !/[\p{L}\p{N}]/u.test(text)) return { ok: false, code: 'no_content', tell_the_user: 'There were no words to write. Ask him what he wants written; do not call write_note again until he has said it.' };
-  if(text.length > 4000) return { ok: false, code: 'too_long', limit: 4000, tell_the_user: 'That is longer than one note can be typed in: say it in two parts.' };
+  if(text.length > 20000) return { ok: false, code: 'too_long', limit: 20000, tell_the_user: 'That is longer than one note can be typed in: say it in two parts.' };
   let r;
   try{ r = await invoke('write_note', { text: text || null }); }
   catch(err){
@@ -15891,7 +15891,7 @@ async function finishNoteDictation(text){
 
 const WRITE_NOTE_TOOL = {
   name: 'write_note',
-  description: "Open a NEW note in Notepad and write text into it, saved as a file. Desktop only, Windows only. Use it when he asks you to put something in his notes: \"write that in notes\", \"write a prompt for it in notes\", \"put what we talked about in a note\", \"תכתוב את זה בפתקים\". YOU compose the text from the conversation: when he asks for a prompt, write the full finished prompt; when he asks for what you discussed, write it out clearly (a short title, then the content). text: exactly what goes in the note, in his language, plain text (no markdown symbols), at most 4000 characters. Never put passwords, keys or other secrets in it. It always makes a new note and never touches one he has open. Do not read the text back to him: say in a few words that it is in a new note. For \"I want you to write something\" with nothing said yet, do not call this: ask what he wants written. If it answers old_app, the desktop app needs rebuilding.",
+  description: "Open a NEW note in Notepad and write text into it, saved as a file. Desktop only, Windows only. Use it when he asks you to put something in his notes: \"write that in notes\", \"write a prompt for it in notes\", \"put what we talked about in a note\", \"תכתוב את זה בפתקים\". YOU compose the text from the conversation: when he asks for a prompt, write the full finished prompt; when he asks for what you discussed, write it out clearly (a short title, then the content). text: exactly what goes in the note, in his language, plain text (no markdown symbols), at most 20000 characters. Never put passwords, keys or other secrets in it. It always makes a new note and never touches one he has open. Do not read the text back to him: say in a few words that it is in a new note. For \"I want you to write something\" with nothing said yet, do not call this: ask what he wants written. If it answers old_app, the desktop app needs rebuilding.",
   input_schema: { type: 'object', properties: { text: { type: 'string', description: 'The whole note, as it should appear.' } }, required: ['text'] }
 };
 
