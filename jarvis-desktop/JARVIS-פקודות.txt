@@ -312,13 +312,23 @@
   close my camera and go to sleep   |   תסגור את המצלמה ותלך לישון
 
   פתקים (Notepad, כל פתק הוא קובץ חדש ב-Documents\JARVIS Notes):
-  open a new note                   |   תפתח פתק חדש
-  i want you to write something     |   תכתוב משהו
-     הוא שואל "What do you want me to write?" ואז כותב הכול כמו שאמרת.
-     עם מקש הדיבור: מחזיקים, מדברים כמה שרוצים, ומשחררים - אז הוא כותב.
-     בלי מקש: כותב מה שאמרת עד העצירה הראשונה. "cancel" מבטל.
-  write a prompt for it in notes    |   תכתוב את זה בפתקים
-     הוא מנסח לבד מתוך השיחה וכותב בפתק חדש.
+  הפקודות גמישות: הוא קורא את המילים, לא משפט מדויק. סדר המילים, נימוס
+  ("could you possibly just...", "בבקשה"), "for me", "down" - לא משנים כלום.
+
+  1) לרשום משהו שתגיד:
+     can you note something | i want you to write something | take a note
+     write something in my notes | jot something down | תרשום משהו | תכתוב משהו בפתק
+     הוא שואל "What do you want me to note?" וכל מה שאתה אומר (עם מקש הדיבור:
+     מחזיקים, מדברים כמה שרוצים, משחררים) נרשם כמו שהוא. "cancel" מבטל.
+  2) לרשום את מה שהוא אמר:
+     note it | note that down | write that down | put that in a note
+     save it to my notes | תרשום את זה | תכתוב את זה בפתקים
+     הוא רושם את הנקודה המרכזית של התשובה האחרונה שלו (כותרת ונקודות), לא את כולה.
+  3) פתק ריק:  open a new note | open notes | תפתח פתק חדש
+  4) לסגור:     close the notes app | close notepad | תסגור את הפתקים
+     (סוגר רק את Notepad, לא את Notepad++).
+  ברירת המחדל: הפתק נפתח על המסך, מלפנים, עם הטקסט בתוכו.
+  בקשה עם תוכן משלה ("write a prompt for it in my notes") - הוא מנסח לבד וכותב.
 
   תלת מימד: הוא בונה מודל רק כשמבקשים (make me a 3D dragon, תעשה לי מודל תלת מימד).
   אם רק מזכירים 3D בשיחה - הוא עונה בשיחה. אם הוא הציע ואמרת "yes" - הוא בונה.

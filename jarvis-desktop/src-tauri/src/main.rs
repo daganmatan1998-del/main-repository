@@ -4158,10 +4158,27 @@ fn write_note_blocking(own: Vec<(String, isize)>, text: Option<String>) -> Resul
     let mut found = false;
     while launched && started.elapsed() < Duration::from_secs(8) {
         sleep(Duration::from_millis(200));
-        found = bring_app_windows(&own)
+        let hit = bring_app_windows(&own)
             .into_iter()
-            .any(|c| c.title.to_lowercase().contains(&needle));
-        if found {
+            .find(|c| c.title.to_lowercase().contains(&needle));
+        if let Some(c) = hit {
+            found = true;
+            /* Open on his screen, in front: restored if it came up minimised,
+               and brought forward the way Windows allows it. */
+            unsafe {
+                use windows_sys::Win32::Foundation::HWND;
+                use windows_sys::Win32::UI::WindowsAndMessaging::{
+                    GetForegroundWindow, IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE,
+                };
+                let h = c.hwnd as HWND;
+                if IsIconic(h) != 0 {
+                    ShowWindow(h, SW_RESTORE);
+                }
+                if GetForegroundWindow() as isize != c.hwnd {
+                    foreground_unlock();
+                    SetForegroundWindow(h);
+                }
+            }
             break;
         }
     }
