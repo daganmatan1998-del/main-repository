@@ -133,6 +133,12 @@ export function personRow(u, ...actions) {
 function usernameForm(done) {
   const input = h('input', { class: 'search', id: 'username-input', type: 'text', maxlength: 20, autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false', placeholder: 'username', dir: 'ltr', 'aria-label': tr('Username') });
   const msg = h('p', { class: 'small', id: 'username-msg', 'aria-live': 'polite' });
+  // What will be saved, as soon as it differs from what was typed (spaces and hyphens become _).
+  const preview = h('p', { class: 'muted small', id: 'username-preview', dir: 'ltr' });
+  input.addEventListener('input', () => {
+    const name = social.normalizeUsername(input.value);
+    preview.textContent = name && name !== input.value.trim() && social.validUsername(name) ? tr('It will be saved as @{0}', name) : '';
+  });
   const save = async () => {
     const name = social.normalizeUsername(input.value);
     if (!social.validUsername(name)) { msg.className = 'small notice warn'; msg.textContent = tr('Use 3–20 letters (a–z), digits or an underscore.'); return; }
@@ -149,7 +155,7 @@ function usernameForm(done) {
   return h('div', { class: 'form', id: 'username-form' },
     h('p', null, h('strong', null, tr('Choose a username'))),
     h('p', { class: 'muted small' }, tr('Friends find you by this username. Use 3–20 letters (a–z), digits or an underscore.')),
-    input, msg,
+    input, preview, msg,
     h('button', { type: 'button', class: 'btn btn-primary btn-block', id: 'username-save', onclick: save }, tr('Save username')));
 }
 

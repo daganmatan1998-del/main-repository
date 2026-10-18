@@ -26,8 +26,9 @@ export function fail(r) {
 
 export const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
-// What the person typed, as a username: no @, no spaces, lower case.
-export const normalizeUsername = (s) => String(s || '').trim().replace(/^@+/, '').toLowerCase();
+// What the person typed, as a username: no @, lower case, no spaces.
+// Spaces, hyphens and dots become underscores: "Shadow Guy" and "shadow-guy" both give shadow_guy.
+export const normalizeUsername = (s) => String(s || '').trim().replace(/^@+/, '').toLowerCase().replace(/[\s.\-]+/g, '_');
 export const validUsername = (s) => USERNAME_RE.test(s);
 
 // ---- the invite link ----

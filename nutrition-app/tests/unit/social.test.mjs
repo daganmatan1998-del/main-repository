@@ -13,8 +13,11 @@ social.setMe(() => ME);
 
 test('usernames: lower case, no @, 3–20 of a–z 0–9 _', () => {
   assert.equal(social.normalizeUsername('  @Dana_K '), 'dana_k');
+  assert.equal(social.normalizeUsername('Shadow Guy'), 'shadow_guy');
+  assert.equal(social.normalizeUsername('shadow-guy'), 'shadow_guy');
+  assert.equal(social.normalizeUsername('a.b  c'), 'a_b_c');
   for (const ok of ['abc', 'dana_k', 'a1_', 'x'.repeat(20)]) assert.ok(social.validUsername(ok), ok);
-  for (const bad of ['ab', 'x'.repeat(21), 'da na', 'דנה', 'a-b', 'a.b', '']) assert.ok(!social.validUsername(bad), bad);
+  for (const bad of ['ab', 'x'.repeat(21), 'da na', 'דנה', 'a-b', 'a.b', '', social.normalizeUsername('דנה')]) assert.ok(!social.validUsername(bad), bad);
 });
 
 test('the invite link and the WhatsApp message', () => {

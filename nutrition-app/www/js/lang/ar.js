@@ -2216,6 +2216,7 @@ export default {
     "Invite a friend with a link on WhatsApp, or find them by username.": "ادع صديقا برابط عبر واتساب، أو ابحث عنه باسم المستخدم.",
     "Invite": "دعوة",
     "Friends are not switched on at the server yet. Please try again later.": "ميزة الأصدقاء لم تفعل على الخادم بعد. حاول مرة أخرى لاحقا.",
+    "It will be saved as @{0}": "سيتم الحفظ باسم @{0}",
   },
   data: {},
 };
