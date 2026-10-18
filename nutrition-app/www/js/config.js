@@ -8,7 +8,7 @@
 import { t as tr } from './i18n.js';
 export const API_BASE = '';
 
-export const APP_VERSION = '1.15.1';
+export const APP_VERSION = '1.16.0';
 
 // Cloud accounts (Supabase): sign in with Google, data kept in the user's own
 // private row. Both empty = no accounts; everything stays on the device.

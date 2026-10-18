@@ -11,6 +11,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from '../../server/dev-server.mjs';
+import { ean13Modules } from './ean.mjs';
 import { memoryKV } from '../../server/push.js';
 import { REMINDERS } from '../../server/push.js';
 
@@ -34,7 +35,14 @@ function check(name, cond, detail = '') {
 const upstream = [];
 // Calorie camera: 'sauce' = the planned meal plus garlic sauce; 'exact' = the planned meal.
 let mealPhotoMode = 'sauce';
+// Open Food Facts, as the barcode lookup asks it (a GET, no body).
+const OFF_PRODUCTS = {
+  '7290000101231': { status: 1, product: { product_name: 'חטיף בדיקה', brands: 'מותג', quantity: '60 g', product_quantity: 60, serving_size: '20 g', serving_quantity: 20, nutriments: { 'energy-kcal_100g': 500, proteins_100g: 10, carbohydrates_100g: 50, fat_100g: 25 } } },
+  '7290000200003': { status: 1, product: { product_name: 'מוצר בלי נתונים', nutriments: {} } },
+};
 async function fakeAnthropic(url, init) {
+  const off = String(url).match(/openfoodfacts\.org\/api\/v2\/product\/(\d+)\.json/);
+  if (off) return new Response(JSON.stringify(OFF_PRODUCTS[off[1]] || { status: 0 }), { status: OFF_PRODUCTS[off[1]] ? 200 : 404 });
   const body = JSON.parse(init.body);
   upstream.push({ url: String(url), headers: new Headers(init.headers), body });
   // The calorie camera goes to a free engine (Groq here), in OpenAI chat format.
@@ -435,6 +443,60 @@ try {
   check('the replaced item leaves the meal', (await customRows().count()) === 1 && (await mealA().locator('.item').count()) === itemsBefore - 1 && Math.abs((await mealKcal()) - planned) <= planned * 0.15, `${await mealA().locator('.item').count()} items, ${await mealKcal()} kcal`);
   await clearCustom();
   check('removing it brings the item back', (await mealA().locator('.item').count()) === itemsBefore);
+
+  // =============== barcode scanner ===============
+  const barcodePng = async (code) => {
+    const bits = ean13Modules(code);
+    const b64 = await page.evaluate((bits) => {
+      const unit = 4; const c = document.createElement('canvas'); c.width = bits.length * unit + 80; c.height = 200;
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.fillStyle = '#000';
+      for (let i = 0; i < bits.length; i++) if (bits[i] === '1') g.fillRect(40 + i * unit, 30, unit, 140);
+      return c.toDataURL('image/png').split(',')[1];
+    }, bits);
+    return Buffer.from(b64, 'base64');
+  };
+  await mealA().locator('.custom-add').click();
+  await page.waitForSelector('#custom-scan');
+  await page.click('#custom-scan');
+  await page.waitForSelector('#scan-code');
+  check('the scanner opens with a number field and a photo option', await visible('#scan-go') && await visible('#scan-photo'));
+  await shot('43-scan');
+  await page.locator('#scan-file').setInputFiles({ name: 'barcode.png', mimeType: 'image/png', buffer: await barcodePng('7290000101231') });
+  await page.waitForSelector('#scan-add');
+  check('a photo of the barcode finds the product', (await page.locator('.sheet-head h2').last().innerText()).includes('חטיף בדיקה'));
+  check('the product starts with one serving', (await page.locator('.custom-mode-btn.on[data-amount]').getAttribute('data-amount')) === 'serving' && (await page.locator('.scan-sum').innerText()).includes('100'), await page.locator('.scan-sum').innerText());
+  await page.locator('[data-amount="package"]').click();
+  check('the whole package is 60 g = 300 kcal', (await page.locator('.scan-sum').innerText()).includes('300') && (await page.locator('#scan-qty').inputValue()) === '1');
+  await page.locator('[data-amount="grams"]').click();
+  await page.fill('#scan-qty', '50');
+  check('50 grams = 250 kcal', (await page.locator('.scan-sum').innerText()).includes('250'));
+  await shot('44-scan-product');
+  await page.locator('[data-amount="serving"]').click();
+  await page.fill('#scan-qty', '1.5');
+  await page.click('#scan-add');
+  await wait(700);
+  check('the scanned product is added with its amount and calories', (await customRows().count()) === 1 && (await customRows().innerText()).includes('חטיף בדיקה') && (await customRows().innerText()).includes('150'), await customRows().innerText().catch(() => ''));
+  check('a scanned product keeps the budget like any custom food', Math.abs((await mealKcal()) - planned) <= planned * 0.15, `${await mealKcal()} vs ${planned}`);
+  await clearCustom();
+  // typed digits: unknown product -> back to typing it by hand
+  await mealA().locator('.custom-add').click();
+  await page.click('#custom-scan');
+  await page.fill('#scan-code', '7290000999999');
+  await page.click('#scan-go');
+  await page.waitForSelector('#scan-manual');
+  await page.click('#scan-manual');
+  await page.waitForSelector('#custom-search');
+  check('an unknown product offers typing it by hand', await visible('.custom-form'));
+  // a product with no calories in the database
+  await page.click('#custom-scan');
+  await page.fill('#scan-code', '7290000200003');
+  await page.click('#scan-go');
+  await page.waitForSelector('#scan-kcal');
+  await page.fill('#scan-kcal', '120');
+  await page.click('#scan-add');
+  await wait(700);
+  check('a product without calorie data takes the calories typed', (await customRows().count()) === 1 && (await customRows().innerText()).includes('120'));
+  await clearCustom();
 
   // =============== Plan & swaps ===============
   await page.click('a[href="#/plan"]');

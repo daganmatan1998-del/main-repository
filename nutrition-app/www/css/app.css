@@ -757,6 +757,24 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .custom-nums { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .custom-nums label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
 .custom-nums input { width: 100%; }
+.custom-scan { margin: 4px 0 10px; }
+.scan { display: grid; gap: 10px; }
+.scan-view { position: relative; border-radius: var(--radius-sm); overflow: hidden; background: #000; aspect-ratio: 4 / 3; }
+.scan-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scan-video[hidden] { display: none; }
+.scan-reticle { position: absolute; inset: 22% 10%; border: 3px solid rgba(255, 255, 255, .9); border-radius: 12px; box-shadow: 0 0 0 999px rgba(0, 0, 0, .35); pointer-events: none; }
+.scan-view:has(.scan-video[hidden]) { display: none; }
+.scan-status { margin: 0; color: var(--muted); text-align: center; }
+.scan-actions:empty { display: none; }
+.scan-manual { display: flex; gap: 8px; }
+.scan-code { flex: 1; min-width: 0; direction: ltr; text-align: center; letter-spacing: .06em; }
+.scan-product { display: grid; gap: 8px; }
+.scan-modes { display: flex; flex-wrap: wrap; gap: 6px; }
+.scan-modes .custom-mode-btn { flex: 1 1 30%; }
+.scan-qty { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
+.scan-qty input { width: 100%; }
+.scan-credit { margin: 0; text-align: center; }
+.scan-sum { margin: 0; font-weight: 600; text-align: center; }
 
 /* drinks as a collapsible heading, like the food groups */
 .drinks { padding: 0; background: none; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; margin: 10px 0 4px; }

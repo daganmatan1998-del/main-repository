@@ -383,3 +383,7 @@ The app shows that it is not medical advice, during onboarding, in the chat and 
 ## Languages (v1.14.0)
 
 English is the default (app name, logo text and every string). The language picker is on the first screen and in the profile. Packs: English, Hebrew, Spanish, French, German, Portuguese, Italian, Russian, Arabic (RTL). Packs live in `www/js/lang/`; check one with `node tools/i18n/check.mjs <lang>`; tour every screen with `LANGS=en,he,ar node tests/e2e/i18n.mjs`. Translations were machine-drafted and machine-reviewed, not checked by native speakers.
+
+## Barcode scanner (v1.16.0)
+
+"Add your own food" has a **Scan a barcode** button: the camera (or a photo, or typed digits) reads the code with ZBar (WebAssembly, vendored in `www/vendor/zbar`, LGPL-2.1), `/api/barcode` looks the product up in [Open Food Facts](https://world.openfoodfacts.org) (ODbL; credited in the product sheet) and caches it for a day, and the person picks grams, servings or the whole package. The CSP gained `'wasm-unsafe-eval'` for the reader. `node tests/e2e/barcode.mjs` tests the reader on a real video (needs ffmpeg).

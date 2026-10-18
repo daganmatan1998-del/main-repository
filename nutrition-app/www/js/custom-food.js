@@ -9,6 +9,7 @@ import { h, icon, sheet, toast, fmt, parseNum, clear, normText, searchMatch } fr
 import { state, setOverride } from './store.js';
 import { everydayOptions, EVERYDAY_BY_ID, makeCustom, withServings, MAX_CUSTOM } from './everyday.js';
 import { household, FOOD_BY_ID } from './foods.js';
+import { openScan } from './screens/scan.js';
 
 const MODE_KEY = 'nutri-custom-mode';
 let mode = 'offset';
@@ -38,6 +39,7 @@ export function customBlock(meal, day) {
           h('div', { class: 'item-name' }, e.name),
           h('div', { class: 'item-amt' },
             food ? h('span', null, household(food, e.servings * food.units[0].g)) : null,
+            !food && e.note ? h('span', null, `${e.note} · `) : null,
             h('span', { class: 'muted num' }, food ? tr(' · {0} kcal', e.kcal) : tr('{0} kcal', e.kcal)))),
         h('div', { class: 'extra-ctl' },
           food ? h('button', { type: 'button', class: 'icon-btn extra-minus', 'aria-label': tr('Less'), onclick: less }, icon('minus', 16)) : null,
@@ -58,40 +60,49 @@ export function customBlock(meal, day) {
   return wrap;
 }
 
+// How the calories count: off the rest of the meal, or on top. The choice is
+// remembered. Returns the two elements to place in a sheet.
+export function modeControl() {
+  const note = h('p', { class: 'muted small custom-mode-note' });
+  const opts = [['offset', tr('Take off the rest of the meal')], ['add', tr('Add on top')]];
+  const seg = h('div', { class: 'custom-mode', role: 'radiogroup', 'aria-label': tr('How the calories count') });
+  const drawMode = () => {
+    clear(seg);
+    for (const [m, label] of opts) {
+      seg.appendChild(h('button', {
+        type: 'button', role: 'radio', 'aria-checked': mode === m ? 'true' : 'false', 'data-mode': m,
+        class: 'custom-mode-btn' + (mode === m ? ' on' : ''),
+        onclick: () => { setMode(m); drawMode(); },
+      }, label));
+    }
+    note.textContent = mode === 'offset'
+      ? tr('The rest of the meal gets smaller, so the meal keeps its calories.')
+      : tr('The calories are added to the meal, so it goes over its budget.');
+  };
+  drawMode();
+  return { seg, note };
+}
+
+// Saves an entry on the meal (replacing the plan item `item`, if given), closes
+// the sheet and says what happened.
+export async function commitCustom(meal, day, entry, { item = null, close = () => {} } = {}) {
+  entry.mode = mode;
+  if (item) entry.slot = item.slot;
+  const cur = stored(day, meal).filter((x) => !(item && x.slot === item.slot));
+  const made = makeCustom(entry);
+  await setOverride(day, meal.index, { custom: [...cur, made].slice(0, MAX_CUSTOM) });
+  close();
+  toast(made.mode === 'add'
+    ? tr('{0} added — {1} kcal added to the meal', made.name, made.kcal)
+    : tr('{0} added — {1} kcal taken off the rest of the meal', made.name, made.kcal));
+}
+
 // item: the plan item being replaced (from the swap sheet), if any.
 export function openCustomSheet(meal, day, { item = null } = {}) {
   const food = item && FOOD_BY_ID[item.foodId];
   return sheet(tr('Add your own food'), (close) => {
-    const commit = async (entry) => {
-      entry.mode = mode;
-      if (item) entry.slot = item.slot;
-      const cur = stored(day, meal).filter((x) => !(item && x.slot === item.slot));
-      const made = makeCustom(entry);
-      await setOverride(day, meal.index, { custom: [...cur, made].slice(0, MAX_CUSTOM) });
-      close();
-      toast(made.mode === 'add'
-        ? tr('{0} added — {1} kcal added to the meal', made.name, made.kcal)
-        : tr('{0} added — {1} kcal taken off the rest of the meal', made.name, made.kcal));
-    };
-
-    // How the calories count: off the rest of the meal, or on top.
-    const note = h('p', { class: 'muted small custom-mode-note' });
-    const opts = [['offset', tr('Take off the rest of the meal')], ['add', tr('Add on top')]];
-    const seg = h('div', { class: 'custom-mode', role: 'radiogroup', 'aria-label': tr('How the calories count') });
-    const drawMode = () => {
-      clear(seg);
-      for (const [m, label] of opts) {
-        seg.appendChild(h('button', {
-          type: 'button', role: 'radio', 'aria-checked': mode === m ? 'true' : 'false', 'data-mode': m,
-          class: 'custom-mode-btn' + (mode === m ? ' on' : ''),
-          onclick: () => { setMode(m); drawMode(); },
-        }, label));
-      }
-      note.textContent = mode === 'offset'
-        ? tr('The rest of the meal gets smaller, so the meal keeps its calories.')
-        : tr('The calories are added to the meal, so it goes over its budget.');
-    };
-    drawMode();
+    const commit = (entry) => commitCustom(meal, day, entry, { item, close });
+    const { seg, note } = modeControl();
 
     // Common foods.
     const search = h('input', { class: 'search', id: 'custom-search', type: 'search', placeholder: tr('Search: fries, sausage, Bamba, pizza…'), autocomplete: 'off', 'aria-label': tr('Search') });
@@ -138,9 +149,15 @@ export function openCustomSheet(meal, day, { item = null } = {}) {
       h('p', { class: 'muted small' }, tr('The grams are optional. Calories are enough.')),
       h('button', { type: 'button', class: 'btn btn-primary btn-block custom-typed-add', onclick: addTyped }, icon('plus', 16), tr('Add')));
 
+    const scan = h('button', {
+      type: 'button', class: 'btn btn-block custom-scan', id: 'custom-scan',
+      onclick: () => { close(); openScan({ meal, day, item, reopen: () => openCustomSheet(meal, day, { item }) }); },
+    }, icon('camera', 18), tr('Scan a barcode'));
+
     return h('div', null,
       food ? h('p', { class: 'small custom-instead' }, tr('Instead of {0}', food.name)) : null,
       seg, note,
+      scan,
       search, list,
       form);
   });

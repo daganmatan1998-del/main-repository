@@ -54,7 +54,7 @@ function corsHeaders(request, env) {
   if (origin && list.includes(origin)) {
     return {
       'access-control-allow-origin': origin,
-      'access-control-allow-methods': 'POST, OPTIONS',
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
       'access-control-allow-headers': 'content-type',
       'access-control-max-age': '86400',
       vary: 'origin',
@@ -423,11 +423,107 @@ export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
   }
 }
 
+
+// /api/barcode?code=<EAN/UPC>&lang=xx — product lookup for the barcode scanner.
+// Open Food Facts (open data, no key) is asked from here, not from the browser:
+// the page's CSP allows no third-party hosts, the request carries the
+// User-Agent the service asks for, and answers are cached for a day. Only the
+// product's number leaves the device — never who is asking beyond the IP the
+// Worker sees.
+const OFF_URL = 'https://world.openfoodfacts.org/api/v2/product/';
+const OFF_FIELDS = 'code,product_name,product_name_he,product_name_en,product_name_es,product_name_fr,product_name_de,product_name_pt,product_name_it,product_name_ru,product_name_ar,brands,quantity,product_quantity,serving_size,serving_quantity,nutriments';
+const BARCODE_WINDOW_MAX = 90;
+const barcodeHits = new Map();
+
+function barcodeLimit(key, now = Date.now()) {
+  const list = (barcodeHits.get(key) || []).filter((t) => now - t < WINDOW_MS);
+  if (list.length >= BARCODE_WINDOW_MAX) { barcodeHits.set(key, list); return false; }
+  list.push(now);
+  barcodeHits.set(key, list);
+  if (barcodeHits.size > 5000) barcodeHits.clear();
+  return true;
+}
+
+const numOr = (v, d = null) => (Number.isFinite(Number(v)) && v !== '' && v !== null ? Number(v) : d);
+
+// What the app needs from an Open Food Facts product, or null when it has no
+// usable calories. Energy falls back from kcal to kJ.
+export function normalizeProduct(code, product, lang = 'en') {
+  if (!product) return null;
+  const n = product.nutriments || {};
+  let kcal = numOr(n['energy-kcal_100g']);
+  if (kcal === null) { const kj = numOr(n.energy_100g) ?? numOr(n['energy-kj_100g']); if (kj !== null) kcal = kj / 4.184; }
+  const name = String(product[`product_name_${lang}`] || product.product_name || product.product_name_en || '').trim().slice(0, 80);
+  const brand = String(product.brands || '').split(',')[0].trim().slice(0, 40);
+  const grams = (v) => { const g = numOr(v); return g !== null && g > 0 && g <= 5000 ? Math.round(g * 10) / 10 : null; };
+  const out = {
+    code: String(code),
+    name,
+    brand,
+    per100: kcal === null ? null : {
+      kcal: Math.round(Math.min(900, Math.max(0, kcal))),
+      p: Math.round(Math.min(100, Math.max(0, numOr(n.proteins_100g, 0))) * 10) / 10,
+      c: Math.round(Math.min(100, Math.max(0, numOr(n.carbohydrates_100g, 0))) * 10) / 10,
+      f: Math.round(Math.min(100, Math.max(0, numOr(n.fat_100g, 0))) * 10) / 10,
+    },
+    servingG: grams(product.serving_quantity),
+    servingText: String(product.serving_size || '').trim().slice(0, 40),
+    packageG: grams(product.product_quantity),
+    packageText: String(product.quantity || '').trim().slice(0, 40),
+  };
+  return out.name || out.brand ? out : null;
+}
+
+export async function handleBarcode(request, env, { fetchImpl = fetch } = {}) {
+  const cors = corsHeaders(request, env);
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'GET') return json(405, { error: 'method_not_allowed' }, cors);
+  if (!originAllowed(request, env)) return json(403, { error: 'forbidden_origin' });
+  const url = new URL(request.url);
+  const code = (url.searchParams.get('code') || '').trim();
+  if (!/^\d{8,14}$/.test(code)) return json(400, { error: 'bad_code' }, cors);
+  const lang = cleanLang(url.searchParams.get('lang')) || 'en';
+
+  const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'local';
+  if (!barcodeLimit(ip)) return json(429, { error: 'rate_limited' }, cors);
+
+  const cache = typeof caches !== 'undefined' && caches.default ? caches.default : null;
+  const key = new Request(`https://nutri-barcode.cache/${code}`);
+  let product;
+  try {
+    const hit = cache && (await cache.match(key));
+    if (hit) product = await hit.json();
+  } catch { /* cache is best-effort */ }
+  if (product === undefined) {
+    try {
+      const res = await fetchImpl(`${OFF_URL}${code}.json?fields=${OFF_FIELDS}`, {
+        headers: { 'user-agent': 'Nutri/1.0 (nutrition planner; barcode lookup)', accept: 'application/json' },
+        signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined,
+      });
+      if (res.status === 404) product = null;
+      else if (!res.ok) return json(502, { error: 'upstream', message: 'The product database is not answering right now.' }, cors);
+      else {
+        const data = await res.json();
+        product = data && data.status === 1 && data.product ? data.product : null;
+      }
+    } catch {
+      return json(502, { error: 'upstream', message: 'The product database is not answering right now.' }, cors);
+    }
+    try {
+      if (cache) await cache.put(key, new Response(JSON.stringify(product), { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=86400' } }));
+    } catch { /* ignore */ }
+  }
+  const item = normalizeProduct(code, product, lang);
+  if (!item) return json(200, { ok: true, found: false, code }, { ...cors, 'cache-control': 'private, max-age=300' });
+  return json(200, { ok: true, found: true, ...item }, { ...cors, 'cache-control': 'private, max-age=3600' });
+}
+
 export async function handleApi(request, env, opts) {
   const { pathname } = new URL(request.url);
   if (pathname === '/api/chat') return handleChat(request, env, opts);
   if (pathname === '/api/bodyfat') return handleBodyFat(request, env, opts);
   if (pathname === '/api/meal-photo') return handleMealPhoto(request, env, opts);
+  if (pathname === '/api/barcode') return handleBarcode(request, env, opts);
   if (pathname.startsWith('/api/push/')) return handlePush(request, env);
   if (pathname === '/api/health') {
     // Engine ids only, never keys. 'configured' is true when chat can be answered at all.
