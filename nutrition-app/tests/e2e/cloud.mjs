@@ -82,9 +82,20 @@ async function supabase(route) {
       if (f('username') && f('username').startsWith('eq.')) rows = rows.filter((x) => x.username === f('username').slice(3));
       return json(200, rows);
     }
+    if (req.method() === 'PATCH') {
+      if (q.get('user_id') !== `eq.${USER.id}`) return json(403, { message: 'rls' });
+      const body = JSON.parse(req.postData());
+      if (!/^[a-z0-9_]{3,20}$/.test(body.username)) return json(400, { code: '23514' });
+      if (fake.profiles.some((x) => x.username === body.username && x.user_id !== USER.id)) return json(409, { code: '23505', message: 'duplicate key' });
+      const mine = fake.profiles.find((x) => x.user_id === USER.id);
+      if (!mine) return json(200, []);
+      Object.assign(mine, body);
+      return json(200, [mine]);
+    }
     if (req.method() === 'POST') {
       const body = JSON.parse(req.postData());
       if (body.user_id !== USER.id) return json(403, { message: 'rls' });
+      if (fake.profiles.some((x) => x.user_id === USER.id)) return json(409, { code: '23505' });
       if (!/^[a-z0-9_]{3,20}$/.test(body.username)) return json(400, { code: '23514' });
       if (fake.profiles.some((x) => x.username === body.username && x.user_id !== USER.id)) return json(409, { code: '23505', message: 'duplicate key' });
       const mine = fake.profiles.find((x) => x.user_id === USER.id);

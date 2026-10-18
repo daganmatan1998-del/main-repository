@@ -16,7 +16,7 @@ export const setMe = (fn) => { me = fn; };
 // tables are missing (setup.sql was not run, or the schema cache is stale), or
 // the server just isn't answering.
 export function fail(r) {
-  const missing = r && (r.status === 404 || (r.data && ['PGRST205', 'PGRST204', '42P01'].includes(r.data.code)));
+  const missing = r && (r.status === 404 || r.status === 403 || (r.data && ['PGRST205', 'PGRST204', '42P01', '42501'].includes(r.data.code)));
   const e = new Error(missing ? 'not_set_up' : 'unavailable');
   e.code = missing ? 'not_set_up' : 'unavailable';
   e.status = r && r.status;
@@ -51,20 +51,22 @@ export async function myProfile() {
   return r.data[0] || null;
 }
 
-// 'taken' | 'invalid' | profile
+// 'taken' | 'invalid' | profile. A new profile is inserted, an existing one is
+// updated (an "upsert" would also try to rewrite user_id, which the database
+// rightly does not allow the app to change).
 export async function saveMyProfile({ username, displayName }) {
   const id = me();
   const name = normalizeUsername(username);
   if (!validUsername(name)) return 'invalid';
-  const r = await net('nutri_profiles?on_conflict=user_id', {
-    method: 'POST',
-    prefer: 'resolution=merge-duplicates,return=representation',
-    body: { user_id: id, username: name, display_name: String(displayName || '').trim().slice(0, 40) },
-  });
+  const fields = { username: name, display_name: String(displayName || '').trim().slice(0, 40) };
+  const existing = await myProfile();
+  const r = existing
+    ? await net(`nutri_profiles?user_id=eq.${id}`, { method: 'PATCH', prefer: 'return=representation', body: fields })
+    : await net('nutri_profiles', { method: 'POST', prefer: 'return=representation', body: { user_id: id, ...fields } });
   if (r.status === 409 || (r.data && r.data.code === '23505')) return 'taken';
   if (r.status === 400) return 'invalid';
   if (!r.ok) throw fail(r);
-  return (Array.isArray(r.data) ? r.data[0] : r.data) || null;
+  return (Array.isArray(r.data) ? r.data[0] : r.data) || { ...existing, user_id: id, ...fields };
 }
 
 export async function findByUsername(username) {

@@ -92,17 +92,30 @@ test('sending a request: new one is posted; an incoming one is accepted instead;
   assert.equal(calls.length, 0, 'already sent / already friends');
 });
 
-test('saving the profile maps the server answers', async () => {
-  const answer = (status, data) => async () => ({ ok: status < 300, status, data });
-  social.setTransport(answer(409, { code: '23505' }));
+test('saving the profile inserts a new one, updates an existing one, and maps the server answers', async () => {
+  const calls = [];
+  const server = (existing, status, data) => async (path, opts = {}) => {
+    calls.push({ path, method: opts.method || 'GET' });
+    if (!opts.method) return { ok: true, status: 200, data: existing ? [existing] : [] };
+    return { ok: status < 300, status, data };
+  };
+  social.setTransport(server(null, 201, [{ user_id: ME, username: 'dana' }]));
+  assert.equal((await social.saveMyProfile({ username: '@Dana', displayName: 'Dana' })).username, 'dana');
+  assert.deepEqual(calls.map((c) => c.method), ['GET', 'POST'], 'no profile yet: insert');
+  calls.length = 0;
+  social.setTransport(server({ user_id: ME, username: 'old' }, 200, [{ user_id: ME, username: 'dana2' }]));
+  assert.equal((await social.saveMyProfile({ username: 'dana2', displayName: 'Dana' })).username, 'dana2');
+  assert.deepEqual(calls.map((c) => c.method), ['GET', 'PATCH'], 'has a profile: update, never an upsert');
+  assert.equal(calls[1].path, `nutri_profiles?user_id=eq.${ME}`);
+  social.setTransport(server(null, 409, { code: '23505' }));
   assert.equal(await social.saveMyProfile({ username: 'bob', displayName: 'x' }), 'taken');
-  social.setTransport(answer(400, {}));
+  social.setTransport(server(null, 400, {}));
   assert.equal(await social.saveMyProfile({ username: 'okname', displayName: 'x' }), 'invalid');
   assert.equal(await social.saveMyProfile({ username: 'no', displayName: 'x' }), 'invalid', 'checked before asking');
-  social.setTransport(answer(201, [{ user_id: ME, username: 'dana' }]));
-  assert.equal((await social.saveMyProfile({ username: '@Dana', displayName: 'Dana' })).username, 'dana');
-  social.setTransport(answer(500, {}));
-  await assert.rejects(() => social.saveMyProfile({ username: 'dana', displayName: '' }));
+  social.setTransport(server(null, 500, {}));
+  await assert.rejects(() => social.saveMyProfile({ username: 'dana', displayName: '' }), (e) => e.code === 'unavailable');
+  social.setTransport(server(null, 403, { code: '42501' }));
+  await assert.rejects(() => social.saveMyProfile({ username: 'dana', displayName: '' }), (e) => e.code === 'not_set_up');
 });
 
 test('missing tables are told apart from a server that is just down', async () => {
