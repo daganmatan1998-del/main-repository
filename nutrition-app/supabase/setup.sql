@@ -118,3 +118,6 @@ create policy "nutri_requests parties delete" on public.nutri_friend_requests fo
 revoke insert, update on public.nutri_friend_requests from authenticated;
 grant insert (from_user, to_user) on public.nutri_friend_requests to authenticated;
 grant update (status, updated_at) on public.nutri_friend_requests to authenticated;
+
+-- Make the API see the new tables right away (otherwise it can take a while).
+notify pgrst, 'reload schema';

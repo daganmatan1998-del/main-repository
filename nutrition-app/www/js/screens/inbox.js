@@ -8,7 +8,7 @@ import * as social from '../social.js';
 import { GOALS } from '../nutrition.js';
 import { messages, markRead, markAllRead, setWaitingRequests, removeMessage } from '../inbox.js';
 import { googleButton } from './account.js';
-import { loadRelations, forgetRelations, personRow } from './friends.js';
+import { loadRelations, forgetRelations, personRow, failed } from './friends.js';
 
 // Title, text and where tapping leads — written in the current language when shown.
 const KINDS = {
@@ -100,5 +100,5 @@ function drawRequests(body, onCount) {
           h('div', { class: 'friend-actions' },
             h('button', { type: 'button', class: 'btn btn-small btn-ghost', 'data-act': 'cancel', onclick: () => act(() => social.removeRequest(e.id), tr('Request cancelled')) }, tr('Cancel request')))))));
     }
-  }).catch(() => { clear(body); body.appendChild(h('p', { class: 'notice warn' }, tr('Couldn\'t reach the server. Try again.'))); });
+  }).catch((e) => { clear(body); body.appendChild(h('p', { class: 'notice warn' }, failed(e))); });
 }

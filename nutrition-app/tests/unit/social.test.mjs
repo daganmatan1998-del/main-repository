@@ -101,3 +101,13 @@ test('saving the profile maps the server answers', async () => {
   social.setTransport(answer(500, {}));
   await assert.rejects(() => social.saveMyProfile({ username: 'dana', displayName: '' }));
 });
+
+test('missing tables are told apart from a server that is just down', async () => {
+  const answer = (status, data) => async () => ({ ok: false, status, data });
+  for (const [status, data] of [[404, {}], [404, { code: 'PGRST205' }], [400, { code: '42P01' }]]) {
+    social.setTransport(answer(status, data));
+    await assert.rejects(() => social.myProfile(), (e) => e.code === 'not_set_up', `${status} ${JSON.stringify(data)}`);
+  }
+  social.setTransport(answer(503, {}));
+  await assert.rejects(() => social.findByUsername('bob'), (e) => e.code === 'unavailable');
+});

@@ -12,6 +12,18 @@ export const setTransport = (fn) => { net = fn; };
 let me = () => cloud.userId();
 export const setMe = (fn) => { me = fn; };
 
+// A failed answer as an Error whose code tells the screen what to say: the
+// tables are missing (setup.sql was not run, or the schema cache is stale), or
+// the server just isn't answering.
+export function fail(r) {
+  const missing = r && (r.status === 404 || (r.data && ['PGRST205', 'PGRST204', '42P01'].includes(r.data.code)));
+  const e = new Error(missing ? 'not_set_up' : 'unavailable');
+  e.code = missing ? 'not_set_up' : 'unavailable';
+  e.status = r && r.status;
+  if (typeof console !== 'undefined') console.warn('friends request failed', r && r.status, r && r.data && (r.data.code || r.data.message));
+  return e;
+}
+
 export const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
 // What the person typed, as a username: no @, no spaces, lower case.
@@ -34,7 +46,7 @@ export async function myProfile() {
   const id = me();
   if (!id) return null;
   const r = await net(`nutri_profiles?select=${PROFILE_FIELDS}&user_id=eq.${id}`);
-  if (!r.ok) throw new Error('unavailable');
+  if (!r.ok) throw fail(r);
   return r.data[0] || null;
 }
 
@@ -50,7 +62,7 @@ export async function saveMyProfile({ username, displayName }) {
   });
   if (r.status === 409 || (r.data && r.data.code === '23505')) return 'taken';
   if (r.status === 400) return 'invalid';
-  if (!r.ok) throw new Error('unavailable');
+  if (!r.ok) throw fail(r);
   return (Array.isArray(r.data) ? r.data[0] : r.data) || null;
 }
 
@@ -58,14 +70,14 @@ export async function findByUsername(username) {
   const name = normalizeUsername(username);
   if (!validUsername(name)) return null;
   const r = await net(`nutri_profiles?select=${PROFILE_FIELDS}&username=eq.${name}`);
-  if (!r.ok) throw new Error('unavailable');
+  if (!r.ok) throw fail(r);
   return r.data[0] || null;
 }
 
 async function profilesByIds(ids) {
   if (!ids.length) return {};
   const r = await net(`nutri_profiles?select=${PROFILE_FIELDS}&user_id=in.(${ids.join(',')})`);
-  if (!r.ok) throw new Error('unavailable');
+  if (!r.ok) throw fail(r);
   return Object.fromEntries(r.data.map((p) => [p.user_id, p]));
 }
 
@@ -77,7 +89,7 @@ export const winRate = (p) => (p && p.wins + p.losses > 0 ? Math.round((100 * p.
 export async function relations() {
   const mine = me();
   const r = await net(`nutri_friend_requests?select=id,from_user,to_user,status,created_at,updated_at&or=(from_user.eq.${mine},to_user.eq.${mine})&order=created_at.desc&limit=200`);
-  if (!r.ok) throw new Error('unavailable');
+  if (!r.ok) throw fail(r);
   const rows = r.data.filter((x) => x.status !== 'declined' || x.to_user === mine);
   const others = [...new Set(rows.map((x) => (x.from_user === mine ? x.to_user : x.from_user)))];
   const people = await profilesByIds(others);
@@ -109,19 +121,19 @@ export async function sendRequest(toUserId, rel) {
   if (rel0.kind !== 'none') return true;
   const r = await net('nutri_friend_requests', { method: 'POST', prefer: 'return=minimal', body: { from_user: me(), to_user: toUserId } });
   if (r.status === 409) return true; // already sent
-  if (!r.ok) throw new Error('unavailable');
+  if (!r.ok) throw fail(r);
   return true;
 }
 
 export async function respond(id, status) {
   const r = await net(`nutri_friend_requests?id=eq.${id}`, { method: 'PATCH', prefer: 'return=minimal', body: { status, updated_at: new Date().toISOString() } });
-  if (!r.ok) throw new Error('unavailable');
+  if (!r.ok) throw fail(r);
   return true;
 }
 
 // Cancels a sent request, or ends a friendship (either side).
 export async function removeRequest(id) {
   const r = await net(`nutri_friend_requests?id=eq.${id}`, { method: 'DELETE', prefer: 'return=minimal' });
-  if (!r.ok) throw new Error('unavailable');
+  if (!r.ok) throw fail(r);
   return true;
 }

@@ -17,7 +17,9 @@ export function initialAvatar(name, size = 44) {
 }
 
 const ERR = () => tr('Couldn\'t reach the server. Try again.');
-const failed = (e) => (e && (e.code === 'offline' || e.code === 'signed_out') ? (e.code === 'offline' ? tr('No connection — syncing will continue when you are back online.') : tr('Your sign-in expired. Sign in again.')) : ERR());
+export const failed = (e) => (e && e.code === 'offline' ? tr('No connection — syncing will continue when you are back online.')
+  : e && e.code === 'signed_out' ? tr('Your sign-in expired. Sign in again.')
+    : e && e.code === 'not_set_up' ? tr('Friends are not switched on at the server yet. Please try again later.') : ERR());
 
 // The relations are fetched once and shared by the screens until something changes.
 let cache = null;

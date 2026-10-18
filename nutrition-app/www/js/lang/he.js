@@ -2211,6 +2211,7 @@ export default {
     "Invite friends": "הזמנת חברים",
     "Invite a friend with a link on WhatsApp, or find them by username.": "הזמינו חבר בקישור בוואטסאפ, או חפשו אותו לפי שם משתמש.",
     "Invite": "הזמנה",
+    "Friends are not switched on at the server yet. Please try again later.": "החברים עדיין לא הופעלו בשרת. נסו שוב מאוחר יותר.",
   },
   data: {},
   fn,

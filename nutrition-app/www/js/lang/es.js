@@ -2217,6 +2217,7 @@ export default {
     "Invite friends": "Invitar amigos",
     "Invite a friend with a link on WhatsApp, or find them by username.": "Invita a un amigo con un enlace por WhatsApp o búscalo por su nombre de usuario.",
     "Invite": "Invitar",
+    "Friends are not switched on at the server yet. Please try again later.": "Los amigos aún no están activados en el servidor. Inténtalo de nuevo más tarde.",
   },
   data: {},
 };
