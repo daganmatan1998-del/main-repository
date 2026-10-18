@@ -2212,6 +2212,9 @@ export default {
     "No friend requests.": "Nessuna richiesta di amicizia.",
     "Received": "Ricevute",
     "Sent": "Inviate",
+    "Invite friends": "Invita amici",
+    "Invite a friend with a link on WhatsApp, or find them by username.": "Invita un amico con un link su WhatsApp oppure cercalo con il nome utente.",
+    "Invite": "Invita",
   },
   data: {},
 };

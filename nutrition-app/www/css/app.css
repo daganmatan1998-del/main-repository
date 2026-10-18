@@ -827,3 +827,12 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .user-stats p { margin: 0; }
 .user-actions { display: grid; gap: 8px; }
 .user-actions > p { margin: 0; text-align: center; }
+.invite-card { display: flex; align-items: center; gap: 12px; }
+.invite-text { flex: 1; min-width: 0; }
+.invite-text h3 { margin: 0 0 2px; }
+.invite-text p { margin: 0; }
+#btn-invite-head { margin-top: 6px; }
+/* Today's header: avatar and greeting first; the bell and the photo chip drop to their own row when there is no room. */
+.today-head { flex-wrap: wrap; justify-content: flex-start; }
+.today-head > .grow { flex: 1 1 55%; min-width: 55%; }
+.today-head .bell-link { margin-inline-start: auto; }

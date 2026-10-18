@@ -241,6 +241,13 @@ try {
   const head = await headText(A.page);
   check(`Today greets by name, and the date no longer says "יום יום" (${head.replace(/\n/g, ' / ')})`, /מתן/.test(head) && !/יום יום/.test(head) && /יום (ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת)/.test(head));
 
+  // Inviting friends is one tap from Today, even before signing in.
+  check('Today has an "invite friends" card', await A.page.locator('#invite-card').isVisible());
+  await A.page.click('#btn-invite-today');
+  await A.page.waitForSelector('#invite-sheet #btn-google-friends');
+  check('not signed in: the invite sheet asks to sign in first', await A.page.locator('#invite-sheet #btn-google-friends').isVisible());
+  await A.page.screenshot({ path: path.join(SHOTS, 'c02b-invite-signin.png') });
+  await A.page.keyboard.press('Escape');
   await A.page.click('a[href="#/profile"]');
   await A.page.waitForSelector('.profile-head');
   const order = await A.page.locator('.page-profile > *').evaluateAll((els) => els.slice(0, 3).map((e) => e.id || e.className));
@@ -297,6 +304,7 @@ try {
   // ======== friends: username, invite link, requests, inbox ========
   await A.page.click('a[href="#/profile"]');
   await A.page.waitForSelector('#friends-card');
+  check('Profile: an invite button at the top and in the Friends card', (await A.page.locator('#btn-invite-head').count()) === 1 && (await A.page.locator('#btn-invite-card').count()) === 1);
   check('Profile has a Friends card after the account card', (await A.page.locator('.page-profile > *').evaluateAll((els) => els.map((e) => e.id))).join().includes('account-card,friends-card'));
   await A.page.waitForSelector('#username-form');
   await A.page.fill('#username-input', 'ab');
@@ -320,6 +328,12 @@ try {
   // The bell: the welcome message and Carol's request.
   await A.page.click('a[href="#/today"]');
   await A.page.waitForSelector('#bell');
+  await A.page.click('#btn-invite-today');
+  await A.page.waitForSelector('#invite-sheet #share-whatsapp');
+  check('Today: the invite button opens the WhatsApp / copy options for your link', (await A.page.locator('#invite-sheet #my-username').innerText()) === '@matan_test' && await A.page.locator('#invite-sheet #share-copy').isVisible());
+  await A.page.screenshot({ path: path.join(SHOTS, 'c05b-invite-sheet.png') });
+  await A.page.keyboard.press('Escape');
+  await A.page.waitForTimeout(400);
   await until(async () => (await A.page.locator('.bell-badge').innerText()) === '2');
   check('the bell counts the welcome message and the waiting friend request', (await A.page.locator('.bell-badge').innerText()) === '2');
   await A.page.click('#bell');

@@ -20,7 +20,8 @@ import { aiStatus } from '../store.js';
 import { photoButtons } from './photo-picker.js';
 import { squareImage } from '../image.js';
 import { accountCard } from './account.js';
-import { friendsCard } from './friends.js';
+import { friendsCard, openInviteSheet } from './friends.js';
+import { cloudReady } from '../cloud.js';
 import * as cloud from '../cloud.js';
 
 export function renderProfile(root) {
@@ -35,7 +36,8 @@ export function renderProfile(root) {
     h('div', { class: 'profile-id' },
       h('h1', null, p.nickname || p.name),
       p.nickname ? h('p', { class: 'muted' }, p.name) : null,
-      h('p', { class: 'muted small' }, tr('Joined {0} · week {1}', fmtDate(p.regDay, true), currentWeek())))));
+      h('p', { class: 'muted small' }, tr('Joined {0} · week {1}', fmtDate(p.regDay, true), currentWeek())),
+      cloudReady() ? h('button', { type: 'button', class: 'btn btn-small btn-primary', id: 'btn-invite-head', onclick: openInviteSheet }, icon('send', 16), tr('Invite friends')) : null)));
 
   // ---- personal details (first: who this profile is) ----
   root.appendChild(h('section', { class: 'card', id: 'details-card' },

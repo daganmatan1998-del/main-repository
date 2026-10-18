@@ -2,7 +2,7 @@
 // the public profile page #/u/<username> that invite links open.
 
 import { t as tr } from '../i18n.js';
-import { h, icon, toast, clear, confirmDialog, fmt } from '../util.js';
+import { h, icon, toast, clear, confirmDialog, fmt, sheet } from '../util.js';
 import * as cloud from '../cloud.js';
 import * as social from '../social.js';
 import { state } from '../store.js';
@@ -45,30 +45,63 @@ function shareButtons(username) {
 
 export function friendsCard() {
   if (!cloud.cloudReady()) return null;
-  const card = h('section', { class: 'card', id: 'friends-card' }, h('h2', null, tr('Friends')));
-  if (!cloud.signedIn()) {
-    card.append(
-      h('p', { class: 'muted small' }, tr('Sign in to add friends and challenge them.')),
-      googleButton(tr('Sign in with Google'), { id: 'btn-google-friends' }));
-    return card;
-  }
   const body = h('div', { class: 'friends-body' }, h('p', { class: 'muted small' }, tr('Loading…')));
-  card.appendChild(body);
-  draw(body);
+  const card = h('section', { class: 'card', id: 'friends-card' },
+    h('div', { class: 'row space' },
+      h('h2', null, tr('Friends')),
+      h('button', { type: 'button', class: 'btn btn-small btn-primary', id: 'btn-invite-card', onclick: openInviteSheet }, icon('send', 16), tr('Invite friends'))),
+    body);
+  drawInvite(body);
   return card;
 }
 
-async function draw(body) {
+// The invite sheet: the same content as the Friends card, from anywhere in the app.
+export function openInviteSheet() {
+  return sheet(tr('Invite friends'), () => {
+    const body = h('div', { class: 'friends-body', id: 'invite-sheet' }, h('p', { class: 'muted small' }, tr('Loading…')));
+    drawInvite(body);
+    return body;
+  });
+}
+
+const closeInviteSheet = () => document.querySelectorAll('#invite-sheet').forEach((el) => el.closest('.sheet-backdrop')?.remove());
+const rememberName = (name) => { try { localStorage.setItem('nutri-username', name); } catch { /* storage unavailable */ } };
+const savedName = () => { try { return localStorage.getItem('nutri-username') || ''; } catch { return ''; } };
+
+// Whatever state the person is in, this says what to do next: sign in, choose a
+// username, or invite — and a failed request can be retried.
+async function drawInvite(body) {
+  clear(body);
+  if (!cloud.cloudReady()) { body.appendChild(h('p', { class: 'muted small' }, tr('Sign-in isn\'t available yet — it\'s coming in the next update.'))); return; }
+  if (!cloud.signedIn()) {
+    body.append(
+      h('p', { class: 'muted small' }, tr('Sign in to add friends and challenge them.')),
+      googleButton(tr('Sign in with Google'), { id: 'btn-google-friends', primary: true }));
+    return;
+  }
+  body.appendChild(h('p', { class: 'muted small' }, tr('Loading…')));
   let me;
   let rel;
-  try { me = await social.myProfile(); rel = me ? await loadRelations(true) : null; } catch (e) { clear(body); body.appendChild(h('p', { class: 'notice warn small' }, failed(e))); return; }
+  try { me = await social.myProfile(); rel = me ? await loadRelations(true) : null; } catch (e) {
+    clear(body);
+    body.append(h('p', { class: 'notice warn small', id: 'friends-error' }, failed(e)),
+      h('button', { type: 'button', class: 'btn btn-block', id: 'friends-retry', onclick: () => drawInvite(body) }, tr('Try again')));
+    // The invite link needs no server: with a username already chosen, it still works.
+    if (savedName()) body.append(h('h3', { class: 'extra-group' }, tr('Invite a friend')), shareButtons(savedName()));
+    return;
+  }
   clear(body);
-  if (!me) { body.appendChild(usernameForm(() => draw(body))); return; }
+  if (!me) { body.appendChild(usernameForm(() => drawInvite(body))); return; }
+  rememberName(me.username);
+  drawInviteContent(body, me, rel);
+}
 
+function drawInviteContent(body, me, rel) {
   const find = h('input', { class: 'search', id: 'friend-search', type: 'text', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false', placeholder: tr('Friend\'s username'), 'aria-label': tr('Friend\'s username') });
   const go = () => {
     const name = social.normalizeUsername(find.value);
     if (!social.validUsername(name)) { toast(tr('Use 3–20 letters (a–z), digits or an underscore.')); find.focus(); return; }
+    closeInviteSheet();
     location.hash = `#/u/${name}`;
   };
   find.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
@@ -76,7 +109,7 @@ async function draw(body) {
   body.append(
     h('div', { class: 'row space' },
       h('div', null, h('div', { class: 'muted small' }, tr('Your username')), h('strong', { id: 'my-username', dir: 'ltr' }, `@${me.username}`)),
-      h('a', { class: 'btn btn-small', href: `#/u/${me.username}` }, tr('My profile'))),
+      h('a', { class: 'btn btn-small', href: `#/u/${me.username}`, onclick: closeInviteSheet }, tr('My profile'))),
     h('h3', { class: 'extra-group' }, tr('Invite a friend')),
     shareButtons(me.username),
     h('h3', { class: 'extra-group' }, tr('Add a friend by username')),
@@ -89,7 +122,7 @@ async function draw(body) {
 
 export function personRow(u, ...actions) {
   return h('li', { class: 'friend' },
-    h('a', { class: 'friend-main', href: `#/u/${u.username}` },
+    h('a', { class: 'friend-main', href: `#/u/${u.username}`, onclick: closeInviteSheet },
       initialAvatar(u.display_name || u.username, 40),
       h('span', { class: 'friend-text' }, h('b', null, u.display_name || u.username), h('small', { class: 'muted', dir: 'ltr' }, `@${u.username}`))),
     ...actions);

@@ -12,6 +12,8 @@ import { state, today, targets, dayPlan, toggleEaten, gate, activePeriod, curren
 import { openPeriodReview } from './period.js';
 import { installCard } from '../install.js';
 import { badgeCount, addMessage } from '../inbox.js';
+import { openInviteSheet } from './friends.js';
+import { cloudReady } from '../cloud.js';
 
 let chartMode = 'weight';
 
@@ -41,7 +43,7 @@ export function renderToday(root, { askAbout }) {
   const hour = new Date().getHours();
   const hello = hour < 12 ? tr('Good morning') : hour < 18 ? tr('Good afternoon') : tr('Good evening');
 
-  root.appendChild(h('header', { class: 'page-head' },
+  root.appendChild(h('header', { class: 'page-head today-head' },
     h('a', { class: 'head-avatar', href: '#/profile', 'aria-label': tr('Profile') }, avatar(44)),
     h('div', { class: 'grow' },
       h('h1', null, `${hello}, ${state.profile.nickname || state.profile.name}`),
@@ -72,6 +74,15 @@ export function renderToday(root, { askAbout }) {
         macroBar(tr('Fat'), 'fat', consumed.f, t.fat))),
     h('p', { class: 'muted small center' },
       remaining >= 0 ? tr('{0} kcal left for today · water: {1} liters', fmt(remaining), t.water) : tr('Over by {0} kcal', fmt(-remaining)))));
+
+  // ---- invite friends ----
+  if (cloudReady()) {
+    root.appendChild(h('section', { class: 'card invite-card', id: 'invite-card' },
+      h('div', { class: 'invite-text' },
+        h('h3', null, tr('Invite friends')),
+        h('p', { class: 'muted small' }, tr('Invite a friend with a link on WhatsApp, or find them by username.'))),
+      h('button', { type: 'button', class: 'btn btn-primary', id: 'btn-invite-today', onclick: openInviteSheet }, icon('send', 16), tr('Invite'))));
+  }
 
   // ---- meals ----
   root.appendChild(h('h2', { class: 'section-title' }, tr('Today\'s meals')));

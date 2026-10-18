@@ -2212,6 +2212,9 @@ export default {
     "No friend requests.": "لا توجد طلبات صداقة.",
     "Received": "المستلمة",
     "Sent": "المرسلة",
+    "Invite friends": "دعوة الأصدقاء",
+    "Invite a friend with a link on WhatsApp, or find them by username.": "ادع صديقا برابط عبر واتساب، أو ابحث عنه باسم المستخدم.",
+    "Invite": "دعوة",
   },
   data: {},
 };
