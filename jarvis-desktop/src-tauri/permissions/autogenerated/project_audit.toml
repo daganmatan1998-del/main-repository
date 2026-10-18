@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-project-audit"
+description = "Enables the project_audit command without any pre-configured scope."
+commands.allow = ["project_audit"]
+
+[[permission]]
+identifier = "deny-project-audit"
+description = "Denies the project_audit command without any pre-configured scope."
+commands.deny = ["project_audit"]

@@ -33,6 +33,8 @@ dirs-next = "2"   # to find the user's Pictures folder, and now the Coding Agent
 # dependency, but a capability an agent relies on is named directly here
 # rather than left to arrive as someone else's side effect.
 sysinfo = "0.32"
+# The folder picker that is the ONLY way a project becomes reachable (2.37.0).
+rfd = "0.15"
 serde_json = "1"   # structuring the workspace/system tool results as JSON, not ad-hoc strings
 
 [target.'cfg(windows)'.dependencies]

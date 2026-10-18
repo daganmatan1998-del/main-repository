@@ -54,5 +54,22 @@ permissions = [
   "allow-take-launch-actions",
   "allow-minimize-camera-window",
   "allow-open-jarvis-folder",
-  "allow-write-note"
+  "allow-write-note",
+  "allow-projects-list",
+  "allow-project-authorize",
+  "allow-project-forget",
+  "allow-project-list-dir",
+  "allow-project-read-file",
+  "allow-project-search",
+  "allow-project-index",
+  "allow-project-find-symbol",
+  "allow-project-changes",
+  "allow-project-write-file",
+  "allow-project-restore-file",
+  "allow-project-git",
+  "allow-project-commands",
+  "allow-project-run",
+  "allow-project-run-cancel",
+  "allow-project-audit",
+  "allow-project-open-in"
 ]

@@ -97,3 +97,18 @@ WebGL works. Slice `mountModelViewer` straight out of `index.html` by string
 index into a harness rather than retyping it, so what runs is the real function.
 Framing and clipping are then measurable: project a model's bounding-box corners
 with `vec.project(camera)` and check the result stays inside NDC -1..1.
+
+**Projects, tasks, video (2.37.0).** `src-tauri/src/projects.rs` is the only
+way a real folder becomes reachable: `project_authorize` opens the folder
+picker (rfd) and takes no path. Its logic runs on Linux in a scratch crate
+with stand-in `tauri` (identity `#[command]` proc macro + a thread-based
+`async_runtime::spawn_blocking`) and `rfd` (returns `$PICK`) crates, including
+its `#[cfg(test)]` tests; the real crate cannot `cargo test` here (no GTK).
+The task engine in `index.html` (search "PROJECTS, TASKS AND THE
+ORCHESTRATOR") is reachable from Playwright through `window.__tasksTest`;
+mock `window.__TAURI__.core.invoke` with `addInitScript` and route the
+worker's `POST /` to a scripted model. Every step's system prompt starts
+"You are the <Role> Agent", the planner's says "orchestrator of
+J.A.R.V.I.S.", which is how a mock tells them apart. Browser-recorded WebM has
+no duration (Infinity) until a far seek - `fileToVideoFrames` handles it, so
+a MediaRecorder clip made in the page is a fair test video.

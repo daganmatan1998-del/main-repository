@@ -19,6 +19,8 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 use std::sync::atomic::{AtomicBool, Ordering};
 
 mod glide;
+mod projects;
+use projects::*;
 
 /* WHERE THE PAGES COME FROM. The orb, camera and 3D viewer load from this
    Cloudflare site, so a deploy there is the update - nothing to rebuild.
@@ -5287,7 +5289,24 @@ fn main() {
             take_launch_actions,
             minimize_camera_window,
             open_jarvis_folder,
-            write_note
+            write_note,
+            projects_list,
+            project_authorize,
+            project_forget,
+            project_list_dir,
+            project_read_file,
+            project_search,
+            project_index,
+            project_find_symbol,
+            project_changes,
+            project_write_file,
+            project_restore_file,
+            project_git,
+            project_commands,
+            project_run,
+            project_run_cancel,
+            project_audit,
+            project_open_in
         ])
         .setup(|app| {
             let window = app
