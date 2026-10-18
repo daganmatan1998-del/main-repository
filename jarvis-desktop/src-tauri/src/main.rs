@@ -4135,27 +4135,39 @@ fn write_note_blocking(own: Vec<(String, isize)>, text: Option<String>) -> Resul
     bytes.extend_from_slice(text.replace("\r\n", "\n").replace('\n', "\r\n").as_bytes());
     std::fs::write(&path, &bytes).map_err(|e| format!("could not make the note: {e}"))?;
     let shown_path = path.display().to_string();
-    if !shell_run("notepad.exe", Some(&format!("\"{}\"", shown_path))) {
-        return Ok(serde_json::json!({ "ok": false, "code": "launch_failed", "path": shown_path }));
+    /* The note IS the file: once it is written and reads back the same, the
+       note exists, whatever happens with the window. Opening it is the second
+       half, and a Notepad that is slow to show its window (the new one, with
+       tabs, restoring its old session first) no longer turns a saved note
+       into "I could not write it". */
+    let saved = std::fs::read(&path).map(|b| b == bytes).unwrap_or(false);
+    if !saved {
+        return Ok(serde_json::json!({ "ok": false, "code": "write_failed", "path": shown_path }));
+    }
+    let quoted = format!("\"{}\"", shown_path);
+    let mut launched = shell_run("notepad.exe", Some(&quoted));
+    let mut via = "notepad";
+    if !launched {
+        // No notepad.exe: whatever opens .txt files on this computer.
+        launched = shell_run(&shown_path, None);
+        via = "default app";
     }
 
     let needle = stem.to_lowercase();
     let started = Instant::now();
     let mut found = false;
-    while started.elapsed() < Duration::from_secs(8) {
+    while launched && started.elapsed() < Duration::from_secs(8) {
         sleep(Duration::from_millis(200));
         found = bring_app_windows(&own)
             .into_iter()
-            .any(|c| c.exe == "notepad" && c.title.to_lowercase().contains(&needle));
+            .any(|c| c.title.to_lowercase().contains(&needle));
         if found {
             break;
         }
     }
-    if !found {
-        return Ok(serde_json::json!({ "ok": false, "code": "no_window", "path": shown_path }));
-    }
     Ok(serde_json::json!({
-        "ok": true, "typed": text.chars().count(), "saved": true, "path": shown_path
+        "ok": true, "typed": text.chars().count(), "saved": true, "path": shown_path,
+        "opened": launched, "window_seen": found, "via": via
     }))
 }
 

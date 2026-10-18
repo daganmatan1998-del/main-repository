@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="824f0497460c">
+<meta name="jarvis-build" content="ddfbe945d7c4">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -15915,13 +15915,19 @@ async function callWriteNoteTool(input){
   try{ r = await invoke('write_note', { text: text || null }); }
   catch(err){
     const msg = String((err && err.message) || err);
+    addMessage('system', '\u25B8 write_note failed: ' + msg.slice(0, 200));
     if(/not found|unknown command|not allowed|write_note/i.test(msg)) return { ok: false, code: 'old_app', tell_the_user: 'Writing in Notes needs the rebuilt desktop app (2.36.0).' };
     return { ok: false, error: msg };
+  }
+  if(r && r.ok && r.opened === false){
+    addMessage('system', '\u25B8 note saved, but Notepad did not open: ' + (r.path || ''));
+    return { ok: true, saved: true, opened: false, path: r.path, note: 'The note is saved as a file (' + r.path + ') but Notepad did not open. Tell him where it is.' };
   }
   if(r && r.ok){
     addMessage('system', text ? '\u25B8 written in a new note (' + (r.typed || text.length) + ' characters): ' + text.slice(0, 60).replace(/\s+/g, ' ') + (text.length > 60 ? '\u2026' : '') : '\u25B8 opened a new note');
     return { ok: true, typed: r.typed || 0, saved: !!r.saved, note: text ? 'It is written in a new note and saved. Say so in a few words; do not read the text back.' : 'A new empty note is open.' };
   }
+  addMessage('system', '\u25B8 write_note failed: ' + ((r && (r.code || r.error)) || 'no answer from the desktop app') + (r && r.path ? ' (' + r.path + ')' : ''));
   return { ok: false, code: (r && r.code) || 'failed', typed: (r && r.typed) || 0,
            tell_the_user: r && r.code === 'focus_lost' ? 'He switched windows while it was being written, so it stopped part-way: say so.' : 'The note could not be written: say so plainly.' };
 }
@@ -15950,7 +15956,7 @@ async function finishNoteDictation(text){
 
 const WRITE_NOTE_TOOL = {
   name: 'write_note',
-  description: "Open a NEW note in Notepad and write text into it, saved as a file. Desktop only, Windows only. Use it when he asks you to put something in his notes: \"write that in notes\", \"write a prompt for it in notes\", \"put what we talked about in a note\", \"תכתוב את זה בפתקים\". YOU compose the text from the conversation: when he asks for a prompt, write the full finished prompt; when he asks for what you discussed, write it out clearly (a short title, then the content). text: exactly what goes in the note, in his language, plain text (no markdown symbols), at most 20000 characters. Never put passwords, keys or other secrets in it. It always makes a new note and never touches one he has open. Do not read the text back to him: say in a few words that it is in a new note. For \"I want you to write something\" with nothing said yet, do not call this: ask what he wants written. If it answers old_app, the desktop app needs rebuilding.",
+  description: "His NOTES. You CAN write in his notes: this opens a NEW note in Notepad with the text in it, saved as a file. Never say you cannot access his notes - call this. Desktop only, Windows only. Use it when he asks you to put something in his notes: \"write that in notes\", \"write a prompt for it in notes\", \"put what we talked about in a note\", \"תכתוב את זה בפתקים\". YOU compose the text from the conversation: when he asks for a prompt, write the full finished prompt; when he asks for what you discussed, write it out clearly (a short title, then the content). text: exactly what goes in the note, in his language, plain text (no markdown symbols), at most 20000 characters. Never put passwords, keys or other secrets in it. It always makes a new note and never touches one he has open. Do not read the text back to him: say in a few words that it is in a new note. For \"I want you to write something\" with nothing said yet, do not call this: ask what he wants written. If it answers old_app, the desktop app needs rebuilding.",
   input_schema: { type: 'object', properties: { text: { type: 'string', description: 'The whole note, as it should appear.' } }, required: ['text'] }
 };
 
@@ -16994,7 +17000,7 @@ function localApprovalVoice(text, ptt){
 ------------------------------------------------------------------ */
 const PROJECT_LIST_TOOL = {
   name: 'project_list',
-  description: "List the project folders he has authorized for you (each has an id), or, with authorize:true, open the folder picker so HE can add one (you cannot add a folder yourself; only he can, by picking it). Use it first whenever he talks about \"my project\", \"my code\", \"my store's theme\", \"the Jarvis project\". If none are authorized, tell him to add one (say you are opening the picker and call this with authorize:true).",
+  description: "Code projects only - NOT notes (his Notes/Notepad is write_note). List the project folders he has authorized for you (each has an id), or, with authorize:true, open the folder picker so HE can add one (you cannot add a folder yourself; only he can, by picking it). Use it first whenever he talks about \"my project\", \"my code\", \"my store's theme\", \"the Jarvis project\". If none are authorized, tell him to add one (say you are opening the picker and call this with authorize:true).",
   input_schema: { type:'object', properties: { authorize: { type:'boolean' } }, required: [] }
 };
 const PROJECT_INDEX_TOOL = {
@@ -17029,7 +17035,7 @@ const PROJECT_CHANGES_TOOL = {
 };
 const PROJECT_WRITE_TOOL = {
   name: 'project_write_file',
-  description: "Write (create or replace) a file in an authorized project. The old file is saved first as a recovery point (project_restore_file puts it back). ALWAYS read the file first and pass its version as expect_version; if the answer is code:\"conflict\", the file changed meanwhile: read it again and redo the edit on the current text. Make the smallest change that does the job and keep the file's existing style. Write the WHOLE file content, not a fragment.",
+  description: "NOT for his notes (anything for Notes/Notepad is write_note, always). Write (create or replace) a file in an authorized project. The old file is saved first as a recovery point (project_restore_file puts it back). ALWAYS read the file first and pass its version as expect_version; if the answer is code:\"conflict\", the file changed meanwhile: read it again and redo the edit on the current text. Make the smallest change that does the job and keep the file's existing style. Write the WHOLE file content, not a fragment.",
   input_schema: { type:'object', properties: { project:{type:'string'}, path:{type:'string'}, content:{type:'string'}, expect_version:{type:'string'} }, required: ['project','path','content'] }
 };
 const PROJECT_RESTORE_TOOL = {
@@ -17258,7 +17264,7 @@ const ROLE_TOOL_NAMES = {
   research: ['search_web', 'read_page', 'qa_check_page'],
   coding:   ['project_index', 'project_search', 'project_find_symbol', 'project_read_file', 'project_list_dir', 'project_changes',
              'project_write_file', 'project_restore_file', 'project_git', 'project_run'],
-  computer: ['open_installed_app', 'open_url', 'project_open_in', 'bring_window_here', 'adjust_window', 'type_text', 'look_at_screen'],
+  computer: ['open_installed_app', 'open_url', 'project_open_in', 'bring_window_here', 'adjust_window', 'type_text', 'write_note', 'look_at_screen'],
   visual:   ['look_at_screen', 'look_at_camera'],
   qa:       ['project_search', 'project_read_file', 'project_changes', 'project_git', 'project_run', 'read_page', 'qa_check_page', 'look_at_screen']
 };
@@ -17283,11 +17289,11 @@ function roleToolDefs(role){
   const all = {
     search_web: SEARCH_WEB_TOOL, read_page: READ_PAGE_TOOL, qa_check_page: QA_CHECK_PAGE_TOOL,
     open_installed_app: OPEN_APP_TOOL, open_url: buildOpenUrlTool(), bring_window_here: BRING_WINDOW_TOOL,
-    adjust_window: ADJUST_WINDOW_TOOL, type_text: TYPE_TEXT_TOOL,
+    adjust_window: ADJUST_WINDOW_TOOL, type_text: TYPE_TEXT_TOOL, write_note: WRITE_NOTE_TOOL,
     look_at_screen: LOOK_SCREEN_TOOL, look_at_camera: LOOK_CAMERA_TOOL
   };
   for(const t of PROJECT_TOOLS) all[t.name] = t;
-  return (ROLE_TOOL_NAMES[role] || []).filter(n => IS_DESKTOP || !/^(project_|open_installed_app|bring_window_here|adjust_window|type_text|look_at_)/.test(n))
+  return (ROLE_TOOL_NAMES[role] || []).filter(n => IS_DESKTOP || !/^(project_|open_installed_app|bring_window_here|adjust_window|type_text|write_note|look_at_)/.test(n))
     .map(n => all[n]).filter(Boolean);
 }
 
@@ -17296,7 +17302,7 @@ function roleToolDefs(role){
 function toolRisk(name, input){
   if(PROJECT_TOOL_NAMES.has(name)) return projectToolRisk(name, input);
   if(name === 'type_text') return input && input.submit ? 'high' : 'moderate';
-  if(['open_installed_app','open_url','bring_window_here','adjust_window'].indexOf(name) >= 0) return 'moderate';
+  if(['open_installed_app','open_url','bring_window_here','adjust_window','write_note'].indexOf(name) >= 0) return 'moderate';
   return 'low';
 }
 const DEDUPE_TOOLS = new Set(['search_web','read_page','qa_check_page','project_index','project_search','project_find_symbol','project_list_dir']);
@@ -17330,6 +17336,7 @@ async function runTaskTool(task, step, name, input, signal){
     else if(name === 'bring_window_here') payload = await callBringWindowTool(input);
     else if(name === 'adjust_window') payload = await callAdjustWindowTool(input);
     else if(name === 'type_text') payload = await callTypeTextTool(input);
+    else if(name === 'write_note') payload = await callWriteNoteTool(input || {});
     else if(name === 'look_at_screen'){
       const got = await captureScreenFrame();
       payload = got.frame ? { ok: true, image: { media_type: got.frame.media_type, data: got.frame.data } } : { error: got.error || 'no capture' };
@@ -17428,7 +17435,7 @@ const PLANNER_SYSTEM =
   'You are the orchestrator of J.A.R.V.I.S., a personal assistant running on his Windows computer. Turn his goal into a short plan of steps ' +
   'for specialist roles, using ONLY these roles:\n' +
   '- research: web search and reading pages.\n- coding: read/search/index an AUTHORIZED project folder, edit files (with recovery points), git status/diff, run the project\'s own test/lint/build commands.\n' +
-  '- computer: open installed programs, open web pages in Chrome, open a project in VS Code, move/focus windows, type into the focused window, look at the screen.\n' +
+  '- computer: open installed programs, open web pages in Chrome, open a project in VS Code, move/focus windows, type into the focused window, write a new note in Notepad, look at the screen.\n' +
   '- visual: look at the screen or the camera and report what is visible.\n- qa: independent verification (re-read changes, diff, run checks, check pages).\n\n' +
   'Rules: as FEW steps as the goal needs (max {MAX}); a step that needs another\'s output lists it in depends_on (earlier ids only); independent steps have no ' +
   'dependency so they run in parallel; if the work changes files or the computer, end with a qa step. Do not plan anything the roles cannot do: no sending ' +
@@ -17716,7 +17723,7 @@ function cancelTask(t){
 /* ---- the two tools his conversation gets ---- */
 const START_TASK_TOOL = {
   name: 'start_task',
-  description: "Hand a multi-step GOAL to the task engine, which plans it, runs specialist roles (research, coding on his authorized projects, computer control, visual, QA) in the background, verifies the result and reports back in the chat when done. Use it for goals that need several actions or checking - \"inspect my store, find the main problems, fix the broken components, test everything and show me\", \"find the latest version of my project and show me what changed\" (if more than a quick look), \"research X and compare\", \"update the code and run the tests\". NOT for a single quick action you can do yourself with one tool. It returns at once: tell him in one short sentence that you have started; the plan and the result come by themselves. goal: his goal in full, in his words plus anything from the conversation it depends on. project: the authorized project id if it is about one.",
+  description: "Hand a multi-step GOAL to the task engine, which plans it, runs specialist roles (research, coding on his authorized projects, computer control, visual, QA) in the background, verifies the result and reports back in the chat when done. Use it for goals that need several actions or checking - \"inspect my store, find the main problems, fix the broken components, test everything and show me\", \"find the latest version of my project and show me what changed\" (if more than a quick look), \"research X and compare\", \"update the code and run the tests\". NOT for a single quick action you can do yourself with one tool, and NEVER for writing in his notes (write_note does that directly, at once). It returns at once: tell him in one short sentence that you have started; the plan and the result come by themselves. goal: his goal in full, in his words plus anything from the conversation it depends on. project: the authorized project id if it is about one.",
   input_schema: { type:'object', properties: {
     goal: { type:'string' }, project: { type:'string' }, priority: { type:'string', enum: ['high','normal','low'] }
   }, required: ['goal'] }
@@ -17856,7 +17863,7 @@ setTimeout(renderTaskDock, 1500);
 window.__tasksTest = {
   validatePlan, readySteps, jsonFrom, toolRisk, projectToolRisk, taskLimits, newTask, findTask, pauseTask, resumeTask, cancelTask,
   callStartTaskTool, callTaskControlTool, callProjectTool, askLocalApproval, settleLocalApproval, localApprovalVoice,
-  toolResultBlock, roleToolDefs, getTasks: () => tasks, usageToday, loadTasks2, renderTaskDock, planVideoKeyframes, fileToVideoFrames
+  toolResultBlock, roleToolDefs, getTasks: () => tasks, usageToday, loadTasks2, renderTaskDock, planVideoKeyframes, fileToVideoFrames, callWriteNoteTool, wantsNoteTurn: (t) => wantsNoteTurn(t)
 };
 
 const CAMERA_TOOL = {
@@ -18248,7 +18255,7 @@ async function readMessageStream(response, onText){
    the last one. Never both: a look replaces the note it is about to write. */
 function cameraSystemExtras(){
   return (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + mailServiceNote() + (compactCodeNote || '') +
-         (turnWants3d ? never3dNote() : '') + (turn3dMentionOnly ? QUIET_3D_NOTE : '');
+         (turnWants3d ? never3dNote() : '') + (turn3dMentionOnly ? QUIET_3D_NOTE : '') + (turnWantsNote ? NOTE_TURN_NOTE : '');
 }
 /* SET ONLY AFTER A CUT-OFF (2.22.1): the last attempt ran out of room in the
    middle of a tool call, so nothing was built. Cleared at the start of each
@@ -18266,6 +18273,22 @@ let turnCutOffTool = false;
    own words; and if even that is not possible, a rough stand-in, said to be
    one. A sentence that refuses is never spoken in such a turn. */
 let turnWants3d = false, turnModelShown = false, turn3dMentionOnly = false;
+/* "Write that in notes", "put a prompt for it in my notes", "תכתוב את זה
+   בפתקים" (2.37.1): a turn about his notes. Since the project and task tools
+   arrived, both of which also "write", the model sometimes reached for one
+   of them, found no project, and said it could not get to his notes. On
+   such a turn those tools are not offered and the model is told plainly. */
+let turnWantsNote = false;
+const NOTE_INTENT_EN = /\b(?:write|put|save|jot|type|add|copy|paste|draft|make)\b[^.?!]{0,80}\b(?:notes?|notepad|note ?pad)\b|\b(?:notes?|notepad)\b[^.?!]{0,30}\b(?:write|put|save|jot)\b/i;
+const NOTE_INTENT_HE = /(?:תכתוב|תרשום|תשמור|תכניס|לכתוב|לרשום|תוסיף|תעתיק|כתוב|רשום)[^.?!]{0,80}(?:פתק|בפתקים|פתקים|פנקס|נוטפד|notepad|notes?)|(?:בפתקים|בפתק|בנוטפד|בפנקס)[^.?!]{0,30}(?:תכתוב|תרשום|תשמור)/;
+function wantsNoteTurn(t){
+  const s = String(t || '');
+  return NOTE_INTENT_EN.test(s) || NOTE_INTENT_HE.test(s);
+}
+const NOTE_TURN_NOTE =
+  '\n\nTHIS TURN IS ABOUT HIS NOTES. Use write_note with the complete text he wants in the note (compose it yourself from the ' +
+  'conversation when he asks for a prompt, a summary or "what we talked about"). You can do this; never say you cannot access his ' +
+  'notes, and do not use project or task tools for it. After it succeeds, say in a few words that it is in a new note.';
 /* The last thing JARVIS said, if it was said in the last `back` messages (so
    "yes" answers what was just asked, not something from an hour ago). */
 function lastAssistantText(back){
@@ -18653,6 +18676,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     requestBody.tools = fullCapability()
       ? everydayTools.concat(advancedTools)
       : everydayTools;
+    if(turnWantsNote) requestBody.tools = requestBody.tools.filter(t => !/^project_|^start_task$/.test(t.name));
     if(mcpServers.length) requestBody.mcp_servers = mcpServers;
   }
   let response;
@@ -19048,6 +19072,7 @@ async function askJarvis(userText, images, onText, tag){
                 (!NEW3D_PRONOUN.test(userText) || !!(images && images.length) || somethingToModel() || !!lastDescribedPicture);
   /* He said 3D but did not ask for a model: a conversation, not an order. */
   turn3dMentionOnly = !turnWants3d && NEW3D_MARK.test(String(userText || ''));
+  turnWantsNote = IS_DESKTOP && wantsNoteTurn(userText);
   turnModelShown = false;
   turnIsLook = !!(images && images.some(a => a && a.kind !== 'pdf' && a.kind !== 'text'));
   turnPicture = pictureOfTurn(images);
