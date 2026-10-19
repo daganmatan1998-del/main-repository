@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="e03611616873">
+<meta name="jarvis-build" content="e97d1db9eeea">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -6812,6 +6812,11 @@ async function handleTranscript(rawText, sawSpeech, spokeAt, ptt){
       if(text && diagIsCancel(text)) cancelDiagnostics();
       return;
     }
+    /* A new request after he stopped JARVIS (the key pressed over his voice,
+       the stop button, "hush") is a new turn: until now only a model turn
+       cleared that flag, so after a stop everything he did locally (tasks,
+       confirmations, notes) went on in silence. */
+    if(!isThinking) userInterrupted = false;
     /* A local approval card is open and he answers it holding the key (2.37.0). */
     if(text && localApprovalVoice(text, ptt)){ noteActivity(); return; }
 
@@ -19396,6 +19401,7 @@ async function runDiagnostics(mode, opts){
   const entry = logActionStart('diagnostics', { mode }, 'local');
   const session = diagSession = { mode, cancelled: false, closeEarly: null };
   diagBusy = true;
+  userInterrupted = false;
   /* Last line of defence: whatever goes wrong inside, the session is over after
      the longest a run can last, and ordinary commands are heard again. */
   session.watchdog = setTimeout(() => {
@@ -19484,6 +19490,9 @@ async function runDiagnostics(mode, opts){
     diagSession = null;
     diagBusy = false;
     if(session.watchdog) clearTimeout(session.watchdog);
+    /* Pressing the key over the narration, or the stop button, stops JARVIS and
+       leaves him "interrupted": a test must never hand the app back silent. */
+    if(!isThinking) userInterrupted = false;
     exit = await diagExitFullscreen(fs);
   }
   const cancelled = session.cancelled || (rep && rep.cancelled);
