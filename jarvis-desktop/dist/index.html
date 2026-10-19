@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="d2458ee79912">
+<meta name="jarvis-build" content="072b4b726cec">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -699,7 +699,9 @@
   #diagOverlay .dgMode{ margin-left:auto; padding:4px 12px; border:1px solid rgba(var(--cyan-rgb),.6); border-radius:2px; font-size:12px; letter-spacing:.3em; color:rgb(var(--cyan-rgb)); background:rgba(var(--cyan-rgb),.08); }
   #diagOverlay .dgClock{ font-variant-numeric:tabular-nums; font-size:14px; min-width:64px; text-align:right; color:var(--text-bright); }
   #diagOverlay #dgSound{ padding:6px 12px; border-radius:2px; border:1px solid rgba(var(--cyan-rgb),.35); background:transparent; color:rgba(var(--dim-rgb),.95); cursor:pointer; font:inherit; font-size:11px; letter-spacing:.2em; text-transform:uppercase; }
-  #diagOverlay #dgSound.off{ opacity:.55; text-decoration:line-through; }
+  #diagOverlay #dgSound.off{ opacity:.7; }
+  #diagOverlay #dgSound.warn, #diagOverlay .dgBadge.warn{ border-color:#ffb020; color:#ffb020; }
+  #diagOverlay .dgBadge{ padding:5px 10px; border:1px solid rgba(var(--cyan-rgb),.3); border-radius:2px; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:rgba(var(--dim-rgb),.95); }
   #diagOverlay #dgSound:hover{ background:rgba(var(--cyan-rgb),.14); }
   #diagOverlay #dgCancel, #diagOverlay #dgCloseNow{
     padding:6px 14px; border-radius:2px; border:1px solid rgba(var(--cyan-rgb),.55); background:rgba(var(--cyan-rgb),.07); color:var(--text-bright);
@@ -18907,7 +18909,7 @@ const diagState = { ttsWav: null, project: null };
 const diagNarrator = {
   q: [], busy: false, enabled: true, log: [], speaker: null, waiters: [],
   /* Whether anyone will hear it: not in quiet mode, not in the web version. */
-  audible(){ return this.enabled && (!!this.speaker || (IS_DESKTOP && !silentMode)); },
+  audible(){ return this.enabled && (!!this.speaker || (typeof speak === 'function' && !silentMode)); },
   say(line){
     if(!line) return;
     this.log.push(line); if(this.log.length > 80) this.log.shift();
@@ -18985,22 +18987,38 @@ function diagSynth(ctx, out, kind, t0, level){
   return 0;
 }
 const diagSfx = {
-  ctx: null, master: null, log: [],
+  master: null, masterCtx: null, log: [], blocked: 0,
   on(){ try{ return localStorage.getItem('jarvis:diag:sfx') !== '0'; }catch(err){ return true; } },
   setOn(v){ try{ localStorage.setItem('jarvis:diag:sfx', v ? '1' : '0'); }catch(err){} },
+  /* Why a sound is or is not heard: on / off (his switch) / quiet (the app's
+     quiet mode) / locked (the browser has not allowed sound yet: it needs one
+     click or key press on the page) / unsupported. */
+  state(){
+    if(silentMode) return 'quiet';
+    if(!this.on()) return 'off';
+    if(!(window.AudioContext || window.webkitAudioContext)) return 'unsupported';
+    ensureAudioAnalyser();
+    if(!audioCtx) return 'unsupported';
+    return audioCtx.state === 'running' ? 'on' : 'locked';
+  },
   play(kind){
     this.log.push(kind); if(this.log.length > 200) this.log.shift();
-    if(!this.on() || silentMode) return;
+    if(this.state() !== 'on'){
+      /* Locked: ask the page to unlock (works only from a gesture, which the
+         app's own listeners also try on every click and key); the effect is
+         skipped rather than queued, so nothing bursts out later. */
+      if(!silentMode && this.on()){ this.blocked++; try{ unlockAudio(); }catch(err){} }
+      return;
+    }
     try{
-      if(!this.ctx){
-        const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
-        this.ctx = new AC(); this.master = this.ctx.createGain(); this.master.gain.value = 0.35; this.master.connect(this.ctx.destination);
+      if(!this.master || this.masterCtx !== audioCtx){
+        this.master = audioCtx.createGain(); this.master.gain.value = 0.35; this.master.connect(audioCtx.destination); this.masterCtx = audioCtx;
       }
-      if(this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
-      diagSynth(this.ctx, this.master, kind, this.ctx.currentTime + 0.01, diagNarrator.busy ? 0.5 : 1);
+      diagSynth(audioCtx, this.master, kind, audioCtx.currentTime + 0.01, diagNarrator.busy ? 0.5 : 1);
     }catch(err){ /* no sound is not a failure of anything */ }
   },
-  close(){ try{ if(this.ctx) this.ctx.close(); }catch(err){} this.ctx = null; this.master = null; }
+  /* The app's audio context belongs to the app: only our own output is let go. */
+  close(){ try{ if(this.master) this.master.disconnect(); }catch(err){} this.master = null; this.masterCtx = null; }
 };
 
 /* What is said before a test and after it. */
@@ -19075,7 +19093,7 @@ function diagBuildOverlay(mode){
     '<div class="dgRays"></div>' +
     '<header class="dgTop"><div class="dgBrand">J.A.R.V.I.S. <b>SYSTEM DIAGNOSTICS</b></div>' +
     '<div class="dgMode" id="dgMode"></div><div class="dgClock" id="dgClock">0.0 s</div>' +
-    '<button id="dgSound" type="button" aria-pressed="true">Sound on</button><button id="dgCancel" type="button">Cancel</button></header>' +
+    '<span id="dgVoice" class="dgBadge"></span><button id="dgSound" type="button" aria-pressed="true">Sound on</button><button id="dgCancel" type="button">Cancel</button></header>' +
     '<main class="dgMain"><section class="dgCol" id="dgLeft"></section>' +
     '<section class="dgCenter"><canvas id="dgSphere"></canvas><div class="dgNow"><div id="dgNowCat"></div><div id="dgNowTest"></div></div></section>' +
     '<section class="dgCol" id="dgRight"></section></main>' +
@@ -19084,7 +19102,29 @@ function diagBuildOverlay(mode){
   document.body.appendChild(el);
   el.querySelector('#dgMode').textContent = mode === 'quick' ? 'QUICK TEST' : 'FULL SELF-TEST';
   diagUi.el = el;
+  diagUi.voiceProblem0 = lastVoiceProblem;
   return el;
+}
+
+/* What the voice and the effects are doing right now, so "I hear nothing"
+   always has a visible reason on the screen. */
+function diagPaintAudio(){
+  if(!diagUi.el) return;
+  const he = heLang();
+  const st = diagSfx.state();
+  const btn = diagUi.el.querySelector('#dgSound'), v = diagUi.el.querySelector('#dgVoice');
+  if(btn){
+    btn.textContent = st === 'on' ? 'Sound on' : st === 'off' ? 'Sound off' : st === 'quiet' ? 'Sound: quiet mode' : st === 'locked' ? 'Sound locked: click once' : 'Sound unavailable';
+    btn.setAttribute('aria-pressed', st === 'on' ? 'true' : 'false');
+    btn.classList.toggle('off', st !== 'on');
+    btn.classList.toggle('warn', st === 'locked');
+  }
+  if(v){
+    const problem = lastVoiceProblem && diagUi.voiceProblem0 !== lastVoiceProblem;
+    v.textContent = silentMode ? 'Voice: quiet mode' : problem ? 'Voice: problem' : 'Voice on';
+    v.title = silentMode ? 'Quiet mode is on: JARVIS does not speak. Turn it off with the mute button.' : problem ? lastVoiceProblem : 'JARVIS narrates the test';
+    v.classList.toggle('warn', silentMode || !!problem);
+  }
 }
 
 function diagBuildPanels(engine){
@@ -19364,9 +19404,9 @@ async function runDiagnostics(mode, opts){
     document.addEventListener('keydown', diagOnKey, true);
     diagUi.el.querySelector('#dgCancel').addEventListener('click', () => cancelDiagnostics());
     const soundBtn = diagUi.el.querySelector('#dgSound');
-    const paintSound = () => { const on = diagSfx.on(); soundBtn.textContent = on ? 'Sound on' : 'Sound off'; soundBtn.setAttribute('aria-pressed', on ? 'true' : 'false'); soundBtn.classList.toggle('off', !on); };
-    soundBtn.addEventListener('click', () => { diagSfx.setOn(!diagSfx.on()); paintSound(); if(diagSfx.on()) diagSfx.play('pass'); });
-    paintSound();
+    soundBtn.addEventListener('click', () => { diagSfx.setOn(!diagSfx.on()); diagPaintAudio(); if(diagSfx.on()) diagSfx.play('pass'); });
+    session.paintAudio = setInterval(diagPaintAudio, 700);   // follows the browser unlocking sound, or quiet mode being switched
+    diagPaintAudio();
     diagUi.el.querySelector('#dgMode').textContent = (mode === 'quick' ? 'QUICK TEST' : 'FULL SELF-TEST') + (fs.limit ? '  ·  IN-WINDOW' : '');
     const clock0 = performance.now();
     const clock = setInterval(() => { const e = diagUi.el && diagUi.el.querySelector('#dgClock'); if(e) e.textContent = ((performance.now() - clock0) / 1000).toFixed(1) + ' s'; }, 100);
@@ -19392,6 +19432,7 @@ async function runDiagnostics(mode, opts){
     session.engine = engine;
     diagBuildPanels(engine);
     diagRenderCounts(engine);
+    try{ unlockAudio(); }catch(err){}   // if the page has had a click or key press already, sound is allowed
     diagSfx.play('start');
     diagNarrator.say(he ? 'מפעיל אבחון מערכת.' : 'Initializing system diagnostics.');
     if(fs.limit) addMessage('system', '▸ ' + fs.limit);
@@ -19414,6 +19455,7 @@ async function runDiagnostics(mode, opts){
     if(engine) try{ engine.cancel(); }catch(e){}
   }finally{
     if(session.clock) clearInterval(session.clock);
+    if(session.paintAudio) clearInterval(session.paintAudio);
     window.removeEventListener('resize', diagOnResize);
     document.removeEventListener('keydown', diagOnKey, true);
     diagLagStop();
