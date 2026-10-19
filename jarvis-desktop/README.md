@@ -222,3 +222,18 @@ and the Rust never runs. If something you add appears dead, check
 
 The worker needs no change for any of this: tasks call the same `POST /`
 the agents already use.
+
+## System diagnostics (2.38.0)
+
+"Jarvis, check yourself" (full) and "Jarvis, run a quick test" (quick) open a
+full-screen diagnostic in the app's own look. Every row is the result of a real,
+read-only test (worker health and session, a real model reply, voice synthesis
+and a speech-recognition loop on the synthesised audio, search, database, Shopify,
+calendar and 3D reads, desktop tools, an agent run, image analysis, video scene
+detection, project access and the file-access limits, interface responsiveness).
+Failures are told apart (auth, quota, service, network, timeout); a test whose
+prerequisite failed is BLOCKED, not FAIL; anything without a safe test (sending
+messages, reading mail, live microphone/camera) is NOT TESTED. Health is
+weighted by criticality: one failed critical test makes the system CRITICAL
+however many minor ones pass. Cancel with the button, Esc or "cancel".
+No worker or Rust change: it is page-only.

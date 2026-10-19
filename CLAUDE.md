@@ -112,3 +112,18 @@ worker's `POST /` to a scripted model. Every step's system prompt starts
 J.A.R.V.I.S.", which is how a mock tells them apart. Browser-recorded WebM has
 no duration (Infinity) until a far seek - `fileToVideoFrames` handles it, so
 a MediaRecorder clip made in the page is a fair test video.
+
+**System diagnostics (2.38.0).** One isolated block in `index.html` (search
+"SYSTEM SELF-DIAGNOSTICS"): `DiagEngine`, `buildDiagRegistry`, the overlay,
+`diagNarrator`. `window.__diagTest` exposes them to Playwright. A test returns
+`{status, summary, evidence, fix}`; to add one, `add({id, name, category,
+critical 1-3, requires:[earlier ids], run})` in the registry (`quick:true` puts
+it in the quick run too). The overlay reads the app's own CSS variables
+(`--cyan-rgb`, `--blue-rgb`, `--panel-rgb`), so it follows ULTRON mode; note
+that in this app setting the language to English switches to ULTRON (amber),
+Hebrew to JARVIS (cyan): a test that calls `setLangMode('en')` is testing the
+amber look. `var diagBusy` (not `let`) because `speak()` reads it and can run
+before the block is reached. The hook object must be defined AFTER the classes:
+a class referenced earlier is a temporal-dead-zone error that stops the whole page.
+Screenshots from the Playwright run can be read back with the Read tool to check
+layout; colour/brightness can be measured with PIL on them.

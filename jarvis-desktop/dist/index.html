@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="cb47c8b44a12">
+<meta name="jarvis-build" content="e7025ac883e7">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -666,6 +666,106 @@
   #approvalsPanel button.reject{ border-color:rgba(255,90,90,0.5); color:#ff9d9d; }
   #approvalsPanel button:hover{ background:rgba(255,255,255,0.12); }
   #approvalsPanel .apEmpty{ opacity:0.6; padding:6px 2px; }
+
+  /* SYSTEM DIAGNOSTICS SCREEN (2.38.0). Built from the app's own tokens, so it
+     looks like the rest of JARVIS - dark field, cyan hologram, Courier New,
+     thin strokes, wide-tracked capitals - and re-tints with them in ULTRON
+     mode. Status colours live only on the small result chips. */
+  #diagOverlay{
+    --dgBlue:var(--blue-rgb); --dgCyan:var(--cyan-rgb);
+    position:fixed; inset:0; z-index:2000; overflow:hidden; display:flex; flex-direction:column;
+    background:radial-gradient(ellipse at 50% 44%, rgba(var(--blue-rgb),.20) 0%, rgba(var(--panel-rgb),.97) 52%, #000 100%);
+    background-color:#000;
+    color:var(--text-bright); font-family:'Courier New', Consolas, monospace;
+  }
+  #diagOverlay::before{
+    content:''; position:absolute; inset:0; pointer-events:none; opacity:.5;
+    background-image:radial-gradient(rgba(var(--cyan-rgb),.55) 1px, transparent 1.2px);
+    background-size:46px 46px; -webkit-mask-image:radial-gradient(ellipse at center, transparent 30%, #000 90%); mask-image:radial-gradient(ellipse at center, transparent 30%, #000 90%);
+  }
+  #diagOverlay .dgRays{
+    position:absolute; left:50%; top:46%; width:150vmax; height:150vmax; margin:-75vmax 0 0 -75vmax; pointer-events:none; opacity:.16;
+    background:repeating-conic-gradient(from 0deg, rgba(var(--cyan-rgb),.9) 0deg 1.2deg, rgba(var(--cyan-rgb),0) 1.2deg 15deg);
+    -webkit-mask-image:radial-gradient(circle, #000 0%, transparent 52%); mask-image:radial-gradient(circle, #000 0%, transparent 52%);
+    animation:dgSpin 120s linear infinite;
+  }
+  @keyframes dgSpin{ to{ transform:rotate(360deg); } }
+  #diagOverlay .dgTop{
+    position:relative; z-index:2; display:flex; align-items:center; gap:18px; padding:14px 24px;
+    border-bottom:1px solid rgba(var(--cyan-rgb),.28); background:rgba(var(--panel-rgb),.6);
+  }
+  #diagOverlay .dgBrand{ font-size:14px; letter-spacing:.42em; text-transform:uppercase; color:rgba(var(--dim-rgb),.9); }
+  #diagOverlay .dgBrand b{ color:rgb(var(--cyan-rgb)); font-weight:400; text-shadow:0 0 10px rgba(var(--cyan-rgb),.7); }
+  #diagOverlay .dgMode{ margin-left:auto; padding:4px 12px; border:1px solid rgba(var(--cyan-rgb),.6); border-radius:2px; font-size:12px; letter-spacing:.3em; color:rgb(var(--cyan-rgb)); background:rgba(var(--cyan-rgb),.08); }
+  #diagOverlay .dgClock{ font-variant-numeric:tabular-nums; font-size:14px; min-width:64px; text-align:right; color:var(--text-bright); }
+  #diagOverlay #dgCancel, #diagOverlay #dgCloseNow{
+    padding:6px 14px; border-radius:2px; border:1px solid rgba(var(--cyan-rgb),.55); background:rgba(var(--cyan-rgb),.07); color:var(--text-bright);
+    cursor:pointer; font:inherit; font-size:12px; letter-spacing:.2em; text-transform:uppercase;
+  }
+  #diagOverlay #dgCancel:hover, #diagOverlay #dgCloseNow:hover{ background:rgba(var(--cyan-rgb),.22); box-shadow:0 0 12px rgba(var(--cyan-rgb),.45); }
+  #diagOverlay .dgMain{
+    position:relative; z-index:1; flex:1; min-height:0; display:grid; gap:18px; padding:16px 24px;
+    grid-template-columns:minmax(250px,1fr) minmax(260px,40vmin) minmax(250px,1fr);
+  }
+  @media (max-width:900px){ #diagOverlay .dgMain{ grid-template-columns:1fr; overflow-y:auto; } #diagOverlay .dgCenter{ order:-1; min-height:46vh; } #diagOverlay .dgRow{ grid-template-columns:88px 1fr; } #diagOverlay .dgRes{ display:none; } }
+  #diagOverlay .dgCol{ display:flex; flex-direction:column; gap:12px; min-height:0; overflow-y:auto; justify-content:center; transition:opacity .45s, filter .45s; }
+  #diagOverlay.dgDone .dgCol{ opacity:.18; filter:blur(1.5px); }
+  #diagOverlay .dgCenter{ position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:0; min-height:0; }
+  #diagOverlay #dgSphere{ display:block; max-width:100%; }
+  #diagOverlay .dgNow{ text-align:center; margin-top:2px; max-width:100%; }
+  #diagOverlay #dgNowCat{ font-size:12px; letter-spacing:.42em; color:rgb(var(--cyan-rgb)); min-height:16px; text-shadow:0 0 8px rgba(var(--cyan-rgb),.6); }
+  #diagOverlay #dgNowTest{ font-size:13px; color:var(--text-bright); min-height:36px; max-width:520px; opacity:.9; }
+  #diagOverlay .dgPanel{
+    position:relative; overflow:hidden; flex:0 0 auto; padding:9px 12px;
+    background:rgba(var(--panel-rgb),.82); border:1px solid rgba(var(--cyan-rgb),.3); border-radius:3px;
+    box-shadow:0 0 14px rgba(var(--cyan-rgb),.08), inset 0 0 18px rgba(var(--cyan-rgb),.04);
+    backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); transition:box-shadow .25s, border-color .25s;
+  }
+  #diagOverlay .dgPanel.active{ border-color:rgb(var(--cyan-rgb)); box-shadow:0 0 0 1px rgba(var(--cyan-rgb),.5), 0 0 22px rgba(var(--cyan-rgb),.4); }
+  #diagOverlay .dgPanel.active::after{
+    content:''; position:absolute; left:0; right:0; top:0; height:26px; pointer-events:none;
+    background:linear-gradient(to bottom, rgba(var(--cyan-rgb),0), rgba(var(--cyan-rgb),.22), rgba(var(--cyan-rgb),0)); animation:dgScan 1.3s linear infinite;
+  }
+  @keyframes dgScan{ from{ transform:translateY(-30px); } to{ transform:translateY(110%); } }
+  #diagOverlay .dgPanelHead{ font-size:11px; letter-spacing:.38em; text-transform:uppercase; color:rgb(var(--cyan-rgb)); margin-bottom:6px; opacity:.95; }
+  #diagOverlay .dgRow{ display:grid; grid-template-columns:96px minmax(128px,.85fr) minmax(0,1.4fr); column-gap:8px; align-items:center; padding:2px 0; }
+  #diagOverlay .dgChip{
+    --c:138,160,173; justify-self:start; padding:1px 6px; border:1px solid rgba(var(--c),.8); border-radius:2px; background:rgba(var(--c),.14);
+    color:rgb(var(--c)); font-size:10px; letter-spacing:.14em; font-weight:700; text-align:center; min-width:86px; line-height:15px; white-space:nowrap;
+  }
+  #diagOverlay .dgName{ font-size:12.5px; color:var(--text-bright); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #diagOverlay .dgRes{ font-size:11px; color:rgba(var(--dim-rgb),.85); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #diagOverlay .dgRow.st-PASS .dgChip{ --c:29,233,182; }
+  #diagOverlay .dgRow.st-FAIL .dgChip{ --c:255,77,106; }
+  #diagOverlay .dgRow.st-WARNING .dgChip{ --c:255,176,32; }
+  #diagOverlay .dgRow.st-RUNNING .dgChip{ --c:var(--blue-rgb); animation:dgBlink 1s ease-in-out infinite; box-shadow:0 0 10px rgba(var(--blue-rgb),.6); }
+  #diagOverlay .dgRow.st-BLOCKED .dgChip{ --c:154,140,255; }
+  #diagOverlay .dgRow.st-NOT_TESTED .dgChip{ --c:138,160,173; }
+  #diagOverlay .dgRow.st-PENDING .dgChip{ --c:100,120,132; }
+  #diagOverlay .dgRow.st-PENDING .dgName{ opacity:.5; }
+  @keyframes dgBlink{ 50%{ opacity:.55; } }
+  #diagOverlay .dgBottom{ position:relative; z-index:2; padding:10px 24px 14px; border-top:1px solid rgba(var(--cyan-rgb),.28); background:rgba(var(--panel-rgb),.6); }
+  #diagOverlay .dgBar{ height:3px; background:rgba(var(--cyan-rgb),.16); overflow:hidden; }
+  #diagOverlay .dgBar i{ display:block; height:100%; width:0; background:rgb(var(--cyan-rgb)); box-shadow:0 0 10px rgba(var(--cyan-rgb),.8); transition:width .35s; }
+  #diagOverlay #dgCounts{ margin-top:7px; font-size:12px; color:rgba(var(--dim-rgb),.9); letter-spacing:.08em; }
+  #diagOverlay .dgReport{
+    position:absolute; z-index:5; left:50%; top:50%; transform:translate(-50%,-46%) scale(.97); opacity:0; pointer-events:none; transition:opacity .35s, transform .35s;
+    width:min(760px, calc(100vw - 40px)); max-height:78vh; overflow-y:auto; padding:18px 20px; border-radius:3px;
+    background:rgba(var(--panel-rgb),.96); border:1px solid rgba(var(--cyan-rgb),.7); box-shadow:0 0 50px rgba(var(--cyan-rgb),.25), inset 0 0 30px rgba(var(--cyan-rgb),.05);
+  }
+  #diagOverlay .dgReport.show{ opacity:1; transform:translate(-50%,-50%); pointer-events:auto; }
+  #diagOverlay .dgRepHead{ display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:12px; letter-spacing:.42em; color:rgb(var(--cyan-rgb)); flex-wrap:wrap; }
+  #diagOverlay .dgVerdict{ --c:29,233,182; letter-spacing:.14em; font-size:14px; padding:3px 12px; border:1px solid rgba(var(--c),.85); border-radius:2px; background:rgba(var(--c),.14); color:rgb(var(--c)); text-shadow:0 0 8px rgba(var(--c),.6); }
+  #diagOverlay .dgVerdict.v-OPERATIONAL_WITH_NOTES{ --c:var(--blue-rgb); }
+  #diagOverlay .dgVerdict.v-NEEDS_ATTENTION{ --c:255,176,32; }
+  #diagOverlay .dgVerdict.v-CRITICAL{ --c:255,77,106; }
+  #diagOverlay .dgVerdict.v-UNKNOWN{ --c:138,160,173; }
+  #diagOverlay .dgRepStats{ margin:12px 0; font-size:13px; color:var(--text-bright); }
+  #diagOverlay .dgProb{ padding:8px 10px; margin:6px 0; background:rgba(255,176,32,.07); border-left:3px solid #ffb020; display:grid; gap:2px; }
+  #diagOverlay .dgProb.st-FAIL{ border-left-color:#ff4d6a; background:rgba(255,77,106,.08); }
+  #diagOverlay .dgProb b{ font-size:13px; font-weight:700; } #diagOverlay .dgProb span{ font-size:12px; color:rgba(var(--dim-rgb),.95); } #diagOverlay .dgProb em{ font-size:12px; color:rgb(var(--cyan-rgb)); font-style:normal; }
+  #diagOverlay .dgRepOk{ padding:10px 0; color:#1de9b6; font-size:14px; }
+  #diagOverlay #dgCloseNow{ margin-top:12px; }
 
   /* LOCAL APPROVAL CARD and TASK PANEL (2.37.0). The card is shown above
      everything whenever a task or a project action is waiting on him; the
@@ -6701,6 +6801,12 @@ async function handleTranscript(rawText, sawSpeech, spokeAt, ptt){
        talking, so it always counts); hands-free, what he says up to his pause,
        but not while JARVIS is still talking (that is his own question coming
        back). Not past two minutes. */
+    /* A diagnostic is on screen (2.38.0): "cancel" stops it; everything else
+       heard meanwhile (including his own narration coming back) is ignored. */
+    if(diagSession){
+      if(text && diagIsCancel(text)) cancelDiagnostics();
+      return;
+    }
     /* A local approval card is open and he answers it holding the key (2.37.0). */
     if(text && localApprovalVoice(text, ptt)){ noteActivity(); return; }
 
@@ -8640,7 +8746,7 @@ async function speak(text, onStart){
      empty reply silently ended continuous conversation — the microphone shut
      and nothing said why. Hand back to listening on the way out instead. */
   if(silentMode || !text){
-    if(conversationMode && !isThinking) convRestartTimer = setTimeout(startListening, 300);
+    if(conversationMode && !isThinking && !diagBusy) convRestartTimer = setTimeout(startListening, 300);
     return;
   }
   let buffer = text;
@@ -8652,7 +8758,9 @@ async function speak(text, onStart){
     if(!buffer) break;
   }
   await speechDrained();
-  if(conversationMode && !isThinking) convRestartTimer = setTimeout(startListening, 400);
+  /* Not while a diagnostic is on screen (2.38.0): its narration must not
+     open the microphone; listening resumes with the summary spoken after. */
+  if(conversationMode && !isThinking && !diagBusy) convRestartTimer = setTimeout(startListening, 400);
 }
 
 /* --- Brain: Claude — direct in-chat connection, or your own backend once set --- */
@@ -13696,7 +13804,8 @@ const FLOW_RULES = [
   /* Notes (2.36.0), and "go to sleep" as a command of its own, so it can be
      one part of a longer sentence ("close my camera and go to sleep"). */
   { flow: 'project_add', strong: [ { test: (s) => projectIntentOf(s) === 'add' } ], bare: [] },
-  { flow: 'self_check', strong: [ { test: (s) => isSelfCheck(s) } ], bare: [] },
+  { flow: 'diag_quick', strong: [ { test: (s) => diagIntentOf(s) === 'quick' } ], bare: [] },
+  { flow: 'diag_full', strong: [ { test: (s) => diagIntentOf(s) === 'full' } ], bare: [] },
   { flow: 'note_close', strong: [ { test: (s) => isNoteClose(s) } ], bare: [] },
   { flow: 'note_last', strong: [ { test: (s) => isNoteLast(s) } ], bare: [] },
   { flow: 'note_new', strong: [ { test: (s) => isNewNoteOpen(s) } ], bare: [] },
@@ -13996,7 +14105,7 @@ const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'fullscreen', '
                                       'live_full', 'live_full_exit', 'workspace', 'open_site', 'bring_window',
                                       'workspace3d', 'workspace3d_project', 'agent_atlas', 'music_on', 'music_off',
                                       'webshooter_on', 'webshooter_off', 'adjust_window', 'close_thing', 'browser_write',
-                                      'base_app', 'open_app', 'jarvis_folder', 'note_new', 'note_dictate', 'note_close', 'note_last', 'project_add', 'self_check', 'sleep']);
+                                      'base_app', 'open_app', 'jarvis_folder', 'note_new', 'note_dictate', 'note_close', 'note_last', 'project_add', 'diag_quick', 'diag_full', 'sleep']);
 
 /* { steps: [{flow, part}], rest: [parts for the model] }, or null when the
    sentence is one request (or none) and the ordinary path should have it. */
@@ -15022,14 +15131,9 @@ async function runWorkflowCommand(flow, text){
     }
     return true;
   }
-  if(flow === 'self_check'){
-    /* The existing check (worker, engines, hearing: the orb menu's "check"),
-       then what it never looked at: the desktop app and its new commands. */
-    try{ await selfCheck(); }catch(err){ /* its own failure is in its report */ }
-    const lines = await runSelfCheck(he);
-    addMessage('system', '\u25B8 app check\n' + lines.join('\n'));
-    const bad = lines.filter(l => /\bNO\b|NOT reachable|answered/.test(l)).length;
-    if(bad) say(he ? 'ובאפליקציה עצמה: ' + bad + ' דברים לא עובדים. הפרטים בצ\'אט.' : 'And in the app itself: ' + bad + ' thing' + (bad === 1 ? '' : 's') + ' not working. Details are in the chat.');
+  /* System self-diagnostics (2.38.0): the full screen, the real tests, the report. */
+  if(flow === 'diag_full' || flow === 'diag_quick'){
+    runDiagnostics(flow === 'diag_quick' ? 'quick' : 'full').catch(err => addMessage('system', '\u25B8 diagnostics failed to start: ' + diagSafe(err, 120)));
     return true;
   }
   /* "Note it" (2.37.2): the main point of what JARVIS just said. */
@@ -15983,36 +16087,12 @@ function projectIntentOf(text){
   const leftover = words.filter(w => !(PJ_VERBS.has(w) || PJ_VERBS.has(noteStem(w)) || PJ_NOUNS.test(w) || PJ_NOUNS.test(noteStem(w)) || PJ_BENIGN.has(w) || PJ_BENIGN.has(noteStem(w)))).length;
   return leftover <= 1 ? 'add' : null;
 }
-const SELF_CHECK_RE = /\b(?:self ?check|system ?check|diagnos(?:e|tic|tics)|check (?:yourself|your ?self|the system|that you work)|(?:version|build) check|check (?:the |your )?(?:version|build)|which (?:version|build)|are you up to date|status check)\b|בדיקת מערכת|תבדוק את עצמך|בדוק את עצמך|איזו גרסה|איזה גרסה|מה הגרסה/;
-function isSelfCheck(text){
-  const n = normaliseHeard(text);
-  return n.split(' ').length <= 10 && SELF_CHECK_RE.test(n);
-}
 function bridgeProblem(err){
   const msg = String((err && err.message) || err);
   if(/not found|unknown command/i.test(msg)) return 'the desktop app is older than this page: rebuild it from the latest jarvis-desktop.zip';
   if(/not allowed|acl|permission/i.test(msg)) return 'the desktop app refused the command (' + msg.slice(0, 100) + '): rebuild it from the latest jarvis-desktop.zip';
   return msg.slice(0, 160);
 }
-async function runSelfCheck(he){
-  const lines = [];
-  const build = (document.querySelector('meta[name="jarvis-build"]') || {}).content || '?';
-  lines.push('page build: ' + build + ' (site: ' + location.origin + ')');
-  const invoke = tauriInvoke();
-  lines.push('desktop bridge: ' + (invoke ? 'yes' : 'NO - this is the web version, or the app did not load it'));
-  if(invoke){
-    try{ const r = await invoke('projects_list'); lines.push('desktop app 2.37 (projects): yes, ' + ((r && r.projects) || []).length + ' authorized'); }
-    catch(err){ lines.push('desktop app 2.37 (projects): NO - ' + bridgeProblem(err)); }
-    try{ await invoke('push_to_talk_key'); lines.push('desktop app basics: yes'); }catch(err){ lines.push('desktop app basics: ' + bridgeProblem(err)); }
-  }
-  try{
-    const r = await Promise.race([fetch(backendUrl + '/health', { headers: jarvisHeaders() }), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 6000))]);
-    lines.push('worker: ' + (r.ok ? 'reachable' : 'answered ' + r.status));
-  }catch(err){ lines.push('worker: NOT reachable (' + String((err && err.message) || err).slice(0, 80) + ')'); }
-  lines.push('tools offered to the model: tasks ' + (typeof START_TASK_TOOL !== 'undefined' ? 'yes' : 'no') + ', projects ' + (typeof PROJECT_TOOLS !== 'undefined' ? PROJECT_TOOLS.length : 0));
-  return lines;
-}
-
 /* WHAT HE WANTS DONE WITH HIS NOTES, READ LOOSELY (2.37.2).
 
    The first version matched whole sentences ("can you write something" yes,
@@ -18111,8 +18191,1158 @@ setTimeout(renderTaskDock, 1500);
 window.__tasksTest = {
   validatePlan, readySteps, jsonFrom, toolRisk, projectToolRisk, taskLimits, newTask, findTask, pauseTask, resumeTask, cancelTask,
   callStartTaskTool, callTaskControlTool, callProjectTool, askLocalApproval, settleLocalApproval, localApprovalVoice,
-  toolResultBlock, roleToolDefs, getTasks: () => tasks, usageToday, loadTasks2, renderTaskDock, planVideoKeyframes, fileToVideoFrames, callWriteNoteTool, wantsNoteTurn: (t) => wantsNoteTurn(t), noteIntentOf, detectWorkflowCommand, composeNoteFrom, handleTranscript, projectIntentOf, isSelfCheck
+  toolResultBlock, roleToolDefs, getTasks: () => tasks, usageToday, loadTasks2, renderTaskDock, planVideoKeyframes, fileToVideoFrames, callWriteNoteTool, wantsNoteTurn: (t) => wantsNoteTurn(t), noteIntentOf, detectWorkflowCommand, composeNoteFrom, handleTranscript, projectIntentOf
 };
+
+/* =====================================================================
+   SYSTEM SELF-DIAGNOSTICS (2.38.0)
+
+   "Jarvis, check yourself" runs the FULL test, "Jarvis, run a quick test"
+   the QUICK one. Both are real: every row on the screen is the outcome of
+   a function that talked to the worker, the desktop app, the camera API or
+   the page's own code, and a row says PASS only when its success criteria
+   were checked. Nothing here is timed to look busy.
+
+   This block is self-contained, in four parts, and touches nothing that
+   existed before it except the two voice commands and the one-line hook in
+   handleTranscript that lets "cancel" stop a running test:
+
+     1. DiagEngine     - runs a list of tests in order: prerequisites,
+                         per-test timeouts, an overall deadline, one failure
+                         never stops the others, cancellation, a report.
+     2. buildDiagRegistry - the tests themselves, built from what this
+                         installation really has (the worker's /health says
+                         which integrations exist; the desktop bridge says
+                         whether the local tools do).
+     3. The overlay    - the bright full-screen presentation. It only DRAWS
+                         what the engine reports.
+     4. The narrator   - short spoken updates that never block the engine.
+
+   Read-only by construction: no test sends a message, mail, purchase or
+   publication, writes a file, starts the camera or the microphone, or runs
+   a command. The only things that cost anything are a handful of tiny model
+   and voice requests (listed in the report as "real external call").
+   ===================================================================== */
+
+const DIAG_STATUS_LABEL = { PASS: 'PASS', FAIL: 'FAIL', WARNING: 'WARNING', NOT_TESTED: 'NOT TESTED', BLOCKED: 'BLOCKED', RUNNING: 'RUNNING', PENDING: 'WAITING' };
+const DIAG_FINAL = ['PASS', 'FAIL', 'WARNING', 'NOT_TESTED', 'BLOCKED'];
+
+/* What may be shown: no keys, tokens or long opaque strings, ever. */
+function diagSafe(v, max){
+  const raw = v == null ? '' : (v && v.message !== undefined ? v.message : v);
+  let s = String(raw).replace(/\s+/g, ' ').trim();
+  s = s.replace(/(?:sk-|gsk_|tsk_|msy_|pk_|rk_)[A-Za-z0-9_\-]{6,}|Bearer\s+[A-Za-z0-9._\-]{8,}|eyJ[A-Za-z0-9._\-]{16,}|[A-Za-z0-9_\-]{36,}/g, '[hidden]');
+  return s.slice(0, max || 200);
+}
+
+class DiagEngine {
+  constructor(tests, opts){
+    this.o = Object.assign({ deadlineMs: 120000, defaultTimeoutMs: 10000, onUpdate: () => {}, now: () => Date.now() }, opts || {});
+    this.tests = tests.slice();
+    this.results = new Map();
+    const seen = new Set();
+    for(const t of this.tests){
+      if(!t.id || typeof t.run !== 'function') throw new Error('a diagnostic test needs an id and a run function');
+      if(seen.has(t.id)) throw new Error('duplicate test id ' + t.id);
+      for(const r of t.requires || []){
+        if(!seen.has(r)) throw new Error('test ' + t.id + ' requires ' + r + ', which is not an earlier test');
+      }
+      seen.add(t.id);
+      this.results.set(t.id, {
+        id: t.id, name: t.name || t.id, category: t.category || 'General', description: t.description || '',
+        critical: t.critical || 1, readOnly: t.readOnly !== false, kind: t.kind || 'real',
+        status: 'PENDING', summary: '', evidence: '', fix: '', ms: null, startedAt: null, endedAt: null, current: ''
+      });
+    }
+    this.state = 'idle';
+    this.cancelled = false;
+    this.ctrl = null;
+  }
+
+  get(id){ return this.results.get(id) || null; }
+  list(){ return this.tests.map(t => this.results.get(t.id)); }
+  emit(r){ try{ this.o.onUpdate(r, this); }catch(err){ /* a broken display never stops a test */ } }
+
+  cancel(){
+    if(this.state !== 'running') return false;
+    this.cancelled = true;
+    try{ this.ctrl.abort(); }catch(err){}
+    return true;
+  }
+
+  async run(){
+    if(this.state === 'running') throw new Error('diagnostics are already running');
+    this.state = 'running';
+    this.cancelled = false;
+    this.ctrl = new AbortController();
+    this.startedAt = this.o.now();
+    const deadline = this.startedAt + this.o.deadlineMs;
+    try{
+      for(const t of this.tests){
+        const r = this.results.get(t.id);
+        if(this.cancelled){ this._finish(r, { status: 'NOT_TESTED', summary: 'cancelled before it ran' }); continue; }
+        if(this.o.now() >= deadline){ this._finish(r, { status: 'NOT_TESTED', summary: 'overall time limit reached before it ran' }); continue; }
+        const unmet = (t.requires || []).map(id => this.results.get(id)).filter(d => d.status !== 'PASS' && d.status !== 'WARNING');
+        if(unmet.length){
+          this._finish(r, { status: 'BLOCKED', summary: 'needs "' + unmet.map(u => u.name).join('", "') + '" first (' + unmet.map(u => DIAG_STATUS_LABEL[u.status] || u.status).join(', ') + ')' });
+          continue;
+        }
+        r.status = 'RUNNING'; r.startedAt = this.o.now(); r.current = t.description || t.name; if(this.o.onStart) try{ this.o.onStart(r); }catch(e){} this.emit(r);
+        const left = Math.max(500, deadline - this.o.now());
+        const own = t.timeoutMs || this.o.defaultTimeoutMs;
+        const out = await this._exec(t, Math.min(this.o.maxTimeoutMs ? Math.min(own, this.o.maxTimeoutMs) : own, left));
+        this._finish(r, out);
+      }
+    } finally {
+      this.endedAt = this.o.now();
+      this.state = this.cancelled ? 'cancelled' : 'done';
+    }
+    return this.report();
+  }
+
+  _finish(r, out){
+    r.status = DIAG_FINAL.indexOf(out.status) >= 0 ? out.status : 'FAIL';
+    r.summary = diagSafe(out.summary, 220);
+    r.evidence = diagSafe(out.evidence, 260);
+    r.fix = diagSafe(out.fix, 220);
+    r.endedAt = this.o.now();
+    r.ms = r.startedAt ? r.endedAt - r.startedAt : 0;
+    r.current = '';
+    this.emit(r);
+  }
+
+  async _exec(t, timeoutMs){
+    const ctrl = new AbortController();
+    const onAbort = () => ctrl.abort();
+    this.ctrl.signal.addEventListener('abort', onAbort);
+    let timer;
+    const timeout = new Promise(res => { timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} res({ __timeout: true }); }, timeoutMs); });
+    try{
+      const body = Promise.resolve().then(() => t.run({ signal: ctrl.signal, timeoutMs, get: id => this.results.get(id), engine: this }));
+      const out = await Promise.race([body, timeout]);
+      if(out && out.__timeout){
+        body.catch(() => {});   // its late answer is ignored
+        return { status: 'FAIL', summary: 'no answer within ' + Math.round(timeoutMs / 1000) + 's (timed out)', fix: t.timeoutFix || 'The service did not respond in time: check its connection and status.' };
+      }
+      if(!out || typeof out !== 'object' || DIAG_FINAL.indexOf(out.status) < 0){
+        return { status: 'FAIL', summary: 'the test returned no valid result (a bug in the test, not in the feature)' };
+      }
+      return out;
+    }catch(err){
+      if(this.cancelled) return { status: 'NOT_TESTED', summary: 'cancelled while running' };
+      return { status: 'FAIL', summary: diagSafe(err), fix: t.errorFix || '' };
+    }finally{
+      clearTimeout(timer);
+      this.ctrl.signal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  report(){
+    return diagSummarize(this.list(), { mode: this.o.mode || 'full', ms: (this.endedAt || this.o.now()) - this.startedAt, cancelled: this.cancelled });
+  }
+}
+
+/* The overall verdict comes from the outcomes and how much each test
+   matters, not from a count: one failed critical test cannot be outvoted by
+   twenty passing minor ones. BLOCKED and NOT TESTED are not failures and do
+   not count for or against the score; they are listed so nothing is hidden. */
+function diagSummarize(results, meta){
+  const c = { total: results.length, passed: 0, failed: 0, warnings: 0, blocked: 0, notTested: 0, pending: 0 };
+  let got = 0, max = 0;
+  for(const r of results){
+    if(r.status === 'PASS') c.passed++;
+    else if(r.status === 'FAIL') c.failed++;
+    else if(r.status === 'WARNING') c.warnings++;
+    else if(r.status === 'BLOCKED') c.blocked++;
+    else if(r.status === 'NOT_TESTED') c.notTested++;
+    else c.pending++;
+    if(r.status === 'PASS' || r.status === 'WARNING' || r.status === 'FAIL'){
+      const w = r.critical || 1;
+      max += w; got += w * (r.status === 'PASS' ? 1 : r.status === 'WARNING' ? 0.5 : 0);
+    }
+  }
+  const critFail = results.some(r => r.status === 'FAIL' && (r.critical || 1) >= 3);
+  const anyFail = c.failed > 0;
+  const critWarn = results.some(r => (r.status === 'WARNING' || r.status === 'BLOCKED') && (r.critical || 1) >= 3);
+  const tested = c.passed + c.failed + c.warnings;
+  let verdict;
+  if(!tested) verdict = 'UNKNOWN';
+  else if(critFail) verdict = 'CRITICAL';
+  else if(anyFail || critWarn) verdict = 'NEEDS_ATTENTION';
+  else if(c.warnings || c.blocked) verdict = 'OPERATIONAL_WITH_NOTES';
+  else verdict = 'OPERATIONAL';
+  const rank = r => (r.status === 'FAIL' ? 0 : r.status === 'WARNING' ? 1 : 2) * 10 - (r.critical || 1);
+  const problems = results
+    .filter(r => r.status === 'FAIL' || (r.status === 'WARNING' && (r.critical || 1) >= 2) ||
+                 /* a critical test that could not run, unless a failure above already explains it */
+                 (r.status === 'BLOCKED' && (r.critical || 1) >= 3 && !results.some(x => x.status === 'FAIL' && r.summary.indexOf('"' + x.name + '"') >= 0)))
+    .sort((a, b) => rank(a) - rank(b))
+    .slice(0, 6)
+    .map(r => ({ id: r.id, name: r.name, category: r.category, status: r.status, summary: r.summary, fix: r.fix, critical: r.critical }));
+  return Object.assign({
+    counts: c, verdict, score: max ? Math.round(100 * got / max) : null, problems,
+    cancelled: !!(meta && meta.cancelled), mode: (meta && meta.mode) || 'full', ms: (meta && meta.ms) || 0,
+    tests: results.map(r => ({ id: r.id, name: r.name, category: r.category, status: r.status, ms: r.ms, summary: r.summary, kind: r.kind, critical: r.critical, readOnly: r.readOnly }))
+  });
+}
+
+/* ------------------------------------------------------------------
+   THE TESTS
+------------------------------------------------------------------ */
+const dPass = (summary, evidence) => ({ status: 'PASS', summary, evidence });
+const dWarn = (summary, evidence, fix) => ({ status: 'WARNING', summary, evidence, fix });
+const dFail = (summary, evidence, fix) => ({ status: 'FAIL', summary, evidence, fix });
+const dBlocked = (summary, evidence, fix) => ({ status: 'BLOCKED', summary, evidence, fix });
+const dNot = (summary, evidence, fix) => ({ status: 'NOT_TESTED', summary, evidence, fix });
+
+/* What an HTTP answer means, so a wrong token, a missing route, a quota and
+   a broken service are not all "failed". */
+function diagHttpKind(status){
+  if(status === 401 || status === 403) return 'auth';
+  if(status === 404) return 'missing';
+  if(status === 429) return 'limit';
+  if(status >= 500) return 'service';
+  return 'http';
+}
+function diagHttpWords(status){
+  const k = diagHttpKind(status);
+  return k === 'auth' ? 'rejected the session (HTTP ' + status + ')' : k === 'missing' ? 'has no such route (HTTP 404): an older worker' :
+         k === 'limit' ? 'is rate-limited or out of quota (HTTP 429)' : k === 'service' ? 'had a service error (HTTP ' + status + ')' : 'answered HTTP ' + status;
+}
+
+async function diagFetch(ctx, path, opts){
+  if(!backendUrl) throw new Error('no worker address is configured');
+  opts = opts || {};
+  const headers = Object.assign(jarvisHeaders(), opts.json !== undefined ? { 'Content-Type': 'application/json' } : {}, opts.headers || {});
+  const t0 = performance.now();
+  let res;
+  try{
+    res = await fetch(backendUrl + path, { method: opts.method || (opts.json !== undefined || opts.body ? 'POST' : 'GET'), headers,
+                                           body: opts.json !== undefined ? JSON.stringify(opts.json) : opts.body, signal: ctx.signal });
+  }catch(err){
+    if(ctx.signal && ctx.signal.aborted) throw err;
+    const e = new Error('could not reach the worker (network): ' + diagSafe(err, 80)); e.network = true; throw e;
+  }
+  return { res, ms: Math.round(performance.now() - t0) };
+}
+const diagJson = async (res) => { try{ return await res.json(); }catch(err){ return null; } };
+
+function diagTinyPngBase64(){
+  const c = document.createElement('canvas'); c.width = 96; c.height = 96;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, 96, 96);
+  g.fillStyle = '#e01616'; g.beginPath(); g.arc(48, 48, 34, 0, Math.PI * 2); g.fill();
+  return c.toDataURL('image/png').split(',')[1];
+}
+
+/* A silent-ish 16 kHz mono WAV, for nothing but "does the service take audio". */
+function diagTinyWav(){
+  const rate = 16000, n = rate / 2, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const w = (o, s) => { for(let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true); v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  w(36, 'data'); v.setUint32(40, n * 2, true);
+  return buf;
+}
+
+/* Permission state without asking for anything. */
+async function diagPermission(name){
+  try{
+    if(!navigator.permissions || !navigator.permissions.query) return 'unsupported';
+    return (await navigator.permissions.query({ name })).state;
+  }catch(err){ return 'unsupported'; }
+}
+async function diagDevices(kind){
+  try{
+    if(!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return null;
+    return (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === kind).length;
+  }catch(err){ return null; }
+}
+
+let diagLag = { max: 0, timer: null, last: 0, cur: '', where: '' };
+function diagLagStart(){
+  diagLag.max = 0; diagLag.last = performance.now(); diagLag.cur = ''; diagLag.where = '';
+  diagLag.timer = setInterval(() => {
+    const now = performance.now(), lag = now - diagLag.last - 100;
+    if(lag > diagLag.max){ diagLag.max = lag; diagLag.where = diagLag.cur; }
+    diagLag.last = now;
+  }, 100);
+}
+function diagLagStop(){ if(diagLag.timer){ clearInterval(diagLag.timer); diagLag.timer = null; } }
+
+async function diagSyntheticVideo(){
+  if(typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) return null;
+  const c = document.createElement('canvas'); c.width = 240; c.height = 135;
+  const g = c.getContext('2d');
+  const rec = new MediaRecorder(c.captureStream(15), { mimeType: 'video/webm' });
+  const chunks = []; rec.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
+  const colors = ['#d22', '#2a2', '#22d'];
+  rec.start(100);
+  for(let k = 0; k < colors.length; k++){
+    for(let f = 0; f < 14; f++){
+      g.fillStyle = colors[k]; g.fillRect(0, 0, 240, 135);
+      g.fillStyle = '#fff'; g.fillRect(8 + f * 4, 50, 24, 24);
+      await new Promise(r => setTimeout(r, 66));
+    }
+  }
+  const stopped = new Promise(r => { rec.onstop = r; });
+  rec.stop(); await stopped;
+  return new File(chunks, 'diag.webm', { type: 'video/webm' });
+}
+
+function buildDiagRegistry(mode, health){
+  const quick = mode === 'quick';
+  const H = health || backendCapabilities || {};
+  const desktop = IS_DESKTOP;
+  const invoke = tauriInvoke();
+  const T = [];
+  /* Tests marked quick:true run in both modes, the rest only in the full one. */
+  const add = (t) => { if(quick && !t.quick) return; T.push(t); };
+  const only = add;
+
+  /* ---- Core assistant ---- */
+  only({ id: 'core.worker', quick: true, category: 'Core assistant', name: 'Worker service', critical: 3, timeoutMs: 10000,
+    description: 'GET /health on the worker, checking the answer is well formed',
+    errorFix: 'Check the internet connection and that the Cloudflare worker is deployed.',
+    run: async (ctx) => {
+      const { res, ms } = await diagFetch(ctx, '/health');
+      const d = await diagJson(res);
+      if(!res.ok) return dFail('the worker ' + diagHttpWords(res.status), 'HTTP ' + res.status + ' in ' + ms + ' ms', 'Check the worker deployment in Cloudflare.');
+      if(!d || d.ok !== true || typeof d.version !== 'string') return dFail('the worker answered, but not with a valid health report', 'HTTP 200, unexpected body', 'Redeploy jarvis-worker.js.');
+      backendCapabilities = d;
+      const missing = Array.isArray(d.missing) ? d.missing : [];
+      if(!d.brain) return dFail('the worker is up but has no model configured', 'worker ' + d.version + ', ' + ms + ' ms', 'Set PRIMARY_API_KEY (or ANTHROPIC_API_KEY) in the worker.');
+      if(missing.length) return dWarn('the worker is up, but its setup is missing: ' + missing.join(', '), 'worker ' + d.version + ', ' + ms + ' ms', 'Add the missing worker secrets.');
+      return dPass('worker ' + d.version + ' answered in ' + ms + ' ms', (d.engines || []).length + ' model engine(s) configured');
+    } });
+  only({ id: 'core.auth', quick: true, category: 'Core assistant', name: 'Session', critical: 3, requires: ['core.worker'], timeoutMs: 8000,
+    description: 'An authenticated request to the worker (session check)',
+    run: async (ctx) => {
+      const { res, ms } = await diagFetch(ctx, '/session');
+      if(res.status === 401) return dFail('the session was rejected: it has expired or the PIN changed', 'HTTP 401', 'Give JARVIS the PIN again.');
+      if(!res.ok) return dFail('the session check ' + diagHttpWords(res.status), 'HTTP ' + res.status, '');
+      const d = await diagJson(res);
+      return d && d.ok === true ? dPass('the session is accepted', ms + ' ms') : dFail('the session check returned an unexpected body', '', '');
+    } });
+  only({ id: 'core.model', quick: true, category: 'Core assistant', name: 'Model reply', critical: 3, requires: ['core.worker', 'core.auth'], timeoutMs: 20000,
+    description: 'A real one-line request through the worker to the model, reading its answer',
+    timeoutFix: 'The model provider is slow or unreachable: check the provider status and the worker keys.',
+    run: async (ctx) => {
+      const { res, ms } = await diagFetch(ctx, '/', { json: { model: 'claude', max_tokens: 16, messages: [{ role: 'user', content: 'Reply with exactly the word OK.' }] } });
+      const d = await diagJson(res);
+      if(!res.ok){
+        const k = diagHttpKind(res.status);
+        return dFail('the model request ' + diagHttpWords(res.status) + (d && d.error ? ': ' + diagSafe(d.error, 90) : ''), 'HTTP ' + res.status + ' in ' + ms + ' ms',
+          k === 'auth' ? 'Give JARVIS the PIN again.' : k === 'limit' ? 'The model provider quota is used up: check its billing or add a fallback engine.' : 'Check the model provider keys in the worker.');
+      }
+      const text = d && Array.isArray(d.content) ? d.content.filter(b => b && b.type === 'text').map(b => b.text).join(' ').trim() : '';
+      if(!text) return dFail('the model answered with no text', 'HTTP 200, empty content, ' + ms + ' ms', 'Check the model provider: the reply came back empty.');
+      return /\bok\b/i.test(text) ? dPass('the model answered in ' + ms + ' ms', 'reply: "' + diagSafe(text, 40) + '"')
+                                  : dWarn('the model answered, but not as asked', 'reply: "' + diagSafe(text, 60) + '"', '');
+    } });
+  only({ id: 'core.pipeline', quick: true, category: 'Core assistant', name: 'Command pipeline', critical: 2, kind: 'local-logic',
+    description: "The page's own command router and request builder, on sample sentences (no network)",
+    run: async () => {
+      const samples = [['open my camera', 'camera_on'], ['close my camera', 'camera_off'], ['go to sleep', 'sleep']];
+      const bad = samples.filter(([s, want]) => detectWorkflowCommand(s) !== want).map(s => s[0]);
+      if(bad.length) return dFail('the command router mis-classified: "' + bad.join('", "') + '"', samples.length - bad.length + '/' + samples.length + ' correct', 'A recent change broke command routing: check the flow rules.');
+      if(typeof askJarvis !== 'function' || typeof handleTranscript !== 'function') return dFail('the conversation functions are missing', '', '');
+      return dPass('the command router classified ' + samples.length + '/' + samples.length + ' sample sentences', 'local logic: no model call');
+    } });
+  add({ id: 'core.errors', category: 'Core assistant', name: 'Error handling', critical: 1, requires: ['core.worker', 'core.auth'], timeoutMs: 10000, kind: 'real',
+    description: 'An unknown route must return a clean 404, and an aborted request must stop cleanly',
+    run: async (ctx) => {
+      const a = await diagFetch(ctx, '/__diagnostics_no_such_route__');
+      const d = await diagJson(a.res);
+      const cleanMissing = a.res.status === 404 && d && typeof d.error === 'string';
+      let aborted = false;
+      const ac = new AbortController(); ac.abort();
+      try{ await fetch(backendUrl + '/health', { signal: ac.signal }); }catch(err){ aborted = err && err.name === 'AbortError'; }
+      if(!cleanMissing) return dFail('the worker did not answer an unknown route with a clean 404 JSON error', 'HTTP ' + a.res.status, '');
+      if(!aborted) return dFail('an aborted request did not stop with an AbortError', '', '');
+      return dPass('unknown routes return a clean 404 and aborted requests stop cleanly', 'both checked');
+    } });
+
+  /* ---- Voice ---- */
+  only({ id: 'voice.init', quick: true, category: 'Voice', name: 'Voice output', critical: 2, kind: 'availability',
+    description: 'Which voice the page will speak with, and whether it has reported a problem',
+    run: async () => {
+      const worker = workerVoiceAvailable && H.voice !== false;
+      const browser = typeof speechSynthesis !== 'undefined';
+      const via = H.voice_via || (worker ? 'worker voice' : null);
+      if(!worker && !browser) return dFail('there is no way to speak: the worker has no voice and the browser has none', '', 'Enable a voice provider in the worker (CARTESIA_API_KEY or the Workers AI binding).');
+      const problem = lastVoiceProblem ? ' Last reported problem: ' + diagSafe(lastVoiceProblem, 80) : '';
+      if(!worker) return dWarn('only the computer\'s own voice is available; the worker voice is not' + problem, 'browser speech synthesis present', 'Check /tts in the worker: its voice provider is not answering.');
+      if(lastVoiceProblem) return dWarn('the voice is configured (' + via + ') but reported a problem recently.' + problem, '', 'Run the full test to exercise the voice provider.');
+      return dPass('voice output is initialised (' + (via || 'worker') + ')', silentMode ? 'quiet mode is ON: replies are text only' : 'speech is on');
+    } });
+  only({ id: 'voice.mic', quick: true, category: 'Voice', name: 'Microphone access', critical: 2, kind: 'availability',
+    description: 'Microphone permission and devices, inspected without opening the microphone',
+    run: async () => {
+      const [perm, n] = await Promise.all([diagPermission('microphone'), diagDevices('audioinput')]);
+      if(n === 0) return dFail('no microphone device was found', 'permission: ' + perm, 'Plug in or enable a microphone.');
+      if(perm === 'denied') return dFail('microphone access is denied', 'devices: ' + (n == null ? 'unknown' : n), 'Allow the microphone for JARVIS in Windows privacy settings.');
+      if(perm === 'granted') return dPass('microphone access is granted (' + n + ' device' + (n === 1 ? '' : 's') + ')', 'this checks access only, not speech recognition');
+      if(perm === 'prompt') return dWarn('microphone access has not been granted yet', 'devices: ' + (n == null ? 'unknown' : n), 'Say something once and allow the microphone when asked.');
+      return dNot('the permission state cannot be read here', 'devices: ' + (n == null ? 'unknown' : n), '');
+    } });
+  only({ id: 'voice.state', quick: true, category: 'Voice', name: 'Hearing pipeline', critical: 2, kind: 'availability',
+    description: 'The recognition pipeline\'s own error record (no audio is recorded)',
+    run: async () => {
+      const via = H.stt_via || (H.stt ? 'workers-ai' : false);
+      if(H.stt === false || !via) return dFail('the worker has no speech recognition', '', 'Add the Workers AI binding or a GROQ_API_KEY to the worker.');
+      if(sttBrokenWhy) return dFail('speech recognition is failing: ' + diagSafe(sttBrokenWhy, 110), 'via ' + via, /limit|quota|neuron|4006/i.test(sttBrokenWhy) ? 'The transcription allowance is used up: add a Groq key to the worker.' : 'Check the speech-to-text service.');
+      if(sttFailures) return dWarn('recognition had ' + sttFailures + ' recent failure(s)', 'via ' + via, 'Say something to see whether it recovers.');
+      return dPass('recognition is available via ' + via + ' and reports no errors', 'availability only: speech itself is tested by the loopback in the full test');
+    } });
+  add({ id: 'voice.tts', category: 'Voice', name: 'Voice provider', critical: 2, requires: ['core.worker', 'core.auth'], timeoutMs: 20000, kind: 'real',
+    description: 'A real one-word synthesis through the worker (the audio is checked, not played)',
+    timeoutFix: 'The voice provider is slow: check Cartesia or Workers AI.',
+    run: async (ctx) => {
+      const { res, ms } = await diagFetch(ctx, '/tts', { json: { text: 'Testing one two three.', language: 'en' } });
+      if(!res.ok){
+        const d = await diagJson(res);
+        return dFail('the voice provider ' + diagHttpWords(res.status) + (d && d.error ? ': ' + diagSafe(d.error, 100) : ''), 'HTTP ' + res.status, 'Check the voice provider key in the worker.');
+      }
+      const buf = await res.arrayBuffer();
+      const type = res.headers.get('content-type') || '';
+      const via = res.headers.get('x-jarvis-voice') || 'worker';
+      if(buf.byteLength < 2000 || !/audio/i.test(type)) return dFail('the voice provider answered, but not with audio', type + ', ' + buf.byteLength + ' bytes', '');
+      ctx.wav = buf;
+      diagState.ttsWav = buf;
+      return dPass('synthesised speech via ' + via + ' in ' + ms + ' ms', Math.round(buf.byteLength / 1024) + ' KB of audio, not played');
+    } });
+  add({ id: 'voice.loopback', category: 'Voice', name: 'Speech loop (TTS → recognition)', critical: 2, requires: ['voice.tts'], timeoutMs: 30000, kind: 'real',
+    description: 'The synthesised audio is sent to speech recognition and the words must come back (no microphone involved)',
+    timeoutFix: 'Speech recognition is slow: check the STT service.',
+    run: async (ctx) => {
+      const wav = diagState.ttsWav;
+      if(!wav) return dBlocked('there is no synthesised audio to send', '', '');
+      const { res, ms } = await diagFetch(ctx, '/stt', { body: wav, headers: { 'Content-Type': 'audio/wav' }, method: 'POST' });
+      const d = await diagJson(res);
+      if(!res.ok){
+        const k = diagHttpKind(res.status);
+        return dFail('speech recognition ' + diagHttpWords(res.status) + (d && d.error ? ': ' + diagSafe(d.error, 100) : ''), 'HTTP ' + res.status,
+          k === 'limit' || /quota|limit|neuron/i.test(String(d && d.error)) ? 'The transcription allowance is used up: add a Groq key to the worker.' : 'Check the speech-to-text service in the worker.');
+      }
+      const heard = String((d && d.text) || '').toLowerCase();
+      if(/(one|two|three|testing)/.test(heard)) return dPass('recognition understood the synthesised phrase (' + ms + ' ms)', 'heard: "' + diagSafe(heard, 50) + '". Live microphone capture is not covered: it needs real speech');
+      if(!heard.trim()) return dWarn('recognition accepted the audio but heard nothing', 'via ' + (d && d.via || '?'), 'Say a sentence to JARVIS to check hearing by hand.');
+      return dWarn('recognition answered, but with different words than were spoken', 'heard: "' + diagSafe(heard, 50) + '"', '');
+    } });
+
+  /* ---- Backend & integrations ---- */
+  add({ id: 'api.search', category: 'Integrations', name: 'Web search', critical: 1, requires: ['core.worker', 'core.auth'], timeoutMs: 15000,
+    description: 'A real search through the worker, checking the result structure',
+    run: async (ctx) => {
+      const { res, ms } = await diagFetch(ctx, '/search', { json: { query: 'weather today' } });
+      const d = await diagJson(res);
+      if(!res.ok) return dFail('web search ' + diagHttpWords(res.status), 'HTTP ' + res.status, 'The search provider may be blocking the worker: try again later.');
+      const list = d && (d.results || d.items);
+      if(!Array.isArray(list)) return dFail('web search answered with an unexpected structure', '', '');
+      return list.length ? dPass('search returned ' + list.length + ' results in ' + ms + ' ms', '') : dWarn('search worked but returned no results', 'HTTP 200', '');
+    } });
+  add({ id: 'api.db', category: 'Integrations', name: 'Database (D1)', critical: 1, requires: ['core.worker', 'core.auth'], timeoutMs: 10000,
+    description: 'A read-only query of the agent tables in the worker database',
+    run: async (ctx) => {
+      const { res, ms } = await diagFetch(ctx, '/approvals/pending');
+      const d = await diagJson(res);
+      if(res.status === 500 || res.status === 503){
+        if(/JARVIS_DB|no JARVIS/i.test(String(d && d.error))) return dBlocked('the worker has no database bound (JARVIS_DB)', '', 'Bind a D1 database named JARVIS_DB if you want scheduled messages and agent memory.');
+        return dFail('the database query failed: ' + diagSafe(d && d.error, 100), 'HTTP ' + res.status, 'Check the D1 binding.');
+      }
+      if(!res.ok) return dFail('the database route ' + diagHttpWords(res.status), '', '');
+      return d && Array.isArray(d.approvals) ? dPass('the database answered in ' + ms + ' ms', d.approvals.length + ' pending approval(s)') : dFail('the database answered with an unexpected structure', '', '');
+    } });
+  const shopifyNames = Array.isArray(H.shopify) ? H.shopify : [];
+  add({ id: 'api.shopify', quick: true, category: 'Integrations', name: 'Shopify', critical: 2, requires: shopifyNames.length ? ['core.worker', 'core.auth'] : [], timeoutMs: 15000,
+    description: 'A read-only shop-name query',
+    run: async (ctx) => {
+      if(!shopifyNames.length) return dNot('Shopify is not configured in this installation', '', '');
+      const { res, ms } = await diagFetch(ctx, '/shopify/query', { json: { query: '{ shop { name } }' } });
+      const d = await diagJson(res);
+      if(!res.ok) return dFail('Shopify ' + diagHttpWords(res.status) + (d && d.error ? ': ' + diagSafe(d.error, 100) : ''), 'HTTP ' + res.status,
+        diagHttpKind(res.status) === 'auth' ? 'The Shopify access token was rejected: create a new one.' : 'Check the store credentials in the worker.');
+      const name = d && d.data && d.data.shop && d.data.shop.name;
+      return name ? dPass('Shopify answered in ' + ms + ' ms', 'store: ' + diagSafe(name, 40)) : dFail('Shopify answered, but the shop query returned no shop', 'HTTP 200', 'Check the Shopify token scopes.');
+    } });
+  add({ id: 'api.calendar', category: 'Integrations', name: 'Calendar', critical: 1, requires: H.calendar ? ['core.worker', 'core.auth'] : [], timeoutMs: 15000,
+    description: 'A read-only request for today\'s events',
+    run: async (ctx) => {
+      if(!H.calendar) return dNot(H.calendar_can_connect ? 'the calendar is not connected (say "connect my calendar")' : 'the calendar is not configured', '', '');
+      const { res, ms } = await diagFetch(ctx, '/calendar/upcoming?days=1');
+      const d = await diagJson(res);
+      if(!res.ok){
+        if(/not connected|connect/i.test(String(d && d.error))) return dBlocked('the calendar needs to be connected again', '', 'Say "connect my calendar".');
+        return dFail('the calendar ' + diagHttpWords(res.status), 'HTTP ' + res.status, '');
+      }
+      return d && Array.isArray(d.events) ? dPass('the calendar answered in ' + ms + ' ms', d.events.length + ' event(s) today') : dFail('the calendar answered with an unexpected structure', '', '');
+    } });
+  add({ id: 'api.mail', category: 'Integrations', name: 'Mail', critical: 1, description: 'Configuration only: the mailbox is private and is not read',
+    run: async () => H.gmail ? dNot('mail is configured, but a test would have to read your mailbox, so it was not run', 'no safe read-only test', '') : dNot('mail is not configured', '', '') });
+  add({ id: 'api.messaging', category: 'Integrations', name: 'WhatsApp and calls', critical: 1, description: 'Configuration and scheduler only: sending is never tested',
+    run: async () => {
+      if(!H.whatsapp && !H.call) return dNot('messaging is not configured', Array.isArray(H.whatsapp_missing) && H.whatsapp_missing.length ? 'missing: ' + H.whatsapp_missing.join(', ') : '', '');
+      if(H.whatsapp_later && !H.whatsapp_cron) return dWarn('configured, but the scheduler that sends delayed messages is not firing', 'cron: not alive', 'Check that the worker Cron Trigger is enabled.');
+      return dNot('configured; a real test would send a message, so none was sent', H.whatsapp_later ? 'scheduler: alive' : '', '');
+    } });
+  add({ id: 'api.model3d', category: 'Integrations', name: '3D service', critical: 1, requires: H.model3d ? ['core.worker', 'core.auth'] : [], timeoutMs: 15000,
+    description: 'The 3D provider\'s read-only account check',
+    run: async (ctx) => {
+      if(!H.model3d) return dNot('no 3D service is configured', '', '');
+      const { res, ms } = await diagFetch(ctx, '/model3d/check', { json: {} });
+      const d = await diagJson(res);
+      if(!res.ok) return dFail('the 3D check ' + diagHttpWords(res.status), '', '');
+      if(d && d.ok === true) return d.note ? dWarn(diagSafe(d.note, 120), (d.provider_label || '') + ', ' + ms + ' ms', 'Top up the 3D provider account.') : dPass((d.provider_label || '3D service') + ' answered in ' + ms + ' ms', typeof d.balance === 'number' ? 'balance: ' + d.balance : '');
+      return dFail('the 3D service check failed: ' + diagSafe(d && (d.error || d.code), 100), (d && d.provider_label) || '', 'Check the 3D provider key.');
+    } });
+
+  /* ---- Local tools (desktop) ---- */
+  only({ id: 'tools.bridge', quick: true, category: 'Local tools', name: 'Desktop bridge', critical: 2,
+    description: 'A read-only system reading through the desktop app',
+    run: async () => {
+      if(!desktop || !invoke) return dNot('this is the web version: there is no local companion to test', '', '');
+      let raw;
+      try{ raw = await invoke('system_metrics'); }
+      catch(err){
+        const msg = String((err && err.message) || err);
+        if(/not found|unknown command/i.test(msg)) return dFail('the desktop app is older than this page', diagSafe(msg, 80), 'Rebuild the desktop app from the latest jarvis-desktop.zip.');
+        if(/not allowed|acl|permission/i.test(msg)) return dFail('the desktop app refused the command', diagSafe(msg, 80), 'Rebuild the desktop app: its permissions are out of date.');
+        return dFail('the desktop app returned an error: ' + diagSafe(msg, 100), '', '');
+      }
+      let m = null; try{ m = JSON.parse(raw); }catch(err){}
+      if(!m || typeof m.cpu_percent !== 'number' || typeof m.memory_total_bytes !== 'number') return dFail('the desktop app answered with an unexpected structure', '', '');
+      return dPass('the desktop app answered (CPU ' + m.cpu_percent + '%, memory ' + m.memory_percent + '%)', 'read-only system reading');
+    } });
+  add({ id: 'tools.registry', category: 'Local tools', name: 'Tool commands', critical: 1, requires: desktop && invoke ? ['tools.bridge'] : [], timeoutMs: 12000,
+    description: 'Read-only commands (process list, work area) and the refusal of an unknown command',
+    run: async () => {
+      if(!desktop || !invoke) return dNot('web version: no local tools', '', '');
+      const p = JSON.parse(await invoke('list_processes', { limit: 1 }));
+      if(!p || !Array.isArray(p.processes) || !p.processes.length) return dFail('the process list came back empty or malformed', '', '');
+      let refused = false;
+      try{ await invoke('__jarvis_diagnostics_no_such_command__'); }catch(err){ refused = true; }
+      if(!refused) return dFail('an unknown command was NOT refused by the desktop app', '', 'This is a safety problem: report it.');
+      return dPass('read-only tools answer and an unknown command is refused cleanly', 'process list and permission refusal checked');
+    } });
+
+  /* ---- Agents ---- */
+  only({ id: 'agents.registry', quick: true, category: 'Agents', name: 'Agent registry', critical: 1, requires: ['core.worker', 'core.auth'], timeoutMs: 12000,
+    description: 'The orchestrator\'s agent list, read from the worker',
+    run: async (ctx) => {
+      const { res, ms } = await diagFetch(ctx, '/agents');
+      const d = await diagJson(res);
+      if(!res.ok) return dFail('the agent registry ' + diagHttpWords(res.status), '', '');
+      const list = d && d.agents;
+      if(!Array.isArray(list) || !list.length) return dFail('the registry returned no agents', '', 'Redeploy jarvis-worker.js.');
+      agentRegistryCache = d;
+      const paused = list.filter(a => a.paused).length;
+      return paused === list.length ? dWarn('all agents are paused', list.length + ' agents', 'Resume the agents.') : dPass(list.length + ' agents are discoverable (' + ms + ' ms)', paused ? paused + ' paused' : 'none paused');
+    } });
+  add({ id: 'agents.run', category: 'Agents', name: 'Agent execution', critical: 1, requires: ['agents.registry', 'core.model'], timeoutMs: 30000,
+    description: 'A real task for one agent that has no tools, through the supervisor path (one small model call)',
+    run: async () => {
+      const reg = agentRegistryCache;
+      const agent = (reg && reg.agents || []).find(a => !a.paused && (!a.tools || !a.tools.length));
+      if(!agent) return dNot('no tool-free agent is available for a safe test task', '', '');
+      const out = await runAgentPersona(agent.id, 'Reply with the single word OK.');
+      if(!out || !out.ok) return dFail('the ' + agent.name + ' did not answer: ' + diagSafe(out && out.error, 100), '', '');
+      return out.text && out.text.trim() ? dPass('the ' + agent.name + ' ran a task and its answer came back', 'real agent run, 1 model call: "' + diagSafe(out.text, 30) + '"') : dFail('the agent returned an empty answer', '', '');
+    } });
+  add({ id: 'agents.planner', category: 'Agents', name: 'Task planner logic', critical: 1, kind: 'local-logic',
+    description: 'Plan validation and dependency order on a crafted plan (local logic, no model call)',
+    run: async () => {
+      const L = taskLimits();
+      const v = validatePlan({ steps: [{ id: 'a', role: 'research' }, { id: 'b', role: 'nonsense' }, { id: 'c', role: 'coding', depends_on: ['a', 'zzz'] }, { id: 'a', role: 'qa' }] }, L);
+      const ok = v.steps.length === 2 && v.steps[1].depends_on.join() === 'a';
+      if(!ok) return dFail('plan validation did not drop the bad role, the unknown dependency and the duplicate', JSON.stringify(v.steps.map(s => s.id)), '');
+      const t = { steps: v.steps.map(s => Object.assign({}, s)) };
+      const ready1 = readySteps(t).map(s => s.id).join();
+      t.steps[0].status = 'done';
+      const ready2 = readySteps(t).map(s => s.id).join();
+      return ready1 === 'a' && ready2 === 'c' ? dPass('plans are validated and steps run in dependency order', 'local logic: this does NOT test a real external agent') : dFail('dependency ordering is wrong', ready1 + ' / ' + ready2, '');
+    } });
+
+  /* ---- Visual ---- */
+  add({ id: 'vision.image', category: 'Vision', name: 'Image analysis', critical: 1, requires: ['core.model'], timeoutMs: 30000,
+    description: 'A generated picture (a red disc) is sent to the model, which must name its colour',
+    timeoutFix: 'The vision engine is slow: check the model provider.',
+    run: async (ctx) => {
+      const { res, ms } = await diagFetch(ctx, '/', { json: { model: 'claude', max_tokens: 20, messages: [{ role: 'user', content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: diagTinyPngBase64() } },
+        { type: 'text', text: 'What colour is the circle? Answer with one word.' }] }] } });
+      const d = await diagJson(res);
+      if(!res.ok) return dFail('image analysis ' + diagHttpWords(res.status) + (d && d.error ? ': ' + diagSafe(d.error, 100) : ''), '', 'Check that a vision-capable engine is configured in the worker.');
+      const text = d && Array.isArray(d.content) ? d.content.filter(b => b && b.type === 'text').map(b => b.text).join(' ') : '';
+      return /red/i.test(text) ? dPass('the model saw the picture and named its colour (' + ms + ' ms)', 'answer: "' + diagSafe(text, 30) + '"')
+                               : dFail('the model did not identify the picture correctly', 'answer: "' + diagSafe(text, 50) + '"', 'The engine may not be able to see images: check vision in /health.');
+    } });
+  add({ id: 'vision.video', category: 'Vision', name: 'Video processing', critical: 1, timeoutMs: 25000, kind: 'local-logic',
+    description: 'A generated three-scene clip goes through the page\'s own scene detector',
+    run: async () => {
+      const file = await diagSyntheticVideo();
+      if(!file) return dNot('this browser cannot record a test clip', '', '');
+      const out = await fileToVideoFrames(file);
+      return out.scenes && out.scenes.length >= 2 ? dPass('the video pipeline found ' + out.scenes.length + ' scenes in a 3-scene test clip', out.frames.length + ' keyframes, local processing')
+                                                   : dFail('the video pipeline did not find the scene changes of a clip made of 3 colours', (out.scenes || []).length + ' scene(s)', '');
+    } });
+  only({ id: 'vision.camera', quick: true, category: 'Vision', name: 'Camera access', critical: 1, kind: 'availability',
+    description: 'Camera devices and permission, inspected without starting the camera',
+    run: async () => {
+      const [perm, n] = await Promise.all([diagPermission('camera'), diagDevices('videoinput')]);
+      if(n === 0) return dNot('no camera device was found', 'permission: ' + perm, '');
+      if(perm === 'denied') return dBlocked('camera access is denied', '', 'Allow the camera for JARVIS in Windows privacy settings.');
+      if(perm === 'granted') return dPass('camera access is granted (' + n + ' device' + (n === 1 ? '' : 's') + ')', 'the camera was not started');
+      return dWarn('camera access has not been granted yet', 'devices: ' + (n == null ? 'unknown' : n), 'Say "open my camera" once and allow it.');
+    } });
+  add({ id: 'vision.live', category: 'Vision', name: 'Live camera tracking', critical: 1, kind: 'availability',
+    description: 'Frame rate of the running camera and tracker (only if the camera is already on)',
+    run: async () => {
+      if(!liveActive()) return dNot('the camera is off: open it to measure live tracking', '', '');
+      const p = lastGesturePerf;
+      if(!p || Date.now() - p.at > 5000) return dWarn('the camera is on but the tracker has not reported recently', '', 'Check the camera window.');
+      const fps = Math.round(p.trackFps || 0);
+      return fps >= 10 ? dPass('tracking at ' + fps + ' fps (' + Math.round(p.camFps || 0) + ' fps camera)', Math.round(p.inferMs || 0) + ' ms per read') : dWarn('tracking is slow: ' + fps + ' fps', '', 'Close heavy programs or lower the camera resolution.');
+    } });
+
+  /* ---- Workspace ---- */
+  add({ id: 'ws.access', quick: true, category: 'Workspace', name: 'Project access', critical: 1, timeoutMs: 20000,
+    description: 'The authorized project folders, indexed read-only',
+    run: async () => {
+      if(!desktop || !invoke) return dNot('web version: no workspace access', '', '');
+      let list;
+      try{ list = ((await invoke('projects_list')) || {}).projects || []; }
+      catch(err){ return dFail('the desktop app has no project support: ' + diagSafe(err, 80), '', 'Rebuild the desktop app from the latest jarvis-desktop.zip.'); }
+      if(!list.length) return dNot('no project is authorized yet', '', 'Say "add a project" to give JARVIS a folder.');
+      const p = list[0];
+      const t0 = performance.now();
+      const ix = await invoke('project_index', { project: p.id });
+      if(!ix || !(ix.files > 0)) return dFail('project "' + p.id + '" indexed to nothing', '', 'Check that the folder still exists and is readable.');
+      diagState.project = p.id;
+      return dPass('project "' + p.id + '" is readable: ' + ix.files + ' files', (ix.languages || []).length + ' languages, indexed in ' + Math.round(performance.now() - t0) + ' ms');
+    } });
+  add({ id: 'ws.search', category: 'Workspace', name: 'Code search', critical: 1, requires: ['ws.access'], timeoutMs: 20000,
+    description: 'A text search of the first project',
+    run: async () => {
+      const r = await tauriInvoke()('project_search', { project: diagState.project, query: 'function', ext: null, maxResults: 5 });
+      return r && Array.isArray(r.matches) ? dPass('search works (' + r.matches.length + ' match' + (r.matches.length === 1 ? '' : 'es') + ', ' + r.files_scanned + ' files scanned)', 'read-only') : dFail('search returned an unexpected structure', '', '');
+    } });
+  add({ id: 'ws.git', category: 'Workspace', name: 'Git status', critical: 1, requires: ['ws.access'], timeoutMs: 15000,
+    description: 'git status of the first project (read-only)',
+    run: async () => {
+      let r;
+      try{ r = await tauriInvoke()('project_git', { project: diagState.project, action: 'status', args: ['--short'], approved: false }); }
+      catch(err){ return dFail('git status failed: ' + diagSafe(err, 90), '', ''); }
+      if(r && r.ok) return dPass('git answered: ' + (String(r.output || '').trim() ? String(r.output).trim().split('\n').length + ' changed file(s)' : 'clean working tree'), 'read-only');
+      return /not a git|no such file|not found|could not run git/i.test(String(r && r.error)) ? dWarn('git is unavailable for this project', diagSafe(r && r.error, 90), 'Install Git or run git init in the folder.') : dFail('git status failed', diagSafe(r && r.error, 90), '');
+    } });
+  add({ id: 'ws.guard', category: 'Workspace', name: 'File-access limits', critical: 2, requires: ['ws.access'], timeoutMs: 10000,
+    description: 'A path outside the project must be refused',
+    run: async () => {
+      let refused = false, read = null;
+      try{ read = await tauriInvoke()('project_read_file', { project: diagState.project, path: '../../../Windows/win.ini', startLine: null, maxLines: 3 }); }
+      catch(err){ refused = /outside the project|refused/i.test(String((err && err.message) || err)); }
+      return refused ? dPass('reading outside the project is refused', 'path escape blocked') : dFail('a path OUTSIDE the project was not refused' + (read ? ' (it was read)' : ''), '', 'This is a safety problem: report it.');
+    } });
+
+  /* ---- Interface & stability ---- */
+  only({ id: 'ui.components', quick: true, category: 'Interface', name: 'Interface components', critical: 2, kind: 'availability',
+    description: 'The elements the app needs are present (not a test of every feature)',
+    run: async () => {
+      const need = ['chatInput', 'stopBtn', 'livePane', 'diagOverlay'];
+      const missing = need.filter(id => !document.getElementById(id));
+      const shown = document.getElementById('diagOverlay');
+      const visible = shown && shown.getBoundingClientRect().width > 100;
+      if(missing.length) return dFail('missing interface parts: ' + missing.join(', '), '', 'A page update lost an element: reload the app.');
+      if(!visible) return dFail('the diagnostic screen is not visible', '', '');
+      return dPass(need.length + '/' + need.length + ' required elements are present', 'the diagnostic screen itself rendered');
+    } });
+  only({ id: 'ui.errors', quick: true, category: 'Interface', name: 'Recent errors', critical: 2, kind: 'availability',
+    description: 'Problems the app has logged recently',
+    run: async () => {
+      const recent = (typeof recentProblems !== 'undefined' ? recentProblems : []).slice(-3);
+      return recent.length ? dWarn(recent.length + ' recent problem(s) logged: ' + recent.map(x => diagSafe(x, 60)).join(' | '), '', 'Look at the first problem listed.') : dPass('no problems are logged', 'from the app\'s own error record');
+    } });
+  add({ id: 'ui.storage', category: 'Interface', name: 'Local storage', critical: 1,
+    description: 'A write and read of the browser storage (settings and history live there)',
+    run: async () => {
+      const k = 'jarvis:diag:probe';
+      try{ localStorage.setItem(k, String(Date.now())); const ok = !!localStorage.getItem(k); localStorage.removeItem(k); return ok ? dPass('storage works', 'write, read and delete') : dFail('storage did not return what was written', '', ''); }
+      catch(err){ return dFail('storage is not available: ' + diagSafe(err, 80), '', 'Settings and reports cannot be saved.'); }
+    } });
+  only({ id: 'ui.responsive', quick: true, category: 'Interface', name: 'Responsiveness', critical: 2, kind: 'availability',
+    description: 'The longest freeze of the interface while the other tests ran',
+    run: async () => {
+      await new Promise(r => setTimeout(r, 400));
+      const worst = Math.round(diagLag.max), where = diagLag.where ? ' during "' + diagLag.where + '"' : '';
+      return worst < 500 ? dPass('the interface stayed responsive (longest stall ' + worst + ' ms)', 'measured while the tests ran')
+           : worst < 1500 ? dWarn('the interface stalled for up to ' + worst + ' ms' + where, 'measured while the tests ran', 'Close heavy programs or the camera and try again.')
+           : dFail('the interface froze for ' + worst + ' ms' + where, '', 'Something is blocking the page: this is a bug to report.');
+    } });
+  return T;
+}
+
+const diagState = { ttsWav: null, project: null };
+
+/* ------------------------------------------------------------------
+   THE NARRATOR: short spoken updates through the existing voice.
+   Never awaited by the engine; an update that is out of date by the time
+   the previous one ends is replaced, not queued; quiet mode is respected
+   (speak() already does that), and a voice that fails changes nothing.
+------------------------------------------------------------------ */
+const diagNarrator = {
+  busy: false, pending: null, enabled: true, log: [],
+  say(line){
+    if(!line) return;
+    this.log.push(line); if(this.log.length > 60) this.log.shift();
+    if(!this.enabled) return;
+    if(this.busy){ this.pending = line; return; }
+    this._speak(line);
+  },
+  async _speak(line){
+    this.busy = true;
+    try{
+      if(typeof speak === 'function' && IS_DESKTOP){
+        await Promise.race([Promise.resolve(speak(line)).catch(() => {}), new Promise(r => setTimeout(r, 7000))]);
+      }
+    }catch(err){ /* narration is never allowed to matter */ }
+    this.busy = false;
+    if(this.pending){ const next = this.pending; this.pending = null; if(this.enabled) this._speak(next); }
+  },
+  stop(){ this.enabled = false; this.pending = null; },
+  start(){ this.enabled = true; this.busy = false; this.pending = null; }
+};
+
+const DIAG_CAT_HE = { 'Core assistant': 'המוח', 'Voice': 'הקול', 'Integrations': 'החיבורים', 'Local tools': 'הכלים המקומיים', 'Agents': 'הסוכנים', 'Vision': 'הראייה', 'Workspace': 'סביבת העבודה', 'Interface': 'הממשק' };
+const DIAG_VERDICT_TEXT = {
+  en: { OPERATIONAL: 'All systems operational.', OPERATIONAL_WITH_NOTES: 'The system is operational, with some items that could not be fully verified.', NEEDS_ATTENTION: 'The system works, but something needs attention.', CRITICAL: 'A critical component is not working.', UNKNOWN: 'Nothing could be verified.' },
+  he: { OPERATIONAL: 'כל המערכות תקינות.', OPERATIONAL_WITH_NOTES: 'המערכת תקינה, עם כמה דברים שלא ניתן היה לאמת עד הסוף.', NEEDS_ATTENTION: 'המערכת עובדת, אבל משהו דורש תשומת לב.', CRITICAL: 'רכיב קריטי לא עובד.', UNKNOWN: 'לא הצלחתי לאמת שום דבר.' }
+};
+function diagSpokenSummary(rep, he){
+  const c = rep.counts;
+  const head = DIAG_VERDICT_TEXT[he ? 'he' : 'en'][rep.verdict] || '';
+  const top = rep.problems[0];
+  const stats = he ? c.passed + ' מתוך ' + c.total + ' בדיקות עברו.' : c.passed + ' of ' + c.total + ' checks passed.';
+  let s = head + ' ' + stats;
+  if(top){
+    s += he ? ' הבעיה העיקרית: ' + top.name + ': ' + top.summary + '.' : ' The main problem: ' + top.name + ': ' + top.summary + '.';
+    if(top.fix) s += he ? ' מה לעשות: ' + top.fix : ' Next step: ' + top.fix;
+  }
+  return s;
+}
+
+/* ------------------------------------------------------------------
+   THE SCREEN. Bright, drawn from the engine's results and nothing else.
+------------------------------------------------------------------ */
+const DIAG_HISTORY_KEY = 'jarvis:diag:history';
+function diagHold(){ let v = NaN; try{ v = Number(localStorage.getItem('jarvis:diag:holdMs')); }catch(err){} return isFinite(v) && v >= 1000 ? v : 8000; }
+
+const diagUi = { el: null, raf: 0, pulse: 0, active: '', activeCat: '', t0: 0, done: false, sphereT: 0, particles: null };
+
+function diagBuildOverlay(mode){
+  let el = document.getElementById('diagOverlay');
+  if(el) el.remove();
+  el = document.createElement('div');
+  el.id = 'diagOverlay';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-label', 'System diagnostics');
+  el.innerHTML =
+    '<div class="dgRays"></div>' +
+    '<header class="dgTop"><div class="dgBrand">J.A.R.V.I.S. <b>SYSTEM DIAGNOSTICS</b></div>' +
+    '<div class="dgMode" id="dgMode"></div><div class="dgClock" id="dgClock">0.0 s</div>' +
+    '<button id="dgCancel" type="button">Cancel</button></header>' +
+    '<main class="dgMain"><section class="dgCol" id="dgLeft"></section>' +
+    '<section class="dgCenter"><canvas id="dgSphere"></canvas><div class="dgNow"><div id="dgNowCat"></div><div id="dgNowTest"></div></div></section>' +
+    '<section class="dgCol" id="dgRight"></section></main>' +
+    '<footer class="dgBottom"><div class="dgBar"><i id="dgBarFill"></i></div><div id="dgCounts"></div></footer>' +
+    '<div class="dgReport" id="dgReport"></div>';
+  document.body.appendChild(el);
+  el.querySelector('#dgMode').textContent = mode === 'quick' ? 'QUICK TEST' : 'FULL SELF-TEST';
+  diagUi.el = el;
+  return el;
+}
+
+function diagBuildPanels(engine){
+  const cats = [];
+  for(const r of engine.list()) if(cats.indexOf(r.category) < 0) cats.push(r.category);
+  const left = diagUi.el.querySelector('#dgLeft'), right = diagUi.el.querySelector('#dgRight');
+  left.innerHTML = ''; right.innerHTML = '';
+  cats.forEach((cat, i) => {
+    const p = document.createElement('div');
+    p.className = 'dgPanel';
+    p.dataset.cat = cat;
+    const h = document.createElement('div'); h.className = 'dgPanelHead'; h.textContent = cat;
+    p.appendChild(h);
+    for(const r of engine.list().filter(x => x.category === cat)){
+      const row = document.createElement('div');
+      row.className = 'dgRow st-PENDING'; row.dataset.id = r.id;
+      row.innerHTML = '<span class="dgChip"></span><span class="dgName"></span><span class="dgRes"></span>';
+      row.querySelector('.dgName').textContent = r.name;
+      row.querySelector('.dgChip').textContent = DIAG_STATUS_LABEL.PENDING;
+      p.appendChild(row);
+    }
+    (i % 2 === 0 ? left : right).appendChild(p);
+  });
+}
+
+function diagRenderRow(r){
+  if(!diagUi.el) return;
+  const row = diagUi.el.querySelector('.dgRow[data-id="' + r.id + '"]');
+  if(!row) return;
+  row.className = 'dgRow st-' + r.status;
+  row.querySelector('.dgChip').textContent = DIAG_STATUS_LABEL[r.status] || r.status;
+  const res = row.querySelector('.dgRes');
+  res.textContent = r.status === 'RUNNING' ? (r.current || '') : r.summary;
+  row.title = r.name + ' - ' + (DIAG_STATUS_LABEL[r.status] || r.status) + (r.summary ? ': ' + r.summary : '') + (r.evidence ? '\nEvidence: ' + r.evidence : '') + (r.fix ? '\nNext: ' + r.fix : '') + (r.ms != null ? '\n' + r.ms + ' ms' : '');
+  const panel = row.closest('.dgPanel');
+  if(r.status === 'RUNNING'){
+    diagUi.el.querySelectorAll('.dgPanel.active').forEach(p => p.classList.remove('active'));
+    panel.classList.add('active');
+    diagUi.pulse = 1; diagUi.activeCat = r.category; diagUi.active = r.name;
+    diagUi.el.querySelector('#dgNowCat').textContent = r.category.toUpperCase();
+    diagUi.el.querySelector('#dgNowTest').textContent = (r.description || r.name);
+  }
+}
+
+function diagRenderCounts(engine){
+  if(!diagUi.el) return;
+  const list = engine.list();
+  const done = list.filter(r => DIAG_FINAL.indexOf(r.status) >= 0).length;
+  diagUi.el.querySelector('#dgBarFill').style.width = Math.round(100 * done / list.length) + '%';
+  const n = s => list.filter(r => r.status === s).length;
+  diagUi.el.querySelector('#dgCounts').textContent = done + '/' + list.length + ' complete  ·  ' + n('PASS') + ' pass  ·  ' + n('FAIL') + ' fail  ·  ' + n('WARNING') + ' warning  ·  ' + n('BLOCKED') + ' blocked  ·  ' + n('NOT_TESTED') + ' not tested';
+}
+
+function diagShowReport(rep){
+  const box = diagUi.el.querySelector('#dgReport');
+  diagUi.el.classList.add('dgDone');
+  diagUi.el.querySelector('#dgNowCat').textContent = 'DIAGNOSTICS COMPLETE';
+  diagUi.el.querySelector('#dgNowTest').textContent = '';
+  diagUi.el.querySelectorAll('.dgPanel.active').forEach(p => p.classList.remove('active'));
+  const c = rep.counts;
+  const label = { OPERATIONAL: 'OPERATIONAL', OPERATIONAL_WITH_NOTES: 'OPERATIONAL · WITH NOTES', NEEDS_ATTENTION: 'NEEDS ATTENTION', CRITICAL: 'CRITICAL', UNKNOWN: 'UNKNOWN' }[rep.verdict];
+  box.innerHTML = '';
+  const h = document.createElement('div'); h.className = 'dgRepHead'; h.innerHTML = '<span>SYSTEM REPORT</span><b class="dgVerdict v-' + rep.verdict + '"></b>';
+  h.querySelector('b').textContent = label + (rep.score != null ? '  ·  health ' + rep.score + '%' : '');
+  const stats = document.createElement('div'); stats.className = 'dgRepStats';
+  stats.textContent = c.total + ' tests  ·  ' + c.passed + ' passed  ·  ' + c.failed + ' failed  ·  ' + c.warnings + ' warnings  ·  ' + c.blocked + ' blocked  ·  ' + c.notTested + ' not performed  ·  ' + (rep.ms / 1000).toFixed(1) + ' s';
+  box.append(h, stats);
+  if(rep.problems.length){
+    const ul = document.createElement('div'); ul.className = 'dgProblems';
+    for(const p of rep.problems){
+      const d = document.createElement('div'); d.className = 'dgProb st-' + p.status;
+      d.innerHTML = '<b></b><span></span><em></em>';
+      d.querySelector('b').textContent = p.name + ' — ' + (DIAG_STATUS_LABEL[p.status] || p.status);
+      d.querySelector('span').textContent = p.summary;
+      d.querySelector('em').textContent = p.fix ? 'Next step: ' + p.fix : '';
+      ul.appendChild(d);
+    }
+    box.appendChild(ul);
+  } else {
+    const ok = document.createElement('div'); ok.className = 'dgRepOk'; ok.textContent = 'Nothing needs attention.'; box.appendChild(ok);
+  }
+  const close = document.createElement('button'); close.type = 'button'; close.id = 'dgCloseNow'; close.textContent = 'Close now';
+  box.appendChild(close);
+  box.classList.add('show');
+}
+
+/* The sphere: bright, drawn every frame from the real state (the pulse is
+   set when a test starts, the colour of the emphasis follows the category). */
+function diagStartSphere(){
+  const cv = diagUi.el.querySelector('#dgSphere');
+  const ctx = cv.getContext('2d');
+  const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /* The app's own colours, read now so ULTRON's amber is followed too. */
+  const cs = getComputedStyle(document.documentElement), body = getComputedStyle(document.body);
+  const pick = (name, fb) => (body.getPropertyValue(name) || cs.getPropertyValue(name) || fb).trim() || fb;
+  const CY = pick('--cyan-rgb', '0, 255, 255'), BL = pick('--blue-rgb', '0, 191, 255'), PN = pick('--panel-rgb', '0, 10, 20');
+  if(!diagUi.particles){
+    diagUi.particles = Array.from({ length: 70 }, () => ({ a: Math.random() * 6.283, r: 0.55 + Math.random() * 0.75, s: (Math.random() - 0.5) * 0.5, z: Math.random(), sz: 1 + Math.random() * 2 }));
+  }
+  const fit = () => {
+    const box = cv.parentElement.getBoundingClientRect();
+    const s = Math.max(240, Math.min(box.width, box.height - 70));
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.style.width = s + 'px'; cv.style.height = s + 'px';
+    cv.width = Math.round(s * dpr); cv.height = Math.round(s * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cv._s = s;
+  };
+  fit(); cv._fit = fit;
+  /* glow sprite in the app's cyan */
+  const sprite = document.createElement('canvas'); sprite.width = sprite.height = 32;
+  { const g = sprite.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(' + CY + ',.85)'); gr.addColorStop(1, 'rgba(' + CY + ',0)'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); }
+  let last = performance.now();
+  const frame = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if(!diagUi.el) return;
+    diagUi.sphereT += reduced ? 0 : dt;
+    diagUi.pulse = Math.max(0, diagUi.pulse - dt * 1.3);
+    const s = cv._s, c = s / 2, t = diagUi.sphereT, pulse = diagUi.pulse;
+    const R = s * 0.235 * (1 + 0.018 * Math.sin(t * 2.1) + pulse * 0.05);
+    ctx.clearRect(0, 0, s, s);
+    ctx.globalCompositeOperation = 'lighter';
+    /* halo */
+    let g = ctx.createRadialGradient(c, c, R * 0.5, c, c, c);
+    g.addColorStop(0, 'rgba(' + BL + ',' + (0.34 + pulse * 0.25) + ')'); g.addColorStop(1, 'rgba(' + BL + ',0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
+    /* orbital rings */
+    const ring = (rx, ry, rot, w, a, dots) => {
+      ctx.save(); ctx.translate(c, c); ctx.rotate(rot);
+      ctx.strokeStyle = 'rgba(' + CY + ',' + a * 0.2 + ')'; ctx.lineWidth = w * 5;
+      ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, 6.283); ctx.stroke();
+      ctx.strokeStyle = 'rgba(' + CY + ',' + a + ')'; ctx.lineWidth = w;
+      ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, 6.283); ctx.stroke();
+      for(let i = 0; i < dots; i++){
+        const a2 = t * (0.5 + i * 0.07) + i * (6.283 / dots);
+        ctx.drawImage(sprite, Math.cos(a2) * rx - 11, Math.sin(a2) * ry - 11, 22, 22);
+      }
+      ctx.restore();
+    };
+    ring(R * 1.55, R * 0.5, t * 0.25, 1.2, 0.85, 3);
+    ring(R * 1.3, R * 1.3, -t * 0.18, 1, 0.6, 5);
+    ring(R * 1.95, R * 0.66, -t * 0.12 + 1.1, 1, 0.5, 2);
+    ring(R * 1.15, R * 0.38, t * 0.34 + 2.2, 1.4, 0.7, 2);
+    /* the sphere: dark glass lit from inside, wireframe on it */
+    ctx.save();
+    ctx.beginPath(); ctx.arc(c, c, R, 0, 6.283); ctx.clip();
+    g = ctx.createRadialGradient(c, c, 0, c, c, R);
+    g.addColorStop(0, 'rgba(' + BL + ',' + (0.55 + pulse * 0.3) + ')'); g.addColorStop(0.55, 'rgba(' + BL + ',.16)'); g.addColorStop(1, 'rgba(' + CY + ',.08)');
+    ctx.fillStyle = g; ctx.fillRect(c - R, c - R, 2 * R, 2 * R);
+    ctx.strokeStyle = 'rgba(' + CY + ',.62)'; ctx.lineWidth = 1;
+    for(let i = 0; i < 6; i++){ const k = Math.cos(t * 0.35 + i * 0.5236); ctx.beginPath(); ctx.ellipse(c, c, Math.abs(k) * R, R, 0, 0, 6.283); ctx.stroke(); }
+    for(let i = -3; i <= 3; i++){ const y = c + i * R / 4, w = Math.sqrt(Math.max(0, R * R - (i * R / 4) ** 2)); ctx.beginPath(); ctx.ellipse(c, y, w, w * 0.16, 0, 0, 6.283); ctx.stroke(); }
+    ctx.fillStyle = 'rgba(' + CY + ',.07)';
+    for(let y = -R; y < R; y += 6){ ctx.fillRect(c - R, c + y + ((t * 22) % 6), 2 * R, 1.2); }
+    /* the two sweeping beams */
+    const by = c + Math.sin(t * 1.3) * R * 0.95;
+    g = ctx.createLinearGradient(0, by - 20, 0, by + 20);
+    g.addColorStop(0, 'rgba(' + CY + ',0)'); g.addColorStop(0.5, 'rgba(' + CY + ',.75)'); g.addColorStop(1, 'rgba(' + CY + ',0)');
+    ctx.fillStyle = g; ctx.fillRect(c - R, by - 20, 2 * R, 40);
+    const bx = c + Math.sin(t * 0.9 + 1.4) * R * 0.95;
+    g = ctx.createLinearGradient(bx - 16, 0, bx + 16, 0);
+    g.addColorStop(0, 'rgba(' + CY + ',0)'); g.addColorStop(0.5, 'rgba(' + CY + ',.6)'); g.addColorStop(1, 'rgba(' + CY + ',0)');
+    ctx.fillStyle = g; ctx.fillRect(bx - 16, c - R, 32, 2 * R);
+    /* the core, brighter on a pulse */
+    g = ctx.createRadialGradient(c, c, 0, c, c, R * 0.42);
+    g.addColorStop(0, 'rgba(255,255,255,' + (0.8 + pulse * 0.2) + ')'); g.addColorStop(0.4, 'rgba(' + CY + ',.55)'); g.addColorStop(1, 'rgba(' + CY + ',0)');
+    ctx.fillStyle = g; ctx.fillRect(c - R, c - R, 2 * R, 2 * R);
+    ctx.restore();
+    /* rim */
+    ctx.strokeStyle = 'rgba(' + CY + ',.22)'; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(c, c, R, 0, 6.283); ctx.stroke();
+    ctx.strokeStyle = 'rgba(' + CY + ',1)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(c, c, R, 0, 6.283); ctx.stroke();
+    /* the pulse ring, set when a test begins */
+    if(pulse > 0){
+      ctx.strokeStyle = 'rgba(' + CY + ',' + pulse * 0.8 + ')'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(c, c, R * (1.05 + (1 - pulse) * 0.9), 0, 6.283); ctx.stroke();
+    }
+    /* particles */
+    for(const p of diagUi.particles){
+      p.a += p.s * dt;
+      const rr = R * p.r, x = c + Math.cos(p.a) * rr, y = c + Math.sin(p.a * 1.1) * rr * 0.8;
+      ctx.globalAlpha = 0.35 + 0.5 * (0.5 + 0.5 * Math.sin(t * 2 + p.z * 9));
+      ctx.drawImage(sprite, x - p.sz * 3, y - p.sz * 3, p.sz * 6, p.sz * 6);
+    }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    diagUi.raf = requestAnimationFrame(frame);
+  };
+  diagUi.raf = requestAnimationFrame(frame);
+}
+
+function diagCloseOverlay(){
+  if(diagUi.raf) cancelAnimationFrame(diagUi.raf);
+  diagUi.raf = 0;
+  if(diagUi.el){ diagUi.el.remove(); diagUi.el = null; }
+}
+
+/* ------------------------------------------------------------------
+   PRESENTATION AND THE SESSION
+------------------------------------------------------------------ */
+let diagSession = null;
+var diagBusy = false;   // var: read by speak(), which can run before this line is reached
+
+/* The existing full-screen mechanisms, nothing new: the desktop orb's
+   expanded view IS the window made the whole screen; in a browser it is
+   the Fullscreen API (which may refuse without a click). The state before
+   is kept and put back, and the putting back is checked. */
+async function diagEnterFullscreen(){
+  const prev = { expanded: !!(window.__orbExpanded && window.__orbExpanded()), browserFs: !!document.fullscreenElement };
+  let how = 'overlay', limit = '';
+  try{
+    if(IS_DESKTOP && typeof window.__orbExpand === 'function'){
+      if(!prev.expanded) await Promise.race([window.__orbExpand(true), new Promise((_, no) => setTimeout(() => no(new Error('timed out')), 4000))]);
+      how = 'desktop full screen';
+    } else if(document.documentElement.requestFullscreen && !prev.browserFs){
+      await document.documentElement.requestFullscreen();
+      how = 'browser full screen';
+    } else if(prev.browserFs) how = 'browser full screen';
+  }catch(err){ limit = 'full screen was not possible (' + diagSafe(err, 60) + '): the test runs in the window'; how = 'overlay'; }
+  return { prev, how, limit };
+}
+async function diagExitFullscreen(state){
+  let restored = true, note = '';
+  try{
+    if(IS_DESKTOP && typeof window.__orbExpand === 'function'){
+      if(!state.prev.expanded) await Promise.race([window.__orbExpand(false), new Promise((_, no) => setTimeout(() => no(new Error('timed out')), 4000))]);
+      restored = !!(window.__orbExpanded && window.__orbExpanded()) === state.prev.expanded;
+    } else if(document.fullscreenElement && !state.prev.browserFs){
+      await document.exitFullscreen();
+      restored = !document.fullscreenElement;
+    }
+  }catch(err){ restored = false; note = diagSafe(err, 60); }
+  return { restored, note };
+}
+
+function diagSaveHistory(rep, extra){
+  try{
+    const list = JSON.parse(localStorage.getItem(DIAG_HISTORY_KEY) || '[]');
+    list.push(Object.assign({ at: new Date().toISOString(), mode: rep.mode, verdict: rep.verdict, score: rep.score, counts: rep.counts, ms: rep.ms, cancelled: rep.cancelled,
+      tests: rep.tests.map(t => ({ id: t.id, status: t.status, ms: t.ms, summary: t.summary })) }, extra || {}));
+    localStorage.setItem(DIAG_HISTORY_KEY, JSON.stringify(list.slice(-10)));
+  }catch(err){ /* history is a convenience */ }
+}
+
+const DIAG_CANCEL_RE = /^(?:cancel|stop|abort|enough|never ?mind|בטל|עצור|תעצור|מספיק|תבטל)(?:\s|$)/i;
+function diagIsCancel(text){
+  const s = normaliseHeard(text).replace(/^(?:hey |ok |okay )?(?:jarvis|ג'?ר[וי]?ויס)\s*/, '');
+  return DIAG_CANCEL_RE.test(s);
+}
+
+async function runDiagnostics(mode, opts){
+  const he = heLang();
+  if(diagSession){
+    diagNarrator.start();
+    diagNarrator.say(he ? 'הבדיקה כבר רצה.' : 'Diagnostics are already running.');
+    return { already: true };
+  }
+  opts = opts || {};
+  const entry = logActionStart('diagnostics', { mode }, 'local');
+  const session = diagSession = { mode, cancelled: false, closeEarly: null };
+  diagBusy = true;
+  diagNarrator.log.length = 0;
+  diagNarrator.start();
+  diagLagStart();
+  let fs = { prev: { expanded: false, browserFs: false }, how: 'overlay', limit: '' };
+  let engine = null, rep = null, exit = { restored: true, note: '' };
+  try{
+    diagBuildOverlay(mode);
+    diagUi.pulse = 1;
+    fs = await diagEnterFullscreen();
+    diagStartSphere();
+    window.addEventListener('resize', diagOnResize);
+    document.addEventListener('keydown', diagOnKey, true);
+    diagUi.el.querySelector('#dgCancel').addEventListener('click', () => cancelDiagnostics());
+    diagUi.el.querySelector('#dgMode').textContent = (mode === 'quick' ? 'QUICK TEST' : 'FULL SELF-TEST') + (fs.limit ? '  ·  IN-WINDOW' : '');
+    const clock0 = performance.now();
+    const clock = setInterval(() => { const e = diagUi.el && diagUi.el.querySelector('#dgClock'); if(e) e.textContent = ((performance.now() - clock0) / 1000).toFixed(1) + ' s'; }, 100);
+    session.clock = clock;
+
+    const registry = (opts.registry ? opts.registry(mode) : buildDiagRegistry(mode, backendCapabilities));
+    let lastCat = '', catDone = {};
+    engine = new DiagEngine(registry, {
+      mode, deadlineMs: opts.deadlineMs || (mode === 'quick' ? 30000 : 120000), defaultTimeoutMs: mode === 'quick' ? 8000 : 12000,
+      maxTimeoutMs: opts.testTimeoutMs || 0,   // a cap on every test's own timeout, for runs that must be short
+      onStart: (r) => { diagLag.cur = r.name; },
+      onUpdate: (r, eng) => {
+        diagRenderRow(r); diagRenderCounts(eng);
+        if(r.status === 'RUNNING' && r.category !== lastCat){
+          lastCat = r.category;
+          diagNarrator.say(he ? 'בודק ' + (DIAG_CAT_HE[r.category] || r.category) + '.' : 'Checking ' + r.category.toLowerCase() + '.');
+        }
+        /* The line about a category is said when ITS last test is done, and
+           only says what was verified. */
+        if(DIAG_FINAL.indexOf(r.status) >= 0){
+          const mine = eng.list().filter(x => x.category === r.category);
+          if(mine.every(x => DIAG_FINAL.indexOf(x.status) >= 0) && !catDone[r.category]){
+            catDone[r.category] = true;
+            const worst = mine.some(x => x.status === 'FAIL') ? 'fail' : mine.some(x => x.status === 'WARNING' || x.status === 'BLOCKED') ? 'warn' : mine.every(x => x.status === 'PASS') ? 'pass' : 'part';
+            const nm = he ? (DIAG_CAT_HE[r.category] || r.category) : r.category.toLowerCase();
+            diagNarrator.say(he ? (worst === 'pass' ? nm + ' אומת.' : worst === 'fail' ? nm + ' דורש טיפול.' : worst === 'warn' ? nm + ': יש הסתייגות.' : nm + ' אומת חלקית.')
+                                : (worst === 'pass' ? nm + ' verified.' : worst === 'fail' ? nm + ' needs attention.' : worst === 'warn' ? nm + ' has a limitation.' : nm + ' only partly verified.'));
+          }
+        }
+      }
+    });
+    session.engine = engine;
+    diagBuildPanels(engine);
+    diagRenderCounts(engine);
+    diagNarrator.say(he ? 'מפעיל אבחון מערכת.' : 'Initializing system diagnostics.');
+    if(fs.limit) addMessage('system', '▸ ' + fs.limit);
+    rep = await engine.run();
+    clearInterval(clock);
+    if(session.cancelled || rep.cancelled){
+      logActionEnd(entry, { error: 'cancelled' });
+    } else {
+      diagShowReport(rep);
+      diagNarrator.say(he ? 'האבחון הסתיים. מכין את דוח המערכת.' : 'Diagnostics complete. Preparing the system report.');
+      diagUi.pulse = 1;
+      const hold = opts.holdMs != null ? opts.holdMs : Math.min(15000, diagHold() + rep.problems.length * 700);
+      await new Promise(res => { const t = setTimeout(res, hold); session.closeEarly = () => { clearTimeout(t); res(); }; const b = diagUi.el && diagUi.el.querySelector('#dgCloseNow'); if(b) b.addEventListener('click', () => session.closeEarly && session.closeEarly()); });
+      logActionEnd(entry, { ok: true, verdict: rep.verdict, passed: rep.counts.passed, failed: rep.counts.failed });
+    }
+  }catch(err){
+    logActionEnd(entry, { error: diagSafe(err, 120) });
+    addMessage('system', '▸ diagnostics stopped: ' + diagSafe(err, 120));
+    if(engine) try{ engine.cancel(); }catch(e){}
+  }finally{
+    if(session.clock) clearInterval(session.clock);
+    window.removeEventListener('resize', diagOnResize);
+    document.removeEventListener('keydown', diagOnKey, true);
+    diagLagStop();
+    diagNarrator.stop();
+    diagCloseOverlay();
+    exit = await diagExitFullscreen(fs);
+    diagSession = null;
+    diagBusy = false;
+  }
+  const cancelled = session.cancelled || (rep && rep.cancelled);
+  const final = rep || (engine ? engine.report() : null);
+  if(final) diagSaveHistory(final, { fullscreen: fs.how, restored: exit.restored, cancelled: !!cancelled });
+  if(cancelled){
+    addMessage('system', '▸ diagnostics cancelled');
+    diagNarrator.start(); diagNarrator.say(he ? 'האבחון בוטל.' : 'Diagnostics cancelled.');
+    return { cancelled: true };
+  }
+  if(!final) return { error: true };
+  const lines = ['▸ diagnostics (' + (mode === 'quick' ? 'quick' : 'full') + '): ' + final.verdict.replace(/_/g, ' ').toLowerCase() + ', health ' + (final.score == null ? 'n/a' : final.score + '%') + ', ' +
+                 final.counts.passed + '/' + final.counts.total + ' passed' + (exit.restored ? '' : ' · the previous window state could not be restored')];
+  for(const t of final.tests) lines.push('  ' + (DIAG_STATUS_LABEL[t.status] || t.status).padEnd(10) + ' ' + t.name + (t.summary ? ' — ' + t.summary : ''));
+  addMessage('system', lines.join('\n'));
+  diagNarrator.start();
+  diagNarrator.say(diagSpokenSummary(final, he) + (exit.restored ? '' : (he ? ' לא הצלחתי להחזיר את החלון למצבו הקודם.' : ' I could not restore the window to its previous state.')));
+  return final;
+}
+
+function cancelDiagnostics(){
+  if(!diagSession) return false;
+  diagSession.cancelled = true;
+  if(diagSession.engine) diagSession.engine.cancel();
+  if(diagSession.closeEarly) diagSession.closeEarly();
+  return true;
+}
+function diagOnKey(e){
+  if(!diagSession) return;
+  if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); cancelDiagnostics(); }
+}
+function diagOnResize(){ const cv = diagUi.el && diagUi.el.querySelector('#dgSphere'); if(cv && cv._fit) cv._fit(); }
+
+/* "Check yourself" (full) and "run a quick test" (quick), by their words. */
+const DIAG_FULL_RE = /\b(?:check (?:yourself|your ?self|all systems|everything)|self[- ]?(?:check|test|diagnostics?)|(?:system|full|complete|full system) (?:test|check|diagnostics?)|run (?:a |the |your )?(?:full |complete |system |self )?(?:diagnostics?|self[- ]?test|self[- ]?check)|diagnose (?:yourself|your ?self)|run diagnostics)\b|תבדוק את עצמך|בדוק את עצמך|בדיקת מערכת|בדיקה עצמית|אבחון מערכת|תריץ אבחון|תריץ בדיקת מערכת/;
+const DIAG_QUICK_RE = /\b(?:quick|fast|short|rapid)\b[\s\S]{0,18}\b(?:test|check|diagnostics?|scan)\b|\b(?:test|check|diagnostics?)\b[\s\S]{0,10}\b(?:quick|fast)\b|בדיקה (?:מהירה|קצרה)|תריץ בדיקה מהירה/;
+function diagIntentOf(text){
+  const n = normaliseHeard(text);
+  const words = n.split(' ').filter(Boolean);
+  if(!words.length || words.length > 12) return null;
+  if(/^(?:what|why|how|when|where|who|מה|למה|איך|מתי)(?:\s|$)/.test(n)) return null;
+  if(/\b(?:project|code|tests of|unit|my app|the app of)\b|פרויקט/.test(n)) return null;
+  if(DIAG_QUICK_RE.test(n)) return 'quick';
+  if(DIAG_FULL_RE.test(n)) return 'full';
+  return null;
+}
+
+/* Reachable from tests only (a closure keeps everything else private). */
+window.__diagTest = { DiagEngine, diagSummarize, buildDiagRegistry, runDiagnostics, cancelDiagnostics, diagIntentOf, diagNarrator, diagSafe, spoken: () => diagNarrator.log, ui: () => diagUi, session: () => diagSession, setLangMode: (m) => setLangMode(m, false) };
 
 const CAMERA_TOOL = {
   name: 'open_camera',
