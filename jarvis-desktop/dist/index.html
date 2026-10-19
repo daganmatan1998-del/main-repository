@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="072b4b726cec">
+<meta name="jarvis-build" content="e03611616873">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -19331,6 +19331,12 @@ var diagBusy = false;   // var: read by speak(), which can run before this line 
    expanded view IS the window made the whole screen; in a browser it is
    the Fullscreen API (which may refuse without a click). The state before
    is kept and put back, and the putting back is checked. */
+/* A browser can leave a full-screen request unanswered for good; nothing the
+   diagnostics wait on may do that, or the session never ends and, with it,
+   the "ignore everything but cancel" rule. */
+function diagBound(promise, ms){
+  return Promise.race([promise, new Promise((_, no) => setTimeout(() => no(new Error('timed out')), ms))]);
+}
 async function diagEnterFullscreen(){
   const prev = { expanded: !!(window.__orbExpanded && window.__orbExpanded()), browserFs: !!document.fullscreenElement };
   let how = 'overlay', limit = '';
@@ -19339,7 +19345,7 @@ async function diagEnterFullscreen(){
       if(!prev.expanded) await Promise.race([window.__orbExpand(true), new Promise((_, no) => setTimeout(() => no(new Error('timed out')), 4000))]);
       how = 'desktop full screen';
     } else if(document.documentElement.requestFullscreen && !prev.browserFs){
-      await document.documentElement.requestFullscreen();
+      await diagBound(document.documentElement.requestFullscreen(), 2500);
       how = 'browser full screen';
     } else if(prev.browserFs) how = 'browser full screen';
   }catch(err){ limit = 'full screen was not possible (' + diagSafe(err, 60) + '): the test runs in the window'; how = 'overlay'; }
@@ -19352,7 +19358,7 @@ async function diagExitFullscreen(state){
       if(!state.prev.expanded) await Promise.race([window.__orbExpand(false), new Promise((_, no) => setTimeout(() => no(new Error('timed out')), 4000))]);
       restored = !!(window.__orbExpanded && window.__orbExpanded()) === state.prev.expanded;
     } else if(document.fullscreenElement && !state.prev.browserFs){
-      await document.exitFullscreen();
+      await diagBound(document.exitFullscreen(), 2500);
       restored = !document.fullscreenElement;
     }
   }catch(err){ restored = false; note = diagSafe(err, 60); }
@@ -19390,6 +19396,17 @@ async function runDiagnostics(mode, opts){
   const entry = logActionStart('diagnostics', { mode }, 'local');
   const session = diagSession = { mode, cancelled: false, closeEarly: null };
   diagBusy = true;
+  /* Last line of defence: whatever goes wrong inside, the session is over after
+     the longest a run can last, and ordinary commands are heard again. */
+  session.watchdog = setTimeout(() => {
+    if(diagSession !== session) return;
+    session.cancelled = true;
+    try{ if(session.engine) session.engine.cancel(); }catch(err){}
+    try{ if(session.closeEarly) session.closeEarly(); }catch(err){}
+    try{ diagCloseOverlay(); }catch(err){}
+    diagSession = null; diagBusy = false;
+    addMessage('system', '\u25B8 diagnostics took too long and was stopped');
+  }, (opts.deadlineMs || (mode === 'quick' ? 30000 : 120000)) + 60000 + (opts.holdMs != null ? opts.holdMs : 15000));
   diagNarrator.log.length = 0;
   diagNarrator.start();
   diagLagStart();
@@ -19462,9 +19479,12 @@ async function runDiagnostics(mode, opts){
     diagNarrator.stop();
     setTimeout(() => diagSfx.close(), 1600);   // after the last effect (done / cancel) has played
     diagCloseOverlay();
-    exit = await diagExitFullscreen(fs);
+    /* The app is his again the moment the screen is gone: restoring the window
+       can take a while (or fail) and must never keep commands from being heard. */
     diagSession = null;
     diagBusy = false;
+    if(session.watchdog) clearTimeout(session.watchdog);
+    exit = await diagExitFullscreen(fs);
   }
   const cancelled = session.cancelled || (rep && rep.cancelled);
   const final = rep || (engine ? engine.report() : null);
