@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="e7025ac883e7">
+<meta name="jarvis-build" content="d2458ee79912">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -698,6 +698,9 @@
   #diagOverlay .dgBrand b{ color:rgb(var(--cyan-rgb)); font-weight:400; text-shadow:0 0 10px rgba(var(--cyan-rgb),.7); }
   #diagOverlay .dgMode{ margin-left:auto; padding:4px 12px; border:1px solid rgba(var(--cyan-rgb),.6); border-radius:2px; font-size:12px; letter-spacing:.3em; color:rgb(var(--cyan-rgb)); background:rgba(var(--cyan-rgb),.08); }
   #diagOverlay .dgClock{ font-variant-numeric:tabular-nums; font-size:14px; min-width:64px; text-align:right; color:var(--text-bright); }
+  #diagOverlay #dgSound{ padding:6px 12px; border-radius:2px; border:1px solid rgba(var(--cyan-rgb),.35); background:transparent; color:rgba(var(--dim-rgb),.95); cursor:pointer; font:inherit; font-size:11px; letter-spacing:.2em; text-transform:uppercase; }
+  #diagOverlay #dgSound.off{ opacity:.55; text-decoration:line-through; }
+  #diagOverlay #dgSound:hover{ background:rgba(var(--cyan-rgb),.14); }
   #diagOverlay #dgCancel, #diagOverlay #dgCloseNow{
     padding:6px 14px; border-radius:2px; border:1px solid rgba(var(--cyan-rgb),.55); background:rgba(var(--cyan-rgb),.07); color:var(--text-bright);
     cursor:pointer; font:inherit; font-size:12px; letter-spacing:.2em; text-transform:uppercase;
@@ -18276,7 +18279,16 @@ class DiagEngine {
     this.cancelled = false;
     this.ctrl = new AbortController();
     this.startedAt = this.o.now();
-    const deadline = this.startedAt + this.o.deadlineMs;
+    let deadline = this.startedAt + this.o.deadlineMs;
+    /* Time spent in the afterTest hook (the narration of a conclusion) is
+       not the tests' time: it is added to the deadline, so speaking never
+       makes a test "run out of time". */
+    const after = async (r) => {
+      if(!this.o.afterTest) return;
+      const t0 = this.o.now();
+      try{ await this.o.afterTest(r, this); }catch(err){ /* narration and sound never matter to a result */ }
+      deadline += this.o.now() - t0;
+    };
     try{
       for(const t of this.tests){
         const r = this.results.get(t.id);
@@ -18285,6 +18297,7 @@ class DiagEngine {
         const unmet = (t.requires || []).map(id => this.results.get(id)).filter(d => d.status !== 'PASS' && d.status !== 'WARNING');
         if(unmet.length){
           this._finish(r, { status: 'BLOCKED', summary: 'needs "' + unmet.map(u => u.name).join('", "') + '" first (' + unmet.map(u => DIAG_STATUS_LABEL[u.status] || u.status).join(', ') + ')' });
+          await after(r);
           continue;
         }
         r.status = 'RUNNING'; r.startedAt = this.o.now(); r.current = t.description || t.name; if(this.o.onStart) try{ this.o.onStart(r); }catch(e){} this.emit(r);
@@ -18292,6 +18305,7 @@ class DiagEngine {
         const own = t.timeoutMs || this.o.defaultTimeoutMs;
         const out = await this._exec(t, Math.min(this.o.maxTimeoutMs ? Math.min(own, this.o.maxTimeoutMs) : own, left));
         this._finish(r, out);
+        if(!this.cancelled) await after(r);
       }
     } finally {
       this.endedAt = this.o.now();
@@ -18891,29 +18905,140 @@ const diagState = { ttsWav: null, project: null };
    (speak() already does that), and a voice that fails changes nothing.
 ------------------------------------------------------------------ */
 const diagNarrator = {
-  busy: false, pending: null, enabled: true, log: [],
+  q: [], busy: false, enabled: true, log: [], speaker: null, waiters: [],
+  /* Whether anyone will hear it: not in quiet mode, not in the web version. */
+  audible(){ return this.enabled && (!!this.speaker || (IS_DESKTOP && !silentMode)); },
   say(line){
     if(!line) return;
-    this.log.push(line); if(this.log.length > 60) this.log.shift();
-    if(!this.enabled) return;
-    if(this.busy){ this.pending = line; return; }
-    this._speak(line);
+    this.log.push(line); if(this.log.length > 80) this.log.shift();
+    if(!this.enabled || !this.audible()) return;
+    this.q.push(line);
+    while(this.q.length > 3) this.q.shift();   // never a long backlog: the oldest, outdated line is dropped
+    this._pump();
   },
-  async _speak(line){
+  async _pump(){
+    if(this.busy) return;
     this.busy = true;
     try{
-      if(typeof speak === 'function' && IS_DESKTOP){
-        await Promise.race([Promise.resolve(speak(line)).catch(() => {}), new Promise(r => setTimeout(r, 7000))]);
+      while(this.enabled && this.q.length){
+        const line = this.q.shift();
+        const say = this.speaker || ((l) => (typeof speak === 'function' ? speak(l) : null));
+        await Promise.race([Promise.resolve().then(() => say(line)).catch(() => {}), new Promise(r => setTimeout(r, 7000))]);
       }
     }catch(err){ /* narration is never allowed to matter */ }
     this.busy = false;
-    if(this.pending){ const next = this.pending; this.pending = null; if(this.enabled) this._speak(next); }
+    this.waiters.splice(0).forEach(f => f());
   },
-  stop(){ this.enabled = false; this.pending = null; },
-  start(){ this.enabled = true; this.busy = false; this.pending = null; }
+  /* Resolves when what was said has been said, or after maxMs, whichever is first. Never rejects. */
+  idle(maxMs){
+    if(!this.audible() || (!this.busy && !this.q.length)) return Promise.resolve();
+    return new Promise(res => { let t = null; const done = () => { clearTimeout(t); res(); }; t = setTimeout(done, maxMs); this.waiters.push(done); });
+  },
+  stop(){ this.enabled = false; this.q.length = 0; this.waiters.splice(0).forEach(f => f()); },
+  start(){ this.enabled = true; this.busy = false; this.q.length = 0; }
 };
 
-const DIAG_CAT_HE = { 'Core assistant': 'המוח', 'Voice': 'הקול', 'Integrations': 'החיבורים', 'Local tools': 'הכלים המקומיים', 'Agents': 'הסוכנים', 'Vision': 'הראייה', 'Workspace': 'סביבת העבודה', 'Interface': 'הממשק' };
+/* ------------------------------------------------------------------
+   SOUND: short synthesised effects (no files): a scan whoosh and blip when
+   a test starts, a chime for PASS, a low buzz for FAIL, two soft blips for
+   WARNING, a tick for skipped, a rising run when the report is ready.
+   Quiet while JARVIS is speaking, silent in quiet mode, and switched off by
+   the SOUND button (kept in localStorage). A missing or blocked audio
+   system changes nothing else.
+------------------------------------------------------------------ */
+let diagNoiseBuf = null;
+function diagSynth(ctx, out, kind, t0, level){
+  const lv = level == null ? 1 : level;
+  const env = (g, start, dur, peak, atk) => {
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * lv), start + (atk || 0.012));
+    g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+  };
+  const tone = (f1, start, dur, type, peak, f2) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type || 'sine'; o.frequency.setValueAtTime(f1, start);
+    if(f2) o.frequency.exponentialRampToValueAtTime(f2, start + dur);
+    env(g, start, dur, peak == null ? 0.4 : peak); o.connect(g); g.connect(out); o.start(start); o.stop(start + dur + 0.03);
+  };
+  const noise = (start, dur, f1, f2, peak, q) => {
+    if(!diagNoiseBuf || diagNoiseBuf.sampleRate !== ctx.sampleRate){
+      diagNoiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const d = diagNoiseBuf.getChannelData(0); for(let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const src = ctx.createBufferSource(); src.buffer = diagNoiseBuf; src.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = q || 6;
+    bp.frequency.setValueAtTime(f1, start); bp.frequency.exponentialRampToValueAtTime(f2, start + dur);
+    const g = ctx.createGain(); env(g, start, dur, peak, dur * 0.35);
+    src.connect(bp); bp.connect(g); g.connect(out); src.start(start); src.stop(start + dur + 0.03);
+  };
+  switch(kind){
+    case 'start':   tone(180, t0, 0.9, 'sine', 0.35, 1500); noise(t0, 0.9, 250, 3800, 0.5, 5); tone(880, t0 + 0.85, 0.16, 'sine', 0.3); tone(1320, t0 + 0.98, 0.22, 'sine', 0.3); return 1.3;
+    case 'scan':    noise(t0, 0.38, 500, 2800, 0.42, 7); tone(1500, t0 + 0.30, 0.05, 'sine', 0.22); return 0.45;
+    case 'pass':    tone(880, t0, 0.1, 'sine', 0.38); tone(1320, t0 + 0.08, 0.2, 'sine', 0.34); return 0.32;
+    case 'warn':    tone(620, t0, 0.09, 'triangle', 0.36); tone(620, t0 + 0.14, 0.12, 'triangle', 0.36); return 0.3;
+    case 'fail':    tone(210, t0, 0.34, 'sawtooth', 0.22, 110); tone(105, t0, 0.34, 'square', 0.12); return 0.4;
+    case 'skip':    tone(520, t0, 0.07, 'sine', 0.3); tone(390, t0 + 0.08, 0.1, 'sine', 0.26); return 0.22;
+    case 'done':    [660, 880, 1100, 1320].forEach((f, k) => tone(f, t0 + k * 0.11, 0.26, 'sine', 0.3)); noise(t0 + 0.3, 0.7, 2500, 6500, 0.16, 3); return 1.1;
+    case 'critical':tone(880, t0, 0.22, 'sawtooth', 0.2, 600); tone(520, t0 + 0.25, 0.4, 'sawtooth', 0.22, 300); return 0.7;
+    case 'cancel':  tone(900, t0, 0.3, 'sine', 0.3, 200); return 0.35;
+  }
+  return 0;
+}
+const diagSfx = {
+  ctx: null, master: null, log: [],
+  on(){ try{ return localStorage.getItem('jarvis:diag:sfx') !== '0'; }catch(err){ return true; } },
+  setOn(v){ try{ localStorage.setItem('jarvis:diag:sfx', v ? '1' : '0'); }catch(err){} },
+  play(kind){
+    this.log.push(kind); if(this.log.length > 200) this.log.shift();
+    if(!this.on() || silentMode) return;
+    try{
+      if(!this.ctx){
+        const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
+        this.ctx = new AC(); this.master = this.ctx.createGain(); this.master.gain.value = 0.35; this.master.connect(this.ctx.destination);
+      }
+      if(this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+      diagSynth(this.ctx, this.master, kind, this.ctx.currentTime + 0.01, diagNarrator.busy ? 0.5 : 1);
+    }catch(err){ /* no sound is not a failure of anything */ }
+  },
+  close(){ try{ if(this.ctx) this.ctx.close(); }catch(err){} this.ctx = null; this.master = null; }
+};
+
+/* What is said before a test and after it. */
+const DIAG_HE = {
+  'core.worker': 'שירות השרת', 'core.auth': 'ההתחברות', 'core.model': 'תשובת המודל', 'core.pipeline': 'עיבוד הפקודות', 'core.errors': 'טיפול בשגיאות',
+  'voice.init': 'פלט הקול', 'voice.mic': 'הגישה למיקרופון', 'voice.state': 'צינור השמיעה', 'voice.tts': 'ספק הקול', 'voice.loopback': 'לולאת הדיבור',
+  'api.search': 'החיפוש ברשת', 'api.db': 'מסד הנתונים', 'api.shopify': 'שופיפיי', 'api.calendar': 'היומן', 'api.mail': 'הדואר', 'api.messaging': 'ההודעות והשיחות', 'api.model3d': 'שירות התלת מימד',
+  'tools.bridge': 'הגשר לדסקטופ', 'tools.registry': 'הכלים המקומיים', 'agents.registry': 'רישום הסוכנים', 'agents.run': 'הרצת סוכן', 'agents.planner': 'מתכנן המשימות',
+  'vision.image': 'ניתוח תמונה', 'vision.video': 'עיבוד וידאו', 'vision.camera': 'הגישה למצלמה', 'vision.live': 'מעקב המצלמה החי',
+  'ws.access': 'הגישה לפרויקטים', 'ws.search': 'החיפוש בקוד', 'ws.git': 'גיט', 'ws.guard': 'הגבלות הקבצים',
+  'ui.components': 'רכיבי הממשק', 'ui.errors': 'השגיאות האחרונות', 'ui.storage': 'האחסון המקומי', 'ui.responsive': 'תגובתיות הממשק'
+};
+const diagPlain = (n) => String(n || '').replace(/\s*\([^)]*\)/g, '').replace(/[→>]/g, ' ').replace(/\s+/g, ' ').trim();
+function diagAnnounce(r, he){
+  return he ? 'בודק ' + (DIAG_HE[r.id] || r.name) + '.' : 'Checking ' + diagPlain(r.name).toLowerCase() + '.';
+}
+/* The conclusion is built from the result itself, so it is never more
+   positive than the test was: a PASS says what was verified, anything else
+   says what was not. */
+function diagConclusion(r, he){
+  const name = he ? (DIAG_HE[r.id] || r.name) : diagPlain(r.name);
+  const sum = String(r.summary || '').replace(/\s+/g, ' ').trim();
+  const short = sum.length > 120 ? sum.slice(0, 117).replace(/\s+\S*$/, '') + '...' : sum;
+  const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+  if(he){
+    return r.status === 'PASS' ? name + ' תקין.' : r.status === 'FAIL' ? name + ' נכשל.' : r.status === 'WARNING' ? name + ': יש הסתייגות.' :
+           r.status === 'BLOCKED' ? name + ' דולג.' : name + ' לא נבדק.';
+  }
+  return r.status === 'PASS' ? cap(name) + ': ' + short + '.' : r.status === 'FAIL' ? cap(name) + ' failed. ' + cap(short) + '.' :
+         r.status === 'WARNING' ? cap(name) + ' has a limitation. ' + cap(short) + '.' : r.status === 'BLOCKED' ? cap(name) + ' was skipped. ' + cap(short) + '.' :
+         cap(name) + ' was not tested. ' + cap(short) + '.';
+}
+function diagPaceMs(opts){
+  if(opts && opts.pace === false) return 0;
+  try{ if(localStorage.getItem('jarvis:diag:pace') === '0') return 0; }catch(err){}
+  return (opts && opts.paceMs) || 3500;
+}
+
 const DIAG_VERDICT_TEXT = {
   en: { OPERATIONAL: 'All systems operational.', OPERATIONAL_WITH_NOTES: 'The system is operational, with some items that could not be fully verified.', NEEDS_ATTENTION: 'The system works, but something needs attention.', CRITICAL: 'A critical component is not working.', UNKNOWN: 'Nothing could be verified.' },
   he: { OPERATIONAL: 'כל המערכות תקינות.', OPERATIONAL_WITH_NOTES: 'המערכת תקינה, עם כמה דברים שלא ניתן היה לאמת עד הסוף.', NEEDS_ATTENTION: 'המערכת עובדת, אבל משהו דורש תשומת לב.', CRITICAL: 'רכיב קריטי לא עובד.', UNKNOWN: 'לא הצלחתי לאמת שום דבר.' }
@@ -18950,7 +19075,7 @@ function diagBuildOverlay(mode){
     '<div class="dgRays"></div>' +
     '<header class="dgTop"><div class="dgBrand">J.A.R.V.I.S. <b>SYSTEM DIAGNOSTICS</b></div>' +
     '<div class="dgMode" id="dgMode"></div><div class="dgClock" id="dgClock">0.0 s</div>' +
-    '<button id="dgCancel" type="button">Cancel</button></header>' +
+    '<button id="dgSound" type="button" aria-pressed="true">Sound on</button><button id="dgCancel" type="button">Cancel</button></header>' +
     '<main class="dgMain"><section class="dgCol" id="dgLeft"></section>' +
     '<section class="dgCenter"><canvas id="dgSphere"></canvas><div class="dgNow"><div id="dgNowCat"></div><div id="dgNowTest"></div></div></section>' +
     '<section class="dgCol" id="dgRight"></section></main>' +
@@ -19203,10 +19328,15 @@ function diagSaveHistory(rep, extra){
   }catch(err){ /* history is a convenience */ }
 }
 
-const DIAG_CANCEL_RE = /^(?:cancel|stop|abort|enough|never ?mind|בטל|עצור|תעצור|מספיק|תבטל)(?:\s|$)/i;
+/* "Cancel", "stop the test", "hey jarvis stop that please", "enough", "בטל":
+   a cancel word and nothing else that matters. */
+const DG_CANCEL_WORDS = new Set(['cancel','stop','abort','enough','quit','exit','halt','nevermind','end','close','בטל','תבטל','לבטל','עצור','תעצור','לעצור','מספיק','תפסיק','הפסק','סגור','תסגור']);
+const DG_CANCEL_OK = new Set(['the','this','that','it','test','tests','check','checks','diagnostic','diagnostics','scan','please','now','jarvis','hey','ok','okay','thanks','thank','you','all','system','תודה','את','זה','הבדיקה','האבדוק','האבחון','בבקשה','עכשיו','הכל','כבר','די']);
 function diagIsCancel(text){
-  const s = normaliseHeard(text).replace(/^(?:hey |ok |okay )?(?:jarvis|ג'?ר[וי]?ויס)\s*/, '');
-  return DIAG_CANCEL_RE.test(s);
+  const words = normaliseHeard(text).replace(/\bnever mind\b/, 'nevermind').split(' ').filter(Boolean).filter(w => !wordIsName(w) || DG_CANCEL_WORDS.has(w));
+  if(!words.length || words.length > 6) return false;
+  if(!words.some(w => DG_CANCEL_WORDS.has(w) || DG_CANCEL_WORDS.has(w.replace(/^[בלהו]/, '')))) return false;
+  return words.filter(w => !DG_CANCEL_WORDS.has(w) && !DG_CANCEL_WORDS.has(w.replace(/^[בלהו]/, '')) && !DG_CANCEL_OK.has(w)).length <= 1;
 }
 
 async function runDiagnostics(mode, opts){
@@ -19233,40 +19363,36 @@ async function runDiagnostics(mode, opts){
     window.addEventListener('resize', diagOnResize);
     document.addEventListener('keydown', diagOnKey, true);
     diagUi.el.querySelector('#dgCancel').addEventListener('click', () => cancelDiagnostics());
+    const soundBtn = diagUi.el.querySelector('#dgSound');
+    const paintSound = () => { const on = diagSfx.on(); soundBtn.textContent = on ? 'Sound on' : 'Sound off'; soundBtn.setAttribute('aria-pressed', on ? 'true' : 'false'); soundBtn.classList.toggle('off', !on); };
+    soundBtn.addEventListener('click', () => { diagSfx.setOn(!diagSfx.on()); paintSound(); if(diagSfx.on()) diagSfx.play('pass'); });
+    paintSound();
     diagUi.el.querySelector('#dgMode').textContent = (mode === 'quick' ? 'QUICK TEST' : 'FULL SELF-TEST') + (fs.limit ? '  ·  IN-WINDOW' : '');
     const clock0 = performance.now();
     const clock = setInterval(() => { const e = diagUi.el && diagUi.el.querySelector('#dgClock'); if(e) e.textContent = ((performance.now() - clock0) / 1000).toFixed(1) + ' s'; }, 100);
     session.clock = clock;
 
     const registry = (opts.registry ? opts.registry(mode) : buildDiagRegistry(mode, backendCapabilities));
-    let lastCat = '', catDone = {};
     engine = new DiagEngine(registry, {
       mode, deadlineMs: opts.deadlineMs || (mode === 'quick' ? 30000 : 120000), defaultTimeoutMs: mode === 'quick' ? 8000 : 12000,
       maxTimeoutMs: opts.testTimeoutMs || 0,   // a cap on every test's own timeout, for runs that must be short
-      onStart: (r) => { diagLag.cur = r.name; },
-      onUpdate: (r, eng) => {
-        diagRenderRow(r); diagRenderCounts(eng);
-        if(r.status === 'RUNNING' && r.category !== lastCat){
-          lastCat = r.category;
-          diagNarrator.say(he ? 'בודק ' + (DIAG_CAT_HE[r.category] || r.category) + '.' : 'Checking ' + r.category.toLowerCase() + '.');
-        }
-        /* The line about a category is said when ITS last test is done, and
-           only says what was verified. */
-        if(DIAG_FINAL.indexOf(r.status) >= 0){
-          const mine = eng.list().filter(x => x.category === r.category);
-          if(mine.every(x => DIAG_FINAL.indexOf(x.status) >= 0) && !catDone[r.category]){
-            catDone[r.category] = true;
-            const worst = mine.some(x => x.status === 'FAIL') ? 'fail' : mine.some(x => x.status === 'WARNING' || x.status === 'BLOCKED') ? 'warn' : mine.every(x => x.status === 'PASS') ? 'pass' : 'part';
-            const nm = he ? (DIAG_CAT_HE[r.category] || r.category) : r.category.toLowerCase();
-            diagNarrator.say(he ? (worst === 'pass' ? nm + ' אומת.' : worst === 'fail' ? nm + ' דורש טיפול.' : worst === 'warn' ? nm + ': יש הסתייגות.' : nm + ' אומת חלקית.')
-                                : (worst === 'pass' ? nm + ' verified.' : worst === 'fail' ? nm + ' needs attention.' : worst === 'warn' ? nm + ' has a limitation.' : nm + ' only partly verified.'));
-          }
-        }
-      }
+      /* Before a test: the scan sound and what is being checked. */
+      onStart: (r) => { diagLag.cur = r.name; diagSfx.play('scan'); diagNarrator.say(diagAnnounce(r, he)); },
+      /* After it: the result's sound and its conclusion, spoken before the next
+         test starts (up to a cap per test, so a slow voice cannot stall the
+         run; the time is not counted against the tests' deadline). */
+      afterTest: async (r) => {
+        diagSfx.play(r.status === 'PASS' ? 'pass' : r.status === 'FAIL' ? 'fail' : r.status === 'WARNING' ? 'warn' : 'skip');
+        diagNarrator.say(diagConclusion(r, he));
+        const pace = diagPaceMs(opts);
+        if(pace > 0 && !session.cancelled) await diagNarrator.idle(pace);
+      },
+      onUpdate: (r, eng) => { diagRenderRow(r); diagRenderCounts(eng); }
     });
     session.engine = engine;
     diagBuildPanels(engine);
     diagRenderCounts(engine);
+    diagSfx.play('start');
     diagNarrator.say(he ? 'מפעיל אבחון מערכת.' : 'Initializing system diagnostics.');
     if(fs.limit) addMessage('system', '▸ ' + fs.limit);
     rep = await engine.run();
@@ -19275,6 +19401,7 @@ async function runDiagnostics(mode, opts){
       logActionEnd(entry, { error: 'cancelled' });
     } else {
       diagShowReport(rep);
+      diagSfx.play(rep.verdict === 'CRITICAL' ? 'critical' : 'done');
       diagNarrator.say(he ? 'האבחון הסתיים. מכין את דוח המערכת.' : 'Diagnostics complete. Preparing the system report.');
       diagUi.pulse = 1;
       const hold = opts.holdMs != null ? opts.holdMs : Math.min(15000, diagHold() + rep.problems.length * 700);
@@ -19291,6 +19418,7 @@ async function runDiagnostics(mode, opts){
     document.removeEventListener('keydown', diagOnKey, true);
     diagLagStop();
     diagNarrator.stop();
+    setTimeout(() => diagSfx.close(), 1600);   // after the last effect (done / cancel) has played
     diagCloseOverlay();
     exit = await diagExitFullscreen(fs);
     diagSession = null;
@@ -19317,6 +19445,8 @@ async function runDiagnostics(mode, opts){
 function cancelDiagnostics(){
   if(!diagSession) return false;
   diagSession.cancelled = true;
+  diagSfx.play('cancel');
+  diagNarrator.stop();
   if(diagSession.engine) diagSession.engine.cancel();
   if(diagSession.closeEarly) diagSession.closeEarly();
   return true;
@@ -19327,22 +19457,73 @@ function diagOnKey(e){
 }
 function diagOnResize(){ const cv = diagUi.el && diagUi.el.querySelector('#dgSphere'); if(cv && cv._fit) cv._fit(); }
 
-/* "Check yourself" (full) and "run a quick test" (quick), by their words. */
-const DIAG_FULL_RE = /\b(?:check (?:yourself|your ?self|all systems|everything)|self[- ]?(?:check|test|diagnostics?)|(?:system|full|complete|full system) (?:test|check|diagnostics?)|run (?:a |the |your )?(?:full |complete |system |self )?(?:diagnostics?|self[- ]?test|self[- ]?check)|diagnose (?:yourself|your ?self)|run diagnostics)\b|תבדוק את עצמך|בדוק את עצמך|בדיקת מערכת|בדיקה עצמית|אבחון מערכת|תריץ אבחון|תריץ בדיקת מערכת/;
-const DIAG_QUICK_RE = /\b(?:quick|fast|short|rapid)\b[\s\S]{0,18}\b(?:test|check|diagnostics?|scan)\b|\b(?:test|check|diagnostics?)\b[\s\S]{0,10}\b(?:quick|fast)\b|בדיקה (?:מהירה|קצרה)|תריץ בדיקה מהירה/;
+/* "CHECK YOURSELF" (full) AND "RUN A QUICK TEST" (quick), READ LOOSELY (2.38.1).
+
+   Not a sentence to match but words to find, in any order, the way the
+   notes commands work: a verb of checking, and something to check
+   (yourself, the system, diagnostics, a test). Politeness, "hey jarvis",
+   "could you", and words nobody needs are ignored; a mistyped or
+   misheard word still counts ("youself", "chek", "diagnos"); "quick",
+   "fast", "short" make it the quick test, "full", "complete", "thorough"
+   the full one. Anything about a project, code or another object, and any
+   question ("what is a quick test"), stays out. */
+const DG_FILLER = new Set(['hey','hi','hello','ok','okay','yo','so','please','pls','can','could','would','will','you','i','we','me','now','just','do','go','ahead','and','then','also','to','a','an','the','for','of','on','up','lets','let','us','want','need','like','id','ill','im','gonna','kindly','jarvis','one','time','more','again','real','really','very','thanks','בבקשה','נא','עכשיו','רק','גם','אז','לי','את','אני','רוצה','צריך','תוכל','יכול','אפשר','היי','הי','אוקיי','נו','שלי','ל','ב','ה','של']);
+const DG_VERBS = ['check','test','diagnose','scan','inspect','verify','examine','run','perform','start','launch','begin','initiate','execute','trigger','activate','תבדוק','בדוק','לבדוק','תריץ','הרץ','להריץ','תסרוק','סרוק','לסרוק','תעשה','תבצע','בצע','תתחיל','תפעיל','הפעל','לעשות','לבצע'];
+const DG_VERB_STRICT = new Set(['run','perform','start','launch','begin','initiate','execute','trigger','activate','do','תריץ','הרץ','להריץ','תעשה','תבצע','בצע','תתחיל','תפעיל','הפעל','לעשות','לבצע']);
+const DG_SELF = ['yourself','yourselves','urself','עצמך','עצמו'];
+const DG_DIAG_NOUN = ['diagnostic','diagnostics','diagnosis','selftest','selfcheck','checkup','healthcheck','self','אבחון','עצמית'];
+const DG_GEN_NOUN = ['test','tests','check','checks','checking','testing','scan','scans','scanning','בדיקה','בדיקת','בדיקות','סריקה','סריקת'];
+const DG_SYS_NOUN = ['system','systems','everything','all','whole','מערכת','מערכות','הכל','הכול'];
+const DG_QUICK = ['quick','quickly','fast','short','rapid','brief','briefly','mini','light','lite','speedy','מהירה','מהר','קצרה','בקצרה','קצר','מהיר','קטנה'];
+const DG_FULL = ['full','complete','entire','thorough','thoroughly','deep','comprehensive','detailed','מלאה','מלא','מקיפה','יסודית','כולל'];
+const DG_BLOCK = new Set(['project','projects','code','unit','repo','app','פרויקט','קוד']);
+function dgNear(w, list, cap){
+  if(list.indexOf(w) >= 0) return true;
+  if(w.length < 4) return false;
+  for(const t of list){ if(t.length >= 4 && Math.abs(t.length - w.length) <= cap && editDistance(w, t, cap) <= cap) return true; }
+  return false;
+}
 function diagIntentOf(text){
   const n = normaliseHeard(text);
-  const words = n.split(' ').filter(Boolean);
-  if(!words.length || words.length > 12) return null;
-  if(/^(?:what|why|how|when|where|who|מה|למה|איך|מתי)(?:\s|$)/.test(n)) return null;
-  if(/\b(?:project|code|tests of|unit|my app|the app of)\b|פרויקט/.test(n)) return null;
-  if(DIAG_QUICK_RE.test(n)) return 'quick';
-  if(DIAG_FULL_RE.test(n)) return 'full';
-  return null;
+  let words = n.split(' ').filter(Boolean);
+  if(!words.length || words.length > 14) return null;
+  if(/^(?:what|why|how|when|where|who|which|מה|למה|איך|מתי|איפה|מי|האם)(?:\s|$)/.test(n)) return null;
+  words = words.filter(w => !(wordIsName(w) && !dgNear(w, DG_VERBS, 1) && !dgNear(w, DG_GEN_NOUN, 1)));
+  /* "your self" / "your" + "self": one word. */
+  const joined = words.join(' ').replace(/\byour self\b/g, 'yourself').replace(/\bself (?:test|check|diagnostics?)\b/g, 'selftest');
+  words = joined.split(' ').filter(Boolean);
+  const stem = (w) => (/^[֐-׿]/.test(w) && w.length > 3 && 'בלהמו'.indexOf(w[0]) >= 0 ? w.slice(1) : w);
+  if(words.some(w => DG_BLOCK.has(w) || DG_BLOCK.has(stem(w)))) return null;
+  const isVerb = (w) => dgNear(w, DG_VERBS, 1) || dgNear(stem(w), DG_VERBS, 1);
+  const hasVerb = words.some(isVerb);
+  const strictVerb = words.some(w => DG_VERB_STRICT.has(w) || DG_VERB_STRICT.has(stem(w)));
+  const selfRef = words.some(w => dgNear(w, DG_SELF, 2));
+  const diagNoun = words.some(w => dgNear(w, DG_DIAG_NOUN, 1) || DG_DIAG_NOUN.indexOf(stem(w)) >= 0);
+  const genNoun = words.some(w => dgNear(w, DG_GEN_NOUN, 1) || DG_GEN_NOUN.indexOf(stem(w)) >= 0);
+  const sysNoun = words.some(w => DG_SYS_NOUN.indexOf(w) >= 0 || DG_SYS_NOUN.indexOf(stem(w)) >= 0);
+  const quickMod = words.some(w => dgNear(w, DG_QUICK, 1));
+  const fullMod = words.some(w => dgNear(w, DG_FULL, 1));
+  const known = (w) => isVerb(w) || DG_FILLER.has(w) || DG_FILLER.has(stem(w)) || dgNear(w, DG_SELF, 2) || dgNear(w, DG_DIAG_NOUN, 1) || DG_DIAG_NOUN.indexOf(stem(w)) >= 0 ||
+                       dgNear(w, DG_GEN_NOUN, 1) || DG_GEN_NOUN.indexOf(stem(w)) >= 0 || DG_SYS_NOUN.indexOf(w) >= 0 || DG_SYS_NOUN.indexOf(stem(w)) >= 0 || dgNear(w, DG_QUICK, 1) || dgNear(w, DG_FULL, 1);
+  const leftover = words.filter(w => !known(w)).length;
+  if(leftover > 1) return null;
+  const wants =
+    (hasVerb && selfRef) ||                              // check yourself, test yourself, תבדוק את עצמך
+    (diagNoun && (hasVerb || quickMod || fullMod || sysNoun)) ||   // run diagnostics, self test, אבחון מערכת
+    (hasVerb && sysNoun && (genNoun || diagNoun || words.some(w => /^(?:check|test|scan|inspect|verify|examine|תבדוק|בדוק|לבדוק)$/.test(w)))) ||   // check all systems, run a system check
+    (quickMod && (genNoun || hasVerb)) ||                // a quick test / check / scan
+    (fullMod && genNoun && (sysNoun || selfRef || hasVerb)) ||     // run a full test
+    (genNoun && sysNoun && leftover === 0) ||            // a system check, בדיקת מערכת
+    (words.some(w => ['selftest','selfcheck','diagnostic','diagnostics','diagnosis','checkup','healthcheck','אבחון'].indexOf(w) >= 0) && leftover === 0) ||   // "self check", "diagnostics"
+    (strictVerb && genNoun);                             // run a test
+  if(!wants) return null;
+  if(quickMod && !fullMod) return 'quick';
+  if(!selfRef && !diagNoun && !sysNoun && !fullMod && strictVerb && genNoun) return 'quick';   // plain "run a test"
+  return 'full';
 }
 
 /* Reachable from tests only (a closure keeps everything else private). */
-window.__diagTest = { DiagEngine, diagSummarize, buildDiagRegistry, runDiagnostics, cancelDiagnostics, diagIntentOf, diagNarrator, diagSafe, spoken: () => diagNarrator.log, ui: () => diagUi, session: () => diagSession, setLangMode: (m) => setLangMode(m, false) };
+window.__diagTest = { DiagEngine, diagSummarize, buildDiagRegistry, runDiagnostics, cancelDiagnostics, diagIntentOf, diagNarrator, diagSafe, spoken: () => diagNarrator.log, ui: () => diagUi, diagSfx, diagSynth, diagConclusion, diagAnnounce, diagIsCancel, setMuted: (on) => setMuted(on, true), session: () => diagSession, setLangMode: (m) => setLangMode(m, false) };
 
 const CAMERA_TOOL = {
   name: 'open_camera',
