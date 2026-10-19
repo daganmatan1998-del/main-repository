@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="d0a0eee45e58">
+<meta name="jarvis-build" content="cb47c8b44a12">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -13695,6 +13695,8 @@ const FLOW_RULES = [
 
   /* Notes (2.36.0), and "go to sleep" as a command of its own, so it can be
      one part of a longer sentence ("close my camera and go to sleep"). */
+  { flow: 'project_add', strong: [ { test: (s) => projectIntentOf(s) === 'add' } ], bare: [] },
+  { flow: 'self_check', strong: [ { test: (s) => isSelfCheck(s) } ], bare: [] },
   { flow: 'note_close', strong: [ { test: (s) => isNoteClose(s) } ], bare: [] },
   { flow: 'note_last', strong: [ { test: (s) => isNoteLast(s) } ], bare: [] },
   { flow: 'note_new', strong: [ { test: (s) => isNewNoteOpen(s) } ], bare: [] },
@@ -13994,7 +13996,7 @@ const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'fullscreen', '
                                       'live_full', 'live_full_exit', 'workspace', 'open_site', 'bring_window',
                                       'workspace3d', 'workspace3d_project', 'agent_atlas', 'music_on', 'music_off',
                                       'webshooter_on', 'webshooter_off', 'adjust_window', 'close_thing', 'browser_write',
-                                      'base_app', 'open_app', 'jarvis_folder', 'note_new', 'note_dictate', 'note_close', 'note_last', 'sleep']);
+                                      'base_app', 'open_app', 'jarvis_folder', 'note_new', 'note_dictate', 'note_close', 'note_last', 'project_add', 'self_check', 'sleep']);
 
 /* { steps: [{flow, part}], rest: [parts for the model] }, or null when the
    sentence is one request (or none) and the ordinary path should have it. */
@@ -14990,6 +14992,46 @@ async function runWorkflowCommand(flow, text){
     addMessage('system', he ? '\u25B8 תגיד את זה (עם מקש הדיבור: החזק, דבר, ושחרר). אני רושם הכול.' : '\u25B8 Say it: hold the talk key and speak, then let go. I note everything.');
     return true;
   }
+  /* "Add a project" (2.37.3): the folder picker, and what happened, always on screen. */
+  if(flow === 'project_add'){
+    if(!IS_DESKTOP){ say(he ? 'זה עובד רק באפליקציית המחשב.' : 'That works only in the desktop app.'); return true; }
+    const invoke = tauriInvoke();
+    if(!invoke){ noteReply(he ? 'אין חיבור לאפליקציית המחשב.' : 'There is no connection to the desktop app.'); return true; }
+    say(he ? 'פותח בחירת תיקייה. אם לא רואים אותה, היא יכולה להיות מאחורי חלון אחר.' : 'Opening the folder picker. If you do not see it, it may be behind another window.');
+    const entry = logActionStart('project_authorize', {}, 'local');
+    let r;
+    try{ r = await invoke('project_authorize'); }
+    catch(err){
+      const why = bridgeProblem(err);
+      logActionEnd(entry, { error: why });
+      addMessage('system', '\u25B8 project_authorize failed: ' + why);
+      noteReply((he ? 'לא הצלחתי לפתוח את בחירת התיקייה: ' : 'I could not open the folder picker: ') + why);
+      return true;
+    }
+    logActionEnd(entry, r || { error: 'no answer' });
+    if(r && r.ok && r.project){
+      setActiveProject(r.project.id); await loadProjects(); renderTaskDock();
+      addMessage('system', '\u25B8 project ' + (r.already ? 'already authorized: ' : 'added: ') + r.project.id + ' (' + r.project.path + ')');
+      say(he ? 'הוספתי את ' + r.project.name + '. עכשיו אפשר לבקש ממני לקרוא אותו, להציע שיפורים או להריץ בדיקות.' : 'Added ' + r.project.name + '. Ask me to read it, suggest improvements or run its tests.');
+    } else if(r && r.code === 'cancelled'){
+      say(he ? 'לא נבחרה תיקייה.' : 'No folder was chosen.');
+    } else if(r && r.code === 'refused'){
+      noteReply((he ? 'לא אפשר להוסיף את התיקייה הזאת: ' : 'That folder cannot be added: ') + (r.why || ''));
+    } else {
+      noteReply(he ? 'משהו השתבש בבחירת התיקייה.' : 'Something went wrong choosing the folder.');
+    }
+    return true;
+  }
+  if(flow === 'self_check'){
+    /* The existing check (worker, engines, hearing: the orb menu's "check"),
+       then what it never looked at: the desktop app and its new commands. */
+    try{ await selfCheck(); }catch(err){ /* its own failure is in its report */ }
+    const lines = await runSelfCheck(he);
+    addMessage('system', '\u25B8 app check\n' + lines.join('\n'));
+    const bad = lines.filter(l => /\bNO\b|NOT reachable|answered/.test(l)).length;
+    if(bad) say(he ? 'ובאפליקציה עצמה: ' + bad + ' דברים לא עובדים. הפרטים בצ\'אט.' : 'And in the app itself: ' + bad + ' thing' + (bad === 1 ? '' : 's') + ' not working. Details are in the chat.');
+    return true;
+  }
   /* "Note it" (2.37.2): the main point of what JARVIS just said. */
   if(flow === 'note_last'){
     if(!IS_DESKTOP) return false;
@@ -15917,6 +15959,60 @@ function afterSpeech(fn, minMs, maxMs){
        it composes the text from the conversation and writes it.
    The note is a real file, Documents\JARVIS Notes\Note <date> <time>.txt,
    saved. Rust's write_note does the opening and the typing. */
+/* "ADD A PROJECT" AND "CHECK YOURSELF", AS COMMANDS OF THEIR OWN (2.37.3).
+   Both used to depend on the model choosing the right tool, and when it did
+   not (or the app was older than the page) nothing at all appeared: no
+   picker, no error. Now the words alone decide, the way the notes commands
+   do, and every outcome - including a failure and why - is said on screen.
+     add / connect / pick / choose / authorize + project / folder / repo
+       (and at most one more word, so a name fits: "connect my nutri project");
+     "check yourself" / "diagnose" / "what version are you" / "בדיקת מערכת". */
+const PJ_VERBS = new Set(['add','authorize','authorise','connect','link','register','pick','choose','select','give','grant','allow','import','תוסיף','הוסף','להוסיף','תחבר','חבר','לחבר','תבחר','בחר','לבחור','תקשר','תייבא','תיתן','תאשר']);
+const PJ_NOUNS = /^(?:projects?|folders?|repos?|repositor(?:y|ies)|codebase|פרויקט(?:ים)?|תיקי+(?:ה|ת|ית|ות)|ריפו|קוד)$/;
+const PJ_BENIGN = new Set(['hey','hi','ok','okay','please','pls','now','just','can','could','would','will','you','i','we','to','me','my','for','the','a','an','some','new','another','one','jarvis','your','our','access','want','need','like','lets','let','us','also','and','של','שלי','לי','את','אני','רוצה','צריך','תוכל','יכול','אפשר','חדש','עוד','בבקשה','נא','עכשיו','ל','ב','ה','גישה','קוד','אליו','אליה']);
+function projectIntentOf(text){
+  let words = normaliseHeard(text).split(' ').filter(Boolean);
+  if(!words.length || words.length > 12) return null;
+  words = words.filter(w => !(wordIsName(w) && !PJ_VERBS.has(w) && !PJ_NOUNS.test(w) && !PJ_BENIGN.has(w)));
+  if(!words.length) return null;
+  const lead = words.filter(w => ['hey','hi','ok','okay','please','היי','הי','אוקיי'].indexOf(w) < 0)[0] || '';
+  if(/^(?:how|what|why|when|where|who|which|whats|מה|איך|למה|מתי|איפה|מי|האם|כמה)$/.test(lead)) return null;
+  const verb = words.some(w => PJ_VERBS.has(w) || PJ_VERBS.has(noteStem(w)));
+  const noun = words.some(w => PJ_NOUNS.test(w) || PJ_NOUNS.test(noteStem(w)));
+  if(!verb || !noun) return null;
+  const leftover = words.filter(w => !(PJ_VERBS.has(w) || PJ_VERBS.has(noteStem(w)) || PJ_NOUNS.test(w) || PJ_NOUNS.test(noteStem(w)) || PJ_BENIGN.has(w) || PJ_BENIGN.has(noteStem(w)))).length;
+  return leftover <= 1 ? 'add' : null;
+}
+const SELF_CHECK_RE = /\b(?:self ?check|system ?check|diagnos(?:e|tic|tics)|check (?:yourself|your ?self|the system|that you work)|(?:version|build) check|check (?:the |your )?(?:version|build)|which (?:version|build)|are you up to date|status check)\b|בדיקת מערכת|תבדוק את עצמך|בדוק את עצמך|איזו גרסה|איזה גרסה|מה הגרסה/;
+function isSelfCheck(text){
+  const n = normaliseHeard(text);
+  return n.split(' ').length <= 10 && SELF_CHECK_RE.test(n);
+}
+function bridgeProblem(err){
+  const msg = String((err && err.message) || err);
+  if(/not found|unknown command/i.test(msg)) return 'the desktop app is older than this page: rebuild it from the latest jarvis-desktop.zip';
+  if(/not allowed|acl|permission/i.test(msg)) return 'the desktop app refused the command (' + msg.slice(0, 100) + '): rebuild it from the latest jarvis-desktop.zip';
+  return msg.slice(0, 160);
+}
+async function runSelfCheck(he){
+  const lines = [];
+  const build = (document.querySelector('meta[name="jarvis-build"]') || {}).content || '?';
+  lines.push('page build: ' + build + ' (site: ' + location.origin + ')');
+  const invoke = tauriInvoke();
+  lines.push('desktop bridge: ' + (invoke ? 'yes' : 'NO - this is the web version, or the app did not load it'));
+  if(invoke){
+    try{ const r = await invoke('projects_list'); lines.push('desktop app 2.37 (projects): yes, ' + ((r && r.projects) || []).length + ' authorized'); }
+    catch(err){ lines.push('desktop app 2.37 (projects): NO - ' + bridgeProblem(err)); }
+    try{ await invoke('push_to_talk_key'); lines.push('desktop app basics: yes'); }catch(err){ lines.push('desktop app basics: ' + bridgeProblem(err)); }
+  }
+  try{
+    const r = await Promise.race([fetch(backendUrl + '/health', { headers: jarvisHeaders() }), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 6000))]);
+    lines.push('worker: ' + (r.ok ? 'reachable' : 'answered ' + r.status));
+  }catch(err){ lines.push('worker: NOT reachable (' + String((err && err.message) || err).slice(0, 80) + ')'); }
+  lines.push('tools offered to the model: tasks ' + (typeof START_TASK_TOOL !== 'undefined' ? 'yes' : 'no') + ', projects ' + (typeof PROJECT_TOOLS !== 'undefined' ? PROJECT_TOOLS.length : 0));
+  return lines;
+}
+
 /* WHAT HE WANTS DONE WITH HIS NOTES, READ LOOSELY (2.37.2).
 
    The first version matched whole sentences ("can you write something" yes,
@@ -18015,7 +18111,7 @@ setTimeout(renderTaskDock, 1500);
 window.__tasksTest = {
   validatePlan, readySteps, jsonFrom, toolRisk, projectToolRisk, taskLimits, newTask, findTask, pauseTask, resumeTask, cancelTask,
   callStartTaskTool, callTaskControlTool, callProjectTool, askLocalApproval, settleLocalApproval, localApprovalVoice,
-  toolResultBlock, roleToolDefs, getTasks: () => tasks, usageToday, loadTasks2, renderTaskDock, planVideoKeyframes, fileToVideoFrames, callWriteNoteTool, wantsNoteTurn: (t) => wantsNoteTurn(t), noteIntentOf, detectWorkflowCommand, composeNoteFrom, handleTranscript
+  toolResultBlock, roleToolDefs, getTasks: () => tasks, usageToday, loadTasks2, renderTaskDock, planVideoKeyframes, fileToVideoFrames, callWriteNoteTool, wantsNoteTurn: (t) => wantsNoteTurn(t), noteIntentOf, detectWorkflowCommand, composeNoteFrom, handleTranscript, projectIntentOf, isSelfCheck
 };
 
 const CAMERA_TOOL = {

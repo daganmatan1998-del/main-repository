@@ -2562,6 +2562,36 @@ ConvertTo-Json -InputObject $a -Compress"#;
             }
         }
     }
+    /* The shortcuts on his DESKTOP, always (2.37.3): an app he built or
+       installed himself usually lives there and nowhere else - a Chrome
+       "--app" window of his own site, a program from a zip - so it is in
+       neither the Start menu nor the registry, and "open Nutri app" found
+       nothing. Only the .lnk / .url files lying directly on the desktop
+       (his own and the shared one), by their file name. */
+    {
+        let mut desks: Vec<std::path::PathBuf> = Vec::new();
+        if let Some(d) = dirs_next::desktop_dir() {
+            desks.push(d);
+        }
+        if let Some(p) = std::env::var_os("PUBLIC") {
+            desks.push(std::path::PathBuf::from(p).join("Desktop"));
+        }
+        for dir in desks {
+            let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+            for e in rd.flatten().take(500) {
+                let p = e.path();
+                let is_link = p.extension().and_then(|x| x.to_str()).map(|x| ["lnk", "url"].contains(&x.to_lowercase().as_str())).unwrap_or(false);
+                if !is_link {
+                    continue;
+                }
+                if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                    if !out.iter().any(|a| a.id == p.display().to_string()) {
+                        out.push(InstalledApp { name: stem.to_string(), id: p.display().to_string(), kind: "lnk" });
+                    }
+                }
+            }
+        }
+    }
     /* No PowerShell answer: the Start menu's own shortcut files. */
     if !out.iter().any(|a| a.kind == "start") {
         let mut roots: Vec<std::path::PathBuf> = Vec::new();

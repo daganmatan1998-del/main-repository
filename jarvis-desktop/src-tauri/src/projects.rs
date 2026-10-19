@@ -223,9 +223,18 @@ pub fn projects_list() -> serde_json::Value {
 
 /* The one way in. Takes no path: he clicks the folder. */
 #[tauri::command]
-pub async fn project_authorize() -> Result<serde_json::Value, String> {
-    let picked = tauri::async_runtime::spawn_blocking(|| {
-        rfd::FileDialog::new().set_title("JARVIS - choose a project folder to authorize").pick_folder()
+pub async fn project_authorize(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    use tauri::Manager;
+    /* Owned by the orb's window. The orb is always on top, and a dialog that
+       has no owner opens BEHIND it: the picker was "open" but nobody could
+       see it, which looks exactly like "add a project does nothing". */
+    let owner = app.get_webview_window("main");
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        let mut d = rfd::FileDialog::new().set_title("JARVIS - choose a project folder to authorize");
+        if let Some(w) = owner.as_ref() {
+            d = d.set_parent(w);
+        }
+        d.pick_folder()
     })
     .await
     .map_err(|e| e.to_string())?;
