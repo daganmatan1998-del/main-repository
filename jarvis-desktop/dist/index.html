@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="e97d1db9eeea">
+<meta name="jarvis-build" content="649301d78015">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -6809,6 +6809,7 @@ async function handleTranscript(rawText, sawSpeech, spokeAt, ptt){
     /* A diagnostic is on screen (2.38.0): "cancel" stops it; everything else
        heard meanwhile (including his own narration coming back) is ignored. */
     if(diagSession){
+      noteActivity();   // a test on screen is activity: he must not doze off under it
       if(text && diagIsCancel(text)) cancelDiagnostics();
       return;
     }
@@ -22571,7 +22572,19 @@ async function handleSend(){
       return;
     }
   }
-  if((!text && !images.length) || isThinking) return;
+  if(!text && !images.length) return;
+  if(isThinking){
+    /* Used to return without a word, which from outside is "he does nothing at
+       all". A turn that has shown no sign of life for 20 s with nothing out on
+       the network is a leftover: released, and this request goes ahead. */
+    if(lastThinkStart && Date.now() - lastThinkStart > 20000 && requestsInFlight === 0 && !toolRunningSince){
+      console.warn('JARVIS: releasing a stale turn so a new request can start');
+      isThinking = false; currentAbortController = null; updateStopBtnVisibility();
+    } else {
+      addMessage('system', '\u25B8 still busy with the previous request - say stop, then ask again');
+      return;
+    }
+  }
   eyeAbandon();   // his turn outranks an unprompted remark, always
   chatInput.value = '';
   autoResizeChatInput();
