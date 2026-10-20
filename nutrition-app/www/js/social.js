@@ -77,7 +77,7 @@ export async function findByUsername(username) {
   return r.data[0] || null;
 }
 
-async function profilesByIds(ids) {
+export async function profilesByIds(ids) {
   if (!ids.length) return {};
   const r = await net(`nutri_profiles?select=${PROFILE_FIELDS}&user_id=in.(${ids.join(',')})`);
   if (!r.ok) throw fail(r);

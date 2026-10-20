@@ -9,6 +9,9 @@ import { GOALS } from '../nutrition.js';
 import { messages, markRead, markAllRead, setWaitingRequests, removeMessage } from '../inbox.js';
 import { googleButton } from './account.js';
 import { loadRelations, forgetRelations, personRow, failed } from './friends.js';
+import { challengeInvitations } from './challenges.js';
+import * as ch from '../challenges.js';
+import { challengeList, refreshChallenges } from '../challenge-sync.js';
 
 // Title, text and where tapping leads — written in the current language when shown.
 const KINDS = {
@@ -16,6 +19,11 @@ const KINDS = {
   'checkin-due': (a) => ({ title: tr('Your weekly check-in is ready'), text: tr('Week {0}: add a progress photo (or skip it) and update your weight.', a[0]), link: '#/today' }),
   'period-ended': (a) => ({ title: tr('Your {0} period is over 🎉', (GOALS[a[0]] || { label: '' }).label), text: tr('Time to review your results and set up the next period.'), link: '#/today' }),
   'friend-accepted': (a) => ({ title: tr('{0} accepted your friend request', a[0]), text: tr('You are now friends.'), link: '' }),
+  'challenge-accepted': (a) => ({ title: tr('{0} accepted your challenge', a[0]), text: tr('It starts tomorrow. Mark every meal before the day ends.') }),
+  'challenge-declined': (a) => ({ title: tr('{0} declined your challenge', a[0]), text: tr('You can challenge another friend any time.') }),
+  'challenge-won': (a) => ({ title: tr('You won the challenge against {0} 🎉', a[0]), text: tr('Your record was updated.') }),
+  'challenge-lost': (a) => ({ title: tr('{0} won the challenge', a[0]), text: tr('Your record was updated.') }),
+  'challenge-draw': (a) => ({ title: tr('The challenge with {0} ended in a draw', a[0]), text: tr('Nobody\'s record changed.') }),
 };
 const describe = (m) => (KINDS[m.kind] ? KINDS[m.kind](m.args || []) : null);
 
@@ -56,7 +64,7 @@ export function renderInbox(root) {
   if (folder === 'messages') { drawMessages(body, unreadAtOpen); markAllRead(); } else drawRequests(body, (n) => { waiting = n; drawTabs(n); });
   // The request count shows on its tab even while the messages folder is open.
   if (folder === 'messages' && cloud.cloudReady() && cloud.signedIn()) {
-    loadRelations().then((rel) => { if (document.body.contains(tabs)) drawTabs(rel.incoming.length); }).catch(() => {});
+    loadRelations().then((rel) => { if (document.body.contains(tabs)) drawTabs(rel.incoming.length + ch.invitations(challengeList()).length); }).catch(() => {});
   }
 }
 
@@ -64,7 +72,7 @@ function drawMessages(body, unread) {
   const list = messages().map((m) => ({ m, d: describe(m) })).filter((x) => x.d);
   if (!list.length) { body.appendChild(h('p', { class: 'empty', id: 'inbox-empty' }, tr('No messages yet.'))); return; }
   body.appendChild(h('ul', { class: 'inbox-list', id: 'inbox-list' }, ...list.map(({ m, d }) => h('li', { class: 'inbox-item' + (unread.has(m.id) ? ' unread' : ''), 'data-kind': m.kind },
-    h('a', { class: 'inbox-main', href: d.link || m.link || '#/inbox', onclick: () => markRead(m.id) },
+    h('a', { class: 'inbox-main', href: m.link || d.link || '#/inbox', onclick: () => markRead(m.id) },
       h('b', null, d.title),
       h('span', { class: 'small' }, d.text),
       h('small', { class: 'muted' }, ago(m.at))),
@@ -78,15 +86,17 @@ function drawRequests(body, onCount) {
     return;
   }
   body.appendChild(h('p', { class: 'muted' }, tr('Loading…')));
-  loadRelations(true).then((rel) => {
+  loadRelations(true).then(async (rel) => {
+    await refreshChallenges();
     if (!document.body.contains(body)) return;
     clear(body);
-    onCount(rel.incoming.length);
+    onCount(rel.incoming.length + ch.invitations(challengeList()).length);
     setWaitingRequests(rel.incoming.length);
     const act = async (fn, okText) => {
       try { await fn(); if (okText) toast(okText); forgetRelations(); renderInbox(document.getElementById('view')); } catch { toast(tr('Couldn\'t reach the server. Try again.')); }
     };
-    if (!rel.incoming.length && !rel.outgoing.length) { body.appendChild(h('p', { class: 'empty', id: 'requests-empty' }, tr('No friend requests.'))); return; }
+    const invites = challengeInvitations(body, () => renderInbox(document.getElementById('view')));
+    if (!rel.incoming.length && !rel.outgoing.length && !invites) { body.appendChild(h('p', { class: 'empty', id: 'requests-empty' }, tr('No friend requests.'))); return; }
     if (rel.incoming.length) {
       body.append(h('h3', { class: 'extra-group' }, tr('Received')),
         h('ul', { class: 'friend-list', id: 'requests-in' }, ...rel.incoming.map((e) => personRow(e.user,

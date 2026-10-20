@@ -392,3 +392,7 @@ English is the default (app name, logo text and every string). The language pick
 
 - **Inbox** (bell on Today): app messages kept on the device, and — in a separate folder — friend requests.
 - **Friends**: a public profile with a username (`@name`), invite link `#/u/<username>` (WhatsApp / copy), search by username, requests to accept or decline. Needs the new tables: **re-run `supabase/setup.sql`** in the Supabase SQL editor (adds `nutri_profiles` and `nutri_friend_requests` with row-level security; wins/losses can only be changed by the server). Tested against an in-memory fake of the PostgREST calls (`tests/e2e/cloud.mjs`), not against a real project.
+
+## Friend challenges (v1.18)
+
+From a friend's profile: **Challenge to a competition** — pick 7/14/30 days (or 3–30) and how many misses are allowed. A *miss* is a planned meal not marked as eaten by the end of its day (a day nobody reports counts as a full day of misses). The first to go over the limit loses at once; if nobody does, whoever missed more when the period ends loses (equal = draw). Accepting starts the challenge tomorrow. Wins/losses show on every profile. The rules live in `supabase/setup.sql` (re-run it in Supabase); each phone reports its own days, so scoring is an honor system between friends. Tests: `tests/unit/sql.test.mjs` runs the real SQL in PGlite (`npm install` first).

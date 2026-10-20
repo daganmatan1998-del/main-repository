@@ -16,6 +16,7 @@
     "@anthropic-ai/sdk": "^0.132.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10",
     "acorn": "^8.19.0",
     "acorn-walk": "^8.3.5",
     "dictionary-bg": "^2.0.0",

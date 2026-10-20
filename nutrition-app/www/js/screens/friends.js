@@ -7,6 +7,9 @@ import * as cloud from '../cloud.js';
 import * as social from '../social.js';
 import { state } from '../store.js';
 import { googleButton } from './account.js';
+import * as ch from '../challenges.js';
+import { openChallengeSheet } from './challenges.js';
+import { refreshChallenges, challengeList } from '../challenge-sync.js';
 
 const myName = () => (state.profile && (state.profile.nickname || state.profile.name)) || '';
 
@@ -179,7 +182,7 @@ export async function renderUserProfile(root) {
 
   let user;
   let rel;
-  try { user = await social.findByUsername(username); rel = await loadRelations(true); } catch (e) { clear(card); card.appendChild(h('p', { class: 'notice warn' }, failed(e))); return; }
+  try { user = await social.findByUsername(username); rel = await loadRelations(true); await refreshChallenges(); } catch (e) { clear(card); card.appendChild(h('p', { class: 'notice warn' }, failed(e))); return; }
   if (!document.body.contains(card)) return; // navigated away meanwhile
   clear(card);
   if (!user) { card.appendChild(h('p', { class: 'empty', id: 'user-missing' }, tr('There is no user named @{0}.', username))); return; }
@@ -222,7 +225,11 @@ function drawActions(box, user, rel) {
         btn(tr('Accept'), run(() => social.respond(r.request.id, 'accepted'), tr('You are now friends with {0}', name)), 'btn btn-primary', 'friend-accept'),
         btn(tr('Decline'), run(() => social.respond(r.request.id, 'declined'), tr('Request declined')), 'btn', 'friend-decline')));
   } else {
+    const open = ch.withFriend(challengeList(), user.user_id);
     box.append(h('p', { class: 'badge active', id: 'friend-badge' }, icon('check', 14), ' ', tr('Friends')),
+      open
+        ? h('a', { class: 'btn btn-block btn-primary', id: 'friend-challenge-open', href: `#/challenge/${open.id}` }, tr('View the challenge'))
+        : btn(tr('Challenge to a competition'), () => openChallengeSheet(user, { onDone: () => drawActions(box, user, rel) }), 'btn btn-primary', 'friend-challenge'),
       btn(tr('Remove friend'), async () => {
         if (!(await confirmDialog(tr('Remove {0} from your friends?', name), tr('You can add them again later.'), tr('Remove friend'), true))) return;
         await run(() => social.removeRequest(r.request.id), tr('Friend removed'))();

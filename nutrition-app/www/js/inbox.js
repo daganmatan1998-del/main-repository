@@ -10,6 +10,7 @@ const KEY = 'inbox';
 const MAX = 100;
 let list = [];
 let requests = 0; // friend requests waiting for an answer
+let invites = 0; // challenges waiting for an answer
 
 const changed = () => window.dispatchEvent(new Event('app:inbox'));
 
@@ -36,12 +37,19 @@ export async function addMessage(kind, { id = `${kind}-${Date.now()}`, args = []
 export const messages = () => list;
 export const unreadMessages = () => list.filter((m) => !m.read).length;
 export const waitingRequests = () => requests;
+export const waitingInvites = () => invites;
 // What the bell's badge shows.
-export const badgeCount = () => unreadMessages() + requests;
+export const badgeCount = () => unreadMessages() + requests + invites;
 
 export function setWaitingRequests(n) {
   if (n === requests) return;
   requests = n;
+  changed();
+}
+
+export function setChallengeInvites(n) {
+  if (n === invites) return;
+  invites = n;
   changed();
 }
 

@@ -13,6 +13,7 @@ import { openPeriodReview } from './period.js';
 import { installCard } from '../install.js';
 import { badgeCount, addMessage } from '../inbox.js';
 import { openInviteSheet } from './friends.js';
+import { challengeStrip } from './challenges.js';
 import { cloudReady } from '../cloud.js';
 
 let chartMode = 'weight';
@@ -83,6 +84,8 @@ export function renderToday(root, { askAbout }) {
         h('p', { class: 'muted small' }, tr('Invite a friend with a link on WhatsApp, or find them by username.'))),
       h('button', { type: 'button', class: 'btn btn-primary', id: 'btn-invite-today', onclick: openInviteSheet }, icon('send', 16), tr('Invite'))));
   }
+
+  if (cloudReady()) root.appendChild(challengeStrip());
 
   // ---- meals ----
   root.appendChild(h('h2', { class: 'section-title' }, tr('Today\'s meals')));

@@ -32,7 +32,7 @@ const USER = { id: '6f1c0e1a-0000-4000-8000-000000000001', email: 'tester@exampl
 // Friends: two other people and a request from one of them, as PostgREST would hold them.
 const BOB = { user_id: '6f1c0e1a-0000-4000-8000-0000000000b0', username: 'bob', display_name: 'Bob', wins: 3, losses: 1 };
 const CAROL = { user_id: '6f1c0e1a-0000-4000-8000-0000000000c0', username: 'carol', display_name: 'Carol', wins: 0, losses: 0 };
-const fake = { profiles: [BOB, CAROL], requests: [{ id: 'req-1', from_user: CAROL.user_id, to_user: USER.id, status: 'pending', created_at: '2026-10-10T08:00:00Z', updated_at: '2026-10-10T08:00:00Z' }], row: null, files: new Map(), challenges: new Map(), calls: [], deletedAccount: false, badAuth: 0 };
+const fake = { profiles: [BOB, CAROL], requests: [{ id: 'req-1', from_user: CAROL.user_id, to_user: USER.id, status: 'pending', created_at: '2026-10-10T08:00:00Z', updated_at: '2026-10-10T08:00:00Z' }], challenges: [], challengeDays: [], rpcCalls: [], codes: new Map(), row: null, files: new Map(), calls: [], deletedAccount: false, badAuth: 0 };
 
 async function supabase(route) {
   const req = route.request();
@@ -44,8 +44,8 @@ async function supabase(route) {
   fake.calls.push(`${req.method()} ${p}`);
 
   if (p === '/auth/v1/authorize') {
-    const code = `code-${fake.challenges.size + 1}`;
-    fake.challenges.set(code, url.searchParams.get('code_challenge'));
+    const code = `code-${fake.codes.size + 1}`;
+    fake.codes.set(code, url.searchParams.get('code_challenge'));
     const back = new URL(url.searchParams.get('redirect_to'));
     back.searchParams.set('code', code);
     return route.fulfill({ status: 302, headers: { location: back.toString() } });
@@ -53,7 +53,7 @@ async function supabase(route) {
   if (p === '/auth/v1/token') {
     const body = JSON.parse(req.postData());
     if (url.searchParams.get('grant_type') === 'pkce') {
-      const want = fake.challenges.get(body.auth_code);
+      const want = fake.codes.get(body.auth_code);
       const got = createHash('sha256').update(body.code_verifier).digest('base64url');
       if (!want || want !== got) { fake.badAuth++; return json(400, { error: 'invalid_grant' }); }
     }
@@ -124,6 +124,67 @@ async function supabase(route) {
       return json(204);
     }
     if (req.method() === 'DELETE') { fake.requests = fake.requests.filter((r) => r !== target); return json(204); }
+  }
+  // ---- challenges: the same rules as supabase/setup.sql, in short ----
+  if (p === '/rest/v1/nutri_challenges' && req.method() === 'GET') return json(200, fake.challenges.filter((c) => c.creator === USER.id || c.opponent === USER.id));
+  if (p === '/rest/v1/nutri_challenge_days' && req.method() === 'GET') {
+    const ids = (url.searchParams.get('challenge_id') || '').replace(/^in\.\(|\)$/g, '').split(',');
+    return json(200, fake.challengeDays.filter((d) => ids.includes(d.challenge_id)));
+  }
+  if (p.startsWith('/rest/v1/rpc/') && p !== '/rest/v1/rpc/delete_my_account') {
+    const name = p.slice('/rest/v1/rpc/'.length);
+    const a = JSON.parse(req.postData() || '{}');
+    fake.rpcCalls.push({ name, args: a });
+    const err = (status, message, code = '42501') => json(status, { code, message });
+    const addDay = (d, n) => new Date(Date.parse(d) + n * 86400000).toISOString().slice(0, 10);
+    const mine = (c) => c.creator === USER.id || c.opponent === USER.id;
+    const misses = (c, uid, to) => {
+      const rows = fake.challengeDays.filter((d) => d.challenge_id === c.id && d.user_id === uid);
+      const fb = rows.length ? Math.max(...rows.map((r) => r.planned)) : 3;
+      let n = 0;
+      for (let d = c.start_date; d <= to; d = addDay(d, 1)) { const r = rows.find((x) => x.day === d); n += r ? Math.max(r.planned - r.logged, 0) : fb; }
+      return n;
+    };
+    const finish = (c, loser) => {
+      Object.assign(c, { status: 'finished', loser, result: loser ? 'loss' : 'draw', finished_at: new Date().toISOString() });
+      if (loser) for (const pr of fake.profiles) { if (pr.user_id === loser) pr.losses++; else if ([c.creator, c.opponent].includes(pr.user_id)) pr.wins++; }
+    };
+    const evaluate = (c, today) => {
+      if (c.status !== 'active') return c.status;
+      const end = [c.end_date, addDay(today, -1)].sort()[0];
+      const mc = misses(c, c.creator, end);
+      const mo = misses(c, c.opponent, end);
+      if (!(mc > c.max_misses || mo > c.max_misses || today > c.end_date)) return 'active';
+      finish(c, mc > mo ? c.creator : mo > mc ? c.opponent : null);
+      return 'finished';
+    };
+    const find = () => fake.challenges.find((c) => c.id === a.p_id);
+    if (name === 'create_challenge') {
+      const friends = fake.requests.some((r) => r.status === 'accepted' && [[r.from_user, r.to_user], [r.to_user, r.from_user]].some(([x, y]) => x === USER.id && y === a.p_opponent));
+      if (!friends) return err(403, 'not_friends');
+      if (fake.challenges.some((c) => ['pending', 'active'].includes(c.status) && mine(c) && [c.creator, c.opponent].includes(a.p_opponent))) return err(409, 'already_challenged', '23505');
+      const c = { id: `00000000-0000-4000-8000-${String(fake.challenges.length + 1).padStart(12, '0')}`, creator: USER.id, opponent: a.p_opponent, status: 'pending', days: a.p_days, max_misses: a.p_max_misses, start_date: null, end_date: null, loser: null, result: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), finished_at: null };
+      fake.challenges.unshift(c);
+      return json(200, c.id);
+    }
+    const c = find();
+    if (!c || !mine(c)) return err(403, 'not_allowed');
+    if (name === 'respond_challenge') {
+      if (c.opponent !== USER.id || c.status !== 'pending') return err(403, 'not_allowed');
+      if (a.p_accept) Object.assign(c, { status: 'active', start_date: addDay(a.p_today, 1), end_date: addDay(a.p_today, c.days) }); else c.status = 'declined';
+      return json(200, c.status);
+    }
+    if (name === 'cancel_challenge') { if (c.creator !== USER.id || c.status !== 'pending') return err(403, 'not_allowed'); c.status = 'cancelled'; return json(200, null); }
+    if (name === 'forfeit_challenge') { if (c.status !== 'active') return err(403, 'not_allowed'); finish(c, USER.id); return json(200, null); }
+    if (name === 'report_challenge_day') {
+      if (c.status !== 'active') return err(403, 'not_allowed');
+      if (a.p_day >= c.start_date && a.p_day <= c.end_date && a.p_day <= a.p_today && a.p_day >= addDay(a.p_today, -1)) {
+        fake.challengeDays = fake.challengeDays.filter((d) => !(d.challenge_id === c.id && d.user_id === USER.id && d.day === a.p_day));
+        fake.challengeDays.push({ challenge_id: c.id, user_id: USER.id, day: a.p_day, planned: a.p_planned, logged: Math.min(a.p_logged, a.p_planned) });
+      }
+      return json(200, evaluate(c, a.p_today));
+    }
+    if (name === 'evaluate_challenge') return json(200, evaluate(c, a.p_today));
   }
   if (p === '/rest/v1/rpc/delete_my_account') { fake.row = null; fake.deletedAccount = true; return json(204); }
 
@@ -394,6 +455,80 @@ try {
   await A.page.reload();
   await A.page.waitForSelector('#share-whatsapp');
   check('your own link opens your profile with the share buttons', (await A.page.locator('#user-handle').innerText()) === '@matan_test');
+  await A.page.goto(`${BASE}/#/today`);
+  await A.page.reload();
+  await A.page.waitForSelector('.page-today');
+
+  // ======== challenges: invite, accept, report, scoreboard, forfeit ========
+  const dayKey = (n = 0) => new Date(Date.now() + n * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+  await A.page.goto(`${BASE}/#/u/carol`);
+  await A.page.reload();
+  await A.page.waitForSelector('#friend-challenge');
+  check("a friend's profile offers a challenge", true);
+  await A.page.click('#friend-challenge');
+  await A.page.waitForSelector('#challenge-sheet');
+  await A.page.click('#challenge-sheet [data-days="14"]');
+  await A.page.click('#challenge-more');
+  const maxShown = await A.page.locator('#challenge-max').innerText();
+  await A.page.screenshot({ path: path.join(SHOTS, 'c09-challenge-sheet.png') });
+  await A.page.click('#challenge-send');
+  await until(() => fake.challenges.length === 1);
+  const sent = fake.challenges[0];
+  check('sending creates one pending challenge with the chosen rules', sent && sent.status === 'pending' && sent.days === 14 && sent.max_misses === Number(maxShown.replace(/\D/g, '')) && sent.opponent === CAROL.user_id, JSON.stringify(sent));
+  await A.page.waitForSelector('#friend-challenge-open');
+  check('the profile now links to the open challenge instead of offering another', (await A.page.locator('#friend-challenge').count()) === 0);
+  await A.page.click('#friend-challenge-open');
+  await A.page.waitForSelector('#challenge-page');
+  check('a pending challenge shows waiting and a cancel button', await A.page.locator('#challenge-waiting').isVisible() && await A.page.locator('#challenge-cancel').isVisible());
+  await A.page.screenshot({ path: path.join(SHOTS, 'c10-challenge-pending.png'), fullPage: true });
+  await A.page.click('#challenge-cancel');
+  await until(() => fake.challenges[0].status === 'cancelled');
+  check('cancelling is recorded on the server', fake.challenges[0].status === 'cancelled');
+
+  // Carol invites; accept from the inbox.
+  const carolCh = { id: '00000000-0000-4000-8000-0000000000c1', creator: CAROL.user_id, opponent: USER.id, status: 'pending', days: 7, max_misses: 3, start_date: null, end_date: null, loser: null, result: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), finished_at: null };
+  fake.challenges.unshift(carolCh);
+  await A.page.goto(`${BASE}/#/today`);
+  await A.page.reload();
+  await A.page.waitForSelector('.page-today');
+  await until(async () => (await A.page.locator('.bell-badge').count()) === 1 && await A.page.locator('.bell-badge').isVisible());
+  check('the bell counts a challenge invitation', await A.page.locator('.bell-badge').isVisible());
+  await A.page.click('.bell, a[href="#/inbox"]');
+  await A.page.waitForSelector('#tab-requests');
+  await A.page.click('#tab-requests');
+  await A.page.waitForSelector('#challenge-invites [data-act="accept-challenge"]');
+  await A.page.screenshot({ path: path.join(SHOTS, 'c11-challenge-invite.png') });
+  await A.page.click('#challenge-invites [data-act="accept-challenge"]');
+  await until(() => carolCh.status === 'active');
+  check('accepting starts it tomorrow for the chosen number of days', carolCh.status === 'active' && carolCh.start_date === dayKey(1) && carolCh.end_date === dayKey(7), JSON.stringify(carolCh));
+
+  // A running challenge: Today strip, page, scoreboard.
+  Object.assign(carolCh, { start_date: dayKey(-1), end_date: dayKey(5), max_misses: 30 });
+  fake.challengeDays.push({ challenge_id: carolCh.id, user_id: CAROL.user_id, day: dayKey(-1), planned: 3, logged: 1 });
+  await A.page.goto(`${BASE}/#/today`);
+  await A.page.reload();
+  await A.page.waitForSelector('#challenge-strip [data-challenge]');
+  check('Today shows a strip for the running challenge', (await A.page.locator('#challenge-strip [data-challenge]').count()) === 1);
+  await A.page.screenshot({ path: path.join(SHOTS, 'c12-today-strip.png') });
+  await until(() => fake.rpcCalls.some((r) => r.name === 'report_challenge_day'));
+  check("this phone reports its own day to the server", fake.rpcCalls.some((r) => r.name === 'report_challenge_day' && r.args.p_id === carolCh.id));
+  await A.page.click('#challenge-strip [data-challenge]');
+  await A.page.waitForSelector('#scoreboard');
+  check('the challenge page has a scoreboard, a day list and a forfeit button', await A.page.locator('#day-list').count() === 1 && await A.page.locator('#challenge-forfeit').isVisible());
+  await A.page.screenshot({ path: path.join(SHOTS, 'c13-challenge-running.png'), fullPage: true });
+  await A.page.goto(`${BASE}/#/profile`);
+  await A.page.waitForSelector('#challenges-card');
+  check('the profile lists the challenge and a record', (await A.page.locator('#challenge-list').innerText()).includes('Carol') && await A.page.locator('#my-record').count() === 1);
+  await A.page.screenshot({ path: path.join(SHOTS, 'c14-profile-challenges.png'), fullPage: true });
+  await A.page.goto(`${BASE}/#/challenge/${carolCh.id}`);
+  await A.page.waitForSelector('#challenge-forfeit');
+  await A.page.click('#challenge-forfeit');
+  const confirmBtn = A.page.locator('.sheet .btn-danger, .sheet [data-confirm], .modal .btn-danger').first();
+  if (await confirmBtn.count()) await confirmBtn.click();
+  await until(() => carolCh.status === 'finished');
+  check('giving up ends it as a loss for you and a win for them', carolCh.status === 'finished' && carolCh.loser === USER.id, JSON.stringify(carolCh));
+  await A.page.waitForSelector('#challenge-result');
+  await A.page.screenshot({ path: path.join(SHOTS, 'c15-challenge-lost.png'), fullPage: true });
   await A.page.goto(`${BASE}/#/today`);
   await A.page.reload();
   await A.page.waitForSelector('.page-today');

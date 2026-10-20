@@ -25,6 +25,8 @@ import { maybeAskReminders } from './screens/reminders.js';
 import { openConflict } from './screens/account.js';
 import { renderInbox } from './screens/inbox.js';
 import { renderUserProfile } from './screens/friends.js';
+import { renderChallenge } from './screens/challenges.js';
+import { startChallengeSync } from './challenge-sync.js';
 import { usernameFromHash } from './social.js';
 import { startSocial } from './social-sync.js';
 import { loadInbox, addMessage } from './inbox.js';
@@ -51,6 +53,7 @@ const ROUTES = {
   // Friends: the inbox (opened from the bell on Today) and a person's public profile (invite links).
   inbox: { render: renderInbox, tab: 'today' },
   u: { render: renderUserProfile, tab: 'profile' },
+  challenge: { render: renderChallenge, tab: 'profile' },
 };
 
 const PENDING_LINK = 'nutri-pending-link';
@@ -248,6 +251,7 @@ async function boot() {
   registerSW();
   startPush();
   startSocial();
+  startChallengeSync();
   // After setup is finished: offer daily reminders once, from the Today screen
   // (not over the weekly photo, the summary or a half-finished form).
   window.addEventListener('app:ready-for-reminders', () => maybeAskReminders());

@@ -836,3 +836,31 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .today-head { flex-wrap: wrap; justify-content: flex-start; }
 .today-head > .grow { flex: 1 1 55%; min-width: 55%; }
 .today-head .bell-link { margin-inline-start: auto; }
+
+/* ---- challenges ---- */
+.stepper { display: flex; align-items: center; justify-content: center; gap: 18px; margin: 4px 0 8px; }
+.stepper .icon-btn { width: 44px; height: 44px; border: 1.5px solid var(--border); border-radius: 50%; background: var(--surface); }
+.challenge-max { min-width: 2ch; text-align: center; font-size: 1.6rem; }
+.challenge-rules { margin: 4px 0 8px; padding-inline-start: 1.2em; display: grid; gap: 4px; }
+.challenge-page .badge { margin-top: 4px; }
+.challenge-result { text-align: center; font-size: 1.25rem; font-weight: 700; margin: 8px 0; }
+.challenge-result.won { color: var(--ok-text); }
+.challenge-result.lost { color: var(--danger); }
+.scoreboard { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+.score { display: grid; justify-items: center; gap: 2px; padding: 12px 8px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.score.over { border-color: var(--danger); }
+.score-name { font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.score-num { font-size: 2rem; line-height: 1.1; }
+.day-table { margin: 10px 0; }
+.day-list { list-style: none; margin: 0; padding: 0; }
+.day-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 6px; align-items: center; padding: 8px 0; border-top: 1px dashed var(--border); }
+.day-row.head { border-top: 0; padding-bottom: 2px; font-weight: 600; }
+.day-row.today { background: var(--primary-weak); border-radius: 8px; padding-inline: 6px; }
+.cell { display: inline-flex; align-items: center; gap: 4px; }
+.cell.ok { color: var(--ok-text); }
+.cell.miss { color: var(--danger); }
+.strip { display: block; text-decoration: none; color: inherit; }
+.strip h3 { margin: 0; }
+.strip .row { align-items: baseline; }
+.strip-score { margin: 4px 0 0; font-weight: 600; }
+.invite-card.strip { display: flex; }
