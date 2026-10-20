@@ -8,7 +8,7 @@ import { lineChart } from '../chart.js';
 import { dayTotals } from '../mealplan.js';
 import { dayMicros } from '../micros.js';
 import { dayActivity } from '../habits.js';
-import { waterCard, fastCard, activityCard, nutrientsCard, streakChip, checkBadges } from './habits.js';
+import { waterCard, fastCard, activityCard, nutrientsCard, streakChip, checkBadges, framed, myLevel } from './habits.js';
 import { dayDrinks } from '../drinks.js';
 import { GOALS } from '../nutrition.js';
 import { state, today, targets, dayPlan, toggleEaten, gate, activePeriod, currentMetrics, periodEnded, saveSettings } from '../store.js';
@@ -48,7 +48,7 @@ export function renderToday(root, { askAbout }) {
   const hello = hour < 12 ? tr('Good morning') : hour < 18 ? tr('Good afternoon') : tr('Good evening');
 
   root.appendChild(h('header', { class: 'page-head today-head' },
-    h('a', { class: 'head-avatar', href: '#/profile', 'aria-label': tr('Profile') }, avatar(44)),
+    h('a', { class: 'head-avatar', href: '#/profile', 'aria-label': tr('Profile') }, framed(avatar(44), myLevel(), 44)),
     h('div', { class: 'grow' },
       h('h1', null, `${hello}, ${state.profile.nickname || state.profile.name}`),
       h('p', { class: 'muted row gap' }, new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' }), streakChip())),

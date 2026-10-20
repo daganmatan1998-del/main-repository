@@ -375,7 +375,7 @@ export async function setAvatar(img) {
 
 // ---------- cloud copy (see sync.js) ----------
 // Settings that belong to this device and never travel between devices.
-const DEVICE_SETTINGS = ['reminders', 'installDismissed', 'lang'];
+const DEVICE_SETTINGS = ['reminders', 'installDismissed', 'lang', 'levelSynced'];
 
 export function snapshot() {
   const settings = { ...state.settings };

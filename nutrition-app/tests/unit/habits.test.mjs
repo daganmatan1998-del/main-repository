@@ -126,3 +126,38 @@ test('micros: items, sauces and the common/typed/scanned own foods are added up'
   assert.equal(mealMicros({ eaten: { totals: {} }, items: [{ foodId: 'tuna', grams: 100 }] }).known, false, 'a photographed meal has no data');
   assert.equal(dayMicros([], undefined).any, false);
 });
+
+test('titles: by days tracked, with the next one and progress', () => {
+  assert.equal(hb.levelForDays(0), 0);
+  assert.equal(hb.levelForDays(2), 0);
+  assert.equal(hb.levelForDays(3), 1);
+  assert.equal(hb.levelForDays(99), 4);
+  assert.equal(hb.levelForDays(365), hb.MAX_LEVEL);
+  assert.equal(hb.levelForDays(9999), hb.MAX_LEVEL);
+  assert.equal(hb.levelInfo(99).level, hb.MAX_LEVEL, 'out-of-range levels are clamped');
+  assert.equal(hb.levelInfo('x').level, 0);
+  const n = hb.nextLevel(20, 2);
+  assert.equal(n.next.level, 3);
+  assert.equal(n.left, 5);
+  assert.equal(Math.round(n.pct * 100), 67);
+  assert.equal(hb.nextLevel(400, hb.MAX_LEVEL).next, null);
+  assert.deepEqual(hb.LEVELS.map((l) => l.level), hb.LEVELS.map((_, i) => i));
+  assert.ok(hb.LEVELS.every((l, i) => i === 0 || l.days > hb.LEVELS[i - 1].days));
+});
+
+test('days tracked: old days fold into a running total before the logs are pruned, and are never counted twice', () => {
+  const k = (...d) => Object.fromEntries(d.map((x) => [x, { eaten: [0] }]));
+  const logs = k('2026-08-01', '2026-08-02', '2026-09-30', '2026-10-19', '2026-10-20');
+  const today = '2026-10-20';
+  assert.equal(hb.lifetimeDays(logs, {}), 5, 'nothing folded yet');
+  const fold = hb.foldDays(logs, {}, today);
+  assert.equal(fold.daysBase, 2, 'two days are older than 30 days (the cut-off is Sep 20)');
+  const settings = { ...fold };
+  assert.equal(hb.lifetimeDays(logs, settings), 5, 'same total after folding');
+  assert.equal(hb.foldDays(logs, settings, today).daysBase, 2, 'folding again adds nothing');
+  const pruned = k('2026-09-30', '2026-10-19', '2026-10-20');
+  assert.equal(hb.lifetimeDays(pruned, settings), 5, 'the total survives pruning');
+  const later = hb.foldDays({ ...pruned, ...k('2026-10-25') }, settings, '2026-11-26');
+  assert.equal(later.daysBase, 6, 'a later fold adds the newly old days');
+  assert.equal(hb.lifetimeDays({}, {}), 0);
+});

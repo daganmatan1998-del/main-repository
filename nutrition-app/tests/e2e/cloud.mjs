@@ -30,7 +30,7 @@ function check(name, cond, detail = '') {
 const SUPA = 'https://e2e.supabase.co';
 const USER = { id: '6f1c0e1a-0000-4000-8000-000000000001', email: 'tester@example.com', user_metadata: { full_name: 'מתן בודק' } };
 // Friends: two other people and a request from one of them, as PostgREST would hold them.
-const BOB = { user_id: '6f1c0e1a-0000-4000-8000-0000000000b0', username: 'bob', display_name: 'Bob', wins: 3, losses: 1 };
+const BOB = { user_id: '6f1c0e1a-0000-4000-8000-0000000000b0', username: 'bob', display_name: 'Bob', wins: 3, losses: 1, level: 4 };
 const CAROL = { user_id: '6f1c0e1a-0000-4000-8000-0000000000c0', username: 'carol', display_name: 'Carol', wins: 0, losses: 0 };
 const fake = { profiles: [BOB, CAROL], requests: [{ id: 'req-1', from_user: CAROL.user_id, to_user: USER.id, status: 'pending', created_at: '2026-10-10T08:00:00Z', updated_at: '2026-10-10T08:00:00Z' }], challenges: [], challengeDays: [], rpcCalls: [], codes: new Map(), row: null, files: new Map(), calls: [], deletedAccount: false, badAuth: 0 };
 
@@ -85,6 +85,13 @@ async function supabase(route) {
     if (req.method() === 'PATCH') {
       if (q.get('user_id') !== `eq.${USER.id}`) return json(403, { message: 'rls' });
       const body = JSON.parse(req.postData());
+      if (body.level !== undefined && body.username === undefined) {
+        const m = fake.profiles.find((x) => x.user_id === USER.id);
+        fake.levelCalls = (fake.levelCalls || 0) + 1;
+        if (!m) return json(200, []);
+        m.level = body.level;
+        return json(200, [m]);
+      }
       if (!/^[a-z0-9_]{3,20}$/.test(body.username)) return json(400, { code: '23514' });
       if (fake.profiles.some((x) => x.username === body.username && x.user_id !== USER.id)) return json(409, { code: '23505', message: 'duplicate key' });
       const mine = fake.profiles.find((x) => x.user_id === USER.id);
@@ -434,6 +441,7 @@ try {
   await A.page.click('#friend-find');
   await A.page.waitForSelector('#user-name');
   check("searching goes to the person's profile with name, @username and win rate", (await A.page.locator('#user-name').innerText()) === 'Bob' && (await A.page.locator('#user-handle').innerText()) === '@bob' && (await A.page.locator('#user-stats').innerText()).includes('75'));
+  check("Bob's title shows next to his picture and under his name", (await A.page.locator('#user-profile .avatar-wrap[data-level="4"]').count()) === 1 && (await A.page.locator('#user-profile .level-line').innerText()).trim().length > 2);
   await A.page.screenshot({ path: path.join(SHOTS, 'c08-user-profile.png') });
   await A.page.click('#friend-add');
   await A.page.waitForSelector('#friend-sent');
@@ -458,6 +466,20 @@ try {
   await A.page.goto(`${BASE}/#/today`);
   await A.page.reload();
   await A.page.waitForSelector('.page-today');
+
+  // ======== title: reported to the server so friends see it ========
+  await A.page.evaluate(async () => { const m = await import('/js/store.js'); await m.saveSettings({ level: 2 }); });
+  await A.page.goto(`${BASE}/#/profile`);
+  await A.page.reload();
+  await A.page.waitForSelector('#level-card');
+  check('your own profile shows your title with the frame on the picture', (await A.page.locator('.profile-head .avatar-wrap[data-level="2"]').count()) === 1 && (await A.page.locator('#level-next').innerText()).length > 5);
+  await until(() => (fake.profiles.find((x) => x.user_id === USER.id) || {}).level === 2);
+  check('the title is sent to the server for friends to see', fake.profiles.find((x) => x.user_id === USER.id).level === 2);
+  await A.page.screenshot({ path: path.join(SHOTS, 'c16-title.png') });
+  await A.page.goto(`${BASE}/#/today`);
+  await A.page.reload();
+  await A.page.waitForSelector('.page-today');
+  check('the picture on Today carries the frame too', (await A.page.locator('.head-avatar .avatar-wrap[data-level="2"]').count()) === 1);
 
   // ======== challenges: invite, accept, report, scoreboard, forfeit ========
   const dayKey = (n = 0) => new Date(Date.now() + n * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });

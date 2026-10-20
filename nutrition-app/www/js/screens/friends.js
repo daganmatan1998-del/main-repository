@@ -7,6 +7,7 @@ import * as cloud from '../cloud.js';
 import * as social from '../social.js';
 import { state } from '../store.js';
 import { googleButton } from './account.js';
+import { framed, levelBadge } from './habits.js';
 import * as ch from '../challenges.js';
 import { openChallengeSheet } from './challenges.js';
 import { refreshChallenges, challengeList } from '../challenge-sync.js';
@@ -128,7 +129,7 @@ function drawInviteContent(body, me, rel) {
 export function personRow(u, ...actions) {
   return h('li', { class: 'friend' },
     h('a', { class: 'friend-main', href: `#/u/${u.username}`, onclick: closeInviteSheet },
-      initialAvatar(u.display_name || u.username, 40),
+      framed(initialAvatar(u.display_name || u.username, 40), u.level, 40),
       h('span', { class: 'friend-text' }, h('b', null, u.display_name || u.username), h('small', { class: 'muted', dir: 'ltr' }, `@${u.username}`))),
     ...actions);
 }
@@ -191,9 +192,10 @@ export async function renderUserProfile(root) {
   const rate = social.winRate(user);
   card.append(
     h('div', { class: 'user-head' },
-      initialAvatar(name, 72),
+      framed(initialAvatar(name, 72), user.level, 72),
       h('h1', { id: 'user-name' }, name),
-      h('p', { class: 'muted', dir: 'ltr', id: 'user-handle' }, `@${user.username}`)),
+      h('p', { class: 'muted', dir: 'ltr', id: 'user-handle' }, `@${user.username}`),
+      levelBadge(user.level)),
     h('div', { class: 'user-stats', id: 'user-stats' },
       rate === null
         ? h('p', { class: 'muted' }, tr('No challenges yet'))

@@ -116,6 +116,51 @@ export function dayActivity(log) {
   return { steps: Math.max(0, Math.round((log && log.steps) || 0)), workouts, kcal, credit: Math.round(kcal * ACTIVITY_CREDIT) };
 }
 
+// ---------- titles ----------
+// By the number of days a planned meal was marked, over the whole time (not
+// just the last 60 days the logs keep). A title is never taken back.
+export const LEVELS = [
+  { level: 0, days: 0, icon: 'leaf', name: tr('Beginner') },
+  { level: 1, days: 3, icon: 'leaf', name: tr('Sprout') },
+  { level: 2, days: 10, icon: 'flame', name: tr('Regular') },
+  { level: 3, days: 25, icon: 'flame', name: tr('Consistent') },
+  { level: 4, days: 50, icon: 'star', name: tr('Dedicated') },
+  { level: 5, days: 100, icon: 'trophy', name: tr('Pro') },
+  { level: 6, days: 200, icon: 'crown', name: tr('Master') },
+  { level: 7, days: 365, icon: 'crown', name: tr('Legend') },
+];
+export const MAX_LEVEL = LEVELS.length - 1;
+export const levelInfo = (level) => LEVELS[Math.max(0, Math.min(MAX_LEVEL, Number(level) || 0))];
+export const levelForDays = (days) => LEVELS.filter((l) => days >= l.days).pop().level;
+const FOLD_AFTER = 30;
+
+// Days older than FOLD_AFTER are added to a running total before the logs are
+// pruned: { base, settled } — every marked day up to `settled` is in `base`.
+export function foldDays(logs, settings, todayKey) {
+  let base = (settings && settings.daysBase) || 0;
+  let settled = (settings && settings.daysSettled) || '';
+  const cutoff = addDays(todayKey, -FOLD_AFTER);
+  if (settled < cutoff) {
+    for (const d of Object.keys(logs || {})) if (d > settled && d <= cutoff && kept(logs[d])) base++;
+    settled = cutoff;
+  }
+  return { daysBase: base, daysSettled: settled };
+}
+
+export function lifetimeDays(logs, settings) {
+  const settled = (settings && settings.daysSettled) || '';
+  const base = (settings && settings.daysBase) || 0;
+  return base + Object.keys(logs || {}).filter((d) => d > settled && kept(logs[d])).length;
+}
+
+// What is next: { next: LEVELS entry | null, left: days to go, pct: 0-1 of the way from the current title }.
+export function nextLevel(days, level) {
+  const cur = levelInfo(level);
+  const next = LEVELS[cur.level + 1] || null;
+  if (!next) return { next: null, left: 0, pct: 1 };
+  return { next, left: Math.max(0, next.days - days), pct: Math.min(1, Math.max(0, (days - cur.days) / (next.days - cur.days))) };
+}
+
 // ---------- badges ----------
 // stats: { streak, best, fullDays, waterDays, fasts, workouts, bigStepDays, wins }
 export const BADGES = [

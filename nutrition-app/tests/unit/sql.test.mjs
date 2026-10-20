@@ -68,6 +68,13 @@ test('profiles: own row only, name and handle writable, score never', async () =
   await fails(as('ann', () => q("update public.nutri_profiles set username = 'Bad Name' where user_id = $1", [U.ann])));
   await fails(as('ann', () => q("update public.nutri_profiles set username = 'bob_b' where user_id = $1", [U.ann])), '23505');
   assert.equal((await as('ann', () => q("update public.nutri_profiles set username = 'bob_b' where user_id = $1 returning 1", [U.bob]))).length, 0, "someone else's row is invisible to an update");
+  // The title (level) is the person's own to report, within 0-20, and only on their own row.
+  assert.equal((await as('ann', () => q('update public.nutri_profiles set level = 3 where user_id = $1 returning level', [U.ann])))[0].level, 3);
+  await fails(as('ann', () => q('update public.nutri_profiles set level = 99 where user_id = $1', [U.ann])), '23514');
+  await fails(as('ann', () => q('update public.nutri_profiles set level = -1 where user_id = $1', [U.ann])), '23514');
+  assert.equal((await as('ann', () => q('update public.nutri_profiles set level = 5 where user_id = $1 returning 1', [U.bob]))).length, 0);
+  assert.equal((await as('bob', () => q('select level from public.nutri_profiles where user_id = $1', [U.ann])))[0].level, 3, 'everyone can read it');
+  await as('ann', () => q('update public.nutri_profiles set level = 0 where user_id = $1', [U.ann]));
   // renaming yourself works (this is what the app does: PATCH)
   assert.equal((await as('ann', () => q("update public.nutri_profiles set username = 'ann_x', display_name = 'Ann K' where user_id = $1 returning username", [U.ann])))[0].username, 'ann_x');
   // …and an upsert would have been refused: it rewrites user_id too

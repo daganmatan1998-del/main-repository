@@ -41,7 +41,7 @@ export function usernameFromHash(hash) {
 }
 
 // ---- profiles ----
-const PROFILE_FIELDS = 'user_id,username,display_name,wins,losses';
+const PROFILE_FIELDS = 'user_id,username,display_name,wins,losses,level';
 
 export async function myProfile() {
   const id = me();
@@ -67,6 +67,15 @@ export async function saveMyProfile({ username, displayName }) {
   if (r.status === 400) return 'invalid';
   if (!r.ok) throw fail(r);
   return (Array.isArray(r.data) ? r.data[0] : r.data) || { ...existing, user_id: id, ...fields };
+}
+
+// The title shown next to the picture. false when there is no profile yet (it is sent once a username is chosen).
+export async function setMyLevel(level) {
+  const id = me();
+  if (!id) return false;
+  const r = await net(`nutri_profiles?user_id=eq.${id}`, { method: 'PATCH', prefer: 'return=representation', body: { level: Math.max(0, Math.min(20, Math.round(level))) } });
+  if (!r.ok) throw fail(r);
+  return Array.isArray(r.data) && r.data.length > 0;
 }
 
 export async function findByUsername(username) {

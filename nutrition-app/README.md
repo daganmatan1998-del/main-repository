@@ -407,3 +407,7 @@ From a friend's profile: **Challenge to a competition** — pick 7/14/30 days (o
 - **Search packaged products by name** (Open Food Facts via `/api/foodsearch`) in Add your own food.
 - **Print** the week's menu (Menu → Print) and the shopping list.
 - Not possible in a PWA: native widgets, store listing, wearable sync. Not built: human coaching.
+
+## Titles (v1.20)
+
+A title (Beginner → Sprout → Regular → Consistent → Dedicated → Pro → Master → Legend) is earned by the number of days a planned meal was marked, over the whole time (3 / 10 / 25 / 50 / 100 / 200 / 365 days) and is never taken back. It shows as a coloured frame and a small mark on the profile picture (Today, Profile, friends) and under the name on a friend's profile. The level is stored in `nutri_profiles.level` (re-run `supabase/setup.sql`); each phone reports its own, so it is honor-system like the challenge days.

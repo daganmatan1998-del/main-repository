@@ -10,6 +10,8 @@ import { state, today, patchLog, saveSettings, currentMetrics, nowMs } from '../
 import { addMessage } from '../inbox.js';
 import { challengeList } from '../challenge-sync.js';
 import * as ch from '../challenges.js';
+import * as social from '../social.js';
+import * as cloud from '../cloud.js';
 
 // ---------- which cards are shown ----------
 const CARD_DEFAULTS = { water: true, fast: false, activity: true, nutrients: true };
@@ -22,21 +24,63 @@ export function habitStats() {
   return hb.statsFrom(state.logs, state.settings, today(), ch.record(challengeList()).wins);
 }
 
-// Stores the badges reached since last time and tells the person once.
+// ---------- titles ----------
+export const myLevel = () => Math.min(hb.MAX_LEVEL, (state.settings.level || 0));
+export const lifetime = () => hb.lifetimeDays(state.logs, { ...state.settings, ...hb.foldDays(state.logs, state.settings, today()) });
+
+// The avatar with the title's frame and corner mark (level 0: unchanged).
+export function framed(avatarEl, level, size = 44) {
+  const lv = Math.max(0, Math.min(hb.MAX_LEVEL, Number(level) || 0));
+  if (!lv) return avatarEl;
+  const info = hb.levelInfo(lv);
+  return h('span', { class: `avatar-wrap lvl-${lv}`, title: info.name, 'data-level': lv },
+    avatarEl,
+    h('span', { class: 'level-mark', style: { width: `${Math.round(size * 0.4)}px`, height: `${Math.round(size * 0.4)}px` }, 'aria-hidden': 'true' }, icon(info.icon, Math.max(10, Math.round(size * 0.24)))));
+}
+
+// "Regular" with its icon, for under a name; null before the first title.
+export function levelBadge(level) {
+  const lv = Math.max(0, Math.min(hb.MAX_LEVEL, Number(level) || 0));
+  if (!lv) return null;
+  const info = hb.levelInfo(lv);
+  return h('span', { class: `level-line lvl-${lv}`, 'data-level': lv }, icon(info.icon, 14), info.name);
+}
+
+let levelTry = 0;
+async function syncLevel(level) {
+  if (!cloud.cloudReady() || !cloud.signedIn() || state.settings.levelSynced === level || !level) return;
+  if (Date.now() - levelTry < 5 * 60 * 1000) return;
+  levelTry = Date.now();
+  try {
+    if (await social.setMyLevel(level)) await saveSettings({ levelSynced: level });
+  } catch { /* offline or not set up: tried again later */ }
+}
+
+// Stores the badges and the title reached since last time and tells the person once.
 export async function checkBadges() {
+  const s = state.settings;
   const stats = habitStats();
-  const have = state.settings.badges || {};
-  const fresh = hb.newBadges(stats, have);
-  const best = Math.max(state.settings.bestStreak || 0, stats.best);
-  if (!fresh.length && best === (state.settings.bestStreak || 0)) return;
-  const badges = { ...have };
-  for (const id of fresh) badges[id] = today();
-  await saveSettings({ badges, bestStreak: best });
+  const fresh = hb.newBadges(stats, s.badges || {});
+  const best = Math.max(s.bestStreak || 0, stats.best);
+  const fold = hb.foldDays(state.logs, s, today());
+  const level = Math.max(s.level || 0, hb.levelForDays(hb.lifetimeDays(state.logs, { ...s, ...fold })));
+  const patch = {};
+  if (fresh.length) patch.badges = { ...(s.badges || {}), ...Object.fromEntries(fresh.map((id) => [id, today()])) };
+  if (best !== (s.bestStreak || 0)) patch.bestStreak = best;
+  if (fold.daysBase !== (s.daysBase || 0) || fold.daysSettled !== (s.daysSettled || '')) Object.assign(patch, fold);
+  if (level !== (s.level || 0)) patch.level = level;
+  if (Object.keys(patch).length) await saveSettings(patch);
   for (const id of fresh) {
     const b = hb.BADGES.find((x) => x.id === id);
     addMessage('badge-earned', { id: `badge-${id}`, args: [b.name], link: '#/profile' });
     toast(tr('New badge: {0}', b.name));
   }
+  if (patch.level) {
+    const info = hb.levelInfo(level);
+    addMessage('level-up', { id: `level-${level}`, args: [info.name], link: '#/profile' });
+    toast(tr('New title: {0}', info.name));
+  }
+  syncLevel(level);
 }
 
 export function streakChip() {
@@ -237,7 +281,17 @@ export function badgesCard() {
   const stats = habitStats();
   const have = state.settings.badges || {};
   const earned = hb.BADGES.filter((b) => have[b.id]).length;
+  const days = lifetime();
+  const lv = myLevel();
+  const nl = hb.nextLevel(days, lv);
+  const titleBox = h('div', { class: 'level-card', id: 'level-card' },
+    h('div', { class: 'row gap' }, h('span', { class: `level-big lvl-${lv}` }, icon(hb.levelInfo(lv).icon, 26)),
+      h('div', { class: 'grow' }, h('b', { id: 'level-name' }, hb.levelInfo(lv).name), h('small', { class: 'muted block' }, tr('{0, plural, one {# day tracked} other {# days tracked}}', days)))),
+    nl.next ? h('div', null, h('div', { class: 'bar' }, h('i', { style: { width: `${nl.pct * 100}%` } })),
+      h('small', { class: 'muted', id: 'level-next' }, tr('Next title: {0} — {1, plural, one {# more day} other {# more days}}', nl.next.name, nl.left)))
+      : h('small', { class: 'muted' }, tr('You reached the top title.')));
   return h('section', { class: 'card', id: 'badges-card' },
+    titleBox,
     h('div', { class: 'row space' }, h('h2', null, tr('Achievements')), h('span', { class: 'muted small num' }, tr('{0} of {1}', earned, hb.BADGES.length))),
     h('div', { class: 'streak-row' },
       h('div', null, h('b', { class: 'num', id: 'streak-now' }, String(stats.streak)), h('small', { class: 'muted' }, tr('Current streak (days)'))),

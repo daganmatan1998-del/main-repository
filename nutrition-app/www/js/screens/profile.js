@@ -22,7 +22,7 @@ import { squareImage } from '../image.js';
 import { accountCard } from './account.js';
 import { friendsCard, openInviteSheet } from './friends.js';
 import { challengesCard } from './challenges.js';
-import { badgesCard, todaySettingsCard } from './habits.js';
+import { badgesCard, todaySettingsCard, framed, levelBadge, myLevel, checkBadges } from './habits.js';
 import { cloudReady } from '../cloud.js';
 import * as cloud from '../cloud.js';
 
@@ -34,10 +34,11 @@ export function renderProfile(root) {
 
   root.appendChild(h('header', { class: 'profile-head' },
     h('button', { class: 'avatar-btn', id: 'btn-avatar', 'aria-label': tr('Change profile photo'), onclick: editAvatar },
-      avatar(84), h('span', { class: 'avatar-badge' }, icon('camera', 16))),
+      framed(avatar(84), myLevel(), 84), h('span', { class: 'avatar-badge' }, icon('camera', 16))),
     h('div', { class: 'profile-id' },
       h('h1', null, p.nickname || p.name),
       p.nickname ? h('p', { class: 'muted' }, p.name) : null,
+      levelBadge(myLevel()),
       h('p', { class: 'muted small' }, tr('Joined {0} · week {1}', fmtDate(p.regDay, true), currentWeek())),
       cloudReady() ? h('button', { type: 'button', class: 'btn btn-small btn-primary', id: 'btn-invite-head', onclick: openInviteSheet }, icon('send', 16), tr('Invite friends')) : null)));
 
@@ -59,6 +60,7 @@ export function renderProfile(root) {
 
   // ---- achievements and the Today cards ----
   root.appendChild(badgesCard());
+  checkBadges();
   root.appendChild(todaySettingsCard());
 
   // ---- plan for the AI features ----

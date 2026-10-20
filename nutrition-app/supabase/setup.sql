@@ -75,6 +75,11 @@ create table if not exists public.nutri_profiles (
   created_at timestamptz not null default now()
 );
 
+-- The title shown next to the picture (0 = none). Each phone reports its own, like the challenge days.
+alter table public.nutri_profiles add column if not exists level smallint not null default 0;
+alter table public.nutri_profiles drop constraint if exists nutri_profiles_level_check;
+alter table public.nutri_profiles add constraint nutri_profiles_level_check check (level between 0 and 20);
+
 alter table public.nutri_profiles enable row level security;
 drop policy if exists "nutri_profiles read" on public.nutri_profiles;
 drop policy if exists "nutri_profiles own insert" on public.nutri_profiles;
@@ -87,7 +92,7 @@ create policy "nutri_profiles own delete" on public.nutri_profiles for delete to
 -- The app may write the handle and the name — not the score.
 revoke insert, update on public.nutri_profiles from authenticated;
 grant insert (user_id, username, display_name) on public.nutri_profiles to authenticated;
-grant update (username, display_name) on public.nutri_profiles to authenticated;
+grant update (username, display_name, level) on public.nutri_profiles to authenticated;
 
 -- A friend request from one user to another. accepted = they are friends.
 create table if not exists public.nutri_friend_requests (
