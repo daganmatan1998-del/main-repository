@@ -111,7 +111,7 @@ const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 // (ref + servings, so the amount can be changed later) or typed by hand.
 // mode: 'offset' = the rest of the meal gets smaller; 'add' = on top of the
 // meal. slot: the plan item it replaces (from the swap sheet), if any.
-export function makeCustom({ name, kcal, p = 0, c = 0, f = 0, mode = 'offset', slot = null, ref = null, servings = 1, note = '' }) {
+export function makeCustom({ name, kcal, p = 0, c = 0, f = 0, mode = 'offset', slot = null, ref = null, servings = 1, note = '', fi, su, na }) {
   const out = { name: String(name || '').trim().slice(0, 40), mode: mode === 'add' ? 'add' : 'offset' };
   if (ref && EVERYDAY_BY_ID[ref]) {
     const food = EVERYDAY_BY_ID[ref];
@@ -120,6 +120,12 @@ export function makeCustom({ name, kcal, p = 0, c = 0, f = 0, mode = 'offset', s
     Object.assign(out, { ref, servings: s, kcal: Math.round(m.kcal), p: r1(m.p), c: r1(m.c), f: r1(m.f) });
   } else {
     Object.assign(out, { kcal: Math.round(Math.min(5000, Math.max(0, num(kcal)))), p: r1(Math.min(500, Math.max(0, num(p)))), c: r1(Math.min(500, Math.max(0, num(c)))), f: r1(Math.min(500, Math.max(0, num(f)))) });
+  }
+  // Label values of a scanned product (fiber g, sugars g, sodium mg), for the nutrient totals.
+  if (!out.ref) {
+    for (const [k, v, cap] of [['fi', fi, 500], ['su', su, 500], ['na', na, 20000]]) {
+      if (v != null && Number.isFinite(Number(v))) out[k] = r1(Math.min(cap, Math.max(0, Number(v))));
+    }
   }
   if (slot) out.slot = String(slot);
   if (note && !out.ref) out.note = String(note).trim().slice(0, 40);

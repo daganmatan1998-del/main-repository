@@ -4,7 +4,7 @@
 
 import { t as tr } from '../i18n.js';
 import { h, icon, sheet, toast, fmt, parseNum, clear } from '../util.js';
-import { decodeSource, decodeFile, lookup, validCode, preload, amountModes, amountGrams, nutritionFor } from '../barcode.js';
+import { decodeSource, decodeFile, lookup, validCode, preload, amountModes, amountGrams, nutritionFor, searchProducts } from '../barcode.js';
 import { commitCustom, modeControl } from '../custom-food.js';
 
 // ctx: { meal, day, item, reopen } — reopen() goes back to the "Add your own
@@ -106,6 +106,40 @@ export function openScan(ctx) {
   return s;
 }
 
+// Search packaged products by name (Open Food Facts) and pick one.
+export function openProductSearch(ctx) {
+  return sheet(tr('Search products'), (close) => {
+    const input = h('input', { class: 'search', id: 'product-search', type: 'search', autocomplete: 'off', placeholder: tr('Product name, e.g. hummus, cornflakes…'), 'aria-label': tr('Search') });
+    const status = h('p', { class: 'muted small', role: 'status', 'aria-live': 'polite' }, tr('Type at least 2 letters.'));
+    const list = h('div', { class: 'extra-opts custom-opts', id: 'product-results' });
+    let timer = 0;
+    let seq = 0;
+    const run = async () => {
+      const q = input.value.trim();
+      clear(list);
+      if (q.length < 2) { status.textContent = tr('Type at least 2 letters.'); return; }
+      const mine = ++seq;
+      status.textContent = tr('Searching…');
+      const r = await searchProducts(q);
+      if (mine !== seq) return;
+      if (r.error) { status.textContent = tr('The product database is not answering. Check your connection and try again.'); return; }
+      if (!r.length) { status.textContent = tr('Nothing found. Try another word.'); return; }
+      status.textContent = '';
+      for (const p of r) {
+        list.appendChild(h('div', { class: 'alt extra-opt', 'data-code': p.code },
+          h('div', { class: 'alt-text' },
+            h('div', { class: 'alt-name' }, p.brand && !p.name.toLowerCase().includes(p.brand.toLowerCase()) ? `${p.name} · ${p.brand}` : p.name),
+            h('div', { class: 'muted small num' }, tr('Per 100 g: {0} kcal', p.per100.kcal))),
+          h('button', { type: 'button', class: 'btn btn-small btn-primary', onclick: () => { close(); openProduct(p, ctx); } }, tr('Choose'))));
+      }
+    };
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 450); });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); run(); } });
+    setTimeout(() => input.focus(), 250);
+    return h('div', null, input, status, list, CREDIT());
+  });
+}
+
 // Open Food Facts asks to be credited (data under the ODbL licence).
 const CREDIT = () => h('p', { class: 'muted small scan-credit', dir: 'ltr' }, 'Open Food Facts · ODbL');
 
@@ -172,7 +206,7 @@ export function openProduct(p, ctx) {
       const g = read();
       if (!(g > 0)) { toast(tr('Write how much you ate')); qty.focus(); return; }
       const n = nutritionFor(p, g);
-      commitCustom(ctx.meal, ctx.day, { name: p.name, kcal: n.kcal, p: n.p, c: n.c, f: n.f, note: tr('{0} g', fmt(g, 1)) }, { item: ctx.item, close });
+      commitCustom(ctx.meal, ctx.day, { name: p.name, kcal: n.kcal, p: n.p, c: n.c, f: n.f, fi: n.fi, su: n.su, na: n.na, note: tr('{0} g', fmt(g, 1)) }, { item: ctx.item, close });
     };
     qty.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
 

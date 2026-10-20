@@ -864,3 +864,53 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .strip .row { align-items: baseline; }
 .strip-score { margin: 4px 0 0; font-weight: 600; }
 .invite-card.strip { display: flex; }
+
+/* ============ habits: water, fasting, activity, nutrients, badges ============ */
+.habit-card h3 { display: flex; align-items: center; gap: 6px; margin: 0; }
+.habit-card .bar { margin: 10px 0; }
+.habit-card .habit-actions { margin-top: 4px; }
+.bar.water i { background: #3f9bd1; }
+.bar.fast i { background: var(--carb); }
+.bar.steps i { background: var(--veg); }
+.fast-now { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 4px; }
+.fast-time { font-size: 2rem; }
+.fast-since-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; }
+.fast-since, .steps-in, .workout-min { min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); padding: 0 12px; font: inherit; }
+.steps-in { width: 100%; }
+.steps-row { display: flex; align-items: flex-end; gap: 12px; margin-top: 8px; }
+.workout-list { list-style: none; margin: 8px 0; padding: 0; }
+.workout-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.workout-row span:first-child { flex: 1; }
+.workout-types { margin-bottom: 12px; }
+.streak-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 999px; background: var(--warn-bg); color: var(--warn-text); text-decoration: none; font-size: .8rem; }
+.nutrient { margin: 10px 0; }
+.nutrient .bar { margin: 4px 0 0; }
+.nutrient.over .bar i { background: var(--danger); }
+.nutrient-more summary { cursor: pointer; padding: 8px 0; color: var(--primary); }
+.switch-row small.block { display: block; }
+.streak-row { display: flex; gap: 12px; margin: 10px 0; }
+.streak-row > div { flex: 1; display: grid; text-align: center; background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px; }
+.streak-row b { font-size: 1.6rem; }
+.badges { list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.badge { display: grid; gap: 2px; justify-items: start; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); opacity: .5; }
+.badge.on { opacity: 1; background: var(--primary-weak); border-color: var(--primary); }
+.badge-ic { color: var(--muted); }
+.badge.on .badge-ic { color: var(--primary); }
+.badge b { font-size: .9rem; }
+.custom-online { margin-bottom: 8px; }
+@media print {
+  .tabbar, .page-head .icon-btn, .no-print, .bell-link, .btn { display: none !important; }
+  body { background: #fff; color: #000; }
+  .card { box-shadow: none; border: 1px solid #999; break-inside: avoid; }
+}
+#print-sheet { display: none; }
+@media print {
+  body.printing > *:not(#print-sheet) { display: none !important; }
+  body.printing #print-sheet { display: block; color: #000; font-size: 11pt; padding: 0; }
+  #print-sheet h1 { font-size: 18pt; margin: 0 0 4px; }
+  #print-sheet h2 { font-size: 13pt; margin: 14px 0 4px; border-bottom: 1px solid #999; }
+  #print-sheet h3 { font-size: 11pt; margin: 6px 0 2px; }
+  #print-sheet ul { margin: 0 0 4px; padding-inline-start: 18px; }
+  .print-day { break-inside: avoid; }
+  .shop-item input { appearance: auto; }
+}

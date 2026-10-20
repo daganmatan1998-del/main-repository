@@ -6,6 +6,9 @@ import { h, icon, fmt, fmtDate, dayNumber, daysBetween, signed, ltr } from '../u
 import { ring, macroBar, mealCard, avatar } from '../components.js';
 import { lineChart } from '../chart.js';
 import { dayTotals } from '../mealplan.js';
+import { dayMicros } from '../micros.js';
+import { dayActivity } from '../habits.js';
+import { waterCard, fastCard, activityCard, nutrientsCard, streakChip, checkBadges } from './habits.js';
 import { dayDrinks } from '../drinks.js';
 import { GOALS } from '../nutrition.js';
 import { state, today, targets, dayPlan, toggleEaten, gate, activePeriod, currentMetrics, periodEnded, saveSettings } from '../store.js';
@@ -48,7 +51,7 @@ export function renderToday(root, { askAbout }) {
     h('a', { class: 'head-avatar', href: '#/profile', 'aria-label': tr('Profile') }, avatar(44)),
     h('div', { class: 'grow' },
       h('h1', null, `${hello}, ${state.profile.nickname || state.profile.name}`),
-      h('p', { class: 'muted' }, new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' }))),
+      h('p', { class: 'muted row gap' }, new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' }), streakChip())),
     bellLink(),
     h('a', { class: 'checkin-chip', href: '#/gallery', 'aria-label': tr('Next weekly photo') },
       icon('camera', 16), g.daysToNext <= 0 ? tr('Today') : g.daysToNext === 1 ? tr('Photo tomorrow') : tr('{0, plural, one {Photo in # day} other {Photo in # days}}', g.daysToNext))));
@@ -65,7 +68,8 @@ export function renderToday(root, { askAbout }) {
   if (ic && !state.settings.installDismissed) root.appendChild(ic);
 
   // ---- calories & macros ----
-  const remaining = t.calories - consumed.kcal;
+  const credit = state.settings.activityCredit ? dayActivity(state.logs[day]).credit : 0;
+  const remaining = t.calories + credit - consumed.kcal;
   root.appendChild(h('section', { class: 'card progress-card' },
     h('div', { class: 'progress-top' },
       ring(consumed.kcal, t.calories, tr('kcal eaten'), tr('of {0}', fmt(t.calories))),
@@ -75,6 +79,9 @@ export function renderToday(root, { askAbout }) {
         macroBar(tr('Fat'), 'fat', consumed.f, t.fat))),
     h('p', { class: 'muted small center' },
       remaining >= 0 ? tr('{0} kcal left for today · water: {1} liters', fmt(remaining), t.water) : tr('Over by {0} kcal', fmt(-remaining)))));
+
+  // ---- daily habits: the quick ones sit right under the calories ----
+  for (const c of [waterCard(day, t.water), fastCard()]) if (c) root.appendChild(c);
 
   // ---- invite friends ----
   if (cloudReady()) {
@@ -92,6 +99,10 @@ export function renderToday(root, { askAbout }) {
   for (const m of plan) {
     root.appendChild(mealCard(m, { day, eaten: eaten.has(m.index), onToggle: () => toggleEaten(day, m.index), onAsk: askAbout }));
   }
+
+  // ---- activity and nutrients ----
+  for (const c of [activityCard(day), nutrientsCard(dayMicros(plan, eaten))]) if (c) root.appendChild(c);
+  checkBadges();
 
   // ---- period progress ----
   if (p && cur) {

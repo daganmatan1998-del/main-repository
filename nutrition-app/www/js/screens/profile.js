@@ -22,6 +22,7 @@ import { squareImage } from '../image.js';
 import { accountCard } from './account.js';
 import { friendsCard, openInviteSheet } from './friends.js';
 import { challengesCard } from './challenges.js';
+import { badgesCard, todaySettingsCard } from './habits.js';
 import { cloudReady } from '../cloud.js';
 import * as cloud from '../cloud.js';
 
@@ -55,6 +56,10 @@ export function renderProfile(root) {
   if (friends) root.appendChild(friends);
   const challenges = challengesCard();
   if (challenges) root.appendChild(challenges);
+
+  // ---- achievements and the Today cards ----
+  root.appendChild(badgesCard());
+  root.appendChild(todaySettingsCard());
 
   // ---- plan for the AI features ----
   if (BILLING.enabled) {

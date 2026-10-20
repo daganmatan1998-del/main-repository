@@ -396,3 +396,14 @@ English is the default (app name, logo text and every string). The language pick
 ## Friend challenges (v1.18)
 
 From a friend's profile: **Challenge to a competition** — pick 7/14/30 days (or 3–30) and how many misses are allowed. A *miss* is a planned meal not marked as eaten by the end of its day (a day nobody reports counts as a full day of misses). The first to go over the limit loses at once; if nobody does, whoever missed more when the period ends loses (equal = draw). Accepting starts the challenge tomorrow. Wins/losses show on every profile. The rules live in `supabase/setup.sql` (re-run it in Supabase); each phone reports its own days, so scoring is an honor system between friends. Tests: `tests/unit/sql.test.mjs` runs the real SQL in PGlite (`npm install` first).
+
+## Habits, nutrients and more (v1.19)
+
+- **Water**: a quick glass counter on Today (goal from your plan), and a home-screen shortcut (`#/quick/water`).
+- **Intermittent fasting** (off by default; switch on in Profile → Today screen): 14:10 / 16:8 / 18:6 / 20:4 timer with history.
+- **Streaks and badges** (Profile → Achievements): a day counts when a planned meal is marked eaten; 15 badges, kept even after old logs are pruned.
+- **Steps and workouts**: typed in by hand (a PWA cannot read Apple Health / Health Connect). Workout calories come from MET × weight × time; optionally half of them are added to the day's budget.
+- **Nutrients**: fiber, sugars, sodium, potassium, calcium, iron, vitamin C for the meals marked eaten (`www/js/micros.js`, typical USDA values — estimates). Scanned products bring the label's fiber / sugars / sodium.
+- **Search packaged products by name** (Open Food Facts via `/api/foodsearch`) in Add your own food.
+- **Print** the week's menu (Menu → Print) and the shopping list.
+- Not possible in a PWA: native widgets, store listing, wearable sync. Not built: human coaching.

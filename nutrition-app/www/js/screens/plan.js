@@ -6,6 +6,7 @@ import { h, icon, fmt, addDays, weekdayName, fmtDate } from '../util.js';
 import { mealCard } from '../components.js';
 import { dayTotals } from '../mealplan.js';
 import { state, today, targets, dayPlan, setOverride } from '../store.js';
+import { printWeek } from '../print.js';
 
 let selected = null;
 
@@ -20,6 +21,8 @@ export function renderPlan(root, { askAbout }) {
   root.appendChild(h('header', { class: 'page-head' },
     h('div', null, h('h1', null, tr('My menu')), h('p', { class: 'muted' }, tr('Tailored to your goal, restrictions and number of meals')))));
   root.appendChild(h('a', { href: '#/shopping', class: 'btn btn-primary btn-block shop-btn', id: 'btn-shopping' }, h('span', { 'aria-hidden': 'true' }, '🛒'), tr('Weekly shopping')));
+
+  root.appendChild(h('button', { type: 'button', class: 'btn btn-block btn-ghost no-print', id: 'btn-print-week', onclick: () => printWeek(7) }, icon('print', 18), tr('Print the week\'s menu')));
 
   const strip = h('div', { class: 'day-strip', role: 'tablist', 'aria-label': tr('Choose a day') });
   for (let i = 0; i < 7; i++) {

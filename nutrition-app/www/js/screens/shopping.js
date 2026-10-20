@@ -5,6 +5,7 @@ import { t as tr } from '../i18n.js';
 import { h, icon, fmtDate, addDays, daysBetween, toast } from '../util.js';
 import { state, today, targets, dayPlan, menuWeek, menuWeekRange, saveShoppingChecks } from '../store.js';
 import { buildShoppingList, shoppingText } from '../shopping.js';
+import { printPage } from '../print.js';
 
 let choice = null; // 'this' | 'next'
 
@@ -93,6 +94,7 @@ export function renderShopping(root) {
   root.append(
     h('div', { class: 'row gap shop-actions' },
       h('button', { class: 'btn btn-primary grow', id: 'shop-share', onclick: share }, icon('send', 18), tr('Share / copy')),
+      h('button', { class: 'btn', id: 'shop-print', onclick: printPage, 'aria-label': tr('Print the list') }, icon('print', 18)),
       h('button', {
         class: 'btn', onclick: async () => {
           checked.clear();

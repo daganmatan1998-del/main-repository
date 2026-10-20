@@ -9,7 +9,7 @@ import { h, icon, sheet, toast, fmt, parseNum, clear, normText, searchMatch } fr
 import { state, setOverride } from './store.js';
 import { everydayOptions, EVERYDAY_BY_ID, makeCustom, withServings, MAX_CUSTOM } from './everyday.js';
 import { household, FOOD_BY_ID } from './foods.js';
-import { openScan } from './screens/scan.js';
+import { openScan, openProductSearch } from './screens/scan.js';
 
 const MODE_KEY = 'nutri-custom-mode';
 let mode = 'offset';
@@ -154,10 +154,16 @@ export function openCustomSheet(meal, day, { item = null } = {}) {
       onclick: () => { close(); openScan({ meal, day, item, reopen: () => openCustomSheet(meal, day, { item }) }); },
     }, icon('camera', 18), tr('Scan a barcode'));
 
+    const online = h('button', {
+      type: 'button', class: 'btn btn-block btn-ghost custom-online', id: 'custom-online',
+      onclick: () => { close(); openProductSearch({ meal, day, item, reopen: () => openCustomSheet(meal, day, { item }) }); },
+    }, icon('search', 18), tr('Search packaged products'));
+
     return h('div', null,
       food ? h('p', { class: 'small custom-instead' }, tr('Instead of {0}', food.name)) : null,
       seg, note,
       scan,
+      online,
       search, list,
       form);
   });

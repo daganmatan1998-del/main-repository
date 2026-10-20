@@ -101,5 +101,25 @@ export function amountGrams(p, mode, qty) {
 export function nutritionFor(p, grams) {
   const k = grams / 100;
   const r1 = (n) => Math.round(n * 10) / 10;
-  return { kcal: Math.round(p.per100.kcal * k), p: r1(p.per100.p * k), c: r1(p.per100.c * k), f: r1(p.per100.f * k) };
+  const out = { kcal: Math.round(p.per100.kcal * k), p: r1(p.per100.p * k), c: r1(p.per100.c * k), f: r1(p.per100.f * k) };
+  // Fiber, sugars (g) and sodium (mg) when the label has them.
+  const m = p.micro100;
+  if (m) {
+    if (m.fiber != null) out.fi = r1(m.fiber * k);
+    if (m.sugar != null) out.su = r1(m.sugar * k);
+    if (m.sodium != null) out.na = Math.round(m.sodium * k);
+  }
+  return out;
+}
+
+// Free-text product search: [{ code, name, brand, per100, … }] or { error }.
+export async function searchProducts(q, fetchImpl = fetch) {
+  try {
+    const res = await fetchImpl(`${API_BASE}/api/foodsearch?q=${encodeURIComponent(q)}&lang=${encodeURIComponent(lang)}`);
+    if (!res.ok) return { error: 'upstream' };
+    const j = await res.json();
+    return Array.isArray(j.items) ? j.items : { error: 'upstream' };
+  } catch {
+    return { error: 'offline' };
+  }
 }

@@ -26,6 +26,7 @@ import { openConflict } from './screens/account.js';
 import { renderInbox } from './screens/inbox.js';
 import { renderUserProfile } from './screens/friends.js';
 import { renderChallenge } from './screens/challenges.js';
+import { addGlass } from './screens/habits.js';
 import { startChallengeSync } from './challenge-sync.js';
 import { usernameFromHash } from './social.js';
 import { startSocial } from './social-sync.js';
@@ -42,6 +43,12 @@ if (document.documentElement.lang !== 'en') {
   document.getElementById('tabbar').setAttribute('aria-label', tr('Main navigation'));
 }
 
+function renderQuick() {
+  const what = (location.hash.split('/')[2] || '').split('?')[0];
+  const done = what === 'water' ? addGlass() : Promise.resolve();
+  done.finally(() => location.replace('#/today'));
+}
+
 const ROUTES = {
   today: { label: tr('Today'), icon: 'today', render: renderToday },
   plan: { label: tr('Menu'), icon: 'plan', render: renderPlan },
@@ -54,6 +61,8 @@ const ROUTES = {
   inbox: { render: renderInbox, tab: 'today' },
   u: { render: renderUserProfile, tab: 'profile' },
   challenge: { render: renderChallenge, tab: 'profile' },
+  // Home-screen shortcut: #/quick/water adds a glass and opens Today.
+  quick: { render: renderQuick, tab: 'today' },
 };
 
 const PENDING_LINK = 'nutri-pending-link';

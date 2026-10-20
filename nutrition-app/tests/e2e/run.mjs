@@ -37,10 +37,15 @@ const upstream = [];
 let mealPhotoMode = 'sauce';
 // Open Food Facts, as the barcode lookup asks it (a GET, no body).
 const OFF_PRODUCTS = {
-  '7290000101231': { status: 1, product: { product_name: 'חטיף בדיקה', brands: 'מותג', quantity: '60 g', product_quantity: 60, serving_size: '20 g', serving_quantity: 20, nutriments: { 'energy-kcal_100g': 500, proteins_100g: 10, carbohydrates_100g: 50, fat_100g: 25 } } },
+  '7290000101231': { status: 1, product: { product_name: 'חטיף בדיקה', brands: 'מותג', quantity: '60 g', product_quantity: 60, serving_size: '20 g', serving_quantity: 20, nutriments: { 'energy-kcal_100g': 500, proteins_100g: 10, carbohydrates_100g: 50, fat_100g: 25, fiber_100g: 6, sugars_100g: 20, sodium_100g: 0.2 } } },
   '7290000200003': { status: 1, product: { product_name: 'מוצר בלי נתונים', nutriments: {} } },
 };
 async function fakeAnthropic(url, init) {
+  if (String(url).includes('openfoodfacts.org/cgi/search.pl')) {
+    const q = new URL(String(url)).searchParams.get('search_terms');
+    const hit = Object.values(OFF_PRODUCTS).map((x) => x.product).filter((p) => p.product_name.includes(q) && p.nutriments['energy-kcal_100g']);
+    return new Response(JSON.stringify({ products: hit.map((p, i) => ({ ...p, code: `729000010123${i}` })) }), { status: 200 });
+  }
   const off = String(url).match(/openfoodfacts\.org\/api\/v2\/product\/(\d+)\.json/);
   if (off) return new Response(JSON.stringify(OFF_PRODUCTS[off[1]] || { status: 0 }), { status: OFF_PRODUCTS[off[1]] ? 200 : 404 });
   const body = JSON.parse(init.body);
@@ -353,6 +358,68 @@ try {
   await mealA().locator('.drinks-head').click();
   check('the heading closes again', !(await mealA().locator('.drink-name').isVisible()));
 
+  // =============== habits: water, streak, activity, nutrients, fasting, badges ===============
+  const waterText = () => page.locator('#water-count').innerText();
+  check('Today has a water card, one glass logged is counted', await visible('#water-card') && (await waterText()).includes('0'));
+  await page.click('#water-plus');
+  await wait(400);
+  check('one tap adds a glass', (await waterText()).includes('1'));
+  await page.reload();
+  await page.waitForSelector('#water-card');
+  check('the glass survives a reload', (await waterText()).includes('1'));
+  await page.click('#water-minus');
+  await wait(300);
+  check('and can be taken back', (await waterText()).includes('0') && await page.locator('#water-minus').isDisabled());
+  check('one meal marked eaten starts a 1-day streak', (await page.locator('#streak-chip').innerText()).trim() === '1');
+  check('the nutrients card shows fiber, sugars and sodium for the marked meal', (await page.locator('#nutrients-card [data-nutrient]').count()) === 7
+    && Number((await page.locator('[data-nutrient="sodium"]').innerText()).match(/([\d,]+)\s*\//)[1].replace(/,/g, '')) > 0);
+  await shot('60-today-habits', { fullPage: true });
+  await page.fill('#steps-in', '10500');
+  await page.locator('#steps-in').dispatchEvent('change');
+  await wait(500);
+  await page.click('#workout-add');
+  await page.waitForSelector('#workout-save');
+  await page.locator('.workout-types [data-type="run"]').click();
+  await page.fill('#workout-min', '30');
+  check('a workout shows an estimate from its type, minutes and weight', /\d{3}/.test(await page.locator('#workout-est').innerText()));
+  await shot('61-workout-sheet');
+  await page.click('#workout-save');
+  await wait(500);
+  check('the workout is listed with its calories', (await page.locator('.workout-row').count()) === 1 && /\d{3}/.test(await page.locator('.workout-row').innerText()));
+  check('10,000 steps earn the steps badge on the profile', await (async () => {
+    await page.evaluate(() => { location.hash = '#/profile'; });
+    await page.waitForSelector('#badges-card');
+    return (await page.locator('.badge.on[data-badge="steps"]').count()) === 1 && (await page.locator('.badge.on[data-badge="move1"]').count()) === 1;
+  })());
+  check('profile shows the streak and the badges', (await page.locator('#streak-now').innerText()) === '1' && (await page.locator('.badges .badge').count()) >= 10);
+  await shot('62-badges', { fullPage: true });
+  check('fasting is off until it is switched on in the profile', !(await page.locator('#cards-fast').isChecked()));
+  await page.locator('#cards-fast').check();
+  await wait(300);
+  await page.locator('#activity-credit').check();
+  await wait(300);
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await page.waitForSelector('#fast-card');
+  check('with the switch on, Today shows the fasting card', await visible('#fast-start'));
+  await page.locator('[data-protocol="14:10"]').click();
+  await page.click('#fast-start');
+  await page.waitForSelector('#fast-elapsed');
+  check('a started fast shows hours fasted and an end button', (await page.locator('#fast-elapsed').innerText()).includes(':') && await visible('#fast-end'));
+  await shot('63-fasting');
+  await page.reload();
+  await page.waitForSelector('#fast-elapsed');
+  check('a running fast survives a reload', await visible('#fast-end'));
+  await page.click('#fast-end');
+  await page.waitForSelector('#fast-start');
+  check('ending it returns to the plan picker', await visible('#fast-start'));
+  check('half of the workout calories are added to the budget when asked', (await page.locator('#activity-card').innerText()).match(/\d+/g).length > 0 && (await page.locator('.progress-card').innerText()).length > 0);
+  await page.evaluate(() => { location.hash = '#/plan'; });
+  await page.waitForSelector('#btn-print-week');
+  const printed = await page.evaluate(async () => { const m = await import('/js/print.js'); const s = m.buildPrintSheet(7); return { days: s.querySelectorAll('.print-day').length, meals: s.querySelectorAll('.print-meal').length, text: s.textContent.length }; });
+  check('the week prints as 7 day blocks with all their meals', printed.days === 7 && printed.meals >= 7 * 3 && printed.text > 500, JSON.stringify(printed));
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await page.waitForSelector('.page-today');
+
   // =============== sauces and cheese: calories come off the rest of the meal ===============
   const mealKcal = async () => Number((await mealA().locator('.meal-sub').innerText()).match(/([\d,]+)\s*קק/)[1].replace(/,/g, ''));
   const target0 = Number(await mealA().getAttribute('data-target-kcal'));
@@ -496,6 +563,25 @@ try {
   await page.click('#scan-add');
   await wait(700);
   check('a product without calorie data takes the calories typed', (await customRows().count()) === 1 && (await customRows().innerText()).includes('120'));
+  await clearCustom();
+
+  // product search by name (Open Food Facts) and the label's fiber / sodium
+  await mealA().locator('.custom-add').click();
+  await page.waitForSelector('#custom-online');
+  await page.click('#custom-online');
+  await page.waitForSelector('#product-search');
+  await page.fill('#product-search', 'חטיף');
+  await page.waitForSelector('#product-results [data-code]');
+  check('searching packaged products by name lists them with calories', (await page.locator('#product-results [data-code]').count()) === 1 && (await page.locator('#product-results').innerText()).includes('500'));
+  await shot('64-product-search');
+  await page.locator('#product-results [data-code] button').click();
+  await page.waitForSelector('#scan-add');
+  await page.fill('#scan-qty', '100');
+  await page.locator('[data-amount="grams"]').click();
+  await page.fill('#scan-qty', '100');
+  await page.click('#scan-add');
+  await wait(700);
+  check('a searched product is added like a scanned one', (await customRows().count()) === 1 && (await customRows().innerText()).includes('500'));
   await clearCustom();
 
   // =============== Plan & swaps ===============

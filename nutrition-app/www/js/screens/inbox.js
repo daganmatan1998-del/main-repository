@@ -23,6 +23,7 @@ const KINDS = {
   'challenge-declined': (a) => ({ title: tr('{0} declined your challenge', a[0]), text: tr('You can challenge another friend any time.') }),
   'challenge-won': (a) => ({ title: tr('You won the challenge against {0} 🎉', a[0]), text: tr('Your record was updated.') }),
   'challenge-lost': (a) => ({ title: tr('{0} won the challenge', a[0]), text: tr('Your record was updated.') }),
+  'badge-earned': (a) => ({ title: tr('New badge: {0}', a[0]), text: tr('See all your achievements on your profile.'), link: '#/profile' }),
   'challenge-draw': (a) => ({ title: tr('The challenge with {0} ended in a draw', a[0]), text: tr('Nobody\'s record changed.') }),
 };
 const describe = (m) => (KINDS[m.kind] ? KINDS[m.kind](m.args || []) : null);

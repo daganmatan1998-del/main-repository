@@ -431,6 +431,7 @@ export async function handleMealPhoto(request, env, { fetchImpl } = {}) {
 // product's number leaves the device — never who is asking beyond the IP the
 // Worker sees.
 const OFF_URL = 'https://world.openfoodfacts.org/api/v2/product/';
+const OFF_SEARCH_URL = 'https://world.openfoodfacts.org/cgi/search.pl';
 const OFF_FIELDS = 'code,product_name,product_name_he,product_name_en,product_name_es,product_name_fr,product_name_de,product_name_pt,product_name_it,product_name_ru,product_name_ar,brands,quantity,product_quantity,serving_size,serving_quantity,nutriments';
 const BARCODE_WINDOW_MAX = 90;
 const barcodeHits = new Map();
@@ -445,6 +446,16 @@ function barcodeLimit(key, now = Date.now()) {
 }
 
 const numOr = (v, d = null) => (Number.isFinite(Number(v)) && v !== '' && v !== null ? Number(v) : d);
+
+function micro(n) {
+  const r1 = (v) => Math.round(Math.min(100, Math.max(0, v)) * 10) / 10;
+  const fiber = numOr(n.fiber_100g);
+  const sugar = numOr(n.sugars_100g);
+  let sodium = numOr(n.sodium_100g);
+  if (sodium === null && numOr(n.salt_100g) !== null) sodium = numOr(n.salt_100g) / 2.5;
+  if (fiber === null && sugar === null && sodium === null) return null;
+  return { fiber: fiber === null ? null : r1(fiber), sugar: sugar === null ? null : r1(sugar), sodium: sodium === null ? null : Math.round(Math.min(40000, Math.max(0, sodium * 1000))) };
+}
 
 // What the app needs from an Open Food Facts product, or null when it has no
 // usable calories. Energy falls back from kcal to kJ.
@@ -466,6 +477,8 @@ export function normalizeProduct(code, product, lang = 'en') {
       c: Math.round(Math.min(100, Math.max(0, numOr(n.carbohydrates_100g, 0))) * 10) / 10,
       f: Math.round(Math.min(100, Math.max(0, numOr(n.fat_100g, 0))) * 10) / 10,
     },
+    // Fiber and sugars in g, sodium in mg per 100 g (salt is 2.5 x sodium); null when the label lacks them.
+    micro100: kcal === null ? null : micro(n),
     servingG: grams(product.serving_quantity),
     servingText: String(product.serving_size || '').trim().slice(0, 40),
     packageG: grams(product.product_quantity),
@@ -518,12 +531,43 @@ export async function handleBarcode(request, env, { fetchImpl = fetch } = {}) {
   return json(200, { ok: true, found: true, ...item }, { ...cors, 'cache-control': 'private, max-age=3600' });
 }
 
+// /api/foodsearch?q=<words>&lang=xx — free-text product search (Open Food Facts),
+// for "Search products" in Add your own food. Same rules as the barcode lookup:
+// asked from the server, rate limited, only products with calories are returned.
+export async function handleFoodSearch(request, env, { fetchImpl = fetch } = {}) {
+  const cors = corsHeaders(request, env);
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+  if (request.method !== 'GET') return json(405, { error: 'method_not_allowed' }, cors);
+  if (!originAllowed(request, env)) return json(403, { error: 'forbidden_origin' });
+  const url = new URL(request.url);
+  const q = (url.searchParams.get('q') || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+  if (q.length < 2) return json(400, { error: 'bad_query' }, cors);
+  const lang = cleanLang(url.searchParams.get('lang')) || 'en';
+  const ip = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'local';
+  if (!barcodeLimit(ip)) return json(429, { error: 'rate_limited' }, cors);
+  let products;
+  try {
+    const res = await fetchImpl(`${OFF_SEARCH_URL}?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=15&lc=${lang}&fields=${OFF_FIELDS}`, {
+      headers: { 'user-agent': 'Nutri/1.0 (nutrition planner; product search)', accept: 'application/json' },
+      signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined,
+    });
+    if (!res.ok) return json(502, { error: 'upstream', message: 'The product database is not answering right now.' }, cors);
+    const data = await res.json();
+    products = Array.isArray(data && data.products) ? data.products : [];
+  } catch {
+    return json(502, { error: 'upstream', message: 'The product database is not answering right now.' }, cors);
+  }
+  const items = products.map((p) => normalizeProduct(p.code, p, lang)).filter((p) => p && p.per100 && p.code).slice(0, 12);
+  return json(200, { ok: true, items }, { ...cors, 'cache-control': 'private, max-age=600' });
+}
+
 export async function handleApi(request, env, opts) {
   const { pathname } = new URL(request.url);
   if (pathname === '/api/chat') return handleChat(request, env, opts);
   if (pathname === '/api/bodyfat') return handleBodyFat(request, env, opts);
   if (pathname === '/api/meal-photo') return handleMealPhoto(request, env, opts);
   if (pathname === '/api/barcode') return handleBarcode(request, env, opts);
+  if (pathname === '/api/foodsearch') return handleFoodSearch(request, env, opts);
   if (pathname.startsWith('/api/push/')) return handlePush(request, env);
   if (pathname === '/api/health') {
     // Engine ids only, never keys. 'configured' is true when chat can be answered at all.
