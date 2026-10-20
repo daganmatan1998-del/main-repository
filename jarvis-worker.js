@@ -836,14 +836,14 @@ async function handleTts(request, env) {
 
   if (env.CARTESIA_API_KEY) {
     const first = await ttsViaCartesia(env, text, body.voiceId, language);
-    if (first.ok) return audioResponse(first.body, env, request, 'cartesia');
+    if (first.ok) return await audioResponse(first.body, env, request, 'cartesia');
     notes.push('cartesia ' + first.status + ': ' + first.detail);
   } else {
     notes.push('cartesia: no key set');
   }
 
   const second = await ttsViaWorkersAI(env, text, language);
-  if (second.ok) return audioResponse(second.body, env, request, 'workers-ai');
+  if (second.ok) return await audioResponse(second.body, env, request, 'workers-ai');
   notes.push('workers-ai: ' + second.detail);
 
   return json({
@@ -853,11 +853,33 @@ async function handleTts(request, env) {
   }, 502, env, request);
 }
 
-function audioResponse(body, env, request, via) {
+/* What the bytes really are. Workers AI voices answer in MP3 (or whatever the
+   model likes) however the request was worded, and labelling that "audio/wav"
+   made the player refuse it (NotSupportedError): no voice at all. */
+function sniffAudioType(u8) {
+  if (!u8 || u8.length < 4) return '';
+  const a = (i) => u8[i];
+  if (a(0) === 0x52 && a(1) === 0x49 && a(2) === 0x46 && a(3) === 0x46) return 'audio/wav';
+  if (a(0) === 0x49 && a(1) === 0x44 && a(2) === 0x33) return 'audio/mpeg';
+  if (a(0) === 0xFF && (a(1) & 0xE0) === 0xE0) return 'audio/mpeg';
+  if (a(0) === 0x4F && a(1) === 0x67 && a(2) === 0x67 && a(3) === 0x53) return 'audio/ogg';
+  if (a(0) === 0x66 && a(1) === 0x4C && a(2) === 0x61 && a(3) === 0x43) return 'audio/flac';
+  if (u8.length > 8 && a(4) === 0x66 && a(5) === 0x74 && a(6) === 0x79 && a(7) === 0x70) return 'audio/mp4';
+  return '';
+}
+
+async function audioResponse(body, env, request, via) {
+  let type = 'audio/wav';
+  if (via === 'workers-ai') {
+    /* Small (one sentence), so it is read whole to look at its first bytes. */
+    const buf = new Uint8Array(await new Response(body).arrayBuffer());
+    type = sniffAudioType(buf) || type;
+    body = buf;
+  }
   return new Response(body, {
     status: 200,
     headers: {
-      'Content-Type': 'audio/wav',
+      'Content-Type': type,
       'Cache-Control': 'no-store',
       'X-Jarvis-Voice': via,
       ...cors(env, request)

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="649301d78015">
+<meta name="jarvis-build" content="93d0360b250f">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -8462,7 +8462,24 @@ function fetchCartesiaDirect(key, text, voiceId, language){
 let lastVoiceProblem = '';
 function noteVoiceProblem(why){ lastVoiceProblem = String(why || '').slice(0, 160); }
 
+/* The label on a voice clip can be wrong (an MP3 sent as audio/wav): the player
+   then refuses it with NotSupportedError and he is silent. Looked at, not trusted. */
+function sniffAudioType(u8){
+  if(!u8 || u8.length < 4) return '';
+  if(u8[0] === 0x52 && u8[1] === 0x49 && u8[2] === 0x46 && u8[3] === 0x46) return 'audio/wav';
+  if(u8[0] === 0x49 && u8[1] === 0x44 && u8[2] === 0x33) return 'audio/mpeg';
+  if(u8[0] === 0xFF && (u8[1] & 0xE0) === 0xE0) return 'audio/mpeg';
+  if(u8[0] === 0x4F && u8[1] === 0x67 && u8[2] === 0x67 && u8[3] === 0x53) return 'audio/ogg';
+  if(u8[0] === 0x66 && u8[1] === 0x4C && u8[2] === 0x61 && u8[3] === 0x43) return 'audio/flac';
+  if(u8.length > 8 && u8[4] === 0x66 && u8[5] === 0x74 && u8[6] === 0x79 && u8[7] === 0x70) return 'audio/mp4';
+  return '';
+}
 async function playAudioBlob(blob){
+  try{
+    const real = sniffAudioType(new Uint8Array(await blob.slice(0, 12).arrayBuffer()));
+    if(real && real !== blob.type) blob = blob.slice(0, blob.size, real);
+    else if(!real && blob.size < 200) noteVoiceProblem('the voice clip was empty (' + blob.size + ' bytes)');
+  }catch(err){}
   if(!audioUnlocked){
     try{ await Promise.race([unlockAudio(), new Promise(r => setTimeout(r, 1200))]); }catch(e){}
   }
@@ -18630,9 +18647,15 @@ function buildDiagRegistry(mode, health){
       const type = res.headers.get('content-type') || '';
       const via = res.headers.get('x-jarvis-voice') || 'worker';
       if(buf.byteLength < 2000 || !/audio/i.test(type)) return dFail('the voice provider answered, but not with audio', type + ', ' + buf.byteLength + ' bytes', '');
+      const real = sniffAudioType(new Uint8Array(buf.slice(0, 12)));
+      if(!real) return dFail('the voice provider (' + via + ') answered with bytes that are not audio in any known format', Math.round(buf.byteLength / 1024) + ' KB, starts ' + Array.from(new Uint8Array(buf.slice(0, 6))).map(x => x.toString(16).padStart(2, '0')).join(' '), 'Check the voice provider key and credit in the worker: it may be returning an error as audio.');
       ctx.wav = buf;
-      diagState.ttsWav = buf;
-      return dPass('synthesised speech via ' + via + ' in ' + ms + ' ms', Math.round(buf.byteLength / 1024) + ' KB of audio, not played');
+      diagState.ttsWav = buf; diagState.ttsType = real;
+      const labelled = type.split(';')[0].trim();
+      const silent = real === 'audio/wav' && buf.byteLength > 1000 && new Uint8Array(buf, 44, Math.min(buf.byteLength - 44, 60000)).every(x => x === 0);
+      if(silent) return dFail('the voice provider (' + via + ') returned audio that is completely silent', Math.round(buf.byteLength / 1024) + ' KB of zeros', 'Check the voice provider key and credit in the worker.');
+      return real !== labelled ? dWarn('synthesised speech via ' + via + ' in ' + ms + ' ms, but it is ' + real + ' while the worker labels it ' + (labelled || 'nothing') + ' (the app corrects this)', Math.round(buf.byteLength / 1024) + ' KB of audio, not played', 'Update jarvis-worker.js: its voice labels do not match.')
+                 : dPass('synthesised speech via ' + via + ' in ' + ms + ' ms (' + real.replace('audio/', '') + ')', Math.round(buf.byteLength / 1024) + ' KB of audio, not played');
     } });
   add({ id: 'voice.loopback', category: 'Voice', name: 'Speech loop (TTS → recognition)', critical: 2, requires: ['voice.tts'], timeoutMs: 30000, kind: 'real',
     description: 'The synthesised audio is sent to speech recognition and the words must come back (no microphone involved)',
@@ -18640,7 +18663,7 @@ function buildDiagRegistry(mode, health){
     run: async (ctx) => {
       const wav = diagState.ttsWav;
       if(!wav) return dBlocked('there is no synthesised audio to send', '', '');
-      const { res, ms } = await diagFetch(ctx, '/stt', { body: wav, headers: { 'Content-Type': 'audio/wav' }, method: 'POST' });
+      const { res, ms } = await diagFetch(ctx, '/stt', { body: wav, headers: { 'Content-Type': diagState.ttsType || 'audio/wav' }, method: 'POST' });
       const d = await diagJson(res);
       if(!res.ok){
         const k = diagHttpKind(res.status);
