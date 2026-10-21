@@ -14,6 +14,7 @@ import { openRecipes } from './screens/recipes.js';
 import { validRemoval } from './mealplan.js';
 import { openCalorieCamera } from './screens/calorie-cam.js';
 import { openPaywall } from './screens/paywall.js';
+import { mealWaterRow } from './screens/habits.js';
 import { canUseAI } from './billing.js';
 
 export function ring(value, target, label, sub) {
@@ -68,6 +69,7 @@ export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {
       onclick: () => (canUseAI(aiStatus()) ? openCalorieCamera(meal, day) : openPaywall('camera')),
     }, icon(canUseAI(aiStatus()) ? 'camera' : 'lock', 18), meal.eaten ? tr('Retake with the calorie camera') : tr('Calorie camera — photograph your plate')));
   }
+  if (camOk) { const w = mealWaterRow(meal, day); if (w) card.appendChild(w); }
   if (camOk) card.appendChild(drinksBlock(meal, day));
   if (meal.eaten) return photoMealBody(card, meal, day);
 

@@ -2415,6 +2415,9 @@ export default {
     "Last: {0} kg · {1}": "الأخير: {0} كجم · {1}",
     "Details, preferences, language, notifications, privacy": "البيانات والتفضيلات واللغة والإشعارات والخصوصية",
     "Back to the profile": "العودة إلى الملف الشخصي",
+    "With meals {0} · between meals {1}": "مع الوجبات {0} · بين الوجبات {1}",
+    "{0, plural, one {# glass} other {# glasses}}": "{0, plural, zero {# كوب} one {كوب واحد} two {كوبان} few {# أكواب} many {# كوبا} other {# كوب}}",
+    "Add a glass of water": "إضافة كوب ماء",
   },
   data: {},
 };

@@ -2416,6 +2416,9 @@ export default {
     "Last: {0} kg · {1}": "Zuletzt: {0} kg · {1}",
     "Details, preferences, language, notifications, privacy": "Angaben, Vorlieben, Sprache, Benachrichtigungen und Datenschutz",
     "Back to the profile": "Zurück zum Profil",
+    "With meals {0} · between meals {1}": "Zu den Mahlzeiten {0} · zwischendurch {1}",
+    "{0, plural, one {# glass} other {# glasses}}": "{0, plural, one {# Glas} other {# Gläser}}",
+    "Add a glass of water": "Ein Glas Wasser hinzufügen",
   },
   data: {},
 };

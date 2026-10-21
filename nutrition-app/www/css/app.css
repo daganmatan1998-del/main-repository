@@ -943,3 +943,8 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .menu-text { display: grid; gap: 2px; flex: 1; min-width: 0; }
 .menu-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-go { color: var(--muted); flex: none; }
+
+/* ============ water with each meal ============ */
+.meal-water { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; margin-top: 6px; border-top: 1px solid var(--border); }
+.meal-water-label { display: inline-flex; align-items: center; gap: 6px; color: #3f9bd1; font-weight: 600; }
+.meal-water-n { min-width: 74px; text-align: center; }

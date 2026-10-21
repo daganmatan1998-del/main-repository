@@ -419,3 +419,7 @@ A day is counted only once the day after it has begun, so a friend who opens the
 ## A shorter profile (v1.22)
 
 Profile is now a short menu: **Achievements** (`#/achievements`: icon picker, streaks, badges), **Update weight and body fat** (`#/weight`) and **Settings** (`#/settings`: personal details, current period, food preferences, Today cards, language, appearance, notifications, privacy, delete all). Account, friends, challenges and the plan stay on the profile. Each page has a back arrow to the profile.
+
+## Water with each meal (v1.23)
+
+Every meal (today and past days) has its own water counter (`logs[day].waterMeals[mealIndex]`). The water card on Today shows the day's total — glasses with meals plus glasses between meals (the card's own counter) — against the daily goal, which is 35 ml per kg of body weight rounded to 250 ml glasses (`computeTargets`). No official Ministry of Health formula was found; height is not used.

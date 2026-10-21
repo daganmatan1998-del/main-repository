@@ -2415,6 +2415,9 @@ export default {
     "Last: {0} kg · {1}": "Ultimo: {0} kg · {1}",
     "Details, preferences, language, notifications, privacy": "Dati, preferenze, lingua, notifiche e privacy",
     "Back to the profile": "Torna al profilo",
+    "With meals {0} · between meals {1}": "Ai pasti {0} · fuori pasto {1}",
+    "{0, plural, one {# glass} other {# glasses}}": "{0, plural, one {# bicchiere} other {# bicchieri}}",
+    "Add a glass of water": "Aggiungi un bicchiere d'acqua",
   },
   data: {},
 };

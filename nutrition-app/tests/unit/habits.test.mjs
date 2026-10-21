@@ -19,6 +19,19 @@ test('water: goal in glasses, never below one, counts are clamped', () => {
   assert.equal(hb.glasses(undefined), 0);
 });
 
+test('water: glasses between meals and with each meal add up to the day\'s total', () => {
+  const log = { water: 2, waterMeals: { 0: 1, 2: 2, 3: 0 } };
+  assert.equal(hb.glasses(log), 2);
+  assert.equal(hb.mealGlasses(log, 2), 2);
+  assert.equal(hb.mealGlasses(log, 1), 0);
+  assert.equal(hb.waterByMeals(log), 3);
+  assert.equal(hb.waterTotal(log), 5);
+  assert.equal(hb.waterTotal({ eaten: [] }), 0);
+  assert.equal(hb.waterTotal(undefined), 0);
+  assert.equal(hb.mealGlasses({ waterMeals: { 0: 99 } }, 0), hb.MAX_MEAL_GLASSES, 'clamped');
+  assert.equal(hb.mealGlasses({ waterMeals: { 0: -3 } }, 0), 0);
+});
+
 test('fasting: running state, reaching the goal, ending and history', () => {
   const now = 1_000_000_000_000;
   assert.equal(hb.fastState(null, now).on, false);

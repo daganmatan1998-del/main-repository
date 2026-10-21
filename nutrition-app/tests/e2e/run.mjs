@@ -372,6 +372,33 @@ try {
   await page.click('#water-minus');
   await wait(300);
   check('and can be taken back', (await waterText()).includes('0') && await page.locator('#water-minus').isDisabled());
+  // water with each meal: breakfast 1, lunch 2, dinner 1 -> all of it counts toward the day's goal
+  const mealWater = (i) => page.locator(`.meal-water[data-meal="${i}"]`);
+  check('every meal has its own water counter', (await page.locator('.meal-water').count()) === (await page.locator('.meal').count()));
+  await mealWater(0).locator('[data-act="water-plus"]').click();
+  await wait(300);
+  await mealWater(1).locator('[data-act="water-plus"]').click();
+  await wait(300);
+  await mealWater(1).locator('[data-act="water-plus"]').click();
+  await wait(300);
+  await mealWater(2).locator('[data-act="water-plus"]').click();
+  await wait(300);
+  check('meal glasses are shown on each meal (1, 2, 1)', (await mealWater(0).locator('.meal-water-n').innerText()).includes('אחת') && (await mealWater(1).locator('.meal-water-n').innerText()).includes('2') && (await mealWater(2).locator('.meal-water-n').innerText()).includes('אחת'));
+  check('they all count in the daily total, which keeps the goal', (await waterText()).startsWith('4') && (await page.locator('#water-split').innerText()).includes('4'), await waterText());
+  await page.click('#water-plus');
+  await wait(300);
+  check('the card adds glasses between meals on top (4 + 1 = 5)', (await waterText()).startsWith('5'));
+  await page.reload();
+  await page.waitForSelector('#water-card');
+  check('all of it survives a reload', (await waterText()).startsWith('5') && (await mealWater(1).locator('.meal-water-n').innerText()).includes('2'));
+  await shot('59-water-per-meal', { fullPage: true });
+  await mealWater(1).locator('[data-act="water-minus"]').click();
+  await wait(300);
+  check('taking a meal glass back lowers the total', (await waterText()).startsWith('4'));
+  for (const i of [0, 1, 2]) { while (!(await mealWater(i).locator('[data-act="water-minus"]').isDisabled())) { await mealWater(i).locator('[data-act="water-minus"]').click(); await wait(200); } }
+  await page.click('#water-minus');
+  await wait(300);
+  check('everything back to zero', (await waterText()).startsWith('0'));
   check('one meal marked eaten starts a 1-day streak', (await page.locator('#streak-chip').innerText()).trim() === '1');
   check('the nutrients card shows fiber, sugars and sodium for the marked meal', (await page.locator('#nutrients-card [data-nutrient]').count()) === 7
     && Number((await page.locator('[data-nutrient="sodium"]').innerText()).match(/([\d,]+)\s*\//)[1].replace(/,/g, '')) > 0);

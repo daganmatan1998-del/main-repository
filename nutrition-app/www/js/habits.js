@@ -11,7 +11,13 @@ import { addDays } from './util.js';
 export const GLASS_ML = 250;
 export const MAX_GLASSES = 40;
 export const waterGoal = (liters) => Math.max(1, Math.round((Number(liters) || 2) * 1000 / GLASS_ML));
+// logs[day].water: glasses between meals (the card's own counter); logs[day].waterMeals: { [mealIndex]: glasses } drunk with a meal.
 export const glasses = (log) => Math.max(0, Math.min(MAX_GLASSES, Math.round((log && log.water) || 0)));
+export const MAX_MEAL_GLASSES = 10;
+export const mealGlasses = (log, idx) => Math.max(0, Math.min(MAX_MEAL_GLASSES, Math.round((log && log.waterMeals && log.waterMeals[idx]) || 0)));
+export const waterByMeals = (log) => Object.keys((log && log.waterMeals) || {}).reduce((s, k) => s + mealGlasses(log, k), 0);
+// Everything counted toward the day's goal.
+export const waterTotal = (log) => glasses(log) + waterByMeals(log);
 
 // ---------- intermittent fasting ----------
 export const PROTOCOLS = [

@@ -118,33 +118,54 @@ export function openEmblemSheet() {
 }
 
 // ---------- water ----------
+// The day's goal comes from the plan (targets().water); glasses count toward it
+// from two places: the card (between meals) and each meal's own counter.
+const waterGoalFor = (day) => { const t = targets(day); return t ? hb.waterGoal(t.water) : hb.waterGoal(2); };
+
+// Applies { water?, waterMeals? } to the day and keeps `waterDone` (goal reached) in step.
+async function patchWater(day, patch) {
+  const log = { ...(state.logs[day] || { eaten: [] }), ...patch };
+  await patchLog(day, { ...patch, waterDone: hb.waterTotal(log) >= waterGoalFor(day) });
+}
+
 export function waterCard(day, liters) {
   if (!cardOn('water')) return null;
   const goal = hb.waterGoal(liters);
-  const n = hb.glasses(state.logs[day]);
-  const set = (v) => {
-    const next = Math.max(0, Math.min(hb.MAX_GLASSES, v));
-    return patchLog(day, { water: next, waterDone: next >= goal });
-  };
+  const log = state.logs[day];
+  const extra = hb.glasses(log);
+  const inMeals = hb.waterByMeals(log);
+  const n = extra + inMeals;
+  const set = (v) => patchWater(day, { water: Math.max(0, Math.min(hb.MAX_GLASSES, v)) });
   return h('section', { class: 'card habit-card', id: 'water-card' },
     h('div', { class: 'row space' },
       h('h3', null, icon('drop', 18), tr('Water')),
       h('span', { class: 'num muted small', id: 'water-count' }, tr('{0} of {1} glasses', n, goal))),
     h('div', { class: 'bar water', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': goal, 'aria-valuenow': Math.min(n, goal) }, h('i', { style: { width: `${Math.min(100, (n / goal) * 100)}%` } })),
+    h('p', { class: 'muted small num', id: 'water-split' }, tr('With meals {0} · between meals {1}', inMeals, extra)),
     h('div', { class: 'row space habit-actions' },
       h('span', { class: 'muted small' }, n >= goal ? tr('Goal reached 🎉') : tr('One glass is {0} ml', hb.GLASS_ML)),
       h('div', { class: 'row gap' },
-        h('button', { type: 'button', class: 'icon-btn', id: 'water-minus', 'aria-label': tr('Remove a glass'), disabled: n < 1, onclick: () => set(n - 1) }, icon('minus')),
-        h('button', { type: 'button', class: 'btn btn-primary btn-small', id: 'water-plus', onclick: () => set(n + 1) }, icon('plus', 16), tr('Glass')))));
+        h('button', { type: 'button', class: 'icon-btn', id: 'water-minus', 'aria-label': tr('Remove a glass'), disabled: extra < 1, onclick: () => set(extra - 1) }, icon('minus')),
+        h('button', { type: 'button', class: 'btn btn-primary btn-small', id: 'water-plus', onclick: () => set(extra + 1) }, icon('plus', 16), tr('Glass')))));
+}
+
+// The glasses drunk with one meal, under the meal's name: − 2 +.
+export function mealWaterRow(meal, day) {
+  if (!cardOn('water')) return null;
+  const n = hb.mealGlasses(state.logs[day], meal.index);
+  const set = (v) => patchWater(day, { waterMeals: { ...((state.logs[day] && state.logs[day].waterMeals) || {}), [meal.index]: Math.max(0, Math.min(hb.MAX_MEAL_GLASSES, v)) } });
+  return h('div', { class: 'meal-water', 'data-meal': meal.index },
+    h('span', { class: 'meal-water-label' }, icon('drop', 16), tr('Water')),
+    h('div', { class: 'row gap' },
+      h('button', { type: 'button', class: 'icon-btn', 'data-act': 'water-minus', 'aria-label': tr('Remove a glass'), disabled: n < 1, onclick: () => set(n - 1) }, icon('minus', 18)),
+      h('output', { class: 'num meal-water-n', 'aria-live': 'polite' }, tr('{0, plural, one {# glass} other {# glasses}}', n)),
+      h('button', { type: 'button', class: 'icon-btn', 'data-act': 'water-plus', 'aria-label': tr('Add a glass of water'), onclick: () => set(n + 1) }, icon('plus', 18))));
 }
 
 // Adds a glass from outside the page (the home-screen shortcut).
 export async function addGlass() {
   const day = today();
-  const log = state.logs[day];
-  const n = Math.min(hb.MAX_GLASSES, hb.glasses(log) + 1);
-  const t = targets(day);
-  await patchLog(day, { water: n, waterDone: !!t && n >= hb.waterGoal(t.water) });
+  await patchWater(day, { water: Math.min(hb.MAX_GLASSES, hb.glasses(state.logs[day]) + 1) });
 }
 
 // ---------- fasting ----------

@@ -2415,6 +2415,9 @@ export default {
     "Last: {0} kg · {1}": "Последний: {0} кг · {1}",
     "Details, preferences, language, notifications, privacy": "Данные, предпочтения, язык, уведомления и конфиденциальность",
     "Back to the profile": "Назад к профилю",
+    "With meals {0} · between meals {1}": "С едой {0} · между приёмами пищи {1}",
+    "{0, plural, one {# glass} other {# glasses}}": "{0, plural, one {# стакан} few {# стакана} many {# стаканов} other {# стакана}}",
+    "Add a glass of water": "Добавить стакан воды",
   },
   data: {},
 };
