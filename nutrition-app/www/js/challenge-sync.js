@@ -10,6 +10,7 @@ import { addMessage, setChallengeInvites } from './inbox.js';
 
 let latest = [];
 let busy = false;
+let runs = 0; // the newest run is the one that counts when two overlap
 let timer = 0;
 const FRESH_MS = 14 * 24 * 3600 * 1000;
 
@@ -27,6 +28,7 @@ export async function refreshChallenges({ force = false } = {}) {
   if (busy && !force) return latest;
   if (!cloud.cloudReady() || !cloud.signedIn()) { latest = []; setChallengeInvites(0); window.dispatchEvent(new Event('app:challenges')); return latest; }
   busy = true;
+  const mine = ++runs;
   try {
     const t = today();
     let list = await ch.list(t, profilesByIds);
@@ -39,11 +41,12 @@ export async function refreshChallenges({ force = false } = {}) {
       } catch (e) { if (e.code === 'not_set_up') throw e; /* one challenge failing must not stop the rest */ }
     }
     if (touched) list = await ch.list(t, profilesByIds);
+    if (mine !== runs) return latest; // a newer refresh started meanwhile: its answer wins
     latest = list;
     setChallengeInvites(ch.invitations(list).length);
     await announce(list);
     window.dispatchEvent(new Event('app:challenges'));
-  } catch { /* offline or not set up: keep what was shown */ } finally { busy = false; }
+  } catch { /* offline or not set up: keep what was shown */ } finally { if (mine === runs) busy = false; }
   return latest;
 }
 

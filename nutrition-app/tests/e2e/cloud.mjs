@@ -158,10 +158,11 @@ async function supabase(route) {
     };
     const evaluate = (c, today) => {
       if (c.status !== 'active') return c.status;
-      const end = [c.end_date, addDay(today, -1)].sort()[0];
+      const end = [c.end_date, addDay(today, -2)].sort()[0];
       const mc = misses(c, c.creator, end);
       const mo = misses(c, c.opponent, end);
-      if (!(mc > c.max_misses || mo > c.max_misses || today > c.end_date)) return 'active';
+      if (!(mc > c.max_misses || mo > c.max_misses || today > addDay(c.end_date, 1))) return 'active';
+      c.final_day = today;
       finish(c, mc > mo ? c.creator : mo > mc ? c.opponent : null);
       return 'finished';
     };
@@ -441,7 +442,7 @@ try {
   await A.page.click('#friend-find');
   await A.page.waitForSelector('#user-name');
   check("searching goes to the person's profile with name, @username and win rate", (await A.page.locator('#user-name').innerText()) === 'Bob' && (await A.page.locator('#user-handle').innerText()) === '@bob' && (await A.page.locator('#user-stats').innerText()).includes('75'));
-  check("Bob's title shows next to his picture and under his name", (await A.page.locator('#user-profile .avatar-wrap[data-level="4"]').count()) === 1 && (await A.page.locator('#user-profile .level-line').innerText()).trim().length > 2);
+  check("Bob's emblem sits on his picture", (await A.page.locator('#user-profile .avatar-wrap[data-emblem="4"] img.emblem').count()) === 1);
   await A.page.screenshot({ path: path.join(SHOTS, 'c08-user-profile.png') });
   await A.page.click('#friend-add');
   await A.page.waitForSelector('#friend-sent');
@@ -467,19 +468,35 @@ try {
   await A.page.reload();
   await A.page.waitForSelector('.page-today');
 
-  // ======== title: reported to the server so friends see it ========
-  await A.page.evaluate(async () => { const m = await import('/js/store.js'); await m.saveSettings({ level: 2 }); });
+  // ======== emblem: chosen on the profile, reported to the server so friends see it ========
+  await A.page.evaluate(async () => { const m = await import('/js/store.js'); await m.saveSettings({ bestStreak: 12 }); });
   await A.page.goto(`${BASE}/#/profile`);
   await A.page.reload();
-  await A.page.waitForSelector('#level-card');
-  check('your own profile shows your title with the frame on the picture', (await A.page.locator('.profile-head .avatar-wrap[data-level="2"]').count()) === 1 && (await A.page.locator('#level-next').innerText()).length > 5);
+  await A.page.waitForSelector('#emblem-card');
+  check('a 12-day record has reached the first two emblems; the rest are locked', (await A.page.locator('#emblem-card .emblem-mini:not(.locked)').count()) === 2 && (await A.page.locator('#emblem-card .emblem-mini.locked').count()) === 4);
+  await A.page.click('#btn-add-icon');
+  await A.page.waitForSelector('#emblem-grid');
+  check('the picker lets you choose a reached emblem, not a locked one', !(await A.page.locator('.emblem-tile[data-emblem="2"]').isDisabled()) && await A.page.locator('.emblem-tile[data-emblem="3"]').isDisabled());
+  await A.page.screenshot({ path: path.join(SHOTS, 'c16-emblems.png') });
+  await A.page.click('.emblem-tile[data-emblem="2"]');
+  await A.page.waitForSelector('.profile-head .avatar-wrap[data-emblem="2"]');
+  check('the chosen emblem sits on the profile picture', (await A.page.locator('.profile-head .emblem').count()) === 1);
   await until(() => (fake.profiles.find((x) => x.user_id === USER.id) || {}).level === 2);
-  check('the title is sent to the server for friends to see', fake.profiles.find((x) => x.user_id === USER.id).level === 2);
-  await A.page.screenshot({ path: path.join(SHOTS, 'c16-title.png') });
+  check('the choice is sent to the server for friends to see', fake.profiles.find((x) => x.user_id === USER.id).level === 2);
   await A.page.goto(`${BASE}/#/today`);
   await A.page.reload();
   await A.page.waitForSelector('.page-today');
-  check('the picture on Today carries the frame too', (await A.page.locator('.head-avatar .avatar-wrap[data-level="2"]').count()) === 1);
+  check('the picture on Today carries the emblem too', (await A.page.locator('.head-avatar .avatar-wrap[data-emblem="2"]').count()) === 1);
+  await A.page.screenshot({ path: path.join(SHOTS, 'c17-today-emblem.png') });
+  await A.page.goto(`${BASE}/#/profile`);
+  await A.page.waitForSelector('#btn-add-icon');
+  await A.page.click('#btn-add-icon');
+  await A.page.click('#emblem-remove');
+  await until(() => (fake.profiles.find((x) => x.user_id === USER.id) || {}).level === 0);
+  check('removing the icon clears it for everyone', (await A.page.locator('.profile-head .emblem').count()) === 0 && fake.profiles.find((x) => x.user_id === USER.id).level === 0);
+  await A.page.goto(`${BASE}/#/today`);
+  await A.page.reload();
+  await A.page.waitForSelector('.page-today');
 
   // ======== challenges: invite, accept, report, scoreboard, forfeit ========
   const dayKey = (n = 0) => new Date(Date.now() + n * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });

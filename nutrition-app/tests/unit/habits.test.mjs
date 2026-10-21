@@ -127,37 +127,42 @@ test('micros: items, sauces and the common/typed/scanned own foods are added up'
   assert.equal(dayMicros([], undefined).any, false);
 });
 
-test('titles: by days tracked, with the next one and progress', () => {
-  assert.equal(hb.levelForDays(0), 0);
-  assert.equal(hb.levelForDays(2), 0);
-  assert.equal(hb.levelForDays(3), 1);
-  assert.equal(hb.levelForDays(99), 4);
-  assert.equal(hb.levelForDays(365), hb.MAX_LEVEL);
-  assert.equal(hb.levelForDays(9999), hb.MAX_LEVEL);
-  assert.equal(hb.levelInfo(99).level, hb.MAX_LEVEL, 'out-of-range levels are clamped');
-  assert.equal(hb.levelInfo('x').level, 0);
-  const n = hb.nextLevel(20, 2);
-  assert.equal(n.next.level, 3);
-  assert.equal(n.left, 5);
-  assert.equal(Math.round(n.pct * 100), 67);
-  assert.equal(hb.nextLevel(400, hb.MAX_LEVEL).next, null);
-  assert.deepEqual(hb.LEVELS.map((l) => l.level), hb.LEVELS.map((_, i) => i));
-  assert.ok(hb.LEVELS.every((l, i) => i === 0 || l.days > hb.LEVELS[i - 1].days));
+test('emblems: reached by the best streak, the next one and the progress', () => {
+  assert.deepEqual(hb.EMBLEMS.map((e) => e.days), [5, 10, 20, 25, 50, 100]);
+  assert.deepEqual(hb.emblemsEarned(4), []);
+  assert.deepEqual(hb.emblemsEarned(5), [1]);
+  assert.deepEqual(hb.emblemsEarned(25), [1, 2, 3, 4]);
+  assert.equal(hb.emblemsEarned(100).length, 6);
+  assert.equal(hb.emblemInfo(3).days, 20);
+  assert.equal(hb.emblemInfo(0), null);
+  assert.equal(hb.emblemInfo(99), null);
+  const n = hb.nextEmblem(7);
+  assert.equal(n.next.id, 2);
+  assert.equal(n.left, 3);
+  assert.equal(Math.round(n.pct * 100), 40);
+  assert.equal(hb.nextEmblem(100).next, null);
+  assert.equal(hb.nextEmblem(0).left, 5);
 });
 
-test('days tracked: old days fold into a running total before the logs are pruned, and are never counted twice', () => {
+test('streak run: carried across days, past the 60 days the logs keep, and survives an unmarked meal', () => {
   const k = (...d) => Object.fromEntries(d.map((x) => [x, { eaten: [0] }]));
-  const logs = k('2026-08-01', '2026-08-02', '2026-09-30', '2026-10-19', '2026-10-20');
-  const today = '2026-10-20';
-  assert.equal(hb.lifetimeDays(logs, {}), 5, 'nothing folded yet');
-  const fold = hb.foldDays(logs, {}, today);
-  assert.equal(fold.daysBase, 2, 'two days are older than 30 days (the cut-off is Sep 20)');
-  const settings = { ...fold };
-  assert.equal(hb.lifetimeDays(logs, settings), 5, 'same total after folding');
-  assert.equal(hb.foldDays(logs, settings, today).daysBase, 2, 'folding again adds nothing');
-  const pruned = k('2026-09-30', '2026-10-19', '2026-10-20');
-  assert.equal(hb.lifetimeDays(pruned, settings), 5, 'the total survives pruning');
-  const later = hb.foldDays({ ...pruned, ...k('2026-10-25') }, settings, '2026-11-26');
-  assert.equal(later.daysBase, 6, 'a later fold adds the newly old days');
-  assert.equal(hb.lifetimeDays({}, {}), 0);
+  assert.deepEqual(hb.advanceRun({}, {}, '2026-10-20'), { runLen: 0, runEnd: '' });
+  assert.deepEqual(hb.advanceRun(k('2026-10-20'), {}, '2026-10-20'), { runLen: 1, runEnd: '2026-10-20' });
+  // the next day the run grows by one even though the logs only show a short window
+  const day2 = hb.advanceRun(k('2026-10-19', '2026-10-20', '2026-10-21'), { runLen: 90, runEnd: '2026-10-20' }, '2026-10-21');
+  assert.deepEqual(day2, { runLen: 91, runEnd: '2026-10-21' });
+  // a missed day in between ends it
+  assert.equal(hb.advanceRun(k('2026-10-21'), { runLen: 90, runEnd: '2026-10-19' }, '2026-10-21').runLen, 1);
+  // today still empty: yesterday's run stands
+  assert.equal(hb.advanceRun(k('2026-10-20'), { runLen: 90, runEnd: '2026-10-20' }, '2026-10-21').runLen, 90);
+  // today's only meal was marked (run 91 stored) and then unmarked
+  assert.equal(hb.advanceRun(k('2026-10-20'), { runLen: 91, runEnd: '2026-10-21' }, '2026-10-21').runLen, 90);
+  // a whole window of 60 days with no stored run
+  const logs = {};
+  for (let i = 0; i < 60; i++) logs[new Date(Date.UTC(2026, 9, 20) - i * 86400000).toISOString().slice(0, 10)] = { eaten: [0] };
+  assert.equal(hb.advanceRun(logs, {}, '2026-10-20').runLen, 60);
+  const s = hb.statsFrom(k('2026-10-20'), { runLen: 99, runEnd: '2026-10-19', bestStreak: 99 }, '2026-10-20');
+  assert.equal(s.streak, 100);
+  assert.equal(s.best, 100);
+  assert.deepEqual(hb.emblemsEarned(s.best).length, 6);
 });

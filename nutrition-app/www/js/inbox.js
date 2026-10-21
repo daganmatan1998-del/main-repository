@@ -7,8 +7,10 @@
 import * as db from './db.js';
 
 const KEY = 'inbox';
+const GONE = 'inbox-gone'; // ids the person deleted: an event the app announces again is not shown again
 const MAX = 100;
 let list = [];
+let gone = new Set();
 let requests = 0; // friend requests waiting for an answer
 let invites = 0; // challenges waiting for an answer
 
@@ -16,6 +18,7 @@ const changed = () => window.dispatchEvent(new Event('app:inbox'));
 
 export async function loadInbox() {
   list = (await db.kv.get(KEY).catch(() => null)) || [];
+  gone = new Set((await db.kv.get(GONE).catch(() => null)) || []);
   changed();
 }
 
@@ -28,7 +31,7 @@ async function save() {
 // kind: what happened; args: the values the text needs; id: the same id is
 // stored once (a message the app would otherwise repeat on every start).
 export async function addMessage(kind, { id = `${kind}-${Date.now()}`, args = [], link = '' } = {}) {
-  if (list.some((m) => m.id === id)) return false;
+  if (list.some((m) => m.id === id) || gone.has(id)) return false;
   list = [{ id, kind, args, link, at: Date.now(), read: false }, ...list];
   await save();
   return true;
@@ -66,12 +69,19 @@ export async function markAllRead() {
   await save();
 }
 
+async function forget(ids) {
+  gone = new Set([...gone, ...ids].slice(-300));
+  try { await db.kv.set(GONE, [...gone]); } catch { /* storage full: kept in memory */ }
+}
+
 export async function removeMessage(id) {
   list = list.filter((m) => m.id !== id);
+  await forget([id]);
   await save();
 }
 
 export async function clearInbox() {
+  await forget(list.map((m) => m.id));
   list = [];
   await save();
 }

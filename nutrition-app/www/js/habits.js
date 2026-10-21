@@ -116,49 +116,44 @@ export function dayActivity(log) {
   return { steps: Math.max(0, Math.round((log && log.steps) || 0)), workouts, kcal, credit: Math.round(kcal * ACTIVITY_CREDIT) };
 }
 
-// ---------- titles ----------
-// By the number of days a planned meal was marked, over the whole time (not
-// just the last 60 days the logs keep). A title is never taken back.
-export const LEVELS = [
-  { level: 0, days: 0, icon: 'leaf', name: tr('Beginner') },
-  { level: 1, days: 3, icon: 'leaf', name: tr('Sprout') },
-  { level: 2, days: 10, icon: 'flame', name: tr('Regular') },
-  { level: 3, days: 25, icon: 'flame', name: tr('Consistent') },
-  { level: 4, days: 50, icon: 'star', name: tr('Dedicated') },
-  { level: 5, days: 100, icon: 'trophy', name: tr('Pro') },
-  { level: 6, days: 200, icon: 'crown', name: tr('Master') },
-  { level: 7, days: 365, icon: 'crown', name: tr('Legend') },
+// ---------- emblems ----------
+// Rewards for keeping a streak (days in a row with a planned meal marked).
+// Reached once, an emblem is kept; the person chooses which one to show above
+// their profile picture (art: www/img/emblems/<id>.webp).
+export const EMBLEMS = [
+  { id: 1, days: 5, name: tr('Common'), tag: tr('Stay consistent') },
+  { id: 2, days: 10, name: tr('Rare'), tag: tr('Build habits') },
+  { id: 3, days: 20, name: tr('Epic'), tag: tr('Reach goals') },
+  { id: 4, days: 25, name: tr('Legendary'), tag: tr('Inspire others') },
+  { id: 5, days: 50, name: tr('Mythical'), tag: tr('Defy limits') },
+  { id: 6, days: 100, name: tr('Above all'), tag: tr('Live the best version') },
 ];
-export const MAX_LEVEL = LEVELS.length - 1;
-export const levelInfo = (level) => LEVELS[Math.max(0, Math.min(MAX_LEVEL, Number(level) || 0))];
-export const levelForDays = (days) => LEVELS.filter((l) => days >= l.days).pop().level;
-const FOLD_AFTER = 30;
-
-// Days older than FOLD_AFTER are added to a running total before the logs are
-// pruned: { base, settled } — every marked day up to `settled` is in `base`.
-export function foldDays(logs, settings, todayKey) {
-  let base = (settings && settings.daysBase) || 0;
-  let settled = (settings && settings.daysSettled) || '';
-  const cutoff = addDays(todayKey, -FOLD_AFTER);
-  if (settled < cutoff) {
-    for (const d of Object.keys(logs || {})) if (d > settled && d <= cutoff && kept(logs[d])) base++;
-    settled = cutoff;
-  }
-  return { daysBase: base, daysSettled: settled };
-}
-
-export function lifetimeDays(logs, settings) {
-  const settled = (settings && settings.daysSettled) || '';
-  const base = (settings && settings.daysBase) || 0;
-  return base + Object.keys(logs || {}).filter((d) => d > settled && kept(logs[d])).length;
-}
-
-// What is next: { next: LEVELS entry | null, left: days to go, pct: 0-1 of the way from the current title }.
-export function nextLevel(days, level) {
-  const cur = levelInfo(level);
-  const next = LEVELS[cur.level + 1] || null;
+export const MAX_EMBLEM = EMBLEMS.length;
+export const emblemInfo = (id) => EMBLEMS.find((e) => e.id === Number(id)) || null;
+export const emblemsEarned = (best) => EMBLEMS.filter((e) => best >= e.days).map((e) => e.id);
+// { next: the emblem to reach, left: days to go, pct: 0-1 of the way from the last one }.
+export function nextEmblem(best) {
+  const next = EMBLEMS.find((e) => best < e.days) || null;
   if (!next) return { next: null, left: 0, pct: 1 };
-  return { next, left: Math.max(0, next.days - days), pct: Math.min(1, Math.max(0, (days - cur.days) / (next.days - cur.days))) };
+  const from = (EMBLEMS[next.id - 2] || { days: 0 }).days;
+  return { next, left: next.days - best, pct: Math.min(1, Math.max(0, (best - from) / (next.days - from))) };
+}
+
+// The streak as it stands, kept across the 60 days the logs hold:
+// run = { runLen, runEnd } is what was stored last time (runEnd = the last day it counted).
+export function advanceRun(logs, run, todayKey) {
+  const end = kept(logs[todayKey]) ? todayKey : kept(logs[addDays(todayKey, -1)]) ? addDays(todayKey, -1) : null;
+  if (!end) return { runLen: 0, runEnd: '' };
+  const cur = streak(logs, todayKey);
+  const prevEnd = (run && run.runEnd) || '';
+  const prevLen = (run && run.runLen) || 0;
+  let len = cur;
+  if (prevEnd) {
+    const gap = Math.round((Date.parse(end) - Date.parse(prevEnd)) / 86400000);
+    if (gap >= 0 && cur >= gap) len = Math.max(cur, prevLen + gap); // every day since then was marked
+    else if (gap === -1) len = Math.max(cur, prevLen - 1); // today's only meal was unmarked again
+  }
+  return { runLen: len, runEnd: end };
 }
 
 // ---------- badges ----------
@@ -183,16 +178,17 @@ export const BADGES = [
 
 export function statsFrom(logs, settings, todayKey, wins = 0) {
   const days = Object.values(logs || {});
-  const run = Math.max(longestRun(logs || {}), (settings && settings.bestStreak) || 0);
+  const run = advanceRun(logs || {}, settings, todayKey);
   return {
-    streak: streak(logs || {}, todayKey),
-    best: run,
+    streak: run.runLen,
+    best: Math.max(longestRun(logs || {}), (settings && settings.bestStreak) || 0, run.runLen),
     fullDays: days.filter((l) => l && l.full).length,
     waterDays: days.filter((l) => l && l.waterDone).length,
     fasts: fastsDone(settings && settings.fast),
     workouts: days.reduce((s, l) => s + ((l && l.workouts) || []).length, 0),
     bigStepDays: days.filter((l) => l && l.steps >= 10000).length,
     wins,
+    run,
   };
 }
 

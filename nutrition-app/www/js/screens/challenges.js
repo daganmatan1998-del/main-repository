@@ -21,6 +21,7 @@ const ERRORS = {
   no_profile: () => tr('Both of you need a username first.'),
   not_set_up: () => tr('Challenges are not switched on at the server yet. Please try again later.'),
   bad_date: () => tr('The date on this phone is off. Fix it and try again.'),
+  not_allowed: () => tr('This challenge has changed. Open it again to see the latest.'),
 };
 export const challengeError = (e) => (e && ERRORS[e.code] ? ERRORS[e.code]() : tr('Couldn\'t reach the server. Try again.'));
 
@@ -136,8 +137,11 @@ export async function renderChallenge(root) {
 
 function drawChallenge(card, v) {
   const name = nameOf(v.other);
+  let working = false; // a second tap while the first is still running is ignored
   const act = (fn, okText) => async () => {
-    try { await fn(); await refreshChallenges({ force: true }); if (okText) toast(okText); const next = challengeList().find((c) => c.id === v.id); clear(card); if (next) drawChallenge(card, next); } catch (e) { toast(challengeError(e)); }
+    if (working) return;
+    working = true;
+    try { await fn(); await refreshChallenges({ force: true }); if (okText) toast(okText); const next = challengeList().find((c) => c.id === v.id); clear(card); if (next) drawChallenge(card, next); } catch (e) { toast(challengeError(e)); } finally { working = false; }
   };
   const badgeText = v.status === 'pending' ? tr('Waiting for an answer')
     : v.status === 'active' ? (v.started ? tr('In progress') : tr('Starts tomorrow'))
@@ -170,8 +174,8 @@ function drawChallenge(card, v) {
     const left = tr('{0, plural, one {# day left} other {# days left}}', v.daysLeft);
     card.appendChild(h('p', { class: 'center lead', id: 'challenge-progress' }, v.started ? `${tr('Day {0} of {1}', v.dayNumber, v.days)} · ${left}` : (v.startsInDays <= 1 ? tr('Starts tomorrow') : tr('{0, plural, one {Starts in # day} other {Starts in # days}}', v.startsInDays))));
   }
-  card.append(scoreboard(v, name));
-  const table = dayTable(v, name);
+  if (!v.noDays) card.append(scoreboard(v, name));
+  const table = v.noDays ? null : dayTable(v, name);
   if (table) card.appendChild(table);
   if (v.status === 'active') {
     card.appendChild(rules());
@@ -261,8 +265,11 @@ export function challengeStrip() {
 export function challengeInvitations(body, rerender) {
   const list = ch.invitations(challengeList().filter((c) => c.other));
   if (!list.length) return 0;
+  let working = false;
   const act = async (fn, okText) => {
-    try { await fn(); await refreshChallenges({ force: true }); if (okText) toast(okText); rerender(); } catch (e) { toast(challengeError(e)); }
+    if (working) return;
+    working = true;
+    try { await fn(); await refreshChallenges({ force: true }); if (okText) toast(okText); rerender(); } catch (e) { toast(challengeError(e)); } finally { working = false; }
   };
   body.append(h('h3', { class: 'extra-group' }, tr('Challenge invitations')),
     h('ul', { class: 'friend-list', id: 'challenge-invites' }, ...list.map((c) => {

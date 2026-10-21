@@ -10,7 +10,7 @@
 // drive it with a fake.
 
 import * as cloud from './cloud.js';
-import { addDays, daysBetween } from './util.js';
+import { addDays, daysBetween, dayKey } from './util.js';
 
 let net = (...a) => cloud.rest(...a);
 export const setTransport = (fn) => { net = fn; };
@@ -23,6 +23,7 @@ export const MAX_DAYS = 30;
 export const MAX_MISSES = 30;
 export const MAX_OPEN = 5;
 export const DEFAULTS = { days: 7, maxMisses: 3 };
+const RECENT_FINISHED = 10;
 
 // An Error whose code says what to tell the person.
 export function fail(r) {
@@ -71,9 +72,10 @@ export function view(c, dayRows, meId, todayKey) {
   if (c.status !== 'active' && c.status !== 'finished') return out;
   out.started = todayKey >= c.start_date;
   out.startsInDays = Math.max(0, daysBetween(todayKey, c.start_date));
-  // A finished challenge is looked at as of the day it ended (days after that were never played).
-  const ref = c.status === 'finished' && c.finished_at ? c.finished_at.slice(0, 10) : todayKey;
-  const closedEnd = [c.end_date, addDays(ref, -1)].sort()[0];
+  // A finished challenge is looked at as of the day it was settled (days after that were never played).
+  // A day counts once the day after it has begun (the server's rule, see nutri_evaluate).
+  const ref = c.status === 'finished' ? (c.final_day || (c.finished_at ? dayKey(new Date(c.finished_at)) : todayKey)) : todayKey;
+  const closedEnd = [c.end_date, addDays(ref, -2)].sort()[0];
   out.mine.missed = misses(my, c.start_date, closedEnd);
   out.theirs.missed = misses(their, c.start_date, closedEnd);
   out.dayNumber = out.started ? Math.min(c.days, daysBetween(c.start_date, todayKey) + 1) : 0;
@@ -82,14 +84,14 @@ export function view(c, dayRows, meId, todayKey) {
   const theirs1 = new Map(their.map((r) => [r.day, r]));
   const last = [c.end_date, ref].sort()[0];
   for (let d = c.start_date; d <= last; d = addDays(d, 1)) {
-    const closed = d < ref || (c.status === 'finished' && d <= ref);
+    const closed = d <= closedEnd;
     out.perDay.push({ day: d, closed, today: d === todayKey, mine: mine1.get(d) || null, theirs: theirs1.get(d) || null });
   }
   return out;
 }
 
 // ---- fetching ----
-const FIELDS = 'id,creator,opponent,status,days,max_misses,start_date,end_date,loser,result,created_at,updated_at,finished_at';
+const FIELDS = 'id,creator,opponent,status,days,max_misses,start_date,end_date,loser,result,created_at,updated_at,finished_at,final_day';
 
 // [{ ...view, other: profile }] newest first.
 export async function list(todayKey, profilesByIds) {
@@ -98,16 +100,21 @@ export async function list(todayKey, profilesByIds) {
   if (!r.ok) throw fail(r);
   const rows = r.data;
   if (!rows.length) return [];
-  const live = rows.filter((c) => c.status === 'active' || c.status === 'finished').map((c) => c.id);
+  // The days of the running challenges and of the latest finished ones (at most 60 rows each,
+  // so two requests stay under the server's row limit); older finished ones show only their result.
+  const running = rows.filter((c) => c.status === 'active').slice(0, MAX_OPEN).map((c) => c.id);
+  const recent = rows.filter((c) => c.status === 'finished').slice(0, RECENT_FINISHED).map((c) => c.id);
+  const withDays = new Set([...running, ...recent]);
   let dayRows = [];
-  if (live.length) {
-    const d = await net(`nutri_challenge_days?select=challenge_id,user_id,day,planned,logged&challenge_id=in.(${live.join(',')})&limit=2000`);
+  for (const ids of [running, recent]) {
+    if (!ids.length) continue;
+    const d = await net(`nutri_challenge_days?select=challenge_id,user_id,day,planned,logged&challenge_id=in.(${ids.join(',')})&order=day.asc&limit=1000`);
     if (!d.ok) throw fail(d);
-    dayRows = d.data;
+    dayRows = dayRows.concat(d.data);
   }
   const others = [...new Set(rows.map((c) => (c.creator === meId ? c.opponent : c.creator)))];
   const people = await profilesByIds(others);
-  return rows.map((c) => ({ ...view(c, dayRows.filter((x) => x.challenge_id === c.id), meId, todayKey), createdAt: c.created_at, updatedAt: c.updated_at, other: people[c.creator === meId ? c.opponent : c.creator] || null }));
+  return rows.map((c) => ({ ...view(c, dayRows.filter((x) => x.challenge_id === c.id), meId, todayKey), noDays: (c.status === 'active' || c.status === 'finished') && !withDays.has(c.id), createdAt: c.created_at, updatedAt: c.updated_at, other: people[c.creator === meId ? c.opponent : c.creator] || null }));
 }
 
 // ---- actions (each is a function in setup.sql; the server checks who is asking) ----
@@ -141,7 +148,7 @@ export function dueReports(v, todayKey, count) {
 }
 
 // Whether a period that has ended still needs the server to settle it.
-export const needsSettling = (v, todayKey) => v.status === 'active' && v.end && todayKey > v.end;
+export const needsSettling = (v, todayKey) => v.status === 'active' && v.end && todayKey > addDays(v.end, 1);
 
 export const openCount = (list) => list.filter((c) => c.status === 'pending' || c.status === 'active').length;
 export const invitations = (list) => list.filter((c) => c.status === 'pending' && !c.iAmCreator);

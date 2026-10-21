@@ -22,7 +22,8 @@ import { squareImage } from '../image.js';
 import { accountCard } from './account.js';
 import { friendsCard, openInviteSheet } from './friends.js';
 import { challengesCard } from './challenges.js';
-import { badgesCard, todaySettingsCard, framed, levelBadge, myLevel, checkBadges } from './habits.js';
+import * as hb from '../habits.js';
+import { badgesCard, todaySettingsCard, framed, myEmblem, checkBadges, openEmblemSheet, habitStats } from './habits.js';
 import { cloudReady } from '../cloud.js';
 import * as cloud from '../cloud.js';
 
@@ -34,11 +35,11 @@ export function renderProfile(root) {
 
   root.appendChild(h('header', { class: 'profile-head' },
     h('button', { class: 'avatar-btn', id: 'btn-avatar', 'aria-label': tr('Change profile photo'), onclick: editAvatar },
-      framed(avatar(84), myLevel(), 84), h('span', { class: 'avatar-badge' }, icon('camera', 16))),
+      framed(avatar(84), myEmblem(), 84), h('span', { class: 'avatar-badge' }, icon('camera', 16))),
     h('div', { class: 'profile-id' },
       h('h1', null, p.nickname || p.name),
       p.nickname ? h('p', { class: 'muted' }, p.name) : null,
-      levelBadge(myLevel()),
+      hb.emblemsEarned(habitStats().best).length ? h('button', { type: 'button', class: 'btn btn-small', id: 'btn-add-icon', onclick: openEmblemSheet }, icon('plus', 16), myEmblem() ? tr('Change icon') : tr('Add icon')) : null,
       h('p', { class: 'muted small' }, tr('Joined {0} · week {1}', fmtDate(p.regDay, true), currentWeek())),
       cloudReady() ? h('button', { type: 'button', class: 'btn btn-small btn-primary', id: 'btn-invite-head', onclick: openInviteSheet }, icon('send', 16), tr('Invite friends')) : null)));
 

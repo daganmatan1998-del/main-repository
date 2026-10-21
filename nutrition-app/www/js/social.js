@@ -132,7 +132,15 @@ export async function sendRequest(toUserId, rel) {
   if (rel0.kind === 'received') return respond(rel0.request.id, 'accepted');
   if (rel0.kind !== 'none') return true;
   const r = await net('nutri_friend_requests', { method: 'POST', prefer: 'return=minimal', body: { from_user: me(), to_user: toUserId } });
-  if (r.status === 409) return true; // already sent
+  if (r.status === 409) {
+    // One request per pair: a declined one is cleared and sent again; a pending or accepted one already counts.
+    const old = await net(`nutri_friend_requests?from_user=eq.${me()}&to_user=eq.${toUserId}&status=eq.declined`, { method: 'DELETE', prefer: 'return=representation' });
+    if (old.ok && Array.isArray(old.data) && old.data.length) {
+      const again = await net('nutri_friend_requests', { method: 'POST', prefer: 'return=minimal', body: { from_user: me(), to_user: toUserId } });
+      if (!again.ok && again.status !== 409) throw fail(again);
+    }
+    return true;
+  }
   if (!r.ok) throw fail(r);
   return true;
 }

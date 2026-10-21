@@ -408,6 +408,10 @@ From a friend's profile: **Challenge to a competition** — pick 7/14/30 days (o
 - **Print** the week's menu (Menu → Print) and the shopping list.
 - Not possible in a PWA: native widgets, store listing, wearable sync. Not built: human coaching.
 
-## Titles (v1.20)
+## Emblems (v1.21)
 
-A title (Beginner → Sprout → Regular → Consistent → Dedicated → Pro → Master → Legend) is earned by the number of days a planned meal was marked, over the whole time (3 / 10 / 25 / 50 / 100 / 200 / 365 days) and is never taken back. It shows as a coloured frame and a small mark on the profile picture (Today, Profile, friends) and under the name on a friend's profile. The level is stored in `nutri_profiles.level` (re-run `supabase/setup.sql`); each phone reports its own, so it is honor-system like the challenge days.
+Six emblems (`www/img/emblems/1..6.webp`) are earned by the longest streak of days with a planned meal marked: Common 5, Rare 10, Epic 20, Legendary 25, Mythical 50, Above all 100 days. A reached emblem is kept. In Profile → Add icon the person chooses one; it shows small above the top right of their picture (Today, Profile, a friend's profile, the friends list). The choice is stored in `nutri_profiles.level` (re-run `supabase/setup.sql`); each phone reports its own, so it is honor-system like the challenge days. The streak is carried in settings (`runLen`, `runEnd`) so it can pass the 60 days the logs keep.
+
+### Challenge counting notes (v1.21)
+
+A day is counted only once the day after it has begun, so a friend who opens the app just after midnight cannot close the other player's last day before they could report it. The settling phone's day is stored in `nutri_challenges.final_day` so every screen shows the same scoreboard. Known limit: two phones whose local dates differ by a day (zones ~13 h apart) can still count a day a few hours early.

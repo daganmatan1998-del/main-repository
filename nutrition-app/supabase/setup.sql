@@ -75,7 +75,7 @@ create table if not exists public.nutri_profiles (
   created_at timestamptz not null default now()
 );
 
--- The title shown next to the picture (0 = none). Each phone reports its own, like the challenge days.
+-- The emblem (1-6, 0 = none) shown above the picture. Each phone reports its own, like the challenge days.
 alter table public.nutri_profiles add column if not exists level smallint not null default 0;
 alter table public.nutri_profiles drop constraint if exists nutri_profiles_level_check;
 alter table public.nutri_profiles add constraint nutri_profiles_level_check check (level between 0 and 20);
@@ -152,6 +152,9 @@ create table if not exists public.nutri_challenges (
   finished_at timestamptz,
   check (creator <> opponent)
 );
+
+-- The day (as the settling phone saw it) the counting stopped at, so every screen shows the same scoreboard.
+alter table public.nutri_challenges add column if not exists final_day date;
 create index if not exists nutri_challenges_creator on public.nutri_challenges (creator, status);
 create index if not exists nutri_challenges_opponent on public.nutri_challenges (opponent, status);
 
@@ -228,11 +231,14 @@ begin
   select * into c from public.nutri_challenges where id = p_id for update;
   if not found then return 'none'; end if;
   if c.status <> 'active' then return c.status; end if;
-  closed_end := least(c.end_date, p_today - 1);
+  -- A day is counted only once the day after it has begun: the other player may be
+  -- hours behind (a time zone, a phone that was offline) and can still report yesterday.
+  closed_end := least(c.end_date, p_today - 2);
   mc := public.nutri_misses(c.id, c.creator, c.start_date, closed_end);
   mo := public.nutri_misses(c.id, c.opponent, c.start_date, closed_end);
-  over := mc > c.max_misses or mo > c.max_misses or p_today > c.end_date;
+  over := mc > c.max_misses or mo > c.max_misses or p_today > c.end_date + 1;
   if not over then return 'active'; end if;
+  update public.nutri_challenges set final_day = p_today where id = c.id;
   perform public.nutri_finish(c.id, case when mc > mo then c.creator when mo > mc then c.opponent else null end);
   return 'finished';
 end $$;

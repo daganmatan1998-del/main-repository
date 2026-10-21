@@ -117,8 +117,8 @@ export function openProductSearch(ctx) {
     const run = async () => {
       const q = input.value.trim();
       clear(list);
+      const mine = ++seq; // also cancels a search still in flight when the box was emptied
       if (q.length < 2) { status.textContent = tr('Type at least 2 letters.'); return; }
-      const mine = ++seq;
       status.textContent = tr('Searching…');
       const r = await searchProducts(q);
       if (mine !== seq) return;

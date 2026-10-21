@@ -220,6 +220,27 @@ test('challenges: reporting a day — only your own challenge, only today and ye
   await fails(call('bob', 'select public.forfeit_challenge($1)', [id]), '42501');
 });
 
+test('challenges: a day counts only once the day after it has begun (the other player may be hours behind)', async () => {
+  const id = await newChallenge('ann', 'bob', 5, 2);
+  await activate(id, 'bob');
+  // the challenge began yesterday; Ann reported it in full, Bob has not (yet)
+  await replay(id, { start: -1, rows: [['ann', -1, 4, 4]] });
+  // Ann's phone opens just after midnight: yesterday is still open for Bob
+  assert.equal((await call('ann', 'select public.evaluate_challenge($1, current_date) as s', [id]))[0].s, 'active', "yesterday is not counted at 00:05 on the other side");
+  assert.equal((await status(id)).status, 'active');
+  // Bob reports yesterday late and is accepted
+  await call('bob', 'select public.report_challenge_day($1, current_date - 1, 4, 4, current_date) as s', [id]);
+  assert.equal((await q('select planned from public.nutri_challenge_days where challenge_id = $1 and user_id = $2 and day = current_date - 1', [id, U.bob])).length, 1);
+  // two days later it is counted: Bob did not report day 2 (3 misses > 2)
+  await sudo('update public.nutri_challenges set start_date = current_date - 2, end_date = current_date + 2 where id = $1', [id]);
+  await sudo('delete from public.nutri_challenge_days where challenge_id = $1', [id]);
+  await sudo('insert into public.nutri_challenge_days (challenge_id, user_id, day, planned, logged) values ($1, $2, current_date - 2, 4, 4)', [id, U.ann]);
+  assert.equal((await call('ann', 'select public.evaluate_challenge($1, current_date) as s', [id]))[0].s, 'finished', 'day 1 is closed two days later');
+  const r = await status(id);
+  assert.equal(r.loser, U.bob);
+  assert.ok((await q('select final_day from public.nutri_challenges where id = $1', [id]))[0].final_day, 'the settled day is kept for the scoreboard');
+});
+
 test('deleting an account removes its profile, requests and challenges', async () => {
   await sudo('delete from auth.users where id = $1', [U.dan]);
   assert.equal((await q('select 1 from public.nutri_profiles where user_id = $1', [U.dan])).length, 0);

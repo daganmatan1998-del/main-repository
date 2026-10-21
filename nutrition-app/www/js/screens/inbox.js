@@ -2,7 +2,7 @@
 // "Friend requests" — people who asked to be friends (and the ones we asked).
 
 import { t as tr, locale } from '../i18n.js';
-import { h, icon, clear, toast, fmtDate } from '../util.js';
+import { h, icon, clear, toast, fmtDate, dayKey } from '../util.js';
 import * as cloud from '../cloud.js';
 import * as social from '../social.js';
 import { GOALS } from '../nutrition.js';
@@ -23,7 +23,7 @@ const KINDS = {
   'challenge-declined': (a) => ({ title: tr('{0} declined your challenge', a[0]), text: tr('You can challenge another friend any time.') }),
   'challenge-won': (a) => ({ title: tr('You won the challenge against {0} 🎉', a[0]), text: tr('Your record was updated.') }),
   'challenge-lost': (a) => ({ title: tr('{0} won the challenge', a[0]), text: tr('Your record was updated.') }),
-  'level-up': (a) => ({ title: tr('New title: {0}', a[0]), text: tr('Everyone who looks at your profile sees it.'), link: '#/profile' }),
+  'emblem-earned': (a) => ({ title: tr('New emblem: {0}', a[0]), text: tr('Add it above your profile picture from your profile.'), link: '#/profile' }),
   'badge-earned': (a) => ({ title: tr('New badge: {0}', a[0]), text: tr('See all your achievements on your profile.'), link: '#/profile' }),
   'challenge-draw': (a) => ({ title: tr('The challenge with {0} ended in a draw', a[0]), text: tr('Nobody\'s record changed.') }),
 };
@@ -34,7 +34,7 @@ function ago(at) {
   if (min < 1) return tr('now');
   if (min < 60) return tr('{0} min ago', min);
   const d = new Date(at);
-  return `${fmtDate(d.toISOString().slice(0, 10))} ${d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`;
+  return `${fmtDate(dayKey(d))} ${d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 let folder = 'messages';

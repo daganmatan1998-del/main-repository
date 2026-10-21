@@ -127,3 +127,27 @@ test('missing tables are told apart from a server that is just down', async () =
   social.setTransport(answer(503, {}));
   await assert.rejects(() => social.findByUsername('bob'), (e) => e.code === 'unavailable');
 });
+
+test('sending again after the other person declined: the old declined row is cleared and a new request is sent', async () => {
+  const calls = [];
+  let posts = 0;
+  social.setTransport(async (path, opts = {}) => {
+    calls.push({ path, method: opts.method || 'GET' });
+    if (opts.method === 'POST') { posts++; return posts === 1 ? { ok: false, status: 409, data: { code: '23505' } } : { ok: true, status: 201, data: null }; }
+    if (opts.method === 'DELETE') return { ok: true, status: 200, data: [{ id: 'old' }] };
+    return { ok: true, status: 200, data: [] };
+  });
+  await social.sendRequest('u-zed', { friends: [], outgoing: [], incoming: [] });
+  assert.deepEqual(calls.map((c) => c.method), ['POST', 'DELETE', 'POST']);
+  assert.match(calls[1].path, /from_user=eq\.u-me&to_user=eq\.u-zed&status=eq\.declined/);
+  // a pending or accepted one (nothing declined to clear): still counts as sent, no second POST
+  calls.length = 0;
+  posts = 0;
+  social.setTransport(async (path, opts = {}) => {
+    calls.push({ method: opts.method || 'GET' });
+    if (opts.method === 'POST') return { ok: false, status: 409, data: { code: '23505' } };
+    return { ok: true, status: 200, data: [] };
+  });
+  assert.equal(await social.sendRequest('u-zed', { friends: [], outgoing: [], incoming: [] }), true);
+  assert.deepEqual(calls.map((c) => c.method), ['POST', 'DELETE']);
+});

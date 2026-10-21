@@ -137,4 +137,4 @@ export function withServings(entry, servings) {
   return makeCustom({ ...entry, servings });
 }
 
-export const customValid = (e) => !!(e && e.name && Number.isFinite(e.kcal) && e.kcal > 0);
+export const customValid = (e) => !!(e && e.name && Number.isFinite(e.kcal) && e.kcal >= 0);

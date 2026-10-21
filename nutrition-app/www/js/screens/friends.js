@@ -7,7 +7,7 @@ import * as cloud from '../cloud.js';
 import * as social from '../social.js';
 import { state } from '../store.js';
 import { googleButton } from './account.js';
-import { framed, levelBadge } from './habits.js';
+import { framed } from './habits.js';
 import * as ch from '../challenges.js';
 import { openChallengeSheet } from './challenges.js';
 import { refreshChallenges, challengeList } from '../challenge-sync.js';
@@ -194,8 +194,7 @@ export async function renderUserProfile(root) {
     h('div', { class: 'user-head' },
       framed(initialAvatar(name, 72), user.level, 72),
       h('h1', { id: 'user-name' }, name),
-      h('p', { class: 'muted', dir: 'ltr', id: 'user-handle' }, `@${user.username}`),
-      levelBadge(user.level)),
+      h('p', { class: 'muted', dir: 'ltr', id: 'user-handle' }, `@${user.username}`),),
     h('div', { class: 'user-stats', id: 'user-stats' },
       rate === null
         ? h('p', { class: 'muted' }, tr('No challenges yet'))
