@@ -933,3 +933,13 @@ body[data-screen="assistant"] { padding-bottom: calc(var(--tabbar-h) + var(--saf
 .emblem-tile.locked img { filter: grayscale(1) brightness(.45); }
 .emblem-tile.on { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary); }
 .user-head .avatar-wrap { margin-bottom: 6px; }
+
+/* ============ profile menu ============ */
+.menu-list { padding: 4px 0; display: grid; }
+.menu-row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; min-height: 60px; text-decoration: none; color: inherit; border-bottom: 1px solid var(--border); }
+.menu-row:last-child { border-bottom: 0; }
+.menu-row:active { background: var(--primary-weak); }
+.menu-ic { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: var(--primary-weak); color: var(--primary); flex: none; }
+.menu-text { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.menu-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-go { color: var(--muted); flex: none; }

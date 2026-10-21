@@ -2411,6 +2411,10 @@ export default {
     "You have every emblem.": "У вас есть все эмблемы.",
     "Add it above your profile picture from your profile.": "Добавить её над фото профиля можно в разделе «Профиль».",
     "This challenge has changed. Open it again to see the latest.": "Этот вызов изменился. Откройте его снова, чтобы увидеть актуальное состояние.",
+    "Profile menu": "Меню профиля",
+    "Last: {0} kg · {1}": "Последний: {0} кг · {1}",
+    "Details, preferences, language, notifications, privacy": "Данные, предпочтения, язык, уведомления и конфиденциальность",
+    "Back to the profile": "Назад к профилю",
   },
   data: {},
 };

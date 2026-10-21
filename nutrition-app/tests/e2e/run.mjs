@@ -117,6 +117,8 @@ page.on('console', (m) => { if (m.type() === 'error' && !/status of 503/.test(m.
 
 const shot = (name, opts = {}) => page.screenshot({ path: path.join(SHOTS, `${name}.png`), ...opts });
 const wait = (ms = 250) => page.waitForTimeout(ms);
+// Pages opened from the profile menu (settings, weight, achievements).
+const go = (hash) => page.evaluate((h) => { location.hash = h; }, hash);
 const visible = (sel) => page.locator(sel).first().isVisible().catch(() => false);
 const text = () => page.locator('#view').innerText();
 
@@ -387,13 +389,15 @@ try {
   await wait(500);
   check('the workout is listed with its calories', (await page.locator('.workout-row').count()) === 1 && /\d{3}/.test(await page.locator('.workout-row').innerText()));
   check('10,000 steps earn the steps badge on the profile', await (async () => {
-    await page.evaluate(() => { location.hash = '#/profile'; });
+    await page.evaluate(() => { location.hash = '#/achievements'; });
     await page.waitForSelector('#badges-card');
     return (await page.locator('.badge.on[data-badge="steps"]').count()) === 1 && (await page.locator('.badge.on[data-badge="move1"]').count()) === 1;
   })());
   check('profile shows the streak and the badges', (await page.locator('#streak-now').innerText()) === '1' && (await page.locator('.badges .badge').count()) >= 10);
   await shot('62-badges', { fullPage: true });
-  check('fasting is off until it is switched on in the profile', !(await page.locator('#cards-fast').isChecked()));
+  await page.evaluate(() => { location.hash = '#/settings'; });
+  await page.waitForSelector('#cards-fast');
+  check('fasting is off until it is switched on in the settings', !(await page.locator('#cards-fast').isChecked()));
   await page.locator('#cards-fast').check();
   await wait(300);
   await page.locator('#activity-credit').check();
@@ -1093,11 +1097,21 @@ try {
   // =============== profile ===============
   await page.click('a[href="#/profile"]');
   await page.waitForSelector('.page-profile');
+  check('Profile is a short menu: achievements, weight, settings', (await page.locator('#profile-menu .menu-row').count()) === 3 && (await page.locator('.page-profile .card').count()) <= 5);
+  await shot('18a-profile-menu', { fullPage: true });
+  await page.click('#menu-settings');
+  await page.waitForSelector('#period-settings');
   const kcalBefore = await page.locator('#period-settings').innerText();
+  await page.click('#back-profile');
+  await page.click('#menu-weight');
+  await page.waitForSelector('#m-weight');
   await page.fill('#m-weight', '64.8');
   await page.fill('#m-bf', '27');
-  await page.click('.page-profile form button[type=submit]');
+  await page.click('.page-weight form button[type=submit]');
   await wait(500);
+  await page.click('#back-profile');
+  await page.click('#menu-settings');
+  await page.waitForSelector('#period-settings');
   check('manual weight / body-fat update recalculates the plan', (await page.locator('#period-settings').innerText()) !== kcalBefore);
   await page.locator('.card', { hasText: 'העדפות תזונה' }).getByRole('button', { name: /עריכה/ }).click();
   await page.click('#btn-food-picker');
@@ -1124,8 +1138,8 @@ try {
   check('changing meals/day regenerates the menu', (await page.locator('.meal').count()) === 3);
 
   for (const [diet, banned] of [['קיטו', ['לחם', 'אורז', 'פסטה', 'קינואה', 'בטטה', 'תפוח', 'בננה', 'עדשים', 'פיתה']], ['קרניבור', ['לחם', 'אורז', 'סלט', 'ירקות', 'ברוקולי', 'טופו', 'שמן זית', 'אבוקדו', 'טחינה', 'עדשים']]]) {
-    await page.click('a[href="#/profile"]');
-    await page.waitForSelector('.page-profile');
+    await go('#/settings');
+    await page.waitForSelector('.page-settings');
     await page.locator('.card', { hasText: 'העדפות תזונה' }).getByRole('button', { name: /עריכה/ }).click();
     await page.locator('.sheet').getByRole('radio', { name: diet }).click();
     check(`${diet}: the diet is explained when chosen`, (await page.locator('.sheet .diet-note').innerText()).length > 20);
@@ -1143,7 +1157,8 @@ try {
     check(`${diet}: a week of menus has none of ${banned.length} off-plan foods`, found.length === 0, [...new Set(found)].join(','));
     if (diet === 'קיטו') await shot('26-keto-plan', { fullPage: true });
   }
-  await page.click('a[href="#/profile"]');
+  await go('#/settings');
+  await page.waitForSelector('.page-settings');
   await page.locator('.card', { hasText: 'העדפות תזונה' }).getByRole('button', { name: /עריכה/ }).click();
   await page.locator('.sheet').getByRole('radio', { name: 'צמחוני' }).click();
   await page.locator('.sheet .btn-primary').last().click();
@@ -1152,8 +1167,8 @@ try {
   await page.waitForSelector('.page-today');
 
   await ctx.grantPermissions(['notifications'], { origin: BASE });
-  await page.click('a[href="#/profile"]');
-  await page.waitForSelector('.page-profile');
+  await go('#/settings');
+  await page.waitForSelector('.page-settings');
   await page.locator('.switch-row', { hasText: 'תזכורת' }).locator('input').check();
   await wait(500);
   const perm = await page.evaluate(() => Notification.permission);
@@ -1179,13 +1194,15 @@ try {
   await page.click('a[href="#/gallery"]');
   await wait(500);
   await shot('20-gallery-dark');
-  await page.click('a[href="#/profile"]');
+  await go('#/settings');
   await page.getByRole('radio', { name: 'בהיר' }).click();
 
   // =============== paid plan for the AI features (the trial is over by now) ===============
   await page.click('a[href="#/profile"]');
   await page.waitForSelector('#plan-card');
-  // messages switch in Profile
+  await go('#/settings');
+  await page.waitForSelector('#push-toggle');
+  // messages switch in Settings
   check('Profile has the messages switch, on, with no list of what is sent', await page.locator('#push-toggle').isChecked() && (await page.locator('.switch-row', { has: page.locator('#push-toggle') }).innerText()).includes('הודעות מנוטרי') && !/\d\d:\d\d/.test(await page.locator('.switch-row', { has: page.locator('#push-toggle') }).innerText()));
   await page.locator('#push-toggle').evaluate((el) => el.click());
   await wait(600);
@@ -1195,6 +1212,8 @@ try {
   await page.click('#push-yes');
   await page.waitForSelector('#reminders-sheet', { state: 'detached' });
   check('turning it back on asks again and subscribes', [...pushKV._dump().keys()].filter((k) => k.startsWith('sub:')).length === 1);
+  await go('#/profile');
+  await page.waitForSelector('#account-card');
   check('without a cloud project the account card is shown as "coming soon"', (await page.locator('#account-card').innerText()).includes('בקרוב'));
   await page.click('#account-card #btn-google');
   await wait(300);
@@ -1224,7 +1243,7 @@ try {
   await page.waitForSelector('#paywall');
   check('the calorie camera is locked too', (await page.locator('.overlay.mc').count()) === 0 && (await page.locator('.paywall .lead').innerText()).includes('מצלמת הקלוריות'));
   await page.locator('.sheet .icon-btn[aria-label="סגירה"]').click();
-  await page.click('a[href="#/profile"]');
+  await go('#/weight');
   await page.click('#m-bf-estimate');
   await page.waitForSelector('#bf-consent');
   check('the body-fat estimate stays free', (await page.locator('#paywall').count()) === 0);
@@ -1305,7 +1324,7 @@ try {
   }
 
   // =============== delete all data ===============
-  await page.evaluate(() => { location.hash = '#/profile'; });
+  await page.evaluate(() => { location.hash = '#/settings'; });
   await page.waitForSelector('#btn-delete-all');
   await page.click('#btn-delete-all');
   check('delete requires typing a confirmation', await page.locator('#confirm-delete-btn').isDisabled());

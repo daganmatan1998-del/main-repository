@@ -2413,6 +2413,10 @@ export default {
     "You have every emblem.": "Tienes todos los emblemas.",
     "Add it above your profile picture from your profile.": "Agrégalo sobre tu foto de perfil desde tu perfil.",
     "This challenge has changed. Open it again to see the latest.": "Este desafío cambió. Ábrelo de nuevo para ver lo más reciente.",
+    "Profile menu": "Menú del perfil",
+    "Last: {0} kg · {1}": "Último: {0} kg · {1}",
+    "Details, preferences, language, notifications, privacy": "Datos, preferencias, idioma, notificaciones y privacidad",
+    "Back to the profile": "Volver al perfil",
   },
   data: {},
 };

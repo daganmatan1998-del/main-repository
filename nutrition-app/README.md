@@ -415,3 +415,7 @@ Six emblems (`www/img/emblems/1..6.webp`) are earned by the longest streak of da
 ### Challenge counting notes (v1.21)
 
 A day is counted only once the day after it has begun, so a friend who opens the app just after midnight cannot close the other player's last day before they could report it. The settling phone's day is stored in `nutri_challenges.final_day` so every screen shows the same scoreboard. Known limit: two phones whose local dates differ by a day (zones ~13 h apart) can still count a day a few hours early.
+
+## A shorter profile (v1.22)
+
+Profile is now a short menu: **Achievements** (`#/achievements`: icon picker, streaks, badges), **Update weight and body fat** (`#/weight`) and **Settings** (`#/settings`: personal details, current period, food preferences, Today cards, language, appearance, notifications, privacy, delete all). Account, friends, challenges and the plan stay on the profile. Each page has a back arrow to the profile.

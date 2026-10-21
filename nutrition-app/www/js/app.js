@@ -15,7 +15,7 @@ import { renderToday } from './screens/today.js';
 import { renderPlan } from './screens/plan.js';
 import { renderAssistant, queueSubstitution, queueAsk } from './screens/assistant.js';
 import { renderGallery } from './screens/gallery.js';
-import { renderProfile } from './screens/profile.js';
+import { renderProfile, renderAchievements, renderWeight, renderSettings } from './screens/profile.js';
 import { renderShopping } from './screens/shopping.js';
 import { applyTheme } from './theme.js';
 import { onInstallChange } from './install.js';
@@ -61,6 +61,10 @@ const ROUTES = {
   inbox: { render: renderInbox, tab: 'today' },
   u: { render: renderUserProfile, tab: 'profile' },
   challenge: { render: renderChallenge, tab: 'profile' },
+  // Pages opened from the profile menu; the profile tab stays highlighted.
+  achievements: { render: renderAchievements, tab: 'profile' },
+  weight: { render: renderWeight, tab: 'profile' },
+  settings: { render: renderSettings, tab: 'profile' },
   // Home-screen shortcut: #/quick/water adds a glass and opens Today.
   quick: { render: renderQuick, tab: 'today' },
 };

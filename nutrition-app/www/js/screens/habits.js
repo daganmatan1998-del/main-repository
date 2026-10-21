@@ -75,12 +75,12 @@ export async function checkBadges() {
     if (Object.keys(patch).length) await saveSettings(patch);
     for (const id of fresh) {
       const b = hb.BADGES.find((x) => x.id === id);
-      addMessage('badge-earned', { id: `badge-${id}`, args: [b.name], link: '#/profile' });
+      addMessage('badge-earned', { id: `badge-${id}`, args: [b.name], link: '#/achievements' });
       toast(tr('New badge: {0}', b.name));
     }
     for (const id of emblems) {
       const e = hb.emblemInfo(id);
-      addMessage('emblem-earned', { id: `emblem-${id}`, args: [e.name], link: '#/profile' });
+      addMessage('emblem-earned', { id: `emblem-${id}`, args: [e.name], link: '#/achievements' });
       toast(tr('New emblem: {0}', e.name));
     }
   } finally { checking = false; }
@@ -90,7 +90,7 @@ export async function checkBadges() {
 export function streakChip() {
   const n = hb.advanceRun(state.logs, state.settings, today()).runLen;
   if (n < 1) return null;
-  return h('a', { class: 'streak-chip', id: 'streak-chip', href: '#/profile', 'aria-label': tr('{0, plural, one {# day streak} other {# days streak}}', n) },
+  return h('a', { class: 'streak-chip', id: 'streak-chip', href: '#/achievements', 'aria-label': tr('{0, plural, one {# day streak} other {# days streak}}', n) },
     icon('flame', 16), h('b', { class: 'num' }, String(n)));
 }
 

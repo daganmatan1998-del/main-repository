@@ -2411,6 +2411,10 @@ export default {
     "You have every emblem.": "لديك جميع الأوسمة.",
     "Add it above your profile picture from your profile.": "أضفه فوق صورتك الشخصية من صفحة ملفك الشخصي.",
     "This challenge has changed. Open it again to see the latest.": "تغير هذا التحدي. افتحه مرة أخرى لرؤية آخر تحديث.",
+    "Profile menu": "قائمة الملف الشخصي",
+    "Last: {0} kg · {1}": "الأخير: {0} كجم · {1}",
+    "Details, preferences, language, notifications, privacy": "البيانات والتفضيلات واللغة والإشعارات والخصوصية",
+    "Back to the profile": "العودة إلى الملف الشخصي",
   },
   data: {},
 };

@@ -331,14 +331,19 @@ try {
   await A.page.click('a[href="#/profile"]');
   await A.page.waitForSelector('.profile-head');
   const order = await A.page.locator('.page-profile > *').evaluateAll((els) => els.slice(0, 3).map((e) => e.id || e.className));
-  check(`profile opens with the picture, then personal details, then the account (${order})`, order[0] === 'profile-head' && order[1] === 'details-card' && order[2] === 'account-card');
+  check(`profile opens with the picture, then the menu (achievements, weight, settings), then the account (${order})`, order[0] === 'profile-head' && order[1] === 'profile-menu' && order[2] === 'account-card');
+  check('the menu has three rows that open their own pages', (await A.page.locator('#profile-menu .menu-row').count()) === 3);
   check('no picture yet: the first letter stands in', (await A.page.locator('.profile-head .avatar').innerText()).trim() === 'מ');
 
-  // nickname
+  // nickname (personal details live under Settings)
+  await A.page.click('#menu-settings');
+  await A.page.waitForSelector('#btn-edit-details');
   await A.page.click('#btn-edit-details');
   await A.page.fill('#ed-nickname', 'מתנוש');
   await A.page.locator('.sheet .btn-primary').click();
   await wait(A.page, 400);
+  await A.page.click('#back-profile');
+  await A.page.waitForSelector('.profile-head');
   check('nickname shows as the profile title, the name under it', (await A.page.locator('.profile-head h1').innerText()) === 'מתנוש' && (await A.page.locator('.profile-id').innerText()).includes('מתן'));
 
   // profile picture from the gallery
@@ -472,13 +477,16 @@ try {
   await A.page.evaluate(async () => { const m = await import('/js/store.js'); await m.saveSettings({ bestStreak: 12 }); });
   await A.page.goto(`${BASE}/#/profile`);
   await A.page.reload();
+  await A.page.click('#menu-achievements');
   await A.page.waitForSelector('#emblem-card');
   check('a 12-day record has reached the first two emblems; the rest are locked', (await A.page.locator('#emblem-card .emblem-mini:not(.locked)').count()) === 2 && (await A.page.locator('#emblem-card .emblem-mini.locked').count()) === 4);
-  await A.page.click('#btn-add-icon');
+  await A.page.click('#btn-emblems');
   await A.page.waitForSelector('#emblem-grid');
   check('the picker lets you choose a reached emblem, not a locked one', !(await A.page.locator('.emblem-tile[data-emblem="2"]').isDisabled()) && await A.page.locator('.emblem-tile[data-emblem="3"]').isDisabled());
   await A.page.screenshot({ path: path.join(SHOTS, 'c16-emblems.png') });
   await A.page.click('.emblem-tile[data-emblem="2"]');
+  await A.page.waitForSelector('#emblem-card .emblem-mini.on[data-emblem="2"]');
+  await A.page.click('#back-profile');
   await A.page.waitForSelector('.profile-head .avatar-wrap[data-emblem="2"]');
   check('the chosen emblem sits on the profile picture', (await A.page.locator('.profile-head .emblem').count()) === 1);
   await until(() => (fake.profiles.find((x) => x.user_id === USER.id) || {}).level === 2);
@@ -588,6 +596,7 @@ try {
 
   // change on B, picked up by A
   await B.page.click('a[href="#/profile"]');
+  await B.page.click('#menu-settings');
   await B.page.click('#btn-edit-details');
   await B.page.fill('#ed-nickname', 'מתי');
   await B.page.locator('.sheet .btn-primary').click();
@@ -618,6 +627,7 @@ try {
 
   // ======== delete everything from A: device + cloud + account ========
   await A.page.click('a[href="#/profile"]');
+  await A.page.click('#menu-settings');
   await A.page.click('#btn-delete-all');
   check('delete warns it also closes the cloud account', (await A.page.locator('.sheet').innerText()).includes('מהחשבון בענן'));
   await A.page.fill('#confirm-delete', 'מחק');
