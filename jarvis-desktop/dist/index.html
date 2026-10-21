@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="jarvis-build" content="726f2b1c0381">
+<meta name="jarvis-build" content="34af810b8143">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>J.A.R.V.I.S.</title>
 
@@ -4918,6 +4918,7 @@ function stopJarvis(){
   speechQueue = []; // drop anything queued but not yet spoken
   if(typeof clearToolStatus === 'function') clearToolStatus();
   if(activeAudio){ try{ activeAudio.pause(); activeAudio.currentTime = 0; }catch(e){} activeAudio = null; }
+  if(activeWebSource){ try{ activeWebSource.stop(); }catch(e){} activeWebSource = null; }
   if(window.speechSynthesis) window.speechSynthesis.cancel();
   if(convRestartTimer){ clearTimeout(convRestartTimer); convRestartTimer = null; }
   isSpeaking = false;
@@ -5457,6 +5458,7 @@ function interruptSpeech(){
   if(!isSpeaking) return;
   speechQueue = [];
   if(activeAudio){ try{ activeAudio.pause(); activeAudio.currentTime = 0; }catch(e){} activeAudio = null; }
+  if(activeWebSource){ try{ activeWebSource.stop(); }catch(e){} activeWebSource = null; }
   if(window.speechSynthesis) window.speechSynthesis.cancel();
   isSpeaking = false;
   lastSpokeEndedAt = Date.now();
@@ -8474,7 +8476,48 @@ function sniffAudioType(u8){
   if(u8.length > 8 && u8[4] === 0x66 && u8[5] === 0x74 && u8[6] === 0x79 && u8[7] === 0x70) return 'audio/mp4';
   return '';
 }
+/* THE <audio> ELEMENT IS NOT THE ONLY WAY TO PLAY A CLIP (2.39.1).
+   In the desktop window (WebView2) the element refused the worker's voice with
+   NotSupportedError, so every spoken answer was silent: tasks still ran (you
+   see those happen) while a question, whose whole answer is the voice, seemed
+   to do nothing. The clip is now decoded by Web Audio and played from a buffer
+   when the element will not take it. Only if that fails too does the computer's
+   own voice speak, and the failure is written down where it can be seen. */
+async function playViaWebAudio(blob){
+  ensureAudioAnalyser();
+  if(!audioCtx) throw new Error('no audio system');
+  if(audioCtx.state !== 'running'){ try{ await Promise.race([audioCtx.resume(), new Promise(r => setTimeout(r, 1500))]); }catch(e){} }
+  if(audioCtx.state !== 'running') throw new Error('the audio system is locked');
+  const buf = await audioCtx.decodeAudioData(await blob.arrayBuffer());
+  await new Promise((resolve, reject) => {
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(voiceAnalyser || audioCtx.destination);
+    if(voiceAnalyser){ try{ voiceAnalyser.connect(audioCtx.destination); }catch(e){} }
+    let done = false;
+    const finish = (err) => { if(done) return; done = true; clearTimeout(guard); activeWebSource = null; if(err) reject(err); else resolve(); };
+    const guard = setTimeout(() => finish(null), Math.min(60000, (buf.duration + 3) * 1000));
+    src.onended = () => finish(null);
+    activeWebSource = src;
+    try{ src.start(0); }catch(err){ finish(err); }
+  });
+}
+var activeWebSource = null;   // var: stopJarvis() reads it
 async function playAudioBlob(blob){
+  try{
+    await playAudioElement(blob);
+  }catch(err){
+    if(userInterrupted) throw err;
+    try{
+      await playViaWebAudio(blob);
+      noteVoiceProblem('');   // it was heard: the element's refusal is no longer the current problem
+    }catch(err2){
+      noteVoiceProblem('the voice clip could not be played: ' + ((err && (err.name || err.message)) || err) + ' / ' + ((err2 && err2.message) || err2));
+      throw err;
+    }
+  }
+}
+async function playAudioElement(blob){
   try{
     const real = sniffAudioType(new Uint8Array(await blob.slice(0, 12).arrayBuffer()));
     if(real && real !== blob.type) blob = blob.slice(0, blob.size, real);
