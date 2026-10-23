@@ -5317,7 +5317,8 @@ struct RingbackSetup {
 impl RingbackSetup {
     fn read() -> RingbackSetup {
         let path = ringback_env_path();
-        let text = std::fs::read_to_string(&path).ok();
+        // Lossy: a file saved in another encoding then reads as "values missing", not "file missing".
+        let text = std::fs::read(&path).ok().map(|b| String::from_utf8_lossy(&b).into_owned());
         let found = text.is_some();
         let vars = text.as_deref().map(ringback::parse_env_file).unwrap_or_default();
         let missing = if found { ringback::missing_env(&vars) } else { ringback::REQUIRED_ENV.to_vec() };

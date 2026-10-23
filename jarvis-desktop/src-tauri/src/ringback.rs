@@ -336,6 +336,11 @@ impl Phone {
             }
         }
         if !self.running() {
+            // Only a new call may start the container; hanging up or talking with no
+            // call up would boot Docker just to be told there is nothing to do.
+            if tool != "call_start" {
+                return Err(CallError::new("no call is up"));
+            }
             self.client = Some(McpClient::start(make_cmd()).map_err(|m| CallError::new(&m))?);
         }
         let result = match self.client.as_mut() {
@@ -540,5 +545,19 @@ mod tests {
         assert!(status_why(true, false, &[], "C:\\x\\ringback.env").contains("ringback.env"));
         assert!(status_why(true, true, &["VOICE_SIP_PASS"], "e").contains("VOICE_SIP_PASS"));
         assert_eq!(status_why(true, true, &[], "e"), "");
+    }
+
+    #[test]
+    fn phone_does_not_start_docker_just_to_hang_up() {
+        let mut p = Phone::new(Duration::from_secs(1200));
+        for tool in ["call_end", "converse", "call_status", "get_conversation"] {
+            let e = p
+                .call(tool, serde_json::json!({}), Duration::from_secs(5), || {
+                    panic!("must not start for {tool}")
+                })
+                .unwrap_err();
+            assert!(e.message.contains("no call"), "{tool}: {e:?}");
+        }
+        assert!(!p.running());
     }
 }
