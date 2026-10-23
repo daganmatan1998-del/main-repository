@@ -5276,6 +5276,120 @@ fn list_processes(limit: Option<u32>) -> Result<String, String> {
     Ok(serde_json::json!({ "processes": list }).to_string())
 }
 
+/* ---------------------------------------------------------------------
+   PHONE CALLS (ringback). The voice server runs in Docker on this machine and
+   rings his phone; everything about talking to it lives in ringback.rs, which is
+   tested on its own. These three commands are the whole bridge to the page.
+   His SIP login sits in %APPDATA%\\JARVIS\\ringback.env and nowhere else: not
+   in the page's storage, not on the worker.
+--------------------------------------------------------------------- */
+struct RingbackState(std::sync::Mutex<ringback::Phone>);
+
+const RINGBACK_IMAGE: &str = "ghcr.io/mohitbadwal/ringback:latest";
+const RINGBACK_MAX_CALL_SECS: u64 = 20 * 60;
+
+fn ringback_env_path() -> std::path::PathBuf {
+    dirs_next::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("JARVIS")
+        .join("ringback.env")
+}
+
+/// No console window flashing up for a background `docker` on Windows.
+fn quiet(cmd: &mut std::process::Command) {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = cmd;
+}
+
+struct RingbackSetup {
+    path: std::path::PathBuf,
+    vars: std::collections::BTreeMap<String, String>,
+    docker: bool,
+    found: bool,
+    missing: Vec<&'static str>,
+}
+
+impl RingbackSetup {
+    fn read() -> RingbackSetup {
+        let path = ringback_env_path();
+        let text = std::fs::read_to_string(&path).ok();
+        let found = text.is_some();
+        let vars = text.as_deref().map(ringback::parse_env_file).unwrap_or_default();
+        let missing = if found { ringback::missing_env(&vars) } else { ringback::REQUIRED_ENV.to_vec() };
+        let mut probe = std::process::Command::new("docker");
+        probe
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        quiet(&mut probe);
+        let docker = probe.status().map(|s| s.success()).unwrap_or(false);
+        RingbackSetup { path, vars, docker, found, missing }
+    }
+
+    fn ready(&self) -> bool {
+        self.docker && self.found && self.missing.is_empty()
+    }
+
+    fn why(&self) -> String {
+        ringback::status_why(self.docker, self.found, &self.missing, &self.path.display().to_string())
+    }
+}
+
+#[tauri::command]
+fn ringback_status(state: tauri::State<'_, RingbackState>) -> serde_json::Value {
+    let setup = RingbackSetup::read();
+    let running = state.0.lock().map(|mut p| p.running()).unwrap_or(false);
+    serde_json::json!({
+        "ok": true,
+        "docker": setup.docker,
+        "env_path": setup.path.display().to_string(),
+        "env_found": setup.found,
+        "missing": setup.missing,
+        "running": running,
+        "ready": setup.ready(),
+        "why": setup.why(),
+    })
+}
+
+#[tauri::command]
+async fn ringback_call(app: tauri::AppHandle, tool: String, args: serde_json::Value) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let setup = RingbackSetup::read();
+        if !setup.ready() {
+            return serde_json::json!({ "ok": false, "error": "ringback is not set up", "tell_the_user": setup.why() });
+        }
+        let state = app.state::<RingbackState>();
+        let mut phone = state.0.lock().unwrap_or_else(|e| e.into_inner());
+        // call_start waits for him to pick up and converse waits for him to speak.
+        let timeout = std::time::Duration::from_secs(90);
+        let result = phone.call(&tool, args, timeout, || {
+            let mut cmd = std::process::Command::new("docker");
+            cmd.args(ringback::docker_args(RINGBACK_IMAGE, &setup.path, &setup.vars));
+            quiet(&mut cmd);
+            cmd
+        });
+        match result {
+            Ok(text) => serde_json::json!({ "ok": true, "text": text }),
+            Err(e) => serde_json::json!({ "ok": false, "error": e.message, "tell_the_user": e.tell_the_user }),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn ringback_stop(state: tauri::State<'_, RingbackState>) -> serde_json::Value {
+    if let Ok(mut p) = state.0.lock() {
+        p.stop();
+    }
+    serde_json::json!({ "ok": true })
+}
+
 fn main() {
     /* JARVIS TALKS WITHOUT A CLICK (2.30.1). WebView2 follows Chromium's
        autoplay rule: no sound from a page until someone has clicked it. A
@@ -5298,7 +5412,13 @@ fn main() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(RingbackState(std::sync::Mutex::new(ringback::Phone::new(
+            std::time::Duration::from_secs(RINGBACK_MAX_CALL_SECS),
+        ))))
         .invoke_handler(tauri::generate_handler![
+            ringback_status,
+            ringback_call,
+            ringback_stop,
             close_foreground_window,
             close_window_named,
             close_browser_tab,
@@ -5540,6 +5660,16 @@ fn main() {
                 let _ = window.hide();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running JARVIS");
+        .build(tauri::generate_context!())
+        .expect("error while building JARVIS")
+        .run(|app, event| {
+            /* His phone line goes down with the app: the docker child ends with its stdin. */
+            if let tauri::RunEvent::Exit = event {
+                if let Some(state) = app.try_state::<RingbackState>() {
+                    if let Ok(mut p) = state.0.lock() {
+                        p.stop();
+                    }
+                }
+            }
+        });
 }

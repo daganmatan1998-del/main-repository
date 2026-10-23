@@ -238,6 +238,120 @@ impl Drop for McpClient {
     }
 }
 
+/// Why a call could not go ahead. `tell_the_user` is a plain sentence JARVIS may say.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CallError {
+    pub message: String,
+    pub tell_the_user: Option<String>,
+}
+
+impl CallError {
+    fn new(message: &str) -> CallError {
+        CallError {
+            message: message.to_string(),
+            tell_the_user: None,
+        }
+    }
+}
+
+/// One plain sentence naming the first thing standing between him and a call;
+/// empty when everything is in place.
+pub fn status_why(docker: bool, env_found: bool, missing: &[&str], env_path: &str) -> String {
+    if !docker {
+        "Docker is not installed or not on the PATH. Install Docker Desktop and start it."
+            .to_string()
+    } else if !env_found {
+        format!("The ringback settings file does not exist yet: {env_path}")
+    } else if !missing.is_empty() {
+        format!(
+            "These are still missing in ringback.env: {}.",
+            missing.join(", ")
+        )
+    } else {
+        String::new()
+    }
+}
+
+/// The phone line: at most one ringback process, started on first use, dropped when
+/// the call ends, when anything goes wrong, or when the call outlives `max_call`.
+pub struct Phone {
+    client: Option<McpClient>,
+    call_started: Option<Instant>,
+    max_call: Duration,
+}
+
+impl Phone {
+    pub fn new(max_call: Duration) -> Phone {
+        Phone {
+            client: None,
+            call_started: None,
+            max_call,
+        }
+    }
+
+    pub fn running(&mut self) -> bool {
+        let alive = match self.client.as_mut() {
+            Some(c) => c.is_alive(),
+            None => return false,
+        };
+        if !alive {
+            self.drop_client();
+        }
+        alive
+    }
+
+    pub fn stop(&mut self) {
+        self.drop_client();
+    }
+
+    fn drop_client(&mut self) {
+        if let Some(mut c) = self.client.take() {
+            c.stop();
+        }
+        self.call_started = None;
+    }
+
+    /// Runs one ringback tool. `make_cmd` builds the process, and is only called
+    /// when no live one exists.
+    pub fn call(
+        &mut self,
+        tool: &str,
+        args: Value,
+        timeout: Duration,
+        make_cmd: impl FnOnce() -> Command,
+    ) -> Result<String, CallError> {
+        if !tool_allowed(tool) {
+            return Err(CallError::new("that ringback tool is not allowed"));
+        }
+        if let Some(t0) = self.call_started {
+            if t0.elapsed() > self.max_call {
+                self.drop_client();
+                return Err(CallError {
+                    message: "call time limit reached".to_string(),
+                    tell_the_user: Some(format!(
+                        "The call reached its {} minute limit and was ended.",
+                        self.max_call.as_secs() / 60
+                    )),
+                });
+            }
+        }
+        if !self.running() {
+            self.client = Some(McpClient::start(make_cmd()).map_err(|m| CallError::new(&m))?);
+        }
+        let result = match self.client.as_mut() {
+            Some(c) => c.call_tool(tool, args, timeout),
+            None => Err("ringback is not running".to_string()),
+        };
+        match &result {
+            Ok(_) if tool == "call_start" => self.call_started = Some(Instant::now()),
+            Ok(_) if tool == "call_end" => self.drop_client(),
+            Ok(_) => {}
+            Err(_) => self.drop_client(),
+        }
+        result.map_err(|m| CallError::new(&m))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,5 +457,88 @@ mod tests {
             "{t:?}"
         );
         hung.stop();
+    }
+
+    #[test]
+    fn phone_refuses_unlisted_tool_without_starting_anything() {
+        let mut p = Phone::new(Duration::from_secs(1200));
+        let r = p.call(
+            "speak",
+            serde_json::json!({}),
+            Duration::from_secs(5),
+            || panic!("must not start"),
+        );
+        assert!(r.is_err());
+        assert!(!p.running());
+    }
+
+    #[test]
+    fn phone_starts_lazily_and_ends_on_call_end() {
+        let mut p = Phone::new(Duration::from_secs(1200));
+        assert!(!p.running());
+        let r = p.call(
+            "call_start",
+            serde_json::json!({"opening_line": "hi"}),
+            Duration::from_secs(5),
+            || fake(&[]),
+        );
+        assert_eq!(r.ok(), Some("hello hi".to_string()));
+        assert!(p.running());
+        let _ = p.call(
+            "call_end",
+            serde_json::json!({}),
+            Duration::from_secs(5),
+            || panic!("already running"),
+        );
+        assert!(!p.running());
+    }
+
+    #[test]
+    fn phone_cap_ends_a_long_call() {
+        let mut p = Phone::new(Duration::from_millis(50));
+        p.call(
+            "call_start",
+            serde_json::json!({"opening_line": "x"}),
+            Duration::from_secs(5),
+            || fake(&[]),
+        )
+        .unwrap();
+        std::thread::sleep(Duration::from_millis(120));
+        let e = p
+            .call(
+                "converse",
+                serde_json::json!({"text": "y"}),
+                Duration::from_secs(5),
+                || panic!("no restart"),
+            )
+            .unwrap_err();
+        assert!(
+            e.tell_the_user.as_deref().unwrap_or("").contains("limit"),
+            "{e:?}"
+        );
+        assert!(!p.running());
+    }
+
+    #[test]
+    fn phone_drops_the_client_after_an_error() {
+        let mut p = Phone::new(Duration::from_secs(1200));
+        let e = p
+            .call(
+                "call_start",
+                serde_json::json!({}),
+                Duration::from_secs(5),
+                || fake(&["--exit-after-init"]),
+            )
+            .unwrap_err();
+        assert!(e.message.contains("ended"), "{e:?}");
+        assert!(!p.running());
+    }
+
+    #[test]
+    fn status_why_names_the_first_thing_missing() {
+        assert!(status_why(false, true, &[], "e").contains("Docker"));
+        assert!(status_why(true, false, &[], "C:\\x\\ringback.env").contains("ringback.env"));
+        assert!(status_why(true, true, &["VOICE_SIP_PASS"], "e").contains("VOICE_SIP_PASS"));
+        assert_eq!(status_why(true, true, &[], "e"), "");
     }
 }
