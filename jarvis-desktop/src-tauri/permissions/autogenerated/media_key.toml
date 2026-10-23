@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-media-key"
+description = "Enables the media_key command without any pre-configured scope."
+commands.allow = ["media_key"]
+
+[[permission]]
+identifier = "deny-media-key"
+description = "Denies the media_key command without any pre-configured scope."
+commands.deny = ["media_key"]

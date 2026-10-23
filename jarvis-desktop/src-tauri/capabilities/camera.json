@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "camera",
   "description": "The camera window, and nothing else. It needs to read and set its own position and size, because it remembers where he put it, and it needs events to hand frames to the orb. No opener, no shell, no filesystem: it films and it reports, and that is the whole of it.",
-  "windows": ["camera"],
+  "windows": [
+    "camera"
+  ],
   "permissions": [
     "core:default",
     "core:event:allow-emit",
@@ -16,6 +18,7 @@
     "core:window:allow-start-dragging",
     "core:window:allow-close",
     "core:window:allow-set-fullscreen",
-    "core:window:allow-is-fullscreen"
+    "core:window:allow-is-fullscreen",
+    "jarvis-commands"
   ]
 }

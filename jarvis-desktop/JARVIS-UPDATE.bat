@@ -1,5 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
+set "NEWBAT="
 title JARVIS - update
 color 0B
 
@@ -19,7 +20,7 @@ set "STAGE=%USERPROFILE%\jarvis-update-tmp"
 set "ZIP=%STAGE%\latest.zip"
 set "UNPACK=%STAGE%\unpacked"
 set "FALLBACK=%USERPROFILE%\Downloads\jarvis-desktop.zip"
-set "SOURCE=https://github.com/daganmatan1998-del/Glowpulse-pro/archive/refs/heads/claude/file-download-0u216w.zip"
+set "SOURCE=https://github.com/daganmatan1998-del/main-repository/archive/refs/heads/claude/fervent-babbage-rb24r6.zip"
 
 REM ------------------------------------------------------------
 echo.
@@ -28,29 +29,54 @@ echo    JARVIS UPDATE
 echo  ============================================
 echo.
 echo   project : %PROJECT%
-echo   source  : github
+echo   source  : the newest zip in Downloads, else github
 echo.
 
-REM --- 1. fetch the latest version ------------------------------
-REM     Downloaded here rather than by hand. Nothing to click, and
-REM     no way to update from a zip that has been sitting in the
-REM     Downloads folder for a fortnight.
+REM --- 1. which version: the zip Claude sent, or github ---------
+REM     The zip Claude sends lands in Downloads. The newest one there
+REM     is used if it has not been installed yet (its date is kept in
+REM     .jarvis-last-zip in the project once it built). Otherwise the
+REM     latest version is downloaded from github. Before this, github
+REM     always won - and it pointed at an old branch, so every update
+REM     quietly put the OLD version back.
+set "LOCALZIP="
+set "LOCALDATE="
+for /f "delims=" %%Z in ('dir /B /O-D "%USERPROFILE%\Downloads\jarvis-desktop*.zip" 2^>nul') do (
+  if not defined LOCALZIP set "LOCALZIP=%USERPROFILE%\Downloads\%%Z"
+)
+if defined LOCALZIP for %%Z in ("!LOCALZIP!") do set "LOCALDATE=%%~tZ"
+set "LASTLOCAL="
+if exist "%PROJECT%\.jarvis-last-zip" set /p LASTLOCAL=<"%PROJECT%\.jarvis-last-zip"
 if exist "%STAGE%" rmdir /S /Q "%STAGE%"
 mkdir "%STAGE%"
-echo  [1/8] downloading the latest version...
-curl -sSL --fail -o "%ZIP%" "%SOURCE%"
-if errorlevel 1 (
-  echo        github did not answer - trying PowerShell...
-  powershell -NoProfile -Command "try{ Invoke-WebRequest -Uri '%SOURCE%' -OutFile '%ZIP%' -UseBasicParsing } catch { exit 1 }"
+set "FROMLOCAL="
+if defined LOCALZIP if not "!LOCALDATE!"=="!LASTLOCAL!" (
+  echo  [1/8] using the zip from your Downloads:
+  echo        !LOCALZIP!
+  echo        saved !LOCALDATE!
+  copy /Y "!LOCALZIP!" "%ZIP%" >nul
+  set "FROMLOCAL=1"
 )
-REM  curl can leave a short or empty file behind when it gives up, and
-REM  "the file exists" would then be true of something unusable.
+if not defined FROMLOCAL (
+  echo  [1/8] no new zip in Downloads - downloading the latest from github...
+  curl -sSL --fail -o "%ZIP%" "%SOURCE%"
+  if errorlevel 1 (
+    echo        github did not answer - trying PowerShell...
+    powershell -NoProfile -Command "try{ Invoke-WebRequest -Uri '%SOURCE%' -OutFile '%ZIP%' -UseBasicParsing } catch { exit 1 }"
+  )
+)
+REM  curl can leave a short or empty file behind when it gives up.
 if exist "%ZIP%" for %%Z in ("%ZIP%") do if %%~zZ LSS 100000 del /Q "%ZIP%"
 if not exist "%ZIP%" (
-  REM  No internet, or the address moved. A zip sent by hand still works.
-  if exist "%FALLBACK%" (
-    echo        could not download - using the zip in your Downloads instead.
-    copy /Y "%FALLBACK%" "%ZIP%" >nul
+  if defined LOCALZIP (
+    echo.
+    echo  WARNING - could not download from github. The newest zip in
+    echo      Downloads is !LOCALZIP!  ^(saved !LOCALDATE!^)
+    echo      and it is already installed. Press any key to install it
+    echo      again anyway, or close this window.
+    pause >nul
+    copy /Y "!LOCALZIP!" "%ZIP%" >nul
+    set "FROMLOCAL=1"
   ) else (
     echo  [X] STOP - could not download, and no zip in Downloads either.
     echo.
@@ -127,14 +153,49 @@ if not exist "!SRC!\dist\index.html" (
   goto :fail
 )
 
+REM  Which version this is, and whether it is any different from the one
+REM  already installed. A github zip stamps every file with the time of its
+REM  commit, so the date below is the date of the version itself.
+for %%F in ("!SRC!\dist\index.html") do set "NEWDATE=%%~tF"
+set "OLDDATE=nothing installed yet"
+if exist "%PROJECT%\dist\index.html" for %%F in ("%PROJECT%\dist\index.html") do set "OLDDATE=%%~tF"
+echo.
+echo   installed version : !OLDDATE!
+echo   this version      : !NEWDATE!
+set "SAMEPAGE="
+if exist "%PROJECT%\dist\index.html" (
+  fc /B "!SRC!\dist\index.html" "%PROJECT%\dist\index.html" >nul 2>&1
+  if not errorlevel 1 set "SAMEPAGE=1"
+)
+if defined SAMEPAGE (
+  echo   ^(the page is identical to what you already have - nothing new in it^)
+)
+echo.
+
+REM  The newest copy of THIS script, kept aside so it can replace itself at
+REM  the very end. Without that, a fix to the updater itself never reaches
+REM  the copy he actually runs, which is exactly how an old one gets stuck.
+set "NEWBAT="
+if exist "!SRC!\JARVIS-UPDATE.bat" (
+  fc /B "!SRC!\JARVIS-UPDATE.bat" "%~f0" >nul 2>&1
+  if errorlevel 1 (
+    copy /Y "!SRC!\JARVIS-UPDATE.bat" "%TEMP%\jarvis-update-new.bat" >nul 2>&1
+    if not errorlevel 1 set "NEWBAT=%TEMP%\jarvis-update-new.bat"
+  )
+)
+
 REM --- 6. copy EVERYTHING except the things that must survive --
 REM     target/ is the build cache - deleting it turns a
 REM     3 minute build into a 30 minute one.
 REM     node_modules/ is installed, not shipped.
 echo  [4/8] copying the new files...
 echo.
+REM     JARVIS-UPDATE.bat is left out on purpose: cmd reads a running
+REM     script from disk line by line, so overwriting it mid-run makes it
+REM     carry on from the wrong place in the new file. It is replaced at
+REM     the very end instead, where that cannot happen.
 robocopy "!SRC!" "%PROJECT%" /E /NFL /NDL /NJH /NJS /NP ^
-  /XD "node_modules" "target" "gen" ".git" >nul
+  /XD "node_modules" "target" "gen" ".git" /XF "JARVIS-UPDATE.bat" >nul
 if errorlevel 8 (
   echo  [X] STOP - copying failed.
   goto :fail
@@ -240,6 +301,8 @@ for /f "delims=" %%W in ('dir /S /B "%UNPACK%\jarvis-worker.js" 2^>nul') do (
 )
 
 REM --- 12. clean up and go -------------------------------------
+REM     The zip from Downloads is now installed: next time, only a newer one counts.
+if defined FROMLOCAL >"%PROJECT%\.jarvis-last-zip" echo(!LOCALDATE!
 if exist "%STAGE%" rmdir /S /Q "%STAGE%"
 
 echo.
@@ -260,6 +323,15 @@ echo   it starts hidden on purpose.
 echo.
 start "" "%EXE%"
 timeout /t 8 >nul
+REM  One block: cmd reads all of it before running any of it, so replacing
+REM  the file it came from cannot derail what comes after.
+if defined NEWBAT (
+  echo   JARVIS-UPDATE.bat updated itself too.
+  copy /Y "%NEWBAT%" "%~f0" >nul 2>&1
+  copy /Y "%NEWBAT%" "%PROJECT%\JARVIS-UPDATE.bat" >nul 2>&1
+  del /Q "%NEWBAT%" >nul 2>&1
+  exit /b 0
+)
 exit /b 0
 
 :fail
@@ -269,4 +341,11 @@ echo    STOPPED. Nothing was started.
 echo  ============================================
 echo.
 pause
+REM  Even a failed run takes the newer updater with it, in case the fix for
+REM  whatever just failed is in the updater itself.
+if defined NEWBAT (
+  copy /Y "%NEWBAT%" "%~f0" >nul 2>&1
+  del /Q "%NEWBAT%" >nul 2>&1
+  exit /b 1
+)
 exit /b 1

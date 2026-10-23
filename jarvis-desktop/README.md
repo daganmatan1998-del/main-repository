@@ -192,3 +192,48 @@ command to turn it into.
 Tauri fails silently on a missing permission: the frontend call does nothing
 and the Rust never runs. If something you add appears dead, check
 `capabilities/default.json` first — that is almost always the reason.
+
+## Projects, tasks and approvals (2.37.0)
+
+- **Authorized projects** (`src-tauri/src/projects.rs`). He adds a folder with
+  the folder picker; nothing else can add one. Inside it JARVIS can index,
+  search, read, find a symbol, list recent changes, write files (each
+  overwrite first saved to `%APPDATA%\jarvis\backups\<project>\<time>\`, and
+  refused as a conflict if the file changed since it was read), restore,
+  run git read commands, `add`/`commit` only after an on-screen approval,
+  and run the project's own commands detected from `package.json`, Cargo or
+  pytest. Test/lint/build/check commands run on their own; any other script
+  needs approval. Nothing runs from a shell string. Every action is written
+  to `%APPDATA%\jarvis\audit.log` (paths and command names, no contents).
+- **Tasks**. `start_task` hands a goal to an orchestrator that plans
+  steps for five roles (research, coding, computer, visual, qa). It runs
+  independent steps in parallel (two at a time), retries a failed step
+  once, adds an independent QA step when anything was changed, and posts
+  one report. Pause, resume, cancel, answer and priority work through
+  `task_control` or the task panel. Budgets are in localStorage
+  `jarvis:taskLimits`: model calls per task (40) and per day (400), 8 steps,
+  8 rounds per step, 4 minutes per step and 30 minutes per task. A task
+  interrupted by a restart comes back paused, with its finished steps kept.
+- **Local approvals**. A high-risk action stops on a card on this screen.
+  He approves by clicking, or by saying "approve"/"deny" while holding the
+  talk key. If he doesn't answer within 10 minutes, the action is denied.
+- **Video**. Dropped videos are scanned locally at low resolution for scene
+  changes. One keyframe per scene (at most 8) is sent, with timestamps.
+
+The worker needs no change for any of this: tasks call the same `POST /`
+the agents already use.
+
+## System diagnostics (2.38.0)
+
+"Jarvis, check yourself" (full) and "Jarvis, run a quick test" (quick) open a
+full-screen diagnostic in the app's own look. Every row is the result of a real,
+read-only test (worker health and session, a real model reply, voice synthesis
+and a speech-recognition loop on the synthesised audio, search, database, Shopify,
+calendar and 3D reads, desktop tools, an agent run, image analysis, video scene
+detection, project access and the file-access limits, interface responsiveness).
+Failures are told apart (auth, quota, service, network, timeout); a test whose
+prerequisite failed is BLOCKED, not FAIL; anything without a safe test (sending
+messages, reading mail, live microphone/camera) is NOT TESTED. Health is
+weighted by criticality: one failed critical test makes the system CRITICAL
+however many minor ones pass. Cancel with the button, Esc or "cancel".
+No worker or Rust change: it is page-only.

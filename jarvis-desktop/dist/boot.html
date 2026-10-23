@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>JARVIS</title>
+<style>html,body{margin:0;background:transparent;overflow:hidden}</style>
+</head>
+<body>
+<script>
+/* THE APP RUNS THE SITE, NOT A COPY OF IT.
+   The orb's page lives on Cloudflare. Every time the app opens (and every
+   Refresh JARVIS) it goes there, so whatever was last deployed is what runs -
+   no rebuild, no update script. This page only decides where to go:
+
+   - the site answers  -> load it. The probe uses cache:'reload', which also
+     overwrites any copy WebView2 has cached, so a new deploy is never hidden
+     behind yesterday's page.
+   - no internet, or Cloudflare does not answer in time -> the copy bundled
+     inside the app (index.html next to this file), so he still has JARVIS.
+
+   Change SITE here and SITE_URL in src-tauri/src/main.rs together. */
+(function(){
+  var SITE = 'https://jarvis-main-version.daganmatan1998.workers.dev/';
+  var done = false;
+  function go(url){ if(done) return; done = true; location.replace(url); }
+  var timer = setTimeout(function(){ go('index.html'); }, 8000);
+  fetch(SITE, { mode: 'no-cors', cache: 'reload' })
+    .then(function(){ clearTimeout(timer); go(SITE); })
+    .catch(function(){ clearTimeout(timer); go('index.html'); });
+})();
+</script>
+</body>
+</html>

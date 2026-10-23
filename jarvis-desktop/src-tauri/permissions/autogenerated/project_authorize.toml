@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-project-authorize"
+description = "Enables the project_authorize command without any pre-configured scope."
+commands.allow = ["project_authorize"]
+
+[[permission]]
+identifier = "deny-project-authorize"
+description = "Denies the project_authorize command without any pre-configured scope."
+commands.deny = ["project_authorize"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-camera-window-open"
+description = "Enables the camera_window_open command without any pre-configured scope."
+commands.allow = ["camera_window_open"]
+
+[[permission]]
+identifier = "deny-camera-window-open"
+description = "Denies the camera_window_open command without any pre-configured scope."
+commands.deny = ["camera_window_open"]

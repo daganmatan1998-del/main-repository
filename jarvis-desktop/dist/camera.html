@@ -35,6 +35,17 @@
     object-fit:cover; background:#000; display:block;
   }
   #feed.mirrored{ transform:scaleX(-1); }
+  #stage{ position:relative; flex:1 1 auto; min-height:0; }
+  #stage #feed{ position:absolute; inset:0; width:100%; height:100%; }
+  /* Gesture zoom's overlay: the two pinch points and the line between them,
+     over the picture and mirrored with it. Never takes a click. */
+  #gz{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  #gz.mirrored{ transform:scaleX(-1); }
+  /* The web shooters (2.25.0, webshooter.js): the model on his wrists (WebGL)
+     and the webs (2D), over the picture, mirrored with it, never a click. */
+  #ws3d, #wsfx{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:none; }
+  #ws3d.on, #wsfx.on{ display:block; }
+  #ws3d.mirrored, #wsfx.mirrored{ transform:scaleX(-1); }
   #bar{
     flex:0 0 auto; display:flex; align-items:center; gap:10px;
     padding:6px 10px; background:rgba(4,12,20,0.94);
@@ -60,11 +71,16 @@
     letter-spacing:0.6px; text-transform:none; background:var(--ink);
   }
   #err.show{ display:grid; }
+  #err div{ white-space:pre-line; }
+  #err #retry{ justify-self:center; margin-top:14px; padding:5px 14px; }
 </style>
 </head>
 <body>
 <div id="wrap">
-  <video id="feed" autoplay playsinline muted></video>
+  <div id="stage">
+    <video id="feed" autoplay playsinline muted></video>
+    <canvas id="gz" class="mirrored"></canvas>
+  </div>
   <div id="bar">
     <span id="dot"></span>
     <span id="state">starting…</span>
@@ -73,6 +89,10 @@
 </div>
 <div id="err"></div>
 
+<!-- Hand tracking, vendored (see vendor/mediapipe/README.txt), and the
+     gesture zoom built on it. Both load here and nowhere else. -->
+<script src="./vendor/mediapipe/vision_bundle.js"></script>
+<script src="./gesture-zoom.js"></script>
 <script>
 (function(){
   "use strict";
@@ -84,10 +104,211 @@
   var errBox = document.getElementById('err');
   var stream = null, timer = null, mirrored = true;
 
+  /* GESTURE ZOOM (gesture-zoom.js). Two hands, thumb and index pinched on
+     each, stretched apart to zoom in and brought together to zoom out —
+     whatever program is in front. One hand pinched (precise control, 2.12.0)
+     turns JARVIS's 3D model, and only that. It runs here because this is the one
+     window that has the camera. Settings come from the orb: saved where
+     both windows can read them, and pushed live when they change. */
+  var GZ = window.JarvisGestureZoom;
+  var gzOverlay = document.getElementById('gz');
+  var gz = null, gzNote = '', liveText = '', perfNote = '';
+  function gzSettings(){
+    try{ return JSON.parse(localStorage.getItem(GZ.STORE_KEY) || 'null'); }catch(e){ return null; }
+  }
+  function showState(){
+    if(liveText) say(liveText + (perfNote ? ' · ' + perfNote : '') + (gzNote ? ' · ' + gzNote : ''), true);
+  }
+  function gzStart(){
+    if(!GZ || gz) return;
+    var saved = gzSettings() || {};
+    gz = GZ.startGestureZoom({
+      video: feed, overlay: gzOverlay, settings: saved,
+      /* GPU first, CPU if the GPU path is slow; 'CPU' in the saved settings
+         forces it, for a machine whose GPU path misbehaves. */
+      delegate: saved.delegate === 'CPU' ? 'CPU' : undefined,
+      invoke: function(cmd, args){
+        return (T.core && T.core.invoke) ? T.core.invoke(cmd, args) : Promise.reject(new Error('no desktop bridge'));
+      },
+      emit: emit,
+      /* Precise control (2.12.0) asks whether a 3D model is open, and the
+         viewer answers on jarvis://model-pong. */
+      listen: ev.listen ? function(name, fn){ return ev.listen(name, fn); } : null,
+      /* For the recording: which camera, what it can be set to. */
+      trackInfo: function(){
+        var tr = stream && stream.getVideoTracks && stream.getVideoTracks()[0];
+        if(!tr) return null;
+        var caps = null; try{ caps = tr.getCapabilities ? tr.getCapabilities() : null; }catch(e){}
+        return { label: tr.label || '', settings: tr.getSettings ? tr.getSettings() : null, capabilities: caps };
+      },
+      onStatus: function(s){
+        /* What the camera and the tracker really do (measured each second):
+           pictures a second, a read in ms, how old a picture is. A camera
+           that gives fewer than 24 a second is the first thing to fix. */
+        if(s.kind === 'perf'){
+          liveText = liveText.replace(/ · \d+ fps/, '');          // the camera's setting; the measured rate replaces it
+          perfNote = (s.delegate ? s.delegate + ' · ' : '') + Math.round(s.camFps) + ' fps' + (s.camFps < 24 ? ' LOW' : '') + ' · ' + Math.round(s.inferMs || 0) + ' ms' +
+                     (s.lateMs != null ? ' · late ' + Math.round(s.lateMs) + ' ms' : '') +
+                     (s.resting ? ' · resting' : '');   // 2.22.0: no hand in view, reading ~8 a second
+          showState(); emit('jarvis://gesture-status', s); return;
+        }
+        if(wsOn){ /* the web shooters' line stays while they are on */ }
+        else if(s.kind === 'ready') gzNote = '✋ zoom';
+        else if(s.kind === 'foreground') gzNote = '✋ zoom' + (s.supported && s.name ? ' · ' + s.name : '');
+        else if(s.kind === 'failed') gzNote = 'no hand tracking';
+        showState();
+        emit('jarvis://gesture-status', s);
+      }
+    });
+    gz.start();
+    window.__gz = gz;   // for the tests: stats() and the live gesture state
+    if(wsOn && WS) gz.setFilter(WS.update);
+  }
+
+  /* THE WEB SHOOTERS (2.25.0). The orb asks on jarvis://filter; three.js,
+     its two add-ons and the model load here the first time only. While they
+     are on, the hands go to them and the camera controls nothing. */
+  var WS = null, wsLoading = null, wsOn = false;
+  function loadScript(src){
+    return new Promise(function(res, rej){
+      var s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = function(){ rej(new Error('could not load ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+  function ensureWebShooter(){
+    if(WS) return Promise.resolve(WS);
+    if(!wsLoading){
+      wsLoading = (window.THREE ? Promise.resolve() : loadScript('./vendor/three/build/three.min.js'))
+        .then(function(){ return window.THREE.GLTFLoader ? null : loadScript('./vendor/three/examples/js/loaders/GLTFLoader.js'); })
+        .then(function(){ return window.THREE.RoomEnvironment ? null : loadScript('./vendor/three/examples/js/environments/RoomEnvironment.js'); })
+        .then(function(){ return window.JarvisWebShooter ? null : loadScript('./webshooter.js'); })
+        .then(function(){
+          var saved = gzSettings() || {};
+          var ws = window.JarvisWebShooter.create({
+            stage: document.getElementById('stage'), video: feed,
+            mirrored: function(){ return mirrored; },
+            onShot: function(info){ emit('jarvis://web-shot', info); },
+            /* The forearm (2.26.0): the pose model, on the same path (GPU or
+               CPU) the hand tracker settled on. */
+            poseModel: './vendor/mediapipe/pose_landmarker_lite.task', wasmBase: './vendor/mediapipe/wasm',
+            delegate: (gz && gz.stats().delegate === 'CPU') || saved.delegate === 'CPU' ? 'CPU' : undefined,
+            onStatus: function(r){ if(wsOn){ gzNote = wsNote(r); showState(); } }
+          });
+          return ws.load('./filters/ws-01-web-shooter.glb').then(function(){ WS = ws; window.__ws = ws; return ws; });
+        })
+        .catch(function(e){ wsLoading = null; throw e; });
+    }
+    return wsLoading;
+  }
+  /* The learning line (2.26.0): per arm, where the forearm comes from (the
+     pose, its own pixels, or only the hand) and how bent the wrist is, the
+     trigger's two fingers in degrees, and the valve. */
+  function wsNote(r){
+    var parts = ((r && r.hands) || []).map(function(h){
+      return h.side + ': forearm ' + h.forearm + (h.bendDeg ? ' ' + h.bendDeg + '\u00b0' : '') +
+             ' \u00b7 trigger ' + (h.middle == null ? '-' : h.middle + '\u00b0/' + h.ring + '\u00b0') +
+             ' \u00b7 ' + (h.valve === 'open' ? 'FLOW ' + Number(h.flowS || 0).toFixed(1) + ' s' : 'closed');
+    });
+    return '\ud83d\udd78 WS-01' + (parts.length ? ' \u00b7 ' + parts.join(' | ') : ' \u00b7 no hand');
+  }
+  function webShooters(on){
+    if(!on){
+      wsOn = false;
+      if(WS) WS.show(false);
+      if(gz) gz.setFilter(null);
+      if(/WEB SHOOTERS/.test(gzNote)) gzNote = '';
+      showState();
+      emit('jarvis://filter-status', { name: 'web_shooter', on: false });
+      return;
+    }
+    ensureWebShooter().then(function(ws){
+      wsOn = true;
+      ws.setMirrored(mirrored);
+      ws.show(true);
+      if(gz) gz.setFilter(ws.update);
+      gzNote = '\ud83d\udd78 WEB SHOOTERS';
+      showState();
+      emit('jarvis://filter-status', { name: 'web_shooter', on: true, tracking: !!gz });
+    }, function(err){
+      emit('jarvis://filter-status', { name: 'web_shooter', on: false, error: String((err && err.message) || err) });
+    });
+  }
+  if(ev.listen) ev.listen('jarvis://filter', function(e){
+    var p = (e && e.payload) || {};
+    if(p.name !== 'web_shooter') return;
+    /* Asked again while already so (the orb repeats until it hears back):
+       answered, not redone. */
+    if(!!p.on === wsOn && (!p.on || WS)){ emit('jarvis://filter-status', { name: 'web_shooter', on: wsOn, tracking: !!gz }); return; }
+    webShooters(!!p.on);
+  });
+  if(ev.listen) ev.listen('jarvis://gesture-settings', function(e){
+    var s = e && e.payload;
+    if(!s || typeof s !== 'object') return;
+    if(!gz){ if(s.enabled !== false){ try{ localStorage.setItem(GZ.STORE_KEY, JSON.stringify(s)); }catch(err){} gzStart(); } return; }
+    gz.configure(s);
+    if(s.enabled === false){ gzNote = ''; showState(); }
+  });
+
+  /* THE TRACKING RECORDING (2.20.0): the orb's GESTURES tab asks for half a
+     minute of what the hand tracker sees; it is saved as a file in
+     JARVIS\Tracking, which he can send to be studied. */
+  if(ev.listen) ev.listen('jarvis://gesture-record', function(e){
+    var secs = Number(e && e.payload && e.payload.seconds) || 30;
+    if(!gz){ emit('jarvis://gesture-status', { kind: 'record-failed', reason: 'hand tracking is not running' }); return; }
+    gz.record(secs).then(function(res){
+      if(!res){ emit('jarvis://gesture-status', { kind: 'record-failed', reason: 'it is already recording, or tracking is off' }); return; }
+      var d = new Date(), p2 = function(n){ return (n < 10 ? '0' : '') + n; };
+      var name = 'tracking-' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '-' + p2(d.getHours()) + p2(d.getMinutes()) + p2(d.getSeconds());
+      if(!(T.core && T.core.invoke)){ emit('jarvis://gesture-status', { kind: 'record-failed', reason: 'no desktop bridge' }); return; }
+      T.core.invoke('save_trace_file', { name: name, text: res.text }).then(function(r){
+        emit('jarvis://gesture-status', { kind: 'recorded', path: r && r.path, bytes: r && r.bytes, summary: res.summary });
+      }, function(err){
+        emit('jarvis://gesture-status', { kind: 'record-failed', reason: String((err && err.message) || err) });
+      });
+    });
+  });
+
   /* How often a frame is handed to the orb. Fast enough that "look at
      this" never shows something stale, slow enough to be free. */
-  var PUSH_MS = 600;
+  var PUSH_MS = 400;
   var MAX_W   = 768;
+
+  /* THE FRAME THAT GOT A CONTROLLER CALLED A WATER BOTTLE.
+
+     pushFrame ran the instant getUserMedia resolved, before the sensor
+     had done anything with the light it was pointed at. Almost every
+     webcam spends its first several frames ramping auto-exposure, which
+     on plenty of hardware means one or more genuinely black or
+     near-featureless frames before the picture settles — and a vision
+     model handed a blank rectangle does not say so, it completes the
+     sentence with whatever is statistically likely, which is a very
+     good description of how a bottle gets invented for a joypad.
+
+     Same variance test the continuous "eye" already uses to reject a
+     covered lens or a blank wall (0.0012 — a spread of about ten grey
+     levels, which nothing with a real object in it fails to clear).
+     Reused rather than re-derived, so both places agree on what "blank"
+     means. A probe this small costs nothing next to the encode it is
+     gating. */
+  var PROBE_W = 24, PROBE_H = 18, DARK_VARIANCE = 0.0012;
+  var probeCanvas = null;
+  function frameLooksBlank(){
+    if(!probeCanvas){ probeCanvas = document.createElement('canvas'); probeCanvas.width = PROBE_W; probeCanvas.height = PROBE_H; }
+    var ctx = probeCanvas.getContext('2d', { willReadFrequently: true });
+    try{ ctx.drawImage(feed, 0, 0, PROBE_W, PROBE_H); }catch(e){ return true; }
+    var px;
+    try{ px = ctx.getImageData(0, 0, PROBE_W, PROBE_H).data; }catch(e){ return true; }
+    var n = PROBE_W * PROBE_H, mean = 0, vals = new Float32Array(n);
+    for(var i = 0, j = 0; i < px.length; i += 4, j++){
+      vals[j] = (px[i]*0.299 + px[i+1]*0.587 + px[i+2]*0.114) / 255;
+      mean += vals[j];
+    }
+    mean /= n;
+    var v = 0;
+    for(var k = 0; k < n; k++){ var d = vals[k] - mean; v += d*d; }
+    return (v / n) < DARK_VARIANCE;
+  }
 
   function say(text, live){
     state.textContent = text;
@@ -96,9 +317,19 @@
   function emit(name, payload){
     try{ if(ev.emit) ev.emit(name, payload); }catch(e){}
   }
-  function fail(message, detail){
+  function fail(message, detail, retry){
     if(timer){ clearInterval(timer); timer = null; }
-    errBox.textContent = message;
+    errBox.textContent = '';
+    var text = document.createElement('div');
+    text.textContent = message;
+    errBox.appendChild(text);
+    if(retry){
+      var again = document.createElement('button');
+      again.id = 'retry';
+      again.textContent = 'try again';
+      again.addEventListener('click', function(){ start(); });
+      errBox.appendChild(again);
+    }
     errBox.classList.add('show');
     say('not available', false);
     emit('jarvis://camera-error', String(detail || message));
@@ -132,8 +363,23 @@
     }catch(e){}
   }
 
+  /* The frame for the orb is encoded off this window's thread (toBlob),
+     and while his hands are in view it goes every third tick: a JPEG
+     encoded here every 400 ms stalled the hand tracker for a frame or two
+     each time (2.13.0). "Look at this" still gets a picture under 1.2 s
+     old. */
+  var pushN = 0, encoding = false;
   function pushFrame(){
-    if(!stream || !feed.videoWidth) return;
+    if(!stream || !feed.videoWidth || encoding) return;
+    pushN++;
+    try{
+      if(gz && pushN % 3 && performance.now() - gz.stats().handsAt < 1000) return;
+    }catch(e){}
+    /* A blank frame is skipped rather than sent: the interval tries again
+       in PUSH_MS, and the orb simply keeps whichever real frame it had
+       before (or none yet, which it is told honestly rather than shown
+       a guess dressed up as an answer). */
+    if(frameLooksBlank()) return;
     try{
       var scale = Math.min(1, MAX_W / feed.videoWidth);
       var c = document.createElement('canvas');
@@ -144,51 +390,161 @@
          frame that gets analysed is not, because text comes out backwards.
          The picture that leaves here is always the true way round. */
       ctx.drawImage(feed, 0, 0, c.width, c.height);
-      emit('jarvis://frame', c.toDataURL('image/jpeg', 0.75));
-    }catch(e){ /* one dropped frame is not worth reporting */ }
+      if(!c.toBlob || typeof FileReader === 'undefined'){ emit('jarvis://frame', c.toDataURL('image/jpeg', 0.75)); return; }
+      encoding = true;
+      c.toBlob(function(b){
+        if(!b){ encoding = false; return; }
+        var r = new FileReader();
+        r.onload = function(){ encoding = false; emit('jarvis://frame', r.result); };
+        r.onerror = function(){ encoding = false; };
+        r.readAsDataURL(b);
+      }, 'image/jpeg', 0.75);
+    }catch(e){ encoding = false; /* one dropped frame is not worth reporting */ }
+  }
+
+  /* STARTING THE CAMERA — WHICHEVER CAMERA ACTUALLY WORKS (2.10.4).
+
+     "The camera would not start. Timeout starting video source." is the
+     picture from his machine. It is Windows opening a camera that never
+     delivers a first frame, and the three usual reasons are all things a
+     single getUserMedia with one set of constraints cannot get past:
+
+     - the wrong camera. A laptop with Windows Hello has an infrared camera
+       beside the ordinary one, and asking for "the front camera" can land
+       on it; it sends no ordinary picture and the start times out;
+     - a camera still being let go — this window closed and opened again
+       quickly, or another program releasing it;
+     - a camera busy in another program (Zoom, Teams, OBS, the Windows
+       Camera app, a browser tab).
+
+     So: the camera that worked last time first, then the ordinary request,
+     then every camera on the machine by name (anything infrared or Hello
+     last), each at 720p and then at whatever it offers; and if they all
+     time out or are busy, the whole round once more after a pause. The one
+     that works is remembered. Only a real refusal (privacy settings) or no
+     camera at all stops at once, and the failure says what to do, with a
+     button to try again. */
+  var CAM_KEY = 'jarvis:camdev';
+  var startGen = 0;
+  function isInfrared(label){ return /\b(?:ir|infrared)\b|hello|depth/i.test(label || ''); }
+  function rememberedCamera(){ try{ return localStorage.getItem(CAM_KEY) || ''; }catch(e){ return ''; } }
+  function cameraAttempts(devices){
+    var remembered = rememberedCamera();
+    var list = [];
+    /* frameRate 60 (2.13.0): hand tracking reads every frame the camera
+       sends, so more frames is smoother tracking. "ideal" never refuses a
+       camera: one that cannot do 60 gives the most it can. */
+    if(remembered) list.push({ why: 'the camera that worked last time', video: { deviceId:{ exact: remembered }, width:{ ideal:1280 }, height:{ ideal:720 }, frameRate:{ ideal:60 } } });
+    list.push({ why: 'the front camera', video: { width:{ ideal:1280 }, height:{ ideal:720 }, frameRate:{ ideal:60 }, facingMode:'user' } });
+    var cams = (devices || []).filter(function(d){ return d.kind === 'videoinput' && d.deviceId && d.deviceId !== 'default'; });
+    cams.sort(function(a, b){ return isInfrared(a.label) - isInfrared(b.label); });
+    cams.forEach(function(d, i){
+      var name = d.label || ('camera ' + (i + 1));
+      list.push({ why: name, video: { deviceId:{ exact: d.deviceId }, width:{ ideal:1280 }, height:{ ideal:720 }, frameRate:{ ideal:60 } } });
+      list.push({ why: name + ' (any size)', video: { deviceId:{ exact: d.deviceId }, frameRate:{ ideal:60 } } });
+    });
+    list.push({ why: 'any camera', video: { frameRate:{ ideal:60 } } });
+    return list;
+  }
+  function stopStream(s){ try{ s.getTracks().forEach(function(t){ t.stop(); }); }catch(e){} }
+
+  function started(s, gen){
+    if(gen !== startGen){ stopStream(s); return; }   // a later attempt already won
+    stream = s;
+    errBox.classList.remove('show');
+    feed.srcObject = s;
+    feed.classList.toggle('mirrored', mirrored);
+    var track = s.getVideoTracks()[0];
+    var st = (track && track.getSettings) ? track.getSettings() : {};
+    try{ if(st.deviceId) localStorage.setItem(CAM_KEY, st.deviceId); }catch(e){}
+    /* play() settles on the first frame; a camera that opened and sends
+       nothing must not leave the window saying "asking" forever. */
+    return Promise.race([feed.play().catch(function(){}), new Promise(function(r){ setTimeout(r, 2500); })]).then(function(){
+      if(gen !== startGen) return;
+      liveText = (st.width || '?') + '×' + (st.height || '?') + (st.frameRate ? ' · ' + Math.round(st.frameRate) + ' fps' : '') + ' — live';
+      perfNote = '';
+      showState();
+      emit('jarvis://camera-open', true);
+      gzStart();
+      if(timer) clearInterval(timer);
+      timer = setInterval(pushFrame, PUSH_MS);
+      pushFrame();
+    });
+  }
+
+  function failedToStart(e){
+    var name = (e && e.name) || '';
+    if(name === 'NotAllowedError' || name === 'SecurityError'){
+      fail('Windows is blocking the camera for desktop apps.\n\n' +
+           'Settings → Privacy & security → Camera → turn on ' +
+           '"Let desktop apps access your camera", then press Try again.', name, true);
+    } else if(name === 'NotFoundError' || name === 'DevicesNotFoundError'){
+      fail('No camera found on this machine.\n\nPlug one in, then press Try again.', name, true);
+    } else {
+      fail('The camera did not start.\n\n' +
+           'It is most likely in use by another program — Zoom, Teams, OBS, the Windows Camera app ' +
+           'or a browser tab — or switched off by the privacy switch or camera key on the laptop. ' +
+           'Every camera on this machine was tried. Close whatever has it, then press Try again.\n\n(' +
+           ((e && e.message) || name || 'unknown') + ')', name || 'start failed', true);
+    }
   }
 
   function start(){
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
       return fail('This window cannot reach a camera.', 'no getUserMedia');
     }
+    var gen = ++startGen;
+    errBox.classList.remove('show');
     say('asking for the camera…', false);
-    navigator.mediaDevices.getUserMedia({
-      video: { width:{ ideal:1280 }, height:{ ideal:720 }, facingMode:'user' },
-      audio: false
-    }).then(function(s){
-      stream = s;
-      feed.srcObject = s;
-      feed.classList.toggle('mirrored', mirrored);
-      return feed.play().catch(function(){});
-    }).then(function(){
-      var track = stream.getVideoTracks()[0];
-      var st = (track && track.getSettings) ? track.getSettings() : {};
-      say((st.width || '?') + '×' + (st.height || '?') + ' — live', true);
-      emit('jarvis://camera-open', true);
-      if(timer) clearInterval(timer);
-      timer = setInterval(pushFrame, PUSH_MS);
-      pushFrame();
-    }).catch(function(e){
-      var name = (e && e.name) || '';
-      if(name === 'NotAllowedError' || name === 'SecurityError'){
-        fail('Windows is blocking the camera for desktop apps.\n\n' +
-             'Settings → Privacy & security → Camera → turn on ' +
-             '"Let desktop apps access your camera", then open this again.', name);
-      } else if(name === 'NotReadableError' || name === 'TrackStartError'){
-        fail('Another application is using the camera.\n\n' +
-             'Close Zoom, Teams, Chrome or whatever has it, then open this again.', name);
-      } else if(name === 'NotFoundError'){
-        fail('No camera found on this machine.', name);
-      } else {
-        fail('The camera would not start.\n\n' + ((e && e.message) || name || 'unknown'), name);
+    var lastError = null, round = 0, tried = {};
+    function stop(e){ return e && (e.name === 'NotAllowedError' || e.name === 'SecurityError'); }
+    function runRound(list){
+      var i = 0;
+      function next(){
+        if(gen !== startGen) return Promise.resolve();
+        while(i < list.length && tried[round + ':' + JSON.stringify(list[i].video)]) i++;
+        if(i >= list.length) return Promise.reject(lastError || new Error('no camera answered'));
+        var a = list[i++];
+        tried[round + ':' + JSON.stringify(a.video)] = true;
+        if(i > 1) say('trying ' + a.why + '…', false);
+        return navigator.mediaDevices.getUserMedia({ video: a.video, audio: false })
+          .then(function(s){ return started(s, gen); })
+          .catch(function(e){
+            lastError = e;
+            if(stop(e)) throw e;
+            /* The first failures are before the camera list has names in
+               it (it has them once access is granted): fetch it now. */
+            if(i === Math.min(2, list.length) && list.length <= 3){
+              return navigator.mediaDevices.enumerateDevices().then(function(devs){
+                list = cameraAttempts(devs); i = 0;
+                return next();
+              }, next);
+            }
+            return next();
+          });
       }
-    });
+      return next();
+    }
+    navigator.mediaDevices.enumerateDevices().catch(function(){ return []; }).then(function(devs){
+      return runRound(cameraAttempts(devs)).catch(function(e){
+        if(stop(e) || gen !== startGen) throw e;
+        /* Everything timed out or was busy: a camera being released takes a
+           moment. Once more, after one. */
+        round = 1;
+        say('the camera is busy — trying again…', false);
+        return new Promise(function(r){ setTimeout(r, 2000); })
+          .then(function(){ return navigator.mediaDevices.enumerateDevices().catch(function(){ return []; }); })
+          .then(function(devs){ return runRound(cameraAttempts(devs)); });
+      });
+    }).catch(function(e){ if(gen === startGen) failedToStart(e || lastError); });
   }
+
 
   document.getElementById('mirror').addEventListener('click', function(){
     mirrored = !mirrored;
     feed.classList.toggle('mirrored', mirrored);
+    if(gzOverlay) gzOverlay.classList.toggle('mirrored', mirrored);
+    if(WS) WS.setMirrored(mirrored);
   });
 
   /* The orb asks for one out of turn, when it wants to look right now
@@ -209,6 +565,7 @@
   window.addEventListener('beforeunload', function(){
     rememberPlace();
     emit('jarvis://camera-closed', true);
+    if(gz) gz.stop();
     if(stream) stream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} });
   });
   /* Moves and resizes are frequent; the last one before it closes is the

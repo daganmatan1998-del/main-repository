@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-trace-file"
+description = "Enables the save_trace_file command without any pre-configured scope."
+commands.allow = ["save_trace_file"]
+
+[[permission]]
+identifier = "deny-save-trace-file"
+description = "Denies the save_trace_file command without any pre-configured scope."
+commands.deny = ["save_trace_file"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-stashed-model"
+description = "Enables the stashed_model command without any pre-configured scope."
+commands.allow = ["stashed_model"]
+
+[[permission]]
+identifier = "deny-stashed-model"
+description = "Denies the stashed_model command without any pre-configured scope."
+commands.deny = ["stashed_model"]

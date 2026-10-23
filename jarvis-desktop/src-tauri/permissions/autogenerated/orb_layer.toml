@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-orb-layer"
+description = "Enables the orb_layer command without any pre-configured scope."
+commands.allow = ["orb_layer"]
+
+[[permission]]
+identifier = "deny-orb-layer"
+description = "Denies the orb_layer command without any pre-configured scope."
+commands.deny = ["orb_layer"]

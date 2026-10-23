@@ -11,6 +11,11 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
+# "Go full screen" from the web app (2.31.0): the site hands over to this app
+# with a jarvis:// link, and the copy already running takes it instead of a
+# second JARVIS starting.
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 # Only the two Win32 pieces needed to close the foreground window. The full
 # windows crate is enormous; windows-sys with these features is small and
@@ -21,10 +26,21 @@ tauri-plugin-global-shortcut = "2"
 xcap = "0.0.14"
 image = { version = "0.25", default-features = false, features = ["png"] }
 base64 = "0.22"
-dirs-next = "2"   # to find the user's Pictures folder
+dirs-next = "2"   # to find the user's Pictures folder, and now the Coding Agent's workspace
+
+# The System Monitor and Security agents' only capability: read-only CPU,
+# RAM, disk and process readouts. Already pulled in transitively by another
+# dependency, but a capability an agent relies on is named directly here
+# rather than left to arrive as someone else's side effect.
+sysinfo = "0.32"
+# The folder picker that is the ONLY way a project becomes reachable (2.37.0).
+rfd = "0.15"
+serde_json = "1"   # structuring the workspace/system tool results as JSON, not ad-hoc strings
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"] }
+# Gesture zoom adds the program-name lookup (Threading) and the monitor
+# check for full-screen windows (Gdi) to what closing windows already used.
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Threading", "Win32_Graphics_Gdi", "Win32_Graphics_Dwm", "Win32_UI_Shell", "Win32_System_Com", "Win32_Media", "Win32_System_SystemInformation"] }
 
 [profile.release]
 opt-level = "s"
