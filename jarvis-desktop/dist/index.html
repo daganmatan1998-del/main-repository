@@ -5022,6 +5022,11 @@ function pttChirp(){
   }catch(e){}
 }
 let silentMode = false; // mic in, text-only replies, no TTS — for offices/nights/meetings
+/* A ringback phone call is up: the orb's own microphone and voice stay quiet (he is
+   on the phone, and the orb would hear and answer the call itself). */
+let phoneCallActive = false;
+let phoneStatus = null, phoneStatusAt = 0, phoneCallTimer = null;
+const PHONE_MAX_MS = 20 * 60 * 1000;
 let researchMode = false; // sub-question, cross-check, cite — instead of one quick search
 let currentAbortController = null; // in-flight Claude request, if any
 let activeAudio = null;            // currently-playing Cartesia <audio>, if any
@@ -7049,6 +7054,7 @@ async function handleTranscript(rawText, sawSpeech, spokeAt, ptt){
 
 function startListening(){
   if(modelLock) return;   // deaf until the locked 3D model is on screen
+  if(phoneCallActive) return;   // he is on the phone; nothing here listens until it ends
   /* isSpeaking is deliberately no longer a blocker — the microphone staying
      open while he talks is exactly what makes interrupting him possible.
      isThinking still is, but ONLY while he is silent: there is nothing to
@@ -8866,7 +8872,7 @@ async function fetchVoiceAudioQueued(text){
 
 function enqueueSpeech(text){
   const clean = (text || '').trim();
-  if(!clean || silentMode || modelLock) return;
+  if(!clean || silentMode || modelLock || phoneCallActive) return;   // on a call the voice is the phone's
   /* Every line he is about to say is registered before it plays, so the
      recognizer can recognise his own voice coming back through the speaker
      and not mistake it for you interrupting. */
@@ -10261,6 +10267,110 @@ const CALL_TOOL = {
     required: ['text']
   }
 };
+
+/* PHONE CALLS (ringback, desktop only). The server runs in Docker on his machine and
+   rings his Linphone app; the three tools below are all JARVIS gets of it. They are
+   offered only when the app reports it ready (ringback_status). */
+const PHONE_CALL_TOOL = {
+  name: 'phone_call',
+  description: "Ring his phone and start a live two-way voice call. Use it ONLY when he asks to be called or to talk by phone, never on your own initiative. opening_line is the first thing he hears when he picks up: one or two plain English sentences. The result is his first words. Then keep the call going with phone_say, and finish with phone_hangup.",
+  input_schema: {
+    type: 'object',
+    properties: { opening_line: { type:'string', description:'What he hears first. Plain spoken English, under 200 characters, no code or URLs.' } },
+    required: ['opening_line']
+  }
+};
+const PHONE_SAY_TOOL = {
+  name: 'phone_say',
+  description: "Say something on the live phone call and listen: speaks your text, then returns what he said back (he can interrupt you). Call it once per turn of the conversation, with short plain spoken English. Only while a call is up.",
+  input_schema: {
+    type: 'object',
+    properties: { text: { type:'string', description:'What to say. Plain sentences, no code, lists or URLs.' } },
+    required: ['text']
+  }
+};
+const PHONE_HANGUP_TOOL = {
+  name: 'phone_hangup',
+  description: "End the phone call, optionally with a short goodbye. Use it when he says bye or the conversation is done.",
+  input_schema: {
+    type: 'object',
+    properties: { text: { type:'string', description:'Optional short goodbye, spoken before hanging up.' } },
+    required: []
+  }
+};
+
+function phoneTauriInvoke(){
+  return window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke;
+}
+
+/* Asked of the app, cached for a minute. An app built before ringback existed has no
+   such command: that is "unavailable" - no tools and no note, not "not set up". */
+async function refreshPhoneStatus(force){
+  if(!IS_DESKTOP) return;
+  if(!force && phoneStatus && Date.now() - phoneStatusAt < 60000) return;
+  const invoke = phoneTauriInvoke();
+  if(!invoke){ phoneStatus = { unavailable: true, ready: false }; phoneStatusAt = Date.now(); return; }
+  try{
+    const r = await invoke('ringback_status');
+    phoneStatus = (r && typeof r === 'object') ? r : { unavailable: true, ready: false };
+  }catch(err){
+    phoneStatus = { unavailable: true, ready: false };
+  }
+  phoneStatusAt = Date.now();
+}
+
+function startPhoneMode(){
+  phoneCallActive = true;
+  try{ interruptSpeech(); }catch(e){}
+  try{ if(typeof stopWhisperCapture === 'function') stopWhisperCapture(); }catch(e){}
+  clearTimeout(phoneCallTimer);
+  phoneCallTimer = setTimeout(()=>{ endPhoneCall('time limit'); }, PHONE_MAX_MS);
+}
+
+function endPhoneMode(){
+  const wasActive = phoneCallActive;
+  phoneCallActive = false;
+  clearTimeout(phoneCallTimer);
+  phoneCallTimer = null;
+  if(wasActive && conversationMode && !isThinking && typeof startListening === 'function') setTimeout(startListening, 800);
+}
+
+/* Hung up from this side without the model: the 20 minute cap, or anything that
+   must not leave a call running. */
+async function endPhoneCall(why){
+  const invoke = phoneTauriInvoke();
+  if(invoke){ try{ await invoke('ringback_stop'); }catch(e){} }
+  if(phoneCallActive) addMessage('system', '\u25B8 phone call ended (' + why + ')');
+  endPhoneMode();
+}
+
+const PHONE_TOOL_MAP = {
+  phone_call:   { tool: 'call_start', arg: 'opening_line', required: true },
+  phone_say:    { tool: 'converse',   arg: 'text',         required: true },
+  phone_hangup: { tool: 'call_end',   arg: 'text',         required: false }
+};
+
+async function callPhoneTool(name, input){
+  const m = PHONE_TOOL_MAP[name];
+  if(!m) return { error: 'Unknown phone tool: ' + name };
+  const value = String((input && input[m.arg]) || '').trim();
+  if(m.required && !value) return { error: 'phone_' + (name === 'phone_call' ? 'call needs an opening_line' : 'say needs text') };
+  const invoke = phoneTauriInvoke();
+  if(!invoke) return { error: 'the desktop bridge is unavailable', tell_the_user: 'Phone calls only work in the desktop app.' };
+  const args = {}; if(value) args[m.arg] = value.slice(0, 600);
+  let r;
+  try{ r = await invoke('ringback_call', { tool: m.tool, args: args }); }
+  catch(err){ endPhoneMode(); return { error: String((err && err.message) || err) }; }
+  if(r && r.ok){
+    if(name === 'phone_call') startPhoneMode();
+    if(name === 'phone_hangup') endPhoneMode();
+    return { ok: true, text: r.text || '' };
+  }
+  endPhoneMode();   // whatever went wrong, the call is not up any more
+  return { error: (r && r.error) || 'the call failed', tell_the_user: (r && r.tell_the_user) || undefined };
+}
+
+window.__phoneTest = { get active(){ return phoneCallActive; }, get status(){ return phoneStatus; }, callPhoneTool, refreshPhoneStatus };
 
 const SCHEDULE_MANAGE_TOOL = {
   name: 'manage_scheduled',
@@ -20272,8 +20382,14 @@ async function readMessageStream(response, onText){
 
 /* Either he is being looked at this turn, or he is being remembered from
    the last one. Never both: a look replaces the note it is about to write. */
+function phoneNote(){
+  if(!IS_DESKTOP || !phoneStatus || phoneStatus.unavailable) return '';
+  if(phoneCallActive) return '\n\nA PHONE CALL IS UP. He hears you only on the phone: the orb is silent. Keep answering with phone_say, in short plain English sentences, and end with phone_hangup when he is done.';
+  if(phoneStatus.ready) return '\n\nPHONE CALLS: phone_call rings his phone for a live two-way call, only when he asks. The call is in English for now (the voice and the speech recognition are English-only): speak plain English on it, no code or URLs. call_me stays the one-way message.';
+  return '\n\nPHONE CALLS: calling him by phone (ringback) is not set up yet. ' + (phoneStatus.why || '') + ' If he asks you to call him or talk by phone, tell him exactly that in one sentence; never claim to dial. The call_me tool (a one-way Telegram message) is separate and still works.';
+}
 function cameraSystemExtras(){
-  return (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + mailServiceNote() + (compactCodeNote || '') +
+  return phoneNote() + (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + mailServiceNote() + (compactCodeNote || '') +
          (turnWants3d ? never3dNote() : '') + (turn3dMentionOnly ? QUIET_3D_NOTE : '') + (turnWantsNote ? NOTE_TURN_NOTE : '');
 }
 /* SET ONLY AFTER A CUT-OFF (2.22.1): the last attempt ran out of room in the
@@ -20595,6 +20711,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     agentRegistryTriedAt = Date.now();
     await Promise.race([loadAgentRegistry().catch(()=>null), new Promise(r => setTimeout(r, 3000))]);
   }
+  if(IS_DESKTOP) await Promise.race([refreshPhoneStatus().catch(()=>null), new Promise(r => setTimeout(r, 2000))]);
   const controller = new AbortController();
   currentAbortController = controller;
   const wantStream = usingOwnBackend && backendSupportsStreaming !== false;
@@ -20651,6 +20768,8 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
                                       ADJUST_WINDOW_TOOL, TYPE_TEXT_TOOL, SHUTDOWN_TOOL, CLOSE_BROWSER_TOOL);
     /* Music (2.23.0): his YouTube playlist, through the worker. */
     everydayTools.push(MUSIC_TOOL, YOUTUBE_CONNECT_TOOL);
+    /* Phone calls: only when the app says ringback is fully set up. */
+    if(IS_DESKTOP && phoneStatus && phoneStatus.ready) everydayTools.push(PHONE_CALL_TOOL, PHONE_SAY_TOOL, PHONE_HANGUP_TOOL);
     /* His mail (worker 2.10.0): offered only when the worker says it can. */
     if(backendCapabilities && backendCapabilities.gmail){
       everydayTools.push(CHECK_MAIL_TOOL, GMAIL_CONNECT_TOOL);
@@ -21258,7 +21377,7 @@ async function askJarvis(userText, images, onText, tag){
        something, and he called nothing. Then — once, never more — he is handed
        that back and asked to either do it or say plainly that he cannot. */
     for(;;){
-      while(data.stop_reason === 'tool_use' && loopGuard < MAX_TOOL_ROUNDS){
+      while(data.stop_reason === 'tool_use' && loopGuard < (phoneCallActive ? 40 : MAX_TOOL_ROUNDS)){   // a call is one round per exchange
         loopGuard++;
         const toolUseBlocks = (data.content || []).filter(b => b.type === 'tool_use');
         workingMessages = [...workingMessages, { role:'assistant', content:data.content }];
@@ -21321,6 +21440,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callConnectYoutubeTool();
           } else if(tu.name === 'send_whatsapp'){
             payload = await callWhatsAppTool(tu.input);
+          } else if(tu.name === 'phone_call' || tu.name === 'phone_say' || tu.name === 'phone_hangup'){
+            payload = await callPhoneTool(tu.name, tu.input || {});
           } else if(tu.name === 'call_me'){
             payload = await callCallTool(tu.input);
           } else if(tu.name === 'manage_scheduled'){
