@@ -392,6 +392,47 @@ pub fn status_why(docker: bool, env_found: bool, missing: &[&str], env_path: &st
     }
 }
 
+/// Whether a call can be attempted, and the plain sentence for what is in the way.
+pub struct Readiness {
+    pub mode: &'static str,
+    pub ready: bool,
+    pub why: String,
+}
+
+/// WSL needs only `wsl.exe` here (its own credentials and Python live inside WSL, which
+/// we neither read nor check); Docker needs Docker and the env file; a broken launch
+/// file is never ready and says what is wrong with it.
+pub fn readiness(
+    launcher: &Result<Launcher, String>,
+    docker: bool,
+    wsl_present: bool,
+    env_found: bool,
+    missing: &[&str],
+    env_path: &str,
+) -> Readiness {
+    match launcher {
+        Err(e) => Readiness {
+            mode: "invalid",
+            ready: false,
+            why: e.clone(),
+        },
+        Ok(Launcher::Wsl(_)) => Readiness {
+            mode: "wsl",
+            ready: wsl_present,
+            why: if wsl_present {
+                String::new()
+            } else {
+                "wsl.exe was not found on this PC.".to_string()
+            },
+        },
+        Ok(Launcher::Docker) => Readiness {
+            mode: "docker",
+            ready: docker && env_found && missing.is_empty(),
+            why: status_why(docker, env_found, missing, env_path),
+        },
+    }
+}
+
 const DEFAULT_MAX_TURNS: u32 = 30;
 const DEFAULT_MAX_EMPTY: u32 = 3;
 
@@ -514,7 +555,13 @@ impl Phone {
             if tool != "call_start" {
                 return Err(CallError::new("no call is up"));
             }
-            self.client = Some(McpClient::start(make_cmd()).map_err(|m| CallError::new(&m))?);
+            self.client = Some(McpClient::start(make_cmd()).map_err(|m| CallError {
+                message: m,
+                tell_the_user: Some(
+                    "ringback could not be started. Check that Docker is running, or that WSL and the paths in ringback.launch are right."
+                        .to_string(),
+                ),
+            })?);
         }
         if matches!(tool, "converse" | "listen" | "speak") && self.turns >= self.max_turns {
             self.end_politely();
@@ -746,13 +793,20 @@ mod tests {
 
     #[test]
     fn client_reports_death_and_timeout() {
-        let mut dead = McpClient::start(fake(&["--exit-after-init"])).expect("start");
-        let r = dead.call_tool("call_start", serde_json::json!({}), Duration::from_secs(5));
-        assert!(
-            r.as_ref().err().map_or(false, |m| m.contains("ended")),
-            "{r:?}"
-        );
-        assert!(!dead.is_alive());
+        // The fake exits right after answering initialize. Whether our "initialized"
+        // notification still gets written first is a race, so both outcomes are right:
+        // start reports the death itself, or the next call does.
+        match McpClient::start(fake(&["--exit-after-init"])) {
+            Err(m) => assert!(m.contains("ended"), "{m}"),
+            Ok(mut dead) => {
+                let r = dead.call_tool("call_start", serde_json::json!({}), Duration::from_secs(5));
+                assert!(
+                    r.as_ref().err().map_or(false, |m| m.contains("ended")),
+                    "{r:?}"
+                );
+                assert!(!dead.is_alive());
+            }
+        }
         let mut hung = McpClient::start(fake(&["--hang"])).expect("start");
         let t = hung.call_tool(
             "call_start",
@@ -1188,5 +1242,36 @@ mod tests {
         assert!(r.result.is_ok() && r.call_up && line.call_up());
         let r = line.call("call_end", j(), t(5), || panic!());
         assert!(r.result.is_ok() && !r.call_up && !line.call_up());
+    }
+
+    // ---- readiness per launcher -------------------------------------------------
+    #[test]
+    fn readiness_depends_on_the_chosen_launcher() {
+        let wsl = Ok(Launcher::Wsl(WslLaunch {
+            distro: "D".into(),
+            cwd: "/c".into(),
+            python: "/p".into(),
+            script: "run_voice_mcp.py".into(),
+        }));
+        // WSL: needs wsl.exe, and neither Docker nor the Docker env file
+        let r = readiness(&wsl, false, true, false, &["VOICE_SIP_ID"], "e");
+        assert!(
+            r.ready && r.mode == "wsl" && r.why.is_empty(),
+            "{:?}",
+            r.why
+        );
+        let r = readiness(&wsl, true, false, true, &[], "e");
+        assert!(!r.ready && r.why.contains("wsl.exe"), "{:?}", r.why);
+        // Docker (no launch file): the old rules
+        let dk: Result<Launcher, String> = Ok(Launcher::Docker);
+        let r = readiness(&dk, false, true, true, &[], "e");
+        assert!(!r.ready && r.mode == "docker" && r.why.contains("Docker"));
+        let r = readiness(&dk, true, false, true, &[], "e");
+        assert!(r.ready && r.mode == "docker");
+        // a launch file that is wrong: never ready, and the reason is its own
+        let bad: Result<Launcher, String> =
+            Err("ringback.launch: \"python\" is missing".to_string());
+        let r = readiness(&bad, true, true, true, &[], "e");
+        assert!(!r.ready && r.mode == "invalid" && r.why.contains("python"));
     }
 }

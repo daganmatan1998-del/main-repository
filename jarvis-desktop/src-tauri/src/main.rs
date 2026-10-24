@@ -5283,19 +5283,27 @@ fn list_processes(limit: Option<u32>) -> Result<String, String> {
    His SIP login sits in %APPDATA%\\JARVIS\\ringback.env and nowhere else: not
    in the page's storage, not on the worker.
 --------------------------------------------------------------------- */
-struct RingbackState(std::sync::Mutex<ringback::Phone>);
+struct RingbackState(ringback::PhoneLine);
 
 const RINGBACK_IMAGE: &str = "ghcr.io/mohitbadwal/ringback:latest";
 const RINGBACK_MAX_CALL_SECS: u64 = 20 * 60;
 
-fn ringback_env_path() -> std::path::PathBuf {
-    dirs_next::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("JARVIS")
-        .join("ringback.env")
+fn ringback_dir() -> std::path::PathBuf {
+    dirs_next::config_dir().unwrap_or_else(|| std::path::PathBuf::from(".")).join("JARVIS")
 }
 
-/// No console window flashing up for a background `docker` on Windows.
+fn ringback_env_path() -> std::path::PathBuf {
+    ringback_dir().join("ringback.env")
+}
+
+/// Optional: when this file exists ringback is started inside WSL instead of Docker.
+/// It names the distribution, folder and Python of the copy that already works there;
+/// the SIP login stays in that folder's own voice.env and never passes through here.
+fn ringback_launch_path() -> std::path::PathBuf {
+    ringback_dir().join("ringback.launch")
+}
+
+/// No console window flashing up for a background `docker` or `wsl.exe` on Windows.
 fn quiet(cmd: &mut std::process::Command) {
     #[cfg(target_os = "windows")]
     {
@@ -5306,54 +5314,95 @@ fn quiet(cmd: &mut std::process::Command) {
     let _ = cmd;
 }
 
+fn wsl_exe_present() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let mut dirs: Vec<std::path::PathBuf> =
+            std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).collect();
+        if let Some(root) = std::env::var_os("SystemRoot") {
+            dirs.push(std::path::PathBuf::from(root).join("System32"));
+        }
+        dirs.iter().any(|d| d.join("wsl.exe").is_file())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        false
+    }
+}
+
+fn docker_present() -> bool {
+    let mut probe = std::process::Command::new("docker");
+    probe.arg("--version").stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    quiet(&mut probe);
+    probe.status().map(|s| s.success()).unwrap_or(false)
+}
+
 struct RingbackSetup {
-    path: std::path::PathBuf,
+    launcher: Result<ringback::Launcher, String>,
+    env_path: std::path::PathBuf,
     vars: std::collections::BTreeMap<String, String>,
-    docker: bool,
-    found: bool,
+    env_found: bool,
     missing: Vec<&'static str>,
+    docker: bool,
+    readiness: ringback::Readiness,
 }
 
 impl RingbackSetup {
     fn read() -> RingbackSetup {
-        let path = ringback_env_path();
         // Lossy: a file saved in another encoding then reads as "values missing", not "file missing".
-        let text = std::fs::read(&path).ok().map(|b| String::from_utf8_lossy(&b).into_owned());
-        let found = text.is_some();
-        let vars = text.as_deref().map(ringback::parse_env_file).unwrap_or_default();
-        let missing = if found { ringback::missing_env(&vars) } else { ringback::REQUIRED_ENV.to_vec() };
-        let mut probe = std::process::Command::new("docker");
-        probe
-            .arg("--version")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
-        quiet(&mut probe);
-        let docker = probe.status().map(|s| s.success()).unwrap_or(false);
-        RingbackSetup { path, vars, docker, found, missing }
+        let lossy = |p: &std::path::Path| std::fs::read(p).ok().map(|b| String::from_utf8_lossy(&b).into_owned());
+        let launcher = ringback::choose_launcher(lossy(&ringback_launch_path()).as_deref());
+        let env_path = ringback_env_path();
+        let env_text = lossy(&env_path);
+        let env_found = env_text.is_some();
+        let vars = env_text.as_deref().map(ringback::parse_env_file).unwrap_or_default();
+        let missing = if env_found { ringback::missing_env(&vars) } else { ringback::REQUIRED_ENV.to_vec() };
+        // Only the launcher in use is probed.
+        let (docker, wsl) = match &launcher {
+            Ok(ringback::Launcher::Docker) => (docker_present(), false),
+            Ok(ringback::Launcher::Wsl(_)) => (false, wsl_exe_present()),
+            Err(_) => (false, false),
+        };
+        let readiness =
+            ringback::readiness(&launcher, docker, wsl, env_found, &missing, &env_path.display().to_string());
+        RingbackSetup { launcher, env_path, vars, env_found, missing, docker, readiness }
     }
 
-    fn ready(&self) -> bool {
-        self.docker && self.found && self.missing.is_empty()
-    }
-
-    fn why(&self) -> String {
-        ringback::status_why(self.docker, self.found, &self.missing, &self.path.display().to_string())
+    /// The process to start for a new call. Arguments are separate values, never a
+    /// shell line, and nothing from the page ever reaches them.
+    fn command(&self) -> std::process::Command {
+        let mut cmd = match &self.launcher {
+            Ok(ringback::Launcher::Wsl(l)) => {
+                let mut c = std::process::Command::new("wsl.exe");
+                c.args(ringback::wsl_args(l));
+                c
+            }
+            _ => {
+                let mut c = std::process::Command::new("docker");
+                c.args(ringback::docker_args(RINGBACK_IMAGE, &self.env_path, &self.vars));
+                c
+            }
+        };
+        quiet(&mut cmd);
+        cmd
     }
 }
 
 #[tauri::command]
 fn ringback_status(state: tauri::State<'_, RingbackState>) -> serde_json::Value {
     let setup = RingbackSetup::read();
-    let running = state.0.lock().map(|mut p| p.running()).unwrap_or(false);
     serde_json::json!({
         "ok": true,
+        "mode": setup.readiness.mode,
         "docker": setup.docker,
-        "env_path": setup.path.display().to_string(),
-        "env_found": setup.found,
+        "env_path": setup.env_path.display().to_string(),
+        "launch_path": ringback_launch_path().display().to_string(),
+        "env_found": setup.env_found,
         "missing": setup.missing,
-        "running": running,
-        "ready": setup.ready(),
-        "why": setup.why(),
+        "running": state.0.running(),
+        "call_up": state.0.call_up(),
+        "ready": setup.readiness.ready,
+        "why": setup.readiness.why,
     })
 }
 
@@ -5361,22 +5410,17 @@ fn ringback_status(state: tauri::State<'_, RingbackState>) -> serde_json::Value 
 async fn ringback_call(app: tauri::AppHandle, tool: String, args: serde_json::Value) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let setup = RingbackSetup::read();
-        if !setup.ready() {
-            return serde_json::json!({ "ok": false, "error": "ringback is not set up", "tell_the_user": setup.why() });
+        if !setup.readiness.ready {
+            return serde_json::json!({ "ok": false, "error": "ringback is not set up",
+                                       "tell_the_user": setup.readiness.why, "call_up": false });
         }
         let state = app.state::<RingbackState>();
-        let mut phone = state.0.lock().unwrap_or_else(|e| e.into_inner());
         // call_start waits for him to pick up and converse waits for him to speak.
-        let timeout = std::time::Duration::from_secs(90);
-        let result = phone.call(&tool, args, timeout, || {
-            let mut cmd = std::process::Command::new("docker");
-            cmd.args(ringback::docker_args(RINGBACK_IMAGE, &setup.path, &setup.vars));
-            quiet(&mut cmd);
-            cmd
-        });
-        match result {
-            Ok(text) => serde_json::json!({ "ok": true, "text": text }),
-            Err(e) => serde_json::json!({ "ok": false, "error": e.message, "tell_the_user": e.tell_the_user }),
+        let reply = state.0.call(&tool, args, std::time::Duration::from_secs(90), || setup.command());
+        match reply.result {
+            Ok(text) => serde_json::json!({ "ok": true, "text": text, "call_up": reply.call_up }),
+            Err(e) => serde_json::json!({ "ok": false, "error": e.message,
+                                          "tell_the_user": e.tell_the_user, "call_up": reply.call_up }),
         }
     })
     .await
@@ -5385,10 +5429,8 @@ async fn ringback_call(app: tauri::AppHandle, tool: String, args: serde_json::Va
 
 #[tauri::command]
 fn ringback_stop(state: tauri::State<'_, RingbackState>) -> serde_json::Value {
-    if let Ok(mut p) = state.0.lock() {
-        p.stop();
-    }
-    serde_json::json!({ "ok": true })
+    state.0.stop();
+    serde_json::json!({ "ok": true, "call_up": false })
 }
 
 fn main() {
@@ -5413,8 +5455,8 @@ fn main() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(RingbackState(std::sync::Mutex::new(ringback::Phone::new(
-            std::time::Duration::from_secs(RINGBACK_MAX_CALL_SECS),
+        .manage(RingbackState(ringback::PhoneLine::new(std::time::Duration::from_secs(
+            RINGBACK_MAX_CALL_SECS,
         ))))
         .invoke_handler(tauri::generate_handler![
             ringback_status,
@@ -5667,9 +5709,7 @@ fn main() {
             /* His phone line goes down with the app: the docker child ends with its stdin. */
             if let tauri::RunEvent::Exit = event {
                 if let Some(state) = app.try_state::<RingbackState>() {
-                    if let Ok(mut p) = state.0.lock() {
-                        p.stop();
-                    }
+                    state.0.stop();
                 }
             }
         });
