@@ -10323,12 +10323,12 @@ async function refreshPhoneStatus(force){
   if(!IS_DESKTOP) return;
   if(!force && phoneStatus && Date.now() - phoneStatusAt < 60000) return;
   const invoke = phoneTauriInvoke();
-  if(!invoke){ phoneStatus = { unavailable: true, ready: false }; phoneStatusAt = Date.now(); return; }
+  if(!invoke){ phoneStatus = { unavailable: true, ready: false, error: 'no desktop bridge' }; phoneStatusAt = Date.now(); return; }
   try{
     const r = await invoke('ringback_status');
-    phoneStatus = (r && typeof r === 'object') ? r : { unavailable: true, ready: false };
+    phoneStatus = (r && typeof r === 'object') ? r : { unavailable: true, ready: false, error: 'the app returned nothing' };
   }catch(err){
-    phoneStatus = { unavailable: true, ready: false };
+    phoneStatus = { unavailable: true, ready: false, error: String((err && err.message) || err).slice(0, 140) };
   }
   phoneStatusAt = Date.now();
 }
@@ -10484,6 +10484,26 @@ function phoneInstruction(kind){
          'Never put an offset in at: the app converts the Israel time (clock changes included). Then confirm in ONE sentence the time you will call, in Israel time. ' +
          'If he already said the time in the same sentence, skip the question. If the time he gives has already passed today, use tomorrow.] ';
 }
+/* "Are phone calls set up?", "phone status": answered from the app's own report, never by
+   the model, so a build without phone support says so instead of "I have no access". */
+const PHONE_STATUS_EN = /\b(?:phone|ringback)\s+(?:calls?\s+)?(?:status|setup|set up|ready|working|configured)\b/;
+const PHONE_STATUS_HE = /(?:סטטוס|בדיקת?)\s+(?:ה)?(?:טלפון|שיחות|רינגבק)|שיחות(?: טלפון)?\s+(?:מוגדר|מוכנ|עובד)/;
+function isPhoneStatusQuestion(text){
+  const t = normaliseHeard(text);
+  return !!t && (PHONE_STATUS_EN.test(t) || PHONE_STATUS_HE.test(t));
+}
+function describePhoneStatus(){
+  const he = currentLang === 'he', s = phoneStatus;
+  if(!s || s.unavailable){
+    return he ? 'שיחות טלפון: אין בגרסה הזאת של האפליקציה תמיכה בשיחות (האפליקציה ענתה: ' + ((s && s.error) || '?') + '). צריך לשים את jarvis-desktop.zip בתיקיית Downloads, להריץ JARVIS-UPDATE.bat ולפתוח את האפליקציה.'
+              : 'Phone calls: this build of the app has no phone support (the app said: ' + ((s && s.error) || '?') + '). Put jarvis-desktop.zip in Downloads, run JARVIS-UPDATE.bat, then open the app.';
+  }
+  if(s.mode === 'invalid') return (he ? 'שיחות טלפון: יש בעיה בקובץ ringback.launch: ' : 'Phone calls: there is a problem with ringback.launch: ') + (s.why || '');
+  if(!s.ready) return (he ? 'שיחות טלפון: לא מוכן עדיין. ' : 'Phone calls: not ready yet. ') + (s.why || '');
+  const how = s.mode === 'wsl' ? 'WSL' : 'Docker';
+  return he ? 'שיחות טלפון: מוכן (דרך ' + how + '). תגיד "call me" כדי לנסות.' : 'Phone calls: ready (through ' + how + '). Say "call me" to try.';
+}
+
 /* '' when a call can be attempted; otherwise the sentence to tell him (no model involved). */
 async function phoneCommandRefusal(){
   await Promise.race([refreshPhoneStatus(true).catch(()=>null), new Promise(r => setTimeout(r, 2000))]);
@@ -10497,7 +10517,7 @@ async function phoneCommandRefusal(){
 }
 
 window.__phoneTest = { get active(){ return phoneCallActive; }, get status(){ return phoneStatus; }, callPhoneTool, refreshPhoneStatus,
-                       israelNow, zonedToIso, phoneCommandOf };
+                       israelNow, zonedToIso, phoneCommandOf, isPhoneStatusQuestion, describePhoneStatus };
 
 const SCHEDULE_MANAGE_TOOL = {
   name: 'manage_scheduled',
@@ -20518,7 +20538,8 @@ async function readMessageStream(response, onText){
 /* Either he is being looked at this turn, or he is being remembered from
    the last one. Never both: a look replaces the note it is about to write. */
 function phoneNote(){
-  if(!IS_DESKTOP || !phoneStatus || phoneStatus.unavailable) return '';
+  if(!IS_DESKTOP || !phoneStatus) return '';
+  if(phoneStatus.unavailable) return '\n\nPHONE CALLS: not available in this build of the app (it must be rebuilt with JARVIS-UPDATE.bat' + (phoneStatus.error ? '; the app said: ' + phoneStatus.error : '') + '). If he asks about phone calls, say exactly that in one sentence; never claim to dial. The call_me tool (a one-way Telegram message) is separate.';
   if(phoneCallActive) return '\n\nA PHONE CALL IS UP. He hears you only on the phone: the orb is silent. Keep answering with phone_say (or phone_speak then phone_listen), in short plain English sentences. Three silent turns in a row end the call by themselves; [CALL ENDED] means he hung up. End with phone_hangup when he is done.';
   if(phoneStatus.ready) return '\n\nPHONE CALLS: phone_call rings his phone for a live two-way call, only when he asks. "Call me" means ring now. "Call me later" means ask ONE question (what time, in Israel time), then save it with remember_to_do (every once, at = the Israel wall-clock time without an offset, timezone Asia/Jerusalem) and confirm the time; it is now ' + israelNow().local.replace('T', ' ') + ' in Israel. The call is in English for now (the voice and the speech recognition are English-only): speak plain English on it, no code or URLs. call_me stays the one-way message.';
   return '\n\nPHONE CALLS: calling him by phone (ringback) is not set up yet. ' + (phoneStatus.why || '') + ' If he asks you to call him or talk by phone, tell him exactly that in one sentence; never claim to dial. The call_me tool (a one-way Telegram message) is separate and still works.';
@@ -23312,6 +23333,17 @@ async function handleSend(){
      needs the model. runWorkflowCommand returns false for it. */
   /* "call me" / "can you call me later": decided here, not left to the model's reading of
      the sentence. Not set up -> told why, no model call and nothing scheduled. */
+  if(IS_DESKTOP && text && !images.length && !screenCmd && isPhoneStatusQuestion(text)){
+    await Promise.race([refreshPhoneStatus(true).catch(()=>null), new Promise(r => setTimeout(r, 2000))]);
+    const report = describePhoneStatus();
+    addMessage('assistant', report);
+    chatHistory.push({ role:'user', content: text });
+    chatHistory.push({ role:'assistant', content: report });
+    persistCurrentSession();
+    await speak(report);
+    if(conversationMode && !isThinking && typeof startListening === 'function') setTimeout(startListening, 250);
+    return;
+  }
   const phoneCmd = (IS_DESKTOP && text && !images.length && !screenCmd) ? phoneCommandOf(text) : null;
   if(phoneCmd){
     const refused = await phoneCommandRefusal();
