@@ -5,7 +5,9 @@ src/ringback.rs. One JSON object per line on stdin/stdout.
   --hang            : answer initialize, then never answer anything again
   --replies a|b|c   : each tools/call (except call_end) answers with the next text,
                       the last one repeating; an empty piece means an empty reply
-  --log PATH        : append the name of every tools/call received, one per line"""
+  --log PATH        : append the name of every tools/call received, one per line
+  --stderr TEXT     : print TEXT (lines separated by |) to stderr right after starting
+  --error-on NAME   : answer tools/call NAME with isError and "Error executing tool NAME: " """
 import json, sys
 
 exit_after_init = "--exit-after-init" in sys.argv
@@ -18,6 +20,14 @@ for i, a in enumerate(sys.argv):
     if a == "--log" and i + 1 < len(sys.argv):
         log_path = sys.argv[i + 1]
 reply_i = 0
+error_on = None
+for i, a in enumerate(sys.argv):
+    if a == "--stderr" and i + 1 < len(sys.argv):
+        for ln in sys.argv[i + 1].split("|"):
+            sys.stderr.write(ln + "\n")
+        sys.stderr.flush()
+    if a == "--error-on" and i + 1 < len(sys.argv):
+        error_on = sys.argv[i + 1]
 
 for line in sys.stdin:
     line = line.strip()
@@ -42,7 +52,9 @@ for line in sys.stdin:
         if log_path:
             with open(log_path, "a") as f:
                 f.write(p["name"] + "\n")
-        if p["name"] == "fail":
+        if error_on and p["name"] == error_on:
+            res = {"isError": True, "content": [{"type": "text", "text": "Error executing tool " + error_on + ": "}]}
+        elif p["name"] == "fail":
             res = {"isError": True, "content": [{"type": "text", "text": "boom"}]}
         elif replies is not None and p["name"] != "call_end":
             text = replies[min(reply_i, len(replies) - 1)]

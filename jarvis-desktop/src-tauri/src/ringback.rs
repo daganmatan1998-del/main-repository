@@ -217,18 +217,67 @@ pub struct McpClient {
     rx: Receiver<String>,
     next_id: u64,
     dead: bool,
+    /// The last lines ringback wrote to stderr (Python tracebacks end up here).
+    stderr_tail: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<String>>>,
+}
+
+const STDERR_KEEP: usize = 60;
+const TAIL_LINES: usize = 25;
+const TAIL_LINE_CHARS: usize = 300;
+const TAIL_MAX_CHARS: usize = 4000;
+
+/// A line that might carry a credential is never shown.
+fn line_may_hold_a_secret(line: &str) -> bool {
+    let l = line.to_lowercase();
+    [
+        "pass",
+        "secret",
+        "token",
+        "authorization",
+        "apikey",
+        "api_key",
+        "api-key",
+        "credential",
+    ]
+    .iter()
+    .any(|w| l.contains(w))
+}
+
+/// `message`, followed by what ringback itself said before it failed.
+fn with_log(message: &str, tail: &str) -> String {
+    if tail.is_empty() {
+        message.to_string()
+    } else {
+        format!("{message}\n--- ringback log (last lines) ---\n{tail}")
+    }
 }
 
 impl McpClient {
     pub fn start(mut cmd: Command) -> Result<McpClient, String> {
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
         let mut child = cmd
             .spawn()
             .map_err(|e| format!("could not start ringback: {e}"))?;
         let stdin = child.stdin.take();
         let stdout = child.stdout.take().ok_or("ringback has no stdout")?;
+        let stderr_tail =
+            std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new()));
+        if let Some(err) = child.stderr.take() {
+            let tail = stderr_tail.clone();
+            std::thread::spawn(move || {
+                for line in BufReader::new(err).lines() {
+                    let Ok(line) = line else { break };
+                    if let Ok(mut q) = tail.lock() {
+                        q.push_back(line);
+                        while q.len() > STDERR_KEEP {
+                            q.pop_front();
+                        }
+                    }
+                }
+            });
+        }
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
             for line in BufReader::new(stdout).lines() {
@@ -248,15 +297,22 @@ impl McpClient {
             rx,
             next_id: 1,
             dead: false,
+            stderr_tail,
         };
-        c.request(
-            "initialize",
-            json!({"protocolVersion": "2024-11-05", "capabilities": {},
+        let started = c
+            .request(
+                "initialize",
+                json!({"protocolVersion": "2024-11-05", "capabilities": {},
                    "clientInfo": {"name": "jarvis", "version": "1"}}),
-            Duration::from_secs(120),
-        )?;
-        c.write_line(&json!({"jsonrpc": "2.0", "method": "notifications/initialized"}))?;
-        Ok(c)
+                Duration::from_secs(120),
+            )
+            .and_then(|_| {
+                c.write_line(&json!({"jsonrpc": "2.0", "method": "notifications/initialized"}))
+            });
+        match started {
+            Ok(()) => Ok(c),
+            Err(m) => Err(with_log(&m, &c.log_tail())),
+        }
     }
 
     fn write_line(&mut self, v: &Value) -> Result<(), String> {
@@ -337,6 +393,44 @@ impl McpClient {
             Err(text)
         } else {
             Ok(text)
+        }
+    }
+
+    /// The last lines of ringback's own output, safe to show: secret-looking lines hidden,
+    /// long lines cut, the whole bounded. Waits a moment so a failing process has finished
+    /// writing before it is read.
+    pub fn log_tail(&self) -> String {
+        std::thread::sleep(Duration::from_millis(80));
+        let lines: Vec<String> = match self.stderr_tail.lock() {
+            Ok(q) => q
+                .iter()
+                .rev()
+                .take(TAIL_LINES)
+                .cloned()
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+        let shown: Vec<String> = lines
+            .iter()
+            .map(|l| l.trim_end())
+            .filter(|l| !l.is_empty())
+            .map(|l| {
+                if line_may_hold_a_secret(l) {
+                    "[line hidden: may hold a secret]".to_string()
+                } else {
+                    l.chars().take(TAIL_LINE_CHARS).collect()
+                }
+            })
+            .collect();
+        let joined = shown.join("\n");
+        let n = joined.chars().count();
+        if n > TAIL_MAX_CHARS {
+            joined.chars().skip(n - TAIL_MAX_CHARS).collect()
+        } else {
+            joined
         }
     }
 
@@ -579,8 +673,19 @@ impl Phone {
         };
         match result {
             Err(m) => {
+                let tail = self
+                    .client
+                    .as_ref()
+                    .map(|c| c.log_tail())
+                    .unwrap_or_default();
                 self.drop_client();
-                Err(CallError::new(&m))
+                Err(CallError {
+                    message: with_log(&m, &tail),
+                    tell_the_user: Some(
+                        "ringback reported an error. The details are in the red box on screen (and copied)."
+                            .to_string(),
+                    ),
+                })
             }
             Ok(text) => self.after_reply(tool, text),
         }
@@ -1273,5 +1378,82 @@ mod tests {
             Err("ringback.launch: \"python\" is missing".to_string());
         let r = readiness(&bad, true, true, true, &[], "e");
         assert!(!r.ready && r.mode == "invalid" && r.why.contains("python"));
+    }
+
+    // ---- ringback's own error output travels with the error --------------------
+    #[test]
+    fn a_tool_error_carries_the_tail_of_ringbacks_stderr_so_the_cause_is_visible() {
+        let mut p = Phone::new(t(1200));
+        let e = p
+            .call("call_start", serde_json::json!({"opening_line": "hi"}), t(5), || {
+                fake(&["--stderr", "Traceback (most recent call last):|  File \"voice_agent.py\", line 9, in place_call|pjsua2.Error: (no message)", "--error-on", "call_start"])
+            })
+            .unwrap_err();
+        assert!(
+            e.message.contains("Error executing tool call_start"),
+            "{e:?}"
+        );
+        assert!(
+            e.message.contains("place_call") && e.message.contains("pjsua2.Error"),
+            "{e:?}"
+        );
+        let tell = e.tell_the_user.unwrap_or_default();
+        assert!(
+            tell.len() < 200 && !tell.contains("Traceback"),
+            "the spoken sentence stays short: {tell:?}"
+        );
+        assert!(!p.running());
+    }
+
+    #[test]
+    fn lines_that_may_hold_a_secret_are_hidden_from_that_tail() {
+        let mut p = Phone::new(t(1200));
+        let e = p
+            .call("call_start", serde_json::json!({}), t(5), || {
+                fake(&["--stderr", "starting|VOICE_SIP_PASS=hunter2|Authorization: Digest abc|token=xyz|apikey: k|done", "--error-on", "call_start"])
+            })
+            .unwrap_err();
+        for secret in ["hunter2", "Digest abc", "xyz", "apikey: k"] {
+            assert!(!e.message.contains(secret), "leaked {secret}: {e:?}");
+        }
+        assert!(
+            e.message.contains("starting") && e.message.contains("done"),
+            "{e:?}"
+        );
+    }
+
+    #[test]
+    fn a_process_that_dies_at_start_explains_itself_from_stderr() {
+        let mut p = Phone::new(t(1200));
+        let e = p
+            .call("call_start", serde_json::json!({}), t(5), || {
+                fake(&[
+                    "--stderr",
+                    "ModuleNotFoundError: No module named 'pjsua2'",
+                    "--exit-after-init",
+                ])
+            })
+            .unwrap_err();
+        assert!(e.message.contains("No module named 'pjsua2'"), "{e:?}");
+    }
+
+    #[test]
+    fn the_tail_keeps_only_the_last_lines_and_cuts_long_ones() {
+        let many: Vec<String> = (0..60).map(|i| format!("line {i}")).collect();
+        let mut long = many.join("|");
+        long.push_str(&format!("|{}", "x".repeat(900)));
+        let mut p = Phone::new(t(1200));
+        let e = p
+            .call("call_start", serde_json::json!({}), t(5), || {
+                fake(&["--stderr", &long, "--error-on", "call_start"])
+            })
+            .unwrap_err();
+        assert!(
+            !e.message.contains("line 0|") && !e.message.contains("line 10\n"),
+            "{}",
+            &e.message[..80.min(e.message.len())]
+        );
+        assert!(e.message.contains("line 59"), "{e:?}");
+        assert!(e.message.len() < 6000, "bounded: {}", e.message.len());
     }
 }
