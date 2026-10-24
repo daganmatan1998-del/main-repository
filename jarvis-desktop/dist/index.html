@@ -10421,7 +10421,83 @@ async function callPhoneTool(name, input, toolUseId){
   return result;
 }
 
-window.__phoneTest = { get active(){ return phoneCallActive; }, get status(){ return phoneStatus; }, callPhoneTool, refreshPhoneStatus };
+/* ISRAEL TIME. He says "at nine" meaning Israel time, whatever the machine's own zone is.
+   These work from the tz database (Intl), so the clock change is handled: on 25 Oct 2026
+   Israel goes from +03:00 to +02:00, and "tomorrow 09:00" must land on the right instant. */
+const ISRAEL_TZ = 'Asia/Jerusalem';
+function tzParts(instantMs, tz){
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour12: false, year:'numeric', month:'2-digit', day:'2-digit',
+                                                   hour:'2-digit', minute:'2-digit', second:'2-digit' }).formatToParts(new Date(instantMs));
+  const g = k => parseInt(parts.find(p => p.type === k).value, 10);
+  return { y: g('year'), mo: g('month'), d: g('day'), h: g('hour') === 24 ? 0 : g('hour'), mi: g('minute'), s: g('second') };
+}
+function tzOffsetMs(instantMs, tz){
+  const p = tzParts(instantMs, tz);
+  return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - Math.floor(instantMs / 1000) * 1000;
+}
+function israelNow(date){
+  const d = date || new Date();
+  const p = tzParts(d.getTime(), ISRAEL_TZ);
+  const two = n => String(n).padStart(2, '0');
+  const offMin = Math.round(tzOffsetMs(d.getTime(), ISRAEL_TZ) / 60000);
+  const a = Math.abs(offMin);
+  const offset = (offMin >= 0 ? '+' : '-') + two(Math.floor(a / 60)) + ':' + two(a % 60);
+  const local = p.y + '-' + two(p.mo) + '-' + two(p.d) + 'T' + two(p.h) + ':' + two(p.mi) + ':' + two(p.s);
+  const weekday = new Intl.DateTimeFormat('en-GB', { timeZone: ISRAEL_TZ, weekday: 'long' }).format(d);
+  return { local: local, offset: offset, iso: local + offset, weekday: weekday };
+}
+/* A wall-clock time in a zone ("2026-10-25T09:00:00", no offset) -> the real instant, as UTC ISO. */
+function zonedToIso(local, tz){
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(String(local || '').trim());
+  if(!m) return null;
+  const wall = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+  let t = wall - tzOffsetMs(wall, tz);
+  const off2 = tzOffsetMs(t, tz);
+  if(off2 !== wall - t) t = wall - off2;       // the guess crossed a clock change
+  return new Date(t).toISOString();
+}
+
+/* "call me" and "can you call me later", said or typed, in English or Hebrew. Matched on
+   whole short sentences, so "call me a cab", "call me maybe" and "don't call me" are not
+   commands. NOW rings at once; LATER asks when and schedules it. */
+const PHONE_NEG      = /\b(?:dont|do not|never|stop|cancel|no)\b|^(?:אל|לא)\s/;
+const PHONE_LATER_EN = /\b(?:call|ring|phone)\s+me\s+(?:back\s+)?(?:later|tonight|tomorrow|this\s+(?:evening|afternoon|morning)|in\s+(?:an?|\d+|a\s+few|half\s+an?|couple)\b|at\s+\d)/;
+const PHONE_NOW_EN   = /^(?:(?:hey|hi|ok|okay)\s+)?(?:(?:jarvis|ultron)\s+)?(?:please\s+)?(?:(?:can|could|will|would)\s+you\s+)?(?:please\s+)?(?:call|ring|phone)\s+me(?:\s+up)?(?:\s+(?:right\s+)?now)?(?:\s+please)?$/;
+const PHONE_LATER_HE = /(?:קשר|חייג|צלצל)\S*\s+(?:אליי|אלי)(?=\s|$).*?(?:אחר כך|אחכ|מאוחר|מחר|הערב|בערב|בבוקר|בעוד|בשעה|בצהריים)/;
+const PHONE_NOW_HE   = /^(?:(?:היי|הי)\s+)?(?:גרוויס\s+)?(?:בבקשה\s+)?(?:(?:אתה\s+)?(?:יכול|תוכל)\s+)?(?:ל?התקשר|תתקשר|ל?חייג|תחייג|חייג|תצלצל|לצלצל)\s+(?:אליי|אלי)(?:\s+(?:עכשיו|מיד|בבקשה))*$/;
+function phoneCommandOf(text){
+  const t = normaliseHeard(text);
+  if(!t || PHONE_NEG.test(t)) return null;
+  if(PHONE_LATER_EN.test(t) || PHONE_LATER_HE.test(t)) return 'later';
+  if(PHONE_NOW_EN.test(t) || PHONE_NOW_HE.test(t)) return 'now';
+  return null;
+}
+function phoneInstruction(kind){
+  if(kind === 'now'){
+    return '[He just said "call me". Ring his phone RIGHT NOW with phone_call: no questions and no confirmation first. Opening line: one short friendly English sentence. Then keep the conversation going with phone_say until he is done, and finish with phone_hangup.] ';
+  }
+  const n = israelNow();
+  return '[He wants a phone call LATER. Ask him ONE short question: at what time? (in the language he speaks). His answer is a time in ISRAEL time (' + ISRAEL_TZ + '). ' +
+         'Right now in Israel it is ' + n.weekday + ' ' + n.local.replace('T', ' ') + ' (UTC' + n.offset + '). ' +
+         'When he gives the time, call remember_to_do with every:"once", at:<that Israel wall-clock time as ISO WITHOUT an offset, e.g. 2026-10-25T21:00:00>, timezone:"' + ISRAEL_TZ + '", ' +
+         'goal:"Ring him on the phone now with phone_call and say hello in one short English sentence. If this task ran more than 30 minutes late, do NOT call: just tell him you missed it." ' +
+         'Never put an offset in at: the app converts the Israel time (clock changes included). Then confirm in ONE sentence the time you will call, in Israel time. ' +
+         'If he already said the time in the same sentence, skip the question. If the time he gives has already passed today, use tomorrow.] ';
+}
+/* '' when a call can be attempted; otherwise the sentence to tell him (no model involved). */
+async function phoneCommandRefusal(){
+  await Promise.race([refreshPhoneStatus(true).catch(()=>null), new Promise(r => setTimeout(r, 2000))]);
+  const he = currentLang === 'he';
+  if(!phoneStatus || phoneStatus.unavailable){
+    return he ? 'שיחות טלפון דורשות את האפליקציה המעודכנת. צריך לבנות אותה מחדש עם JARVIS-UPDATE.bat.'
+              : 'Phone calls need the updated app. Rebuild it with JARVIS-UPDATE.bat.';
+  }
+  if(!phoneStatus.ready) return (he ? 'אני עוד לא יכול להתקשר: ' : "I can't call yet: ") + (phoneStatus.why || '');
+  return '';
+}
+
+window.__phoneTest = { get active(){ return phoneCallActive; }, get status(){ return phoneStatus; }, callPhoneTool, refreshPhoneStatus,
+                       israelNow, zonedToIso, phoneCommandOf };
 
 const SCHEDULE_MANAGE_TOOL = {
   name: 'manage_scheduled',
@@ -17007,7 +17083,8 @@ const TASK_TOOL = {
       time: { type:'string', description:'HH:MM in 24-hour form, for day and week. e.g. "02:00".' },
       weekday: { type:'number', description:'For week: 0 Sunday through 6 Saturday.' },
       hours: { type:'number', description:'For hour: how many hours between runs.' },
-      at: { type:'string', description:'For once: an ISO datetime, e.g. 2026-09-20T10:00:00.' }
+      at: { type:'string', description:'For once: an ISO datetime, e.g. 2026-09-20T10:00:00.' },
+      timezone: { type:'string', description:'Optional IANA zone, e.g. "Asia/Jerusalem". When given, `at` is the wall-clock time in that zone WITHOUT an offset and the app converts it (clock changes included).' }
     },
     required: ['goal','every']
   }
@@ -17031,6 +17108,12 @@ const TASK_CANCEL_TOOL = {
 
 async function callTaskTool(input){
   if(!input || !input.goal || !input.every) return { error: 'a goal and a schedule are both required' };
+  if(input.timezone && input.at && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(String(input.at).trim())){
+    let iso = null;
+    try{ iso = zonedToIso(input.at, String(input.timezone)); }catch(err){ return { error: 'unknown timezone: ' + input.timezone }; }
+    if(!iso) return { error: 'at must look like 2026-09-20T10:00:00 when a timezone is given' };
+    input = Object.assign({}, input, { at: iso });
+  }
   if((input.every === 'day' || input.every === 'week') && !/^\d{1,2}:\d{2}$/.test(String(input.time || ''))){
     return { error: 'a time like "02:00" is required for a daily or weekly task' };
   }
@@ -17043,6 +17126,7 @@ async function callTaskTool(input){
     return {
       ok: true,
       id: task.id,
+      at: task.every === 'once' ? task.at : undefined,
       runs: describeTask(task),
       next: task.nextRun ? new Date(task.nextRun).toLocaleString() : null,
       note: 'It is saved and will run on its own. It needs the app to be open at that hour; if the machine is off it runs at the next launch and says it is late. Confirm in one short line, including when it will next run.'
@@ -20436,7 +20520,7 @@ async function readMessageStream(response, onText){
 function phoneNote(){
   if(!IS_DESKTOP || !phoneStatus || phoneStatus.unavailable) return '';
   if(phoneCallActive) return '\n\nA PHONE CALL IS UP. He hears you only on the phone: the orb is silent. Keep answering with phone_say (or phone_speak then phone_listen), in short plain English sentences. Three silent turns in a row end the call by themselves; [CALL ENDED] means he hung up. End with phone_hangup when he is done.';
-  if(phoneStatus.ready) return '\n\nPHONE CALLS: phone_call rings his phone for a live two-way call, only when he asks. The call is in English for now (the voice and the speech recognition are English-only): speak plain English on it, no code or URLs. call_me stays the one-way message.';
+  if(phoneStatus.ready) return '\n\nPHONE CALLS: phone_call rings his phone for a live two-way call, only when he asks. "Call me" means ring now. "Call me later" means ask ONE question (what time, in Israel time), then save it with remember_to_do (every once, at = the Israel wall-clock time without an offset, timezone Asia/Jerusalem) and confirm the time; it is now ' + israelNow().local.replace('T', ' ') + ' in Israel. The call is in English for now (the voice and the speech recognition are English-only): speak plain English on it, no code or URLs. call_me stays the one-way message.';
   return '\n\nPHONE CALLS: calling him by phone (ringback) is not set up yet. ' + (phoneStatus.why || '') + ' If he asks you to call him or talk by phone, tell him exactly that in one sentence; never claim to dial. The call_me tool (a one-way Telegram message) is separate and still works.';
 }
 function cameraSystemExtras(){
@@ -23226,8 +23310,23 @@ async function handleSend(){
      The store report is the exception and deliberately falls through: its
      numbers are worthless without something to say about them, and that
      needs the model. runWorkflowCommand returns false for it. */
-  let modelText = text;
-  const plan = (images.length || screenCmd) ? null : planRequests(text);
+  /* "call me" / "can you call me later": decided here, not left to the model's reading of
+     the sentence. Not set up -> told why, no model call and nothing scheduled. */
+  const phoneCmd = (IS_DESKTOP && text && !images.length && !screenCmd) ? phoneCommandOf(text) : null;
+  if(phoneCmd){
+    const refused = await phoneCommandRefusal();
+    if(refused){
+      addMessage('assistant', refused);
+      chatHistory.push({ role:'user', content: text });
+      chatHistory.push({ role:'assistant', content: refused });
+      persistCurrentSession();
+      await speak(refused);
+      if(conversationMode && !isThinking && typeof startListening === 'function') setTimeout(startListening, 250);
+      return;
+    }
+  }
+  let modelText = phoneCmd ? phoneInstruction(phoneCmd) + text : text;
+  const plan = (images.length || screenCmd || phoneCmd) ? null : planRequests(text);
   if(plan){
     const done = [];
     for(const step of plan.steps){
@@ -23251,7 +23350,7 @@ async function handleSend(){
        neither repeats it nor claims it cannot. */
     modelText = (done.length ? '[Already done by the app, do not do again: ' + done.join('; ') + '.] ' : '') +
                 plan.rest.join(', ');
-  } else if(!images.length && !screenCmd){
+  } else if(!images.length && !screenCmd && !phoneCmd){
     const flow = detectWorkflowCommand(text);
     if(flow){
       chatHistory.push({ role:'user', content: text });
