@@ -10480,6 +10480,7 @@ function phoneCommandOf(text){
   return null;
 }
 const PHONE_OPENING_LINE = 'Hi, it is JARVIS. You asked me to call. How can I help?';
+const PHONE_AUTO_SAY_MAX = 25;
 /* What the model is told once the page has really placed the call. */
 function phoneNowHandoff(text, firstWords){
   return '[The app has ALREADY placed the phone call he asked for (do not call phone_call again). His first words on the phone: ' + (firstWords || '(nothing yet)') + ' ' +
@@ -21551,6 +21552,7 @@ async function askJarvis(userText, images, onText, tag){
     // at what came back, and correct himself — which is the whole difference
     // between describing an answer and arriving at one.
     let loopGuard = 0;
+    let phoneAutoSays = 0;   // plain-text turns spoken on a call for the model (capped)
     let corrections = 0;
     let model3dNudges = 0;
     /* The outer pass exists for one case: the turn ended, he described doing
@@ -21792,6 +21794,34 @@ async function askJarvis(userText, images, onText, tag){
         data = await callWithRoom();
         const more = textOf(data);
         if(more) collected = collected ? collected + '\n' + more : more;
+      }
+
+      /* A phone call is up and the model ended its turn with plain text instead of phone_say.
+         That text is what it meant to tell him, but the orb is silent on a call, so it only
+         reached a screen nobody reads and he heard nothing. Say it on the call for the model,
+         hand it his answer, and let it carry on. Capped, so a model that only ever writes text
+         cannot keep a call going forever (the call is then ended properly). */
+      if(phoneCallActive && data.stop_reason !== 'tool_use' && !userInterrupted){
+        const toSay = textOf(data).replace(/[*_`#]+/g, '').trim();
+        if(toSay){
+          if(phoneAutoSays >= PHONE_AUTO_SAY_MAX){
+            await callPhoneTool('phone_hangup', { text: 'Let us pick this up another time. Goodbye.' }, 'auto_end_' + Date.now().toString(36));
+            addMessage('system', '\u25B8 phone call ended (turn limit)');
+          } else {
+            phoneAutoSays++;
+            const sayId = 'auto_' + Date.now().toString(36) + '_' + phoneAutoSays;
+            const said = toSay.slice(0, 600);
+            const res = await callPhoneTool('phone_say', { text: said }, sayId);
+            workingMessages = [...workingMessages,
+                               { role:'assistant', content: (data.content || []).concat([{ type:'tool_use', id: sayId, name:'phone_say', input:{ text: said } }]) },
+                               { role:'user', content: [{ type:'tool_result', tool_use_id: sayId, content: JSON.stringify(res) }] }];
+            roundBoundary();
+            data = await callWithRoom();
+            const next = textOf(data);
+            if(next) collected = collected ? collected + '\n' + next : next;
+            continue;
+          }
+        }
       }
 
       /* He asked for a 3D model and none is on his screen: handed back,
