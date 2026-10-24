@@ -10470,19 +10470,30 @@ function zonedToIso(local, tz){
 const PHONE_NEG      = /\b(?:dont|do not|never|stop|cancel|no)\b|^(?:אל|לא)\s/;
 const PHONE_LATER_EN = /\b(?:call|ring|phone)\s+me\s+(?:back\s+)?(?:later|tonight|tomorrow|this\s+(?:evening|afternoon|morning)|in\s+(?:an?|\d+|a\s+few|half\s+an?|couple)\b|at\s+\d)/;
 const PHONE_NOW_EN   = /^(?:(?:hey|hi|ok|okay)\s+)?(?:(?:jarvis|ultron)\s+)?(?:please\s+)?(?:(?:can|could|will|would)\s+you\s+)?(?:please\s+)?(?:call|ring|phone)\s+me(?:\s+up)?(?:\s+(?:right\s+)?now)?(?:\s+please)?$/;
+/* "call me and tell me to go to the gym": a call with a PURPOSE. Right now when no time is said. */
+const PHONE_NOW_WHY_EN = /^(?:(?:hey|hi|ok|okay)\s+)?(?:(?:jarvis|ultron)\s+)?(?:please\s+)?(?:(?:can|could|will|would)\s+you\s+)?(?:please\s+)?(?:call|ring|phone)\s+me(?:\s+up)?(?:\s+(?:right\s+)?now)?\s*(?:and|to)\s+(?:tell|remind|let|say|ask|read|give)\b.{3,}$/;
+const PHONE_NOW_WHY_HE = /^(?:(?:היי|הי)\s+)?(?:גרוויס\s+)?(?:בבקשה\s+)?(?:ל?התקשר|תתקשר|ל?חייג|תחייג|תצלצל|לצלצל)\s+(?:אליי|אלי)(?:\s+(?:עכשיו|מיד))?\s+(?:ו|כדי\s+|ת)\S+.{3,}$/;
 const PHONE_LATER_HE = /(?:קשר|חייג|צלצל)\S*\s+(?:אליי|אלי)(?=\s|$).*?(?:אחר כך|אחכ|מאוחר|מחר|הערב|בערב|בבוקר|בעוד|בשעה|בצהריים)/;
 const PHONE_NOW_HE   = /^(?:(?:היי|הי)\s+)?(?:גרוויס\s+)?(?:בבקשה\s+)?(?:(?:אתה\s+)?(?:יכול|תוכל)\s+)?(?:ל?התקשר|תתקשר|ל?חייג|תחייג|חייג|תצלצל|לצלצל)\s+(?:אליי|אלי)(?:\s+(?:עכשיו|מיד|בבקשה))*$/;
 function phoneCommandOf(text){
   const t = normaliseHeard(text);
   if(!t || PHONE_NEG.test(t)) return null;
   if(PHONE_LATER_EN.test(t) || PHONE_LATER_HE.test(t)) return 'later';
-  if(PHONE_NOW_EN.test(t) || PHONE_NOW_HE.test(t)) return 'now';
+  if(PHONE_NOW_EN.test(t) || PHONE_NOW_HE.test(t) || PHONE_NOW_WHY_EN.test(t) || PHONE_NOW_WHY_HE.test(t)) return 'now';
   return null;
+}
+/* True when the call has a reason ("call me and tell me ..."), not just "call me". */
+function phoneHasPurpose(text){
+  const t = normaliseHeard(text);
+  return !!t && (PHONE_NOW_WHY_EN.test(t) || PHONE_NOW_WHY_HE.test(t));
 }
 const PHONE_OPENING_LINE = 'Hi, it is JARVIS. You asked me to call. How can I help?';
 const PHONE_AUTO_SAY_MAX = 25;
 /* What the model is told once the page has really placed the call. */
-function phoneNowHandoff(text, firstWords){
+function phoneNowHandoff(text, firstWords, hasPurpose){
+  if(hasPurpose) return '[The app has ALREADY placed the phone call he asked for (do not call phone_call again). He answered and said only hello so far (' + (firstWords || 'nothing yet') + '). ' +
+         'The call has a PURPOSE, which is in his request below. Your FIRST phone_say delivers that purpose in one or two short plain English sentences, as if you were saying it yourself ("Good morning, sir. Time to head to the gym."). ' +
+         'Then listen: if he answers, reply briefly; when he is done, or when the purpose is delivered and he has nothing to add, say goodbye in one sentence and use phone_hangup.] ' + text;
   return '[The app has ALREADY placed the phone call he asked for (do not call phone_call again). His first words on the phone: ' + (firstWords || '(nothing yet)') + ' ' +
          'Carry on the conversation with phone_say, in short plain English, and finish with phone_hangup when he is done.] ' + text;
 }
@@ -10505,7 +10516,8 @@ function phoneInstruction(kind){
   return '[He wants a phone call LATER. Ask him ONE short question: at what time? (in the language he speaks). His answer is a time in ISRAEL time (' + ISRAEL_TZ + '). ' +
          'Right now in Israel it is ' + n.weekday + ' ' + n.local.replace('T', ' ') + ' (UTC' + n.offset + '). ' +
          'When he gives the time, call remember_to_do with every:"once", at:<that Israel wall-clock time as ISO WITHOUT an offset, e.g. 2026-10-25T21:00:00>, timezone:"' + ISRAEL_TZ + '", ' +
-         'goal:"Ring him on the phone now with phone_call and say hello in one short English sentence. If this task ran more than 30 minutes late, do NOT call: just tell him you missed it." ' +
+         'goal:"Ring him on the phone now with phone_call (opening_line: Hi, it is JARVIS.). THEN, with phone_say, deliver this message in one or two short plain English sentences: <WRITE HERE, IN FULL, WHAT HE ASKED YOU TO TELL HIM OR REMIND HIM OF; if he gave no reason, just ask how you can help>. If he answers, reply briefly. When the message is delivered and he has nothing to add, say goodbye and use phone_hangup. If this task ran more than 30 minutes late, do NOT call: just tell him you missed it." ' +
+         'The goal must contain the actual message in your own words (it runs later with none of this conversation around it). If he said the reason in the same sentence ("call me at 8 am and tell me to go to the gym"), use it and do not ask for it again. ' +
          'Never put an offset in at: the app converts the Israel time (clock changes included). Then confirm in ONE sentence the time you will call, in Israel time. ' +
          'If he already said the time in the same sentence, skip the question. If the time he gives has already passed today, use tomorrow.] ';
 }
@@ -10542,7 +10554,7 @@ async function phoneCommandRefusal(){
 }
 
 window.__phoneTest = { get active(){ return phoneCallActive; }, get status(){ return phoneStatus; }, callPhoneTool, refreshPhoneStatus,
-                       israelNow, zonedToIso, phoneCommandOf, isPhoneStatusQuestion, describePhoneStatus, claimsItDidSomething };
+                       israelNow, zonedToIso, phoneCommandOf, phoneHasPurpose, isPhoneStatusQuestion, describePhoneStatus, claimsItDidSomething };
 
 const SCHEDULE_MANAGE_TOOL = {
   name: 'manage_scheduled',
@@ -23428,7 +23440,7 @@ async function handleSend(){
     if(phoneBusy) r = { error: 'another phone action is still running' };
     else {
       setToolStatus('ringing your phone');
-      try{ r = await callPhoneTool('phone_call', { opening_line: PHONE_OPENING_LINE }, 'page_' + Date.now().toString(36)); }
+      try{ r = await callPhoneTool('phone_call', { opening_line: phoneHasPurpose(text) ? 'Hi, it is JARVIS.' : PHONE_OPENING_LINE }, 'page_' + Date.now().toString(36)); }
       finally{ clearToolStatus(); }
     }
     if(!r || r.error || !phoneCallActive){
@@ -23445,7 +23457,7 @@ async function handleSend(){
     }
     phoneFirstWords = r.text || '';
   }
-  let modelText = phoneCmd === 'now' ? phoneNowHandoff(text, phoneFirstWords)
+  let modelText = phoneCmd === 'now' ? phoneNowHandoff(text, phoneFirstWords, phoneHasPurpose(text))
                 : phoneCmd ? phoneInstruction(phoneCmd) + text : text;
   const plan = (images.length || screenCmd || phoneCmd) ? null : planRequests(text);
   if(plan){
