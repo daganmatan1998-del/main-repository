@@ -12,13 +12,15 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 /// The only ringback tools JARVIS may ever invoke. Anything else the model asks for
-/// (speak, listen, a made-up name) is refused before it reaches the server.
-pub const ALLOWED_TOOLS: [&str; 5] = [
+/// (alert_me, a made-up name, a path) is refused before it reaches the server.
+pub const ALLOWED_TOOLS: [&str; 7] = [
     "call_start",
     "converse",
-    "call_end",
+    "speak",
+    "listen",
     "call_status",
     "get_conversation",
+    "call_end",
 ];
 
 /// What ringback cannot start without (a Linphone SIP account).
@@ -87,6 +89,124 @@ pub fn docker_args(image: &str, env_file: &Path, vars: &BTreeMap<String, String>
     a.push(env_file.to_string_lossy().into_owned());
     a.push(image.to_string());
     a
+}
+
+/// How ringback is started. Docker is the default; a `ringback.launch` file switches
+/// to the copy that already works inside WSL, with its own Python environment.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Launcher {
+    Docker,
+    Wsl(WslLaunch),
+}
+
+/// Everything needed to start `run_voice_mcp.py` inside a WSL distribution. Credentials
+/// are not here and never travel through us: `run_voice_mcp.py` reads its own `voice.env`
+/// inside WSL.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WslLaunch {
+    pub distro: String,
+    pub cwd: String,
+    pub python: String,
+    pub script: String,
+}
+
+const LAUNCH_KEYS: [&str; 4] = ["distro", "cwd", "python", "script"];
+
+fn launch_field(
+    obj: &serde_json::Map<String, Value>,
+    key: &str,
+    default: Option<&str>,
+) -> Result<String, String> {
+    match obj.get(key) {
+        Some(Value::String(v)) => Ok(v.clone()),
+        Some(_) => Err(format!("ringback.launch: \"{key}\" must be text")),
+        None => default.map(String::from).ok_or_else(|| match key {
+            "python" => "ringback.launch: \"python\" is missing - give the full path of the python inside the ringback virtualenv, e.g. /home/you/ringback/.venv/bin/python".to_string(),
+            "cwd" => "ringback.launch: \"cwd\" is missing - the folder of ringback inside WSL, e.g. /home/you/ringback".to_string(),
+            "distro" => "ringback.launch: \"distro\" is missing - the WSL distribution name exactly as `wsl -l -v` prints it".to_string(),
+            _ => format!("ringback.launch: \"{key}\" is missing"),
+        }),
+    }
+}
+
+fn plain_chars(s: &str, extra: &[char]) -> bool {
+    s.chars().all(|c| {
+        c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' || extra.contains(&c)
+    })
+}
+
+fn valid_linux_path(s: &str) -> bool {
+    s.starts_with('/')
+        && s.len() <= 260
+        && plain_chars(s, &['/', '+', '@'])
+        && !s.split('/').any(|seg| seg == "..")
+}
+
+/// No file means Docker. A file that is there but wrong is an error to show him, never a
+/// quiet fall back to Docker: he asked for WSL, and starting something else would hide
+/// the mistake. Only the four known keys are accepted, so the file cannot carry a command.
+pub fn choose_launcher(launch_text: Option<&str>) -> Result<Launcher, String> {
+    let Some(text) = launch_text else {
+        return Ok(Launcher::Docker);
+    };
+    let v: Value = serde_json::from_str(text.trim_start_matches('\u{feff}'))
+        .map_err(|_| "ringback.launch is not valid JSON".to_string())?;
+    let obj = v
+        .as_object()
+        .ok_or("ringback.launch must be a JSON object")?;
+    if let Some(k) = obj.keys().find(|k| !LAUNCH_KEYS.contains(&k.as_str())) {
+        return Err(format!(
+            "ringback.launch: unknown key \"{k}\" (allowed: distro, cwd, python, script)"
+        ));
+    }
+    let distro = launch_field(obj, "distro", None)?;
+    let cwd = launch_field(obj, "cwd", None)?;
+    let python = launch_field(obj, "python", None)?;
+    let script = launch_field(obj, "script", Some("run_voice_mcp.py"))?;
+    if distro.is_empty()
+        || !distro.starts_with(|c: char| c.is_ascii_alphanumeric())
+        || !plain_chars(&distro, &[])
+    {
+        return Err("ringback.launch: \"distro\" must be the distribution name exactly as `wsl -l -v` prints it (letters, digits, . _ -)".to_string());
+    }
+    if !valid_linux_path(&cwd) {
+        return Err("ringback.launch: \"cwd\" must be an absolute Linux path without spaces, e.g. /home/you/ringback".to_string());
+    }
+    if !valid_linux_path(&python) {
+        return Err("ringback.launch: \"python\" must be the absolute path of the virtualenv's python (no bare `python3`, no spaces)".to_string());
+    }
+    if !script.ends_with(".py")
+        || script.len() < 4
+        || script.contains("..")
+        || !plain_chars(&script, &[])
+    {
+        return Err(
+            "ringback.launch: \"script\" must be a plain file name ending in .py".to_string(),
+        );
+    }
+    Ok(Launcher::Wsl(WslLaunch {
+        distro,
+        cwd,
+        python,
+        script,
+    }))
+}
+
+/// Arguments for `wsl.exe`. `--exec` runs the program directly, with no shell in between,
+/// so nothing in the paths can be interpreted as a command.
+pub fn wsl_args(l: &WslLaunch) -> Vec<String> {
+    [
+        "--distribution",
+        &l.distro,
+        "--cd",
+        &l.cwd,
+        "--exec",
+        &l.python,
+        &l.script,
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
 }
 
 /// One running ringback server. Requests are one JSON object per line; a reader
@@ -272,20 +392,50 @@ pub fn status_why(docker: bool, env_found: bool, missing: &[&str], env_path: &st
     }
 }
 
+const DEFAULT_MAX_TURNS: u32 = 30;
+const DEFAULT_MAX_EMPTY: u32 = 3;
+
+/// What ringback answers when nobody said anything on the caller's turn.
+fn is_silence(text: &str) -> bool {
+    let t = text.trim();
+    t.is_empty() || t.starts_with("[SILENCE]")
+}
+
+/// Replies that mean there is no call (any more): he hung up, nobody picked up, or the
+/// call was never up.
+fn is_over_marker(text: &str) -> bool {
+    text.contains("[CALL ENDED]")
+        || text.contains("[NO ANSWER]")
+        || text.contains("[NO ACTIVE CALL]")
+        || text.contains("then the call ENDED")
+}
+
 /// The phone line: at most one ringback process, started on first use, dropped when
-/// the call ends, when anything goes wrong, or when the call outlives `max_call`.
+/// the call ends, when anything goes wrong, or when the call outlives its limits.
 pub struct Phone {
     client: Option<McpClient>,
     call_started: Option<Instant>,
     max_call: Duration,
+    max_turns: u32,
+    max_empty: u32,
+    turns: u32,
+    empty_streak: u32,
 }
 
 impl Phone {
     pub fn new(max_call: Duration) -> Phone {
+        Phone::with_limits(max_call, DEFAULT_MAX_TURNS, DEFAULT_MAX_EMPTY)
+    }
+
+    pub fn with_limits(max_call: Duration, max_turns: u32, max_empty: u32) -> Phone {
         Phone {
             client: None,
             call_started: None,
             max_call,
+            max_turns,
+            max_empty,
+            turns: 0,
+            empty_streak: 0,
         }
     }
 
@@ -300,6 +450,11 @@ impl Phone {
         alive
     }
 
+    /// A call is actually up: started, answered, and not over.
+    pub fn call_up(&self) -> bool {
+        self.call_started.is_some() && self.client.is_some()
+    }
+
     pub fn stop(&mut self) {
         self.drop_client();
     }
@@ -309,10 +464,22 @@ impl Phone {
             c.stop();
         }
         self.call_started = None;
+        self.turns = 0;
+        self.empty_streak = 0;
+    }
+
+    /// Hang up properly (a call_end the phone hears) before dropping the process.
+    fn end_politely(&mut self) {
+        if let Some(c) = self.client.as_mut() {
+            if c.is_alive() {
+                let _ = c.call_tool("call_end", json!({}), Duration::from_secs(8));
+            }
+        }
+        self.drop_client();
     }
 
     /// Runs one ringback tool. `make_cmd` builds the process, and is only called
-    /// when no live one exists.
+    /// when a new call starts and no live process exists.
     pub fn call(
         &mut self,
         tool: &str,
@@ -325,7 +492,7 @@ impl Phone {
         }
         if let Some(t0) = self.call_started {
             if t0.elapsed() > self.max_call {
-                self.drop_client();
+                self.end_politely();
                 return Err(CallError {
                     message: "call time limit reached".to_string(),
                     tell_the_user: Some(format!(
@@ -335,6 +502,12 @@ impl Phone {
                 });
             }
         }
+        if tool == "call_start" && self.call_started.is_some() && self.running() {
+            return Err(CallError {
+                message: "a call is already up".to_string(),
+                tell_the_user: Some("A call is already in progress.".to_string()),
+            });
+        }
         if !self.running() {
             // Only a new call may start the container; hanging up or talking with no
             // call up would boot Docker just to be told there is nothing to do.
@@ -343,17 +516,133 @@ impl Phone {
             }
             self.client = Some(McpClient::start(make_cmd()).map_err(|m| CallError::new(&m))?);
         }
+        if matches!(tool, "converse" | "listen" | "speak") && self.turns >= self.max_turns {
+            self.end_politely();
+            return Err(CallError {
+                message: "turn limit reached".to_string(),
+                tell_the_user: Some(format!(
+                    "The call reached its {} turn limit and was ended.",
+                    self.max_turns
+                )),
+            });
+        }
         let result = match self.client.as_mut() {
             Some(c) => c.call_tool(tool, args, timeout),
             None => Err("ringback is not running".to_string()),
         };
-        match &result {
-            Ok(_) if tool == "call_start" => self.call_started = Some(Instant::now()),
-            Ok(_) if tool == "call_end" => self.drop_client(),
-            Ok(_) => {}
-            Err(_) => self.drop_client(),
+        match result {
+            Err(m) => {
+                self.drop_client();
+                Err(CallError::new(&m))
+            }
+            Ok(text) => self.after_reply(tool, text),
         }
-        result.map_err(|m| CallError::new(&m))
+    }
+
+    fn after_reply(&mut self, tool: &str, text: String) -> Result<String, CallError> {
+        if tool == "call_end" || is_over_marker(&text) {
+            self.drop_client();
+            return Ok(text);
+        }
+        if tool == "call_start" {
+            self.call_started = Some(Instant::now());
+            self.turns = 0;
+            self.empty_streak = 0;
+        }
+        // Only a caller's turn can be silent; an empty reply from speak, call_status or
+        // get_conversation says nothing about him.
+        if matches!(tool, "call_start" | "converse" | "listen") {
+            self.turns += 1;
+            self.empty_streak = if is_silence(&text) {
+                self.empty_streak + 1
+            } else {
+                0
+            };
+            if self.empty_streak >= self.max_empty {
+                let n = self.max_empty;
+                self.end_politely();
+                return Err(CallError {
+                    message: format!("{n} silent turns in a row; the call was ended"),
+                    tell_the_user: Some(format!(
+                        "He said nothing {n} times in a row, so I ended the call."
+                    )),
+                });
+            }
+        }
+        Ok(text)
+    }
+}
+
+/// What the page gets back: the tool's outcome, and whether a call is up afterwards
+/// (the page leaves call mode on `false`, whatever else happened).
+pub struct Reply {
+    pub result: Result<String, CallError>,
+    pub call_up: bool,
+}
+
+/// The one shared phone line. A second request while one is running is refused at once
+/// ("busy"), never queued behind a 90 second wait.
+pub struct PhoneLine {
+    inner: std::sync::Mutex<Phone>,
+    up: std::sync::atomic::AtomicBool,
+}
+
+impl PhoneLine {
+    pub fn new(max_call: Duration) -> PhoneLine {
+        PhoneLine {
+            inner: std::sync::Mutex::new(Phone::new(max_call)),
+            up: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    pub fn call(
+        &self,
+        tool: &str,
+        args: Value,
+        timeout: Duration,
+        make_cmd: impl FnOnce() -> Command,
+    ) -> Reply {
+        use std::sync::atomic::Ordering;
+        use std::sync::TryLockError;
+        let mut phone = match self.inner.try_lock() {
+            Ok(g) => g,
+            Err(TryLockError::Poisoned(p)) => p.into_inner(),
+            Err(TryLockError::WouldBlock) => {
+                return Reply {
+                    result: Err(CallError {
+                        message: "ringback is busy with another action".to_string(),
+                        tell_the_user: Some("Another phone action is still running.".to_string()),
+                    }),
+                    call_up: self.up.load(Ordering::SeqCst),
+                }
+            }
+        };
+        let result = phone.call(tool, args, timeout, make_cmd);
+        let up = phone.call_up();
+        self.up.store(up, Ordering::SeqCst);
+        Reply {
+            result,
+            call_up: up,
+        }
+    }
+
+    pub fn call_up(&self) -> bool {
+        self.up.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// True while a process is running (or a call is mid-action).
+    pub fn running(&self) -> bool {
+        match self.inner.try_lock() {
+            Ok(mut p) => p.running(),
+            Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner().running(),
+            Err(std::sync::TryLockError::WouldBlock) => true,
+        }
+    }
+
+    pub fn stop(&self) {
+        let mut p = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        p.stop();
+        self.up.store(false, std::sync::atomic::Ordering::SeqCst);
     }
 }
 
@@ -417,15 +706,28 @@ mod tests {
         for ok in [
             "call_start",
             "converse",
-            "call_end",
+            "speak",
+            "listen",
             "call_status",
             "get_conversation",
+            "call_end",
         ] {
             assert!(tool_allowed(ok), "{ok}");
         }
-        for bad in ["speak", "listen", "", "call_start; rm"] {
+        for bad in [
+            "",
+            "call_start; rm",
+            "alert_me",
+            "alert_test",
+            "shell",
+            "run",
+            "Converse",
+            " converse",
+            "../call_start",
+        ] {
             assert!(!tool_allowed(bad), "{bad:?}");
         }
+        assert_eq!(ALLOWED_TOOLS.len(), 7);
     }
 
     #[test]
@@ -559,5 +861,332 @@ mod tests {
             assert!(e.message.contains("no call"), "{tool}: {e:?}");
         }
         assert!(!p.running());
+    }
+
+    fn log_path(name: &str) -> std::path::PathBuf {
+        let p = std::env::temp_dir().join(format!("fake_mcp_{}_{}.log", std::process::id(), name));
+        let _ = std::fs::remove_file(&p);
+        p
+    }
+    fn logged(p: &std::path::Path) -> Vec<String> {
+        std::fs::read_to_string(p)
+            .unwrap_or_default()
+            .lines()
+            .map(String::from)
+            .collect()
+    }
+    fn fake_with(replies: &str, log: &std::path::Path) -> Command {
+        fake(&["--replies", replies, "--log", log.to_str().unwrap()])
+    }
+    const SIL: &str = "[SILENCE] \u{2014} user said nothing; you may prompt again.";
+    const SAID: &str = "User replied: \"yes\"";
+    fn t(s: u64) -> Duration {
+        Duration::from_secs(s)
+    }
+    fn j() -> serde_json::Value {
+        serde_json::json!({})
+    }
+
+    // ---- launcher selection -------------------------------------------------
+    #[test]
+    fn launcher_is_docker_when_no_launch_file() {
+        assert_eq!(choose_launcher(None), Ok(Launcher::Docker));
+    }
+
+    #[test]
+    fn launcher_is_wsl_from_a_valid_file_and_args_use_exec_not_a_shell() {
+        let text = "\u{feff}{\"distro\":\"Debian-12\",\"cwd\":\"/home/u/ringback\",\"python\":\"/home/u/ringback/.venv/bin/python\"}";
+        let l = match choose_launcher(Some(text)) {
+            Ok(Launcher::Wsl(l)) => l,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(l.script, "run_voice_mcp.py");
+        assert_eq!(
+            wsl_args(&l),
+            vec![
+                "--distribution",
+                "Debian-12",
+                "--cd",
+                "/home/u/ringback",
+                "--exec",
+                "/home/u/ringback/.venv/bin/python",
+                "run_voice_mcp.py"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_present_but_invalid_launch_file_is_an_error_not_a_silent_docker_fallback() {
+        let with = |k: &str, v: &str| {
+            let mut m = serde_json::json!({"distro":"D","cwd":"/c","python":"/p"});
+            m[k] = serde_json::json!(v);
+            m.to_string()
+        };
+        assert!(choose_launcher(Some("")).is_err());
+        assert!(choose_launcher(Some("not json")).is_err());
+        assert!(choose_launcher(Some("[]")).is_err());
+        assert!(choose_launcher(Some(r#"{"distro":"D","cwd":"/c"}"#))
+            .unwrap_err()
+            .contains("python"));
+        assert!(choose_launcher(Some(r#"{"distro":"D","python":"/p"}"#))
+            .unwrap_err()
+            .contains("cwd"));
+        assert!(choose_launcher(Some(r#"{"cwd":"/c","python":"/p"}"#))
+            .unwrap_err()
+            .contains("distro"));
+        assert!(choose_launcher(Some(&with("distro", "Ubuntu; calc"))).is_err());
+        assert!(choose_launcher(Some(&with("distro", "<name from wsl -l -v>"))).is_err());
+        assert!(choose_launcher(Some(&with("cwd", "relative/path"))).is_err());
+        assert!(choose_launcher(Some(&with("cwd", "/a b"))).is_err());
+        assert!(
+            choose_launcher(Some(&with("python", "python3"))).is_err(),
+            "bare python = system python is refused"
+        );
+        assert!(choose_launcher(Some(&with("python", "/p; rm -rf /"))).is_err());
+        assert!(choose_launcher(Some(&with("python", "/p/../q"))).is_err());
+        assert!(choose_launcher(Some(&with("script", "../x.py"))).is_err());
+        assert!(choose_launcher(Some(&with("script", "run.sh"))).is_err());
+        assert!(choose_launcher(Some(
+            r#"{"distro":"D","cwd":"/c","python":"/p","command":"calc.exe"}"#
+        ))
+        .unwrap_err()
+        .contains("command"));
+    }
+
+    // ---- duplicate call_start, silence, turn cap ------------------------------
+    #[test]
+    fn a_second_call_start_while_a_call_is_up_is_refused_and_never_reaches_ringback() {
+        let log = log_path("dup");
+        let mut p = Phone::new(t(1200));
+        p.call(
+            "call_start",
+            serde_json::json!({"opening_line": "hi"}),
+            t(5),
+            || fake_with(SAID, &log),
+        )
+        .unwrap();
+        let e = p
+            .call(
+                "call_start",
+                serde_json::json!({"opening_line": "again"}),
+                t(5),
+                || panic!("no new process"),
+            )
+            .unwrap_err();
+        assert!(e.message.contains("already"), "{e:?}");
+        assert!(
+            p.call_up() && p.running(),
+            "the first call must survive the refusal"
+        );
+        assert_eq!(logged(&log), vec!["call_start"]);
+    }
+
+    #[test]
+    fn three_silent_caller_turns_in_a_row_end_the_call_politely() {
+        let log = log_path("sil3");
+        let mut p = Phone::new(t(1200));
+        let r = format!("{SIL}|{SIL}|{SIL}");
+        assert!(p
+            .call(
+                "call_start",
+                serde_json::json!({"opening_line": "hi"}),
+                t(5),
+                || fake_with(&r, &log)
+            )
+            .is_ok());
+        assert!(p
+            .call(
+                "converse",
+                serde_json::json!({"text": "hello?"}),
+                t(5),
+                || panic!()
+            )
+            .is_ok());
+        let e = p
+            .call(
+                "converse",
+                serde_json::json!({"text": "anyone?"}),
+                t(5),
+                || panic!(),
+            )
+            .unwrap_err();
+        assert!(e.message.contains("silent"), "{e:?}");
+        assert!(e.tell_the_user.is_some());
+        assert!(!p.running() && !p.call_up());
+        assert_eq!(
+            logged(&log),
+            vec!["call_start", "converse", "converse", "call_end"]
+        );
+    }
+
+    #[test]
+    fn a_real_reply_resets_the_silence_count() {
+        let log = log_path("reset");
+        let mut p = Phone::new(t(1200));
+        let r = format!("{SIL}|{SIL}|{SAID}|{SIL}|{SIL}|{SAID}");
+        p.call(
+            "call_start",
+            serde_json::json!({"opening_line": "hi"}),
+            t(5),
+            || fake_with(&r, &log),
+        )
+        .unwrap();
+        for _ in 0..5 {
+            p.call(
+                "converse",
+                serde_json::json!({"text": "x"}),
+                t(5),
+                || panic!(),
+            )
+            .unwrap();
+        }
+        assert!(p.call_up(), "S S R S S R never reaches three in a row");
+    }
+
+    #[test]
+    fn empty_replies_from_ordinary_tools_do_not_count_as_silence() {
+        let log = log_path("ordinary");
+        let mut p = Phone::new(t(1200));
+        // call_start answers with a real reply; then six empty replies from non-caller tools
+        p.call(
+            "call_start",
+            serde_json::json!({"opening_line": "hi"}),
+            t(5),
+            || fake_with(&format!("{SAID}||||||"), &log),
+        )
+        .unwrap();
+        for tool in [
+            "speak",
+            "speak",
+            "call_status",
+            "get_conversation",
+            "speak",
+            "call_status",
+        ] {
+            let r = p.call(tool, serde_json::json!({"text": "x"}), t(5), || panic!());
+            assert_eq!(r, Ok(String::new()), "{tool}");
+        }
+        assert!(p.call_up());
+    }
+
+    #[test]
+    fn the_turn_cap_ends_the_call_politely() {
+        let log = log_path("cap");
+        let mut p = Phone::with_limits(t(1200), 3, 3);
+        p.call(
+            "call_start",
+            serde_json::json!({"opening_line": "hi"}),
+            t(5),
+            || fake_with(SAID, &log),
+        )
+        .unwrap();
+        p.call(
+            "converse",
+            serde_json::json!({"text": "1"}),
+            t(5),
+            || panic!(),
+        )
+        .unwrap();
+        p.call(
+            "converse",
+            serde_json::json!({"text": "2"}),
+            t(5),
+            || panic!(),
+        )
+        .unwrap();
+        let e = p
+            .call(
+                "converse",
+                serde_json::json!({"text": "3"}),
+                t(5),
+                || panic!(),
+            )
+            .unwrap_err();
+        assert!(
+            e.tell_the_user.as_deref().unwrap_or("").contains("turn"),
+            "{e:?}"
+        );
+        assert!(!p.running());
+        assert_eq!(logged(&log).last().map(String::as_str), Some("call_end"));
+    }
+
+    #[test]
+    fn call_over_markers_clear_the_call_and_allow_a_new_one() {
+        for (marker, tool) in [
+            ("[CALL ENDED]", "converse"),
+            ("[NO ACTIVE CALL] \u{2014} call call_start first", "listen"),
+            ("User replied: \"bye\" then the call ENDED.", "converse"),
+        ] {
+            let log = log_path("over");
+            let mut p = Phone::new(t(1200));
+            p.call(
+                "call_start",
+                serde_json::json!({"opening_line": "hi"}),
+                t(5),
+                || fake_with(&format!("{SAID}|{marker}"), &log),
+            )
+            .unwrap();
+            assert!(p.call_up());
+            let r = p.call(tool, serde_json::json!({"text": "x"}), t(5), || panic!());
+            assert!(r.is_ok(), "{marker}");
+            assert!(!p.call_up() && !p.running(), "{marker}");
+        }
+        let log = log_path("noanswer");
+        let mut p = Phone::new(t(1200));
+        let r = p.call(
+            "call_start",
+            serde_json::json!({"opening_line": "hi"}),
+            t(5),
+            || fake_with("[NO ANSWER] \u{2014} the user did not pick up.", &log),
+        );
+        assert!(r.unwrap().contains("NO ANSWER"));
+        assert!(!p.call_up(), "nobody picked up: there is no call");
+        p.call(
+            "call_start",
+            serde_json::json!({"opening_line": "retry"}),
+            t(5),
+            || fake_with(SAID, &log),
+        )
+        .unwrap();
+        assert!(p.call_up(), "a new call may start after an unanswered one");
+    }
+
+    // ---- overlapping execution --------------------------------------------------
+    #[test]
+    fn a_second_tool_call_while_one_is_running_is_refused_not_queued() {
+        let line = std::sync::Arc::new(PhoneLine::new(t(1200)));
+        let a = line.clone();
+        let h = std::thread::spawn(move || {
+            a.call("call_start", j(), Duration::from_millis(1200), || {
+                fake(&["--hang"])
+            })
+        });
+        std::thread::sleep(Duration::from_millis(500));
+        let started = std::time::Instant::now();
+        let r = line.call("converse", j(), t(5), || panic!("must not start"));
+        assert!(
+            started.elapsed() < Duration::from_millis(300),
+            "refused at once, not after waiting"
+        );
+        let e = r.result.unwrap_err();
+        assert!(e.message.contains("busy"), "{e:?}");
+        let first = h.join().unwrap();
+        assert!(first.result.is_err(), "the hung call times out on its own");
+    }
+
+    #[test]
+    fn phone_line_reports_whether_a_call_is_up() {
+        let log = log_path("line");
+        let line = PhoneLine::new(t(1200));
+        assert!(!line.call_up());
+        let r = line.call(
+            "call_start",
+            serde_json::json!({"opening_line": "hi"}),
+            t(5),
+            || fake_with(SAID, &log),
+        );
+        assert!(r.result.is_ok() && r.call_up && line.call_up());
+        let r = line.call("call_end", j(), t(5), || panic!());
+        assert!(r.result.is_ok() && !r.call_up && !line.call_up());
     }
 }
