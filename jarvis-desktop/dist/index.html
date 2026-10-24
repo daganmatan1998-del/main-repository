@@ -4816,7 +4816,14 @@ function getSystemPrompt(calendarAvailable){
             : 'the Cloudflare worker is missing the secret(s) ' + (missing || 'WHATSAPP_PHONE / CALLMEBOT_APIKEY') + ' (Settings → Variables and Secrets).') +
           ' When he asks for a message, tell him exactly that in one sentence — not "I can\'t send messages", and do not offer the calendar instead.';
     }
-    if(backendCapabilities && backendCapabilities.call){
+    /* When the app has the ringback phone feature, IT describes the phone state (phoneNote). These
+       notes are about the worker's Telegram call_me and, with the secrets missing, told the model
+       to answer any request to be called with "the worker is missing WHATSAPP_PHONE" - which it
+       then said about ringback calls too. */
+    const ringbackHandlesCalls = IS_DESKTOP && phoneStatus && !phoneStatus.unavailable;
+    if(ringbackHandlesCalls){
+      /* nothing here: see phoneNote() */
+    } else if(backendCapabilities && backendCapabilities.call){
       const who = String(backendCapabilities.call_to || '');
       const tailC = who.startsWith('@') ? who : who.replace(/\D/g, '').slice(-4);
       const laterC = !!backendCapabilities.whatsapp_later;
@@ -20541,8 +20548,8 @@ function phoneNote(){
   if(!IS_DESKTOP || !phoneStatus) return '';
   if(phoneStatus.unavailable) return '\n\nPHONE CALLS: not available in this build of the app (it must be rebuilt with JARVIS-UPDATE.bat' + (phoneStatus.error ? '; the app said: ' + phoneStatus.error : '') + '). If he asks about phone calls, say exactly that in one sentence; never claim to dial. The older call_me tool (a one-way Telegram call through the worker) needs its own secrets and may not be set up: do not use it for this.';
   if(phoneCallActive) return '\n\nA PHONE CALL IS UP. He hears you only on the phone: the orb is silent. Keep answering with phone_say (or phone_speak then phone_listen), in short plain English sentences. Three silent turns in a row end the call by themselves; [CALL ENDED] means he hung up. End with phone_hangup when he is done.';
-  if(phoneStatus.ready) return '\n\nPHONE CALLS: phone_call rings his phone for a live two-way call, only when he asks. "Call me" means ring now. "Call me later" means ask ONE question (what time, in Israel time), then save it with remember_to_do (every once, at = the Israel wall-clock time without an offset, timezone Asia/Jerusalem) and confirm the time; it is now ' + israelNow().local.replace('T', ' ') + ' in Israel. The call is in English for now (the voice and the speech recognition are English-only): speak plain English on it, no code or URLs.';
-  return '\n\nPHONE CALLS: calling him by phone (ringback) is not set up yet. ' + (phoneStatus.why || '') + ' If he asks you to call him or talk by phone, tell him exactly that in one sentence; never claim to dial. The older call_me tool (a one-way Telegram call through the worker) needs its own secrets and may not be set up: do not use it for this.';
+  if(phoneStatus.ready) return '\n\nPHONE CALLS: Phone calls here have nothing to do with WhatsApp or CallMeBot: never mention WHATSAPP_PHONE or CALLMEBOT_APIKEY when asked about calling him. phone_call rings his phone for a live two-way call, only when he asks. "Call me" means ring now. "Call me later" means ask ONE question (what time, in Israel time), then save it with remember_to_do (every once, at = the Israel wall-clock time without an offset, timezone Asia/Jerusalem) and confirm the time; it is now ' + israelNow().local.replace('T', ' ') + ' in Israel. The call is in English for now (the voice and the speech recognition are English-only): speak plain English on it, no code or URLs.';
+  return '\n\nPHONE CALLS: Phone calls here have nothing to do with WhatsApp or CallMeBot: never mention WHATSAPP_PHONE or CALLMEBOT_APIKEY when asked about calling him. Calling him by phone (ringback) is not set up yet. ' + (phoneStatus.why || '') + ' If he asks you to call him or talk by phone, tell him exactly that in one sentence; never claim to dial. The older call_me tool (a one-way Telegram call through the worker) needs its own secrets and may not be set up: do not use it for this.';
 }
 function cameraSystemExtras(){
   return phoneNote() + (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + mailServiceNote() + (compactCodeNote || '') +
