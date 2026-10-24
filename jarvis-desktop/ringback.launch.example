@@ -1,0 +1,5 @@
+{
+  "distro": "<DISTRO - the name exactly as `wsl -l -v` prints it>",
+  "cwd": "/home/<YOU>/ringback",
+  "python": "/home/<YOU>/ringback/.venv/bin/python"
+}

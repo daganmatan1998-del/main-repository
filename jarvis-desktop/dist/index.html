@@ -10282,12 +10282,26 @@ const PHONE_CALL_TOOL = {
 };
 const PHONE_SAY_TOOL = {
   name: 'phone_say',
-  description: "Say something on the live phone call and listen: speaks your text, then returns what he said back (he can interrupt you). Call it once per turn of the conversation, with short plain spoken English. Only while a call is up.",
+  description: "Say something on the live phone call and listen, in one turn: speaks your text, then returns what he said back (he can interrupt you). The normal way to carry the conversation: once per turn, short plain spoken English, only while a call is up. A reply of [SILENCE] means he said nothing (you may prompt once more; three silent turns in a row end the call). [CALL ENDED] means he hung up: stop.",
   input_schema: {
     type: 'object',
     properties: { text: { type:'string', description:'What to say. Plain sentences, no code, lists or URLs.' } },
     required: ['text']
   }
+};
+const PHONE_SPEAK_TOOL = {
+  name: 'phone_speak',
+  description: "Only speak on the live phone call, without listening for a reply (use phone_say for a normal turn). Follow it with phone_listen, or finish with phone_hangup. Short plain spoken English.",
+  input_schema: {
+    type: 'object',
+    properties: { text: { type:'string', description:'What to say. Plain sentences, no code, lists or URLs.' } },
+    required: ['text']
+  }
+};
+const PHONE_LISTEN_TOOL = {
+  name: 'phone_listen',
+  description: "Only listen on the live phone call and return what he said. [SILENCE] means he said nothing (three silent turns in a row end the call); [CALL ENDED] means he hung up: stop.",
+  input_schema: { type: 'object', properties: {}, required: [] }
 };
 const PHONE_HANGUP_TOOL = {
   name: 'phone_hangup',
@@ -10347,27 +10361,64 @@ async function endPhoneCall(why){
 const PHONE_TOOL_MAP = {
   phone_call:   { tool: 'call_start', arg: 'opening_line', required: true },
   phone_say:    { tool: 'converse',   arg: 'text',         required: true },
+  phone_speak:  { tool: 'speak',      arg: 'text',         required: true },
+  phone_listen: { tool: 'listen',     arg: null,           required: false },
   phone_hangup: { tool: 'call_end',   arg: 'text',         required: false }
 };
+const PHONE_NEEDS = { phone_call: 'phone_call needs an opening_line', phone_say: 'phone_say needs text', phone_speak: 'phone_speak needs text' };
 
-async function callPhoneTool(name, input){
-  const m = PHONE_TOOL_MAP[name];
-  if(!m) return { error: 'Unknown phone tool: ' + name };
-  const value = String((input && input[m.arg]) || '').trim();
-  if(m.required && !value) return { error: 'phone_' + (name === 'phone_call' ? 'call needs an opening_line' : 'say needs text') };
-  const invoke = phoneTauriInvoke();
-  if(!invoke) return { error: 'the desktop bridge is unavailable', tell_the_user: 'Phone calls only work in the desktop app.' };
-  const args = {}; if(value) args[m.arg] = value.slice(0, 600);
-  let r;
-  try{ r = await invoke('ringback_call', { tool: m.tool, args: args }); }
-  catch(err){ endPhoneMode(); return { error: String((err && err.message) || err) }; }
+/* One phone action at a time, and a tool_use id is executed once: a model that repeats
+   an id (a retried stream, a replayed turn) gets the first result back, not a second
+   call. Failures are remembered too, so a refused id is not retried into a different answer. */
+let phoneBusy = false;
+const phoneResults = new Map();
+function rememberPhoneResult(id, result){
+  if(!id) return;
+  phoneResults.set(id, result);
+  if(phoneResults.size > 50) phoneResults.delete(phoneResults.keys().next().value);
+}
+
+/* The app says whether a call is up after every action; that, not the reply text, decides
+   call mode. An older app that does not say falls back to what the action implies. */
+function applyPhoneState(name, r){
+  if(r && typeof r.call_up === 'boolean'){
+    if(r.call_up){ if(!phoneCallActive) startPhoneMode(); }
+    else endPhoneMode();
+    return;
+  }
   if(r && r.ok){
     if(name === 'phone_call') startPhoneMode();
     if(name === 'phone_hangup') endPhoneMode();
-    return { ok: true, text: r.text || '' };
+    return;
   }
   endPhoneMode();   // whatever went wrong, the call is not up any more
-  return { error: (r && r.error) || 'the call failed', tell_the_user: (r && r.tell_the_user) || undefined };
+}
+
+async function callPhoneTool(name, input, toolUseId){
+  if(toolUseId && phoneResults.has(toolUseId)) return phoneResults.get(toolUseId);
+  const m = Object.prototype.hasOwnProperty.call(PHONE_TOOL_MAP, name) ? PHONE_TOOL_MAP[name] : null;
+  if(!m) return { error: 'Unknown phone tool: ' + name };
+  const value = m.arg ? String((input && input[m.arg]) || '').trim() : '';
+  if(m.required && !value) return { error: PHONE_NEEDS[name] };
+  if(name === 'phone_call' && phoneCallActive) return { error: 'a call is already up', tell_the_user: 'A call is already in progress.' };
+  if(phoneBusy) return { error: 'another phone action is still running; wait for its result before the next one' };
+  const invoke = phoneTauriInvoke();
+  if(!invoke) return { error: 'the desktop bridge is unavailable', tell_the_user: 'Phone calls only work in the desktop app.' };
+  const args = {}; if(m.arg && value) args[m.arg] = value.slice(0, 600);
+  phoneBusy = true;
+  let result;
+  try{
+    let r;
+    try{ r = await invoke('ringback_call', { tool: m.tool, args: args }); }
+    catch(err){ endPhoneMode(); result = { error: String((err && err.message) || err) }; }
+    if(!result){
+      applyPhoneState(name, r);
+      result = (r && r.ok) ? { ok: true, text: r.text || '' }
+                           : { error: (r && r.error) || 'the call failed', tell_the_user: (r && r.tell_the_user) || undefined };
+    }
+  } finally { phoneBusy = false; }
+  rememberPhoneResult(toolUseId, result);
+  return result;
 }
 
 window.__phoneTest = { get active(){ return phoneCallActive; }, get status(){ return phoneStatus; }, callPhoneTool, refreshPhoneStatus };
@@ -20384,7 +20435,7 @@ async function readMessageStream(response, onText){
    the last one. Never both: a look replaces the note it is about to write. */
 function phoneNote(){
   if(!IS_DESKTOP || !phoneStatus || phoneStatus.unavailable) return '';
-  if(phoneCallActive) return '\n\nA PHONE CALL IS UP. He hears you only on the phone: the orb is silent. Keep answering with phone_say, in short plain English sentences, and end with phone_hangup when he is done.';
+  if(phoneCallActive) return '\n\nA PHONE CALL IS UP. He hears you only on the phone: the orb is silent. Keep answering with phone_say (or phone_speak then phone_listen), in short plain English sentences. Three silent turns in a row end the call by themselves; [CALL ENDED] means he hung up. End with phone_hangup when he is done.';
   if(phoneStatus.ready) return '\n\nPHONE CALLS: phone_call rings his phone for a live two-way call, only when he asks. The call is in English for now (the voice and the speech recognition are English-only): speak plain English on it, no code or URLs. call_me stays the one-way message.';
   return '\n\nPHONE CALLS: calling him by phone (ringback) is not set up yet. ' + (phoneStatus.why || '') + ' If he asks you to call him or talk by phone, tell him exactly that in one sentence; never claim to dial. The call_me tool (a one-way Telegram message) is separate and still works.';
 }
@@ -20769,7 +20820,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     /* Music (2.23.0): his YouTube playlist, through the worker. */
     everydayTools.push(MUSIC_TOOL, YOUTUBE_CONNECT_TOOL);
     /* Phone calls: only when the app says ringback is fully set up. */
-    if(IS_DESKTOP && phoneStatus && phoneStatus.ready) everydayTools.push(PHONE_CALL_TOOL, PHONE_SAY_TOOL, PHONE_HANGUP_TOOL);
+    if(IS_DESKTOP && phoneStatus && phoneStatus.ready) everydayTools.push(PHONE_CALL_TOOL, PHONE_SAY_TOOL, PHONE_SPEAK_TOOL, PHONE_LISTEN_TOOL, PHONE_HANGUP_TOOL);
     /* His mail (worker 2.10.0): offered only when the worker says it can. */
     if(backendCapabilities && backendCapabilities.gmail){
       everydayTools.push(CHECK_MAIL_TOOL, GMAIL_CONNECT_TOOL);
@@ -21440,8 +21491,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callConnectYoutubeTool();
           } else if(tu.name === 'send_whatsapp'){
             payload = await callWhatsAppTool(tu.input);
-          } else if(tu.name === 'phone_call' || tu.name === 'phone_say' || tu.name === 'phone_hangup'){
-            payload = await callPhoneTool(tu.name, tu.input || {});
+          } else if(Object.prototype.hasOwnProperty.call(PHONE_TOOL_MAP, tu.name)){
+            payload = await callPhoneTool(tu.name, tu.input || {}, tu.id);
           } else if(tu.name === 'call_me'){
             payload = await callCallTool(tu.input);
           } else if(tu.name === 'manage_scheduled'){

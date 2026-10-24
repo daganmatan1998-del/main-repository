@@ -56,3 +56,19 @@ never pretends to dial.
 - Docker Desktop one-way audio if STUN is blocked.
 - GPL pjproject inside the image (fine for personal use; see ringback NOTICE).
 - English-only calls until the Hebrew follow-up.
+
+## Addendum (2026-10-24): WSL launcher, extra tools, call limits
+- Optional `%APPDATA%\JARVIS\ringback.launch` (JSON: `distro`, `cwd`, `python`, optional `script`;
+  no other keys) starts `wsl.exe --distribution D --cd C --exec PYTHON run_voice_mcp.py`.
+  Absent -> Docker as before. Present but wrong -> an error shown to him, never a silent
+  fall back. SIP credentials stay in the voice.env inside WSL and are never read here.
+- Allowlist is now `call_start`, `converse`, `speak`, `listen`, `call_status`,
+  `get_conversation`, `call_end`. Page tools: `phone_call`, `phone_say`, `phone_speak`,
+  `phone_listen`, `phone_hangup`.
+- Protections: a second `call_start` while a call is up is refused; one phone action at a time
+  (refused as busy, not queued); a tool_use id is executed once; three consecutive empty
+  caller turns (`[SILENCE]` from call_start/converse/listen) end the call with a real
+  `call_end`; 30 caller turns and 20 minutes cap a call; ringback's `[CALL ENDED]`,
+  `[NO ANSWER]`, `[NO ACTIVE CALL]` clear the call state. Empty replies from other tools
+  never count as silence. Every reply carries `call_up`, which alone drives the page's call mode.
+
