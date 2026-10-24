@@ -20539,10 +20539,10 @@ async function readMessageStream(response, onText){
    the last one. Never both: a look replaces the note it is about to write. */
 function phoneNote(){
   if(!IS_DESKTOP || !phoneStatus) return '';
-  if(phoneStatus.unavailable) return '\n\nPHONE CALLS: not available in this build of the app (it must be rebuilt with JARVIS-UPDATE.bat' + (phoneStatus.error ? '; the app said: ' + phoneStatus.error : '') + '). If he asks about phone calls, say exactly that in one sentence; never claim to dial. The call_me tool (a one-way Telegram message) is separate.';
+  if(phoneStatus.unavailable) return '\n\nPHONE CALLS: not available in this build of the app (it must be rebuilt with JARVIS-UPDATE.bat' + (phoneStatus.error ? '; the app said: ' + phoneStatus.error : '') + '). If he asks about phone calls, say exactly that in one sentence; never claim to dial. The older call_me tool (a one-way Telegram call through the worker) needs its own secrets and may not be set up: do not use it for this.';
   if(phoneCallActive) return '\n\nA PHONE CALL IS UP. He hears you only on the phone: the orb is silent. Keep answering with phone_say (or phone_speak then phone_listen), in short plain English sentences. Three silent turns in a row end the call by themselves; [CALL ENDED] means he hung up. End with phone_hangup when he is done.';
-  if(phoneStatus.ready) return '\n\nPHONE CALLS: phone_call rings his phone for a live two-way call, only when he asks. "Call me" means ring now. "Call me later" means ask ONE question (what time, in Israel time), then save it with remember_to_do (every once, at = the Israel wall-clock time without an offset, timezone Asia/Jerusalem) and confirm the time; it is now ' + israelNow().local.replace('T', ' ') + ' in Israel. The call is in English for now (the voice and the speech recognition are English-only): speak plain English on it, no code or URLs. call_me stays the one-way message.';
-  return '\n\nPHONE CALLS: calling him by phone (ringback) is not set up yet. ' + (phoneStatus.why || '') + ' If he asks you to call him or talk by phone, tell him exactly that in one sentence; never claim to dial. The call_me tool (a one-way Telegram message) is separate and still works.';
+  if(phoneStatus.ready) return '\n\nPHONE CALLS: phone_call rings his phone for a live two-way call, only when he asks. "Call me" means ring now. "Call me later" means ask ONE question (what time, in Israel time), then save it with remember_to_do (every once, at = the Israel wall-clock time without an offset, timezone Asia/Jerusalem) and confirm the time; it is now ' + israelNow().local.replace('T', ' ') + ' in Israel. The call is in English for now (the voice and the speech recognition are English-only): speak plain English on it, no code or URLs.';
+  return '\n\nPHONE CALLS: calling him by phone (ringback) is not set up yet. ' + (phoneStatus.why || '') + ' If he asks you to call him or talk by phone, tell him exactly that in one sentence; never claim to dial. The older call_me tool (a one-way Telegram call through the worker) needs its own secrets and may not be set up: do not use it for this.';
 }
 function cameraSystemExtras(){
   return phoneNote() + (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + mailServiceNote() + (compactCodeNote || '') +
@@ -20942,7 +20942,11 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
        is never handed a tool whose only answer is "not set up". */
     const caps = backendCapabilities || {};
     if(caps.whatsapp) everydayTools.push(WHATSAPP_TOOL);
-    if(caps.call) everydayTools.push(CALL_TOOL);
+    /* Two different phone mechanisms exist: ringback (a live call, through the app) and call_me (a
+       one-way Telegram call through the worker, which needs its own secrets). With ringback ready the
+       old one is not offered at all: a model that picks it gets a "missing secrets" error and tells him
+       the phone tool failed. */
+    if(caps.call && !(IS_DESKTOP && phoneStatus && phoneStatus.ready)) everydayTools.push(CALL_TOOL);
     if(caps.calendar_can_connect) everydayTools.push(CALENDAR_CONNECT_TOOL);
     if(caps.whatsapp_later && (caps.whatsapp || caps.call)) everydayTools.push(SCHEDULE_MANAGE_TOOL);
     /* The supervisor tool, offered once the registry has actually been
