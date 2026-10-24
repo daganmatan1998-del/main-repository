@@ -10487,9 +10487,14 @@ function phoneNowHandoff(text, firstWords){
          'Carry on the conversation with phone_say, in short plain English, and finish with phone_hangup when he is done.] ' + text;
 }
 /* The sentence for a call that did not happen. */
+const PHONE_BUSY_RE = /still running|busy with another/i;
 function phoneCallReport(r){
   const he = currentLang === 'he';
   const t = String((r && r.text) || '');
+  if(r && r.error && PHONE_BUSY_RE.test(String(r.error))){
+    return he ? 'אני כבר מצלצל לטלפון שלך. תענה לו (הוא מצלצל עד 25 שניות).'
+              : "I'm already ringing your phone. Pick it up (it rings for up to 25 seconds).";
+  }
   if(r && r.error) return (he ? 'לא הצלחתי להתקשר. ' : 'I could not place the call. ') + (r.tell_the_user || r.error);
   if(/\[NO ANSWER\]/.test(t)) return he ? 'צלצלתי לטלפון אבל אף אחד לא ענה. תבדוק שאפליקציית Linphone בטלפון מחוברת (Connected).'
                                          : 'I rang your phone but nobody picked up. Check that the Linphone app on your phone is connected.';
@@ -23417,13 +23422,19 @@ async function handleSend(){
      conversation to the model. */
   let phoneFirstWords = '';
   if(phoneCmd === 'now'){
-    setToolStatus('ringing your phone');
-    let r;
-    try{ r = await callPhoneTool('phone_call', { opening_line: PHONE_OPENING_LINE }, 'page_' + Date.now().toString(36)); }
-    finally{ clearToolStatus(); }
+    /* Said again while the first call is still ringing (it waits up to 25 s for him to pick up):
+       that is not a failure, so no second call and no error box, just the plain truth. */
+    let r = null;
+    if(phoneBusy) r = { error: 'another phone action is still running' };
+    else {
+      setToolStatus('ringing your phone');
+      try{ r = await callPhoneTool('phone_call', { opening_line: PHONE_OPENING_LINE }, 'page_' + Date.now().toString(36)); }
+      finally{ clearToolStatus(); }
+    }
     if(!r || r.error || !phoneCallActive){
       const report = phoneCallReport(r);
-      if(!r || r.error || !/\[NO ANSWER\]/.test(String(r.text || ''))) showOrbError(new Error('phone call failed: ' + ((r && (r.error || r.text)) || 'no result')));
+      const stillRinging = !!(r && r.error && PHONE_BUSY_RE.test(String(r.error)));
+      if(!stillRinging && (!r || r.error || !/\[NO ANSWER\]/.test(String(r.text || '')))) showOrbError(new Error('phone call failed: ' + ((r && (r.error || r.text)) || 'no result')));
       addMessage('assistant', report);
       chatHistory.push({ role:'user', content: text });
       chatHistory.push({ role:'assistant', content: report });
