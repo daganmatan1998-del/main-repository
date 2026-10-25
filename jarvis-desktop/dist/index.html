@@ -10468,7 +10468,7 @@ function zonedToIso(local, tz){
    whole short sentences, so "call me a cab", "call me maybe" and "don't call me" are not
    commands. NOW rings at once; LATER asks when and schedules it. */
 const PHONE_NEG      = /\b(?:dont|do not|never|stop|cancel|no)\b|^(?:אל|לא)\s/;
-const PHONE_LATER_EN = /\b(?:call|ring|phone)\s+me\s+(?:back\s+)?(?:later|tonight|tomorrow|this\s+(?:evening|afternoon|morning)|in\s+(?:an?|\d+|a\s+few|half\s+an?|couple)\b|at\s+\d)/;
+const PHONE_LATER_EN = /\b(?:call|ring|phone)\s+me\s+(?:back\s+)?(?:later|tonight|tomorrow|this\s+(?:evening|afternoon|morning)|in\s+(?:an?|\d+|one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty|a\s+few|half\s+an?|couple)\b|at\s+\d)/;
 const PHONE_NOW_EN   = /^(?:(?:hey|hi|ok|okay)\s+)?(?:(?:jarvis|ultron)\s+)?(?:please\s+)?(?:(?:can|could|will|would)\s+you\s+)?(?:please\s+)?(?:call|ring|phone)\s+me(?:\s+up)?(?:\s+(?:right\s+)?now)?(?:\s+please)?$/;
 /* "call me and tell me to go to the gym": a call with a PURPOSE. Right now when no time is said. */
 const PHONE_NOW_WHY_EN = /^(?:(?:hey|hi|ok|okay)\s+)?(?:(?:jarvis|ultron)\s+)?(?:please\s+)?(?:(?:can|could|will|would)\s+you\s+)?(?:please\s+)?(?:call|ring|phone)\s+me(?:\s+up)?(?:\s+(?:right\s+)?now)?\s*(?:and|to)\s+(?:tell|remind|let|say|ask|read|give)\b.{3,}$/;
@@ -10489,6 +10489,11 @@ function phoneHasPurpose(text){
 }
 const PHONE_OPENING_LINE = 'Hi, it is JARVIS. You asked me to call. How can I help?';
 const PHONE_AUTO_SAY_MAX = 25;
+/* The whole brief while a call is up (see callClaudeOnce): short on purpose, it is read on every turn. */
+const PHONE_FAST_SYSTEM = 'You are JARVIS, a polite, dry-witted assistant, speaking with your user on a live PHONE CALL. Address him as "sir". ' +
+  'Everything you write is spoken aloud, so: reply ONLY by calling phone_say with one or two short plain English sentences (under 25 words), no lists, no code, no URLs, no markdown. ' +
+  'The result of phone_say is what he said back. If he said [SILENCE], prompt him once. If the reason for the call was delivered and he has nothing to add, say goodbye in one sentence and call phone_hangup. If he says goodbye or hangs up ([CALL ENDED]), stop. ' +
+  'You cannot open apps or do other tasks during the call; if he asks, say you will do it after the call. Never mention tools.';
 /* What the model is told once the page has really placed the call. */
 function phoneNowHandoff(text, firstWords, hasPurpose){
   if(hasPurpose) return '[The app has ALREADY placed the phone call he asked for (do not call phone_call again). He answered and said only hello so far (' + (firstWords || 'nothing yet') + '). ' +
@@ -20904,7 +20909,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
     agentRegistryTriedAt = Date.now();
     await Promise.race([loadAgentRegistry().catch(()=>null), new Promise(r => setTimeout(r, 3000))]);
   }
-  if(IS_DESKTOP) await Promise.race([refreshPhoneStatus().catch(()=>null), new Promise(r => setTimeout(r, 2000))]);
+  if(IS_DESKTOP && !phoneCallActive) await Promise.race([refreshPhoneStatus().catch(()=>null), new Promise(r => setTimeout(r, 2000))]);
   const controller = new AbortController();
   currentAbortController = controller;
   const wantStream = usingOwnBackend && backendSupportsStreaming !== false;
@@ -20918,7 +20923,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
   const requestBody = {
     model:'claude-sonnet-4-6',
     max_tokens: tokenBudget,
-    system: String(getSystemPrompt(usingOwnBackend)) + cameraSystemExtras(),
+    system: (usingOwnBackend && phoneCallActive) ? PHONE_FAST_SYSTEM : String(getSystemPrompt(usingOwnBackend)) + cameraSystemExtras(),
     messages: messages
   };
   if(wantStream) requestBody.stream = true;
@@ -21014,6 +21019,15 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
       : everydayTools;
     if(turnWantsNote) requestBody.tools = requestBody.tools.filter(t => !/^project_|^start_task$/.test(t.name));
     if(mcpServers.length) requestBody.mcp_servers = mcpServers;
+  }
+  /* ON THE PHONE EVERY SECOND IS HEARD. The ordinary request carries a system prompt of thousands of
+     tokens and sixty tool definitions, and a model that has to read all of it before saying "okay" is
+     most of the silence he sits through between his sentence and the answer. A call needs the phone
+     tools and a short brief, a small reply budget, and nothing else. */
+  if(usingOwnBackend && phoneCallActive){
+    requestBody.tools = [PHONE_SAY_TOOL, PHONE_HANGUP_TOOL];
+    requestBody.max_tokens = Math.min(requestBody.max_tokens, 400);
+    delete requestBody.mcp_servers;
   }
   /* Gemini (and other OpenAI-style engines the worker falls back to) reject
      a function whose parameters are an object with no properties \u2014
