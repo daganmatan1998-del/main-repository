@@ -18,6 +18,8 @@ const CARD_DEFAULTS = { water: true, fast: false, activity: true, nutrients: tru
 export const cardOn = (id) => ({ ...CARD_DEFAULTS, ...(state.settings.cards || {}) })[id];
 
 const weightKg = () => (currentMetrics() || {}).weight || 70;
+// Burned calories (steps and workouts) go back into the day's budget unless the person turned that off.
+export const creditOn = () => state.settings.activityCredit !== false;
 
 // ---------- badges ----------
 export function habitStats() {
@@ -118,54 +120,82 @@ export function openEmblemSheet() {
 }
 
 // ---------- water ----------
-// The day's goal comes from the plan (targets().water); glasses count toward it
-// from two places: the card (between meals) and each meal's own counter.
-const waterGoalFor = (day) => { const t = targets(day); return t ? hb.waterGoal(t.water) : hb.waterGoal(2); };
+// The day's goal (litres) comes from the plan (targets().water). Drinks count toward it
+// from two places: the card (between meals) and each meal's own row. Quick buttons add
+// half a litre or a litre; "Other" asks for any amount in millilitres.
+const waterGoalFor = (day) => { const t = targets(day); return hb.waterGoalMl(t ? t.water : 2); };
+const litres = (ml) => tr('{0} L', fmt(ml / 1000, 2));
 
-// Applies { water?, waterMeals? } to the day and keeps `waterDone` (goal reached) in step.
+// Applies { waterAdds } to the day and keeps `waterDone` (goal reached) in step.
 async function patchWater(day, patch) {
   const log = { ...(state.logs[day] || { eaten: [] }), ...patch };
-  await patchLog(day, { ...patch, waterDone: hb.waterTotal(log) >= waterGoalFor(day) });
+  await patchLog(day, { ...patch, waterDone: hb.waterTotalMl(log) >= waterGoalFor(day) });
+}
+const logWater = (day, ml, meal) => patchWater(day, { waterAdds: hb.addWater(state.logs[day], ml, meal) });
+const undoLast = (day, meal) => patchWater(day, { waterAdds: hb.undoWater(state.logs[day], meal) });
+
+// "How much did you drink?" — any amount in millilitres.
+export function openWaterSheet(day, meal) {
+  return sheet(tr('How much did you drink?'), (close) => {
+    const input = h('input', { class: 'water-ml', id: 'water-ml', type: 'text', inputmode: 'decimal', placeholder: '330', 'aria-label': tr('Milliliters'), autocomplete: 'off' });
+    const add = async () => {
+      const ml = hb.parseMl(input.value);
+      if (!(ml > 0)) { toast(tr('Write how many milliliters you drank')); input.focus(); return; }
+      await logWater(day, ml, meal);
+      close();
+      checkBadges();
+    };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    setTimeout(() => input.focus(), 250);
+    return h('div', null,
+      h('label', { class: 'scan-qty' }, h('span', null, tr('Milliliters')), input),
+      h('p', { class: 'muted small' }, tr('Write the amount in milliliters, for example 330.')),
+      h('button', { type: 'button', class: 'btn btn-primary btn-block', id: 'water-ml-add', onclick: add }, icon('plus', 16), tr('Add')));
+  });
+}
+
+// The three ways to add, and undo: used by the card and by each meal.
+function waterButtons(day, meal, hasAny) {
+  return h('div', { class: 'water-btns' },
+    h('button', { type: 'button', class: 'icon-btn', 'data-act': 'water-undo', 'aria-label': tr('Undo the last drink'), disabled: !hasAny, onclick: () => undoLast(day, meal) }, icon('minus', 18)),
+    ...hb.QUICK_ML.map((ml) => h('button', { type: 'button', class: 'btn btn-small btn-ghost water-quick', 'data-act': 'water-add', 'data-ml': ml, onclick: () => logWater(day, ml, meal) }, icon('plus', 14), tr('{0} L', fmt(ml / 1000, 2)))),
+    h('button', { type: 'button', class: 'btn btn-small btn-ghost', 'data-act': 'water-other', onclick: () => openWaterSheet(day, meal) }, tr('Other amount')));
 }
 
 export function waterCard(day, liters) {
   if (!cardOn('water')) return null;
-  const goal = hb.waterGoal(liters);
+  const goal = hb.waterGoalMl(liters);
   const log = state.logs[day];
-  const extra = hb.glasses(log);
-  const inMeals = hb.waterByMeals(log);
-  const n = extra + inMeals;
-  const set = (v) => patchWater(day, { water: Math.max(0, Math.min(hb.MAX_GLASSES, v)) });
+  const loose = hb.looseWaterMl(log);
+  const inMeals = hb.waterWithMealsMl(log);
+  const n = loose + inMeals;
+  const hasLoose = hb.undoWater(log, -1).length !== (log && log.waterAdds ? log.waterAdds.length : 0);
   return h('section', { class: 'card habit-card', id: 'water-card' },
     h('div', { class: 'row space' },
       h('h3', null, icon('drop', 18), tr('Water')),
-      h('span', { class: 'num muted small', id: 'water-count' }, tr('{0} of {1} glasses', n, goal))),
+      h('span', { class: 'num muted small', id: 'water-count' }, tr('{0} of {1}', litres(n), litres(goal)))),
     h('div', { class: 'bar water', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': goal, 'aria-valuenow': Math.min(n, goal) }, h('i', { style: { width: `${Math.min(100, (n / goal) * 100)}%` } })),
-    h('p', { class: 'muted small num', id: 'water-split' }, tr('With meals {0} · between meals {1}', inMeals, extra)),
-    h('div', { class: 'row space habit-actions' },
-      h('span', { class: 'muted small' }, n >= goal ? tr('Goal reached 🎉') : tr('One glass is {0} ml', hb.GLASS_ML)),
-      h('div', { class: 'row gap' },
-        h('button', { type: 'button', class: 'icon-btn', id: 'water-minus', 'aria-label': tr('Remove a glass'), disabled: extra < 1, onclick: () => set(extra - 1) }, icon('minus')),
-        h('button', { type: 'button', class: 'btn btn-primary btn-small', id: 'water-plus', onclick: () => set(extra + 1) }, icon('plus', 16), tr('Glass')))));
+    h('p', { class: 'muted small num', id: 'water-split' }, tr('With meals {0} · between meals {1}', litres(inMeals), litres(loose))),
+    n >= goal ? h('p', { class: 'small', id: 'water-done' }, tr('Goal reached 🎉')) : null,
+    waterButtons(day, -1, hasLoose));
 }
 
-// The glasses drunk with one meal, under the meal's name: − 2 +.
+// The water drunk with one meal, on the meal's page.
 export function mealWaterRow(meal, day) {
   if (!cardOn('water')) return null;
-  const n = hb.mealGlasses(state.logs[day], meal.index);
-  const set = (v) => patchWater(day, { waterMeals: { ...((state.logs[day] && state.logs[day].waterMeals) || {}), [meal.index]: Math.max(0, Math.min(hb.MAX_MEAL_GLASSES, v)) } });
+  const log = state.logs[day];
+  const n = hb.mealWaterMl(log, meal.index);
+  const hasAny = hb.undoWater(log, meal.index).length !== (log && log.waterAdds ? log.waterAdds.length : 0);
   return h('div', { class: 'meal-water', 'data-meal': meal.index },
-    h('span', { class: 'meal-water-label' }, icon('drop', 16), tr('Water')),
-    h('div', { class: 'row gap' },
-      h('button', { type: 'button', class: 'icon-btn', 'data-act': 'water-minus', 'aria-label': tr('Remove a glass'), disabled: n < 1, onclick: () => set(n - 1) }, icon('minus', 18)),
-      h('output', { class: 'num meal-water-n', 'aria-live': 'polite' }, tr('{0, plural, one {# glass} other {# glasses}}', n)),
-      h('button', { type: 'button', class: 'icon-btn', 'data-act': 'water-plus', 'aria-label': tr('Add a glass of water'), onclick: () => set(n + 1) }, icon('plus', 18))));
+    h('div', { class: 'row space' },
+      h('span', { class: 'meal-water-label' }, icon('drop', 16), tr('Water')),
+      h('output', { class: 'num meal-water-n', 'aria-live': 'polite' }, litres(n))),
+    waterButtons(day, meal.index, hasAny));
 }
 
-// Adds a glass from outside the page (the home-screen shortcut).
+// Adds half a litre from outside the page (the home-screen shortcut).
 export async function addGlass() {
-  const day = today();
-  await patchWater(day, { water: Math.min(hb.MAX_GLASSES, hb.glasses(state.logs[day]) + 1) });
+  await logWater(today(), 500, -1);
 }
 
 // ---------- fasting ----------
@@ -238,7 +268,7 @@ export function fastCard() {
 // ---------- steps and workouts ----------
 export function activityCard(day) {
   if (!cardOn('activity')) return null;
-  const a = hb.dayActivity(state.logs[day]);
+  const a = hb.dayActivity(state.logs[day], weightKg());
   const steps = h('input', { class: 'steps-in', id: 'steps-in', type: 'text', inputmode: 'numeric', placeholder: '0', value: a.steps || '', 'aria-label': tr('Steps today') });
   steps.addEventListener('change', () => {
     const v = parseNum(steps.value);
@@ -250,14 +280,14 @@ export function activityCard(day) {
     h('button', { type: 'button', class: 'icon-btn', 'aria-label': tr('Remove'), onclick: () => patchLog(day, { workouts: a.workouts.filter((_, k) => k !== i) }) }, icon('close', 18))));
   return h('section', { class: 'card habit-card', id: 'activity-card' },
     h('div', { class: 'row space' }, h('h3', null, icon('run', 18), tr('Activity')),
-      h('span', { class: 'muted small num' }, a.kcal ? tr('{0} kcal burned', fmt(a.kcal)) : '')),
+      h('span', { class: 'muted small num', id: 'activity-kcal' }, a.kcal ? tr('{0} kcal burned', fmt(a.kcal)) : '')),
     h('div', { class: 'steps-row' },
       h('label', { class: 'grow' }, h('span', { class: 'muted small' }, tr('Steps')), steps),
       h('span', { class: 'muted small num' }, tr('Goal {0}', fmt(hb.STEP_GOAL)))),
     h('div', { class: 'bar steps' }, h('i', { style: { width: `${Math.min(100, (a.steps / hb.STEP_GOAL) * 100)}%` } })),
     list.length ? h('ul', { class: 'workout-list' }, ...list) : null,
     h('button', { type: 'button', class: 'btn btn-block btn-ghost', id: 'workout-add', onclick: () => openWorkoutSheet(day) }, icon('plus', 16), tr('Add a workout')),
-    state.settings.activityCredit && a.credit ? h('p', { class: 'muted small' }, tr('{0} kcal were added to today\'s budget', fmt(a.credit))) : null);
+    creditOn() && a.credit ? h('p', { class: 'muted small', id: 'activity-credit-note' }, tr('{0} kcal were added to today\'s budget', fmt(a.credit))) : null);
 }
 
 function openWorkoutSheet(day) {
@@ -364,6 +394,6 @@ export function todaySettingsCard() {
     row('activity', tr('Steps and workouts')),
     row('nutrients', tr('Fiber, sugar, sodium and vitamins')),
     h('label', { class: 'switch-row' },
-      h('span', null, h('strong', null, tr('Add workout calories to my budget')), h('small', { class: 'muted block' }, tr('Half of the calories burned are added, because estimates run high.'))),
-      h('input', { type: 'checkbox', role: 'switch', id: 'activity-credit', checked: !!state.settings.activityCredit, onchange: (e) => saveSettings({ activityCredit: e.target.checked }) })));
+      h('span', null, h('strong', null, tr('Subtract steps and workouts from my calories')), h('small', { class: 'muted block' }, tr('The calories burned are added back to the day\'s budget. They are estimates.'))),
+      h('input', { type: 'checkbox', role: 'switch', id: 'activity-credit', checked: creditOn(), onchange: (e) => saveSettings({ activityCredit: e.target.checked }) })));
 }

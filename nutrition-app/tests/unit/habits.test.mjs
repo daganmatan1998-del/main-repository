@@ -9,27 +9,56 @@ import { makeCustom } from '../../www/js/everyday.js';
 
 const H = 3600 * 1000;
 
-test('water: goal in glasses, never below one, counts are clamped', () => {
-  assert.equal(hb.waterGoal(2), 8);
-  assert.equal(hb.waterGoal(2.75), 11);
-  assert.equal(hb.waterGoal(0), 8, 'unknown liters fall back to 2');
-  assert.equal(hb.glasses({ water: 5 }), 5);
-  assert.equal(hb.glasses({ water: -3 }), 0);
-  assert.equal(hb.glasses({ water: 999 }), hb.MAX_GLASSES);
-  assert.equal(hb.glasses(undefined), 0);
+test('water: the goal in ml, drinks logged between meals and with each meal add up to the total', () => {
+  assert.equal(hb.waterGoalMl(2.5), 2500);
+  assert.equal(hb.waterGoalMl(0), 2000, 'unknown litres fall back to 2');
+  assert.equal(hb.waterGoalMl(undefined), 2000);
+  let log = { eaten: [] };
+  log = { ...log, waterAdds: hb.addWater(log, 500, 0) };
+  log = { ...log, waterAdds: hb.addWater(log, 1000, 1) };
+  log = { ...log, waterAdds: hb.addWater(log, 330, 1) };
+  log = { ...log, waterAdds: hb.addWater(log, 250, -1) };
+  assert.equal(hb.mealWaterMl(log, 0), 500);
+  assert.equal(hb.mealWaterMl(log, 1), 1330);
+  assert.equal(hb.mealWaterMl(log, 2), 0);
+  assert.equal(hb.looseWaterMl(log), 250);
+  assert.equal(hb.waterWithMealsMl(log), 1830);
+  assert.equal(hb.waterTotalMl(log), 2080);
+  // undo removes the last drink of that meal (or between meals), nothing else
+  assert.deepEqual(hb.undoWater(log, 1).map((a) => a.ml), [500, 1000, 250]);
+  assert.deepEqual(hb.undoWater(log, -1).map((a) => a.ml), [500, 1000, 330]);
+  assert.equal(hb.undoWater(log, 5).length, 4, 'nothing logged for that meal: unchanged');
+  assert.equal(hb.undoWater(undefined, -1).length, 0);
 });
 
-test('water: glasses between meals and with each meal add up to the day\'s total', () => {
-  const log = { water: 2, waterMeals: { 0: 1, 2: 2, 3: 0 } };
-  assert.equal(hb.glasses(log), 2);
-  assert.equal(hb.mealGlasses(log, 2), 2);
-  assert.equal(hb.mealGlasses(log, 1), 0);
-  assert.equal(hb.waterByMeals(log), 3);
-  assert.equal(hb.waterTotal(log), 5);
-  assert.equal(hb.waterTotal({ eaten: [] }), 0);
-  assert.equal(hb.waterTotal(undefined), 0);
-  assert.equal(hb.mealGlasses({ waterMeals: { 0: 99 } }, 0), hb.MAX_MEAL_GLASSES, 'clamped');
-  assert.equal(hb.mealGlasses({ waterMeals: { 0: -3 } }, 0), 0);
+test('water: bad amounts are refused or capped, and the list stays short', () => {
+  assert.equal(hb.addWater({}, 0, -1).length, 0);
+  assert.equal(hb.addWater({}, -5, -1).length, 0);
+  assert.equal(hb.addWater({}, 'x', -1).length, 0);
+  assert.equal(hb.addWater({}, 99999, -1)[0].ml, hb.MAX_ADD_ML);
+  let log = {};
+  for (let i = 0; i < 100; i++) log = { waterAdds: hb.addWater(log, 100, -1) };
+  assert.equal(log.waterAdds.length, hb.MAX_ADDS);
+  assert.equal(hb.waterTotalMl(undefined), 0);
+});
+
+test('water: what is typed in the free field (ml; a small decimal means litres)', () => {
+  assert.equal(hb.parseMl('330'), 330);
+  assert.equal(hb.parseMl(' 250 '), 250);
+  assert.equal(hb.parseMl('1.5'), 1500);
+  assert.equal(hb.parseMl('0,5'), 500);
+  assert.equal(hb.parseMl('2'), 2, 'a whole number is millilitres');
+  assert.equal(hb.parseMl('99999'), hb.MAX_ADD_ML);
+  for (const bad of ['', 'abc', '0', '-3', '  ']) assert.ok(Number.isNaN(hb.parseMl(bad)), bad);
+});
+
+test('water: older data in 250 ml glasses is still counted', () => {
+  const log = { water: 2, waterMeals: { 0: 1, 2: 2 }, waterAdds: [{ ml: 500, meal: 0 }] };
+  assert.equal(hb.looseWaterMl(log), 500);
+  assert.equal(hb.mealWaterMl(log, 0), 250 + 500);
+  assert.equal(hb.mealWaterMl(log, 2), 500);
+  assert.equal(hb.waterWithMealsMl(log), 250 + 500 + 500);
+  assert.equal(hb.waterTotalMl(log), 500 + 1250);
 });
 
 test('fasting: running state, reaching the goal, ending and history', () => {
@@ -75,18 +104,20 @@ test('streak: counts back from today, or from yesterday while today is empty', (
   assert.equal(hb.longestRun(k('2026-02-27', '2026-02-28', '2026-03-01')), 3, 'across a month end');
 });
 
-test('workouts: calories from MET, weight and minutes; entries are clamped; credit is half', () => {
+test('workouts and steps: calories from MET / weight / minutes and from steps; entries are clamped', () => {
   assert.equal(hb.burn(9, 70, 30), 315);
   const w = hb.makeWorkout('run', 30, 80);
   assert.deepEqual(w, { type: 'run', min: 30, kcal: 360 });
   assert.equal(hb.makeWorkout('???', 0, 70).type, 'other');
   assert.equal(hb.makeWorkout('walk', 99999, 70).min, hb.MAX_MINUTES);
   assert.equal(hb.makeWorkout('walk', 10, undefined).kcal, hb.burn(3.5, 70, 10));
-  const a = hb.dayActivity({ steps: 4321.6, workouts: [w, hb.makeWorkout('yoga', 60, 80)] });
+  const a = hb.dayActivity({ steps: 4321.6, workouts: [w, hb.makeWorkout('yoga', 60, 80)] }, 80);
   assert.equal(a.steps, 4322);
-  assert.equal(a.kcal, 360 + 200);
-  assert.equal(a.credit, 280);
-  assert.deepEqual(hb.dayActivity(undefined), { steps: 0, workouts: [], kcal: 0, credit: 0 });
+  assert.equal(a.workoutKcal, 360 + 200);
+  assert.equal(a.stepsKcal, hb.stepKcal(4322, 80));
+  assert.equal(a.kcal, a.workoutKcal + a.stepsKcal);
+  assert.equal(a.credit, a.kcal, 'everything burned goes back into the budget');
+  assert.deepEqual(hb.dayActivity(undefined), { steps: 0, stepsKcal: 0, workouts: [], workoutKcal: 0, kcal: 0, credit: 0 });
 });
 
 test('badges: earned once, from the data, and never twice', () => {
@@ -178,4 +209,15 @@ test('streak run: carried across days, past the 60 days the logs keep, and survi
   assert.equal(s.streak, 100);
   assert.equal(s.best, 100);
   assert.deepEqual(hb.emblemsEarned(s.best).length, 6);
+});
+
+test('steps: 8000 steps burn about 300-500 kcal depending on weight', () => {
+  assert.equal(hb.stepKcal(0, 70), 0);
+  assert.equal(hb.stepKcal(-5, 70), 0);
+  assert.equal(hb.stepKcal('x', 70), 0);
+  assert.ok(hb.stepKcal(8000, 60) >= 280 && hb.stepKcal(8000, 60) <= 340, String(hb.stepKcal(8000, 60)));
+  assert.ok(hb.stepKcal(8000, 70) >= 330 && hb.stepKcal(8000, 70) <= 400, String(hb.stepKcal(8000, 70)));
+  assert.ok(hb.stepKcal(8000, 90) >= 420 && hb.stepKcal(8000, 90) <= 500, String(hb.stepKcal(8000, 90)));
+  assert.equal(hb.stepKcal(8000), hb.stepKcal(8000, 70), 'unknown weight: 70 kg');
+  assert.ok(Math.abs(hb.stepKcal(16000, 70) - 2 * hb.stepKcal(8000, 70)) <= 1);
 });

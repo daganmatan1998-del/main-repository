@@ -27,6 +27,7 @@ import { renderInbox } from './screens/inbox.js';
 import { renderUserProfile } from './screens/friends.js';
 import { renderChallenge } from './screens/challenges.js';
 import { addGlass } from './screens/habits.js';
+import { renderMeal } from './screens/meal.js';
 import { startChallengeSync } from './challenge-sync.js';
 import { usernameFromHash } from './social.js';
 import { startSocial } from './social-sync.js';
@@ -61,6 +62,8 @@ const ROUTES = {
   inbox: { render: renderInbox, tab: 'today' },
   u: { render: renderUserProfile, tab: 'profile' },
   challenge: { render: renderChallenge, tab: 'profile' },
+  // One meal on its own page, opened from a meal row on Today or the menu.
+  meal: { render: renderMeal, tab: 'today' },
   // Pages opened from the profile menu; the profile tab stays highlighted.
   achievements: { render: renderAchievements, tab: 'profile' },
   weight: { render: renderWeight, tab: 'profile' },

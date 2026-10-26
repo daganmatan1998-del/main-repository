@@ -119,6 +119,10 @@ const shot = (name, opts = {}) => page.screenshot({ path: path.join(SHOTS, `${na
 const wait = (ms = 250) => page.waitForTimeout(ms);
 // Pages opened from the profile menu (settings, weight, achievements).
 const go = (hash) => page.evaluate((h) => { location.hash = h; }, hash);
+// A meal's own page (#/meal/<day>/<index>): `.meal` there is the one full card.
+const dayKeyNow = () => page.evaluate(async () => (await import('/js/util.js')).dayKey());
+const openMeal = async (i = 0, day) => { await go(`#/meal/${day || await dayKeyNow()}/${i}`); await page.waitForSelector('.page-meal .meal'); };
+const onToday = async () => { await go('#/today'); await page.waitForSelector('.page-today'); };
 const visible = (sel) => page.locator(sel).first().isVisible().catch(() => false);
 const text = () => page.locator('#view').innerText();
 
@@ -301,11 +305,11 @@ try {
   const rec = () => JSON.parse(pushKV._dump().get(subKeys()[0]));
   check('only meal flags are stored, no food or personal data', JSON.stringify(Object.keys(rec()).sort()) === JSON.stringify(['created', 'endpoint', 'sent', 'state', 'tz']) && !JSON.stringify(rec()).includes('דנה'));
   // marking lunch reaches the server, so it won't remind about it
-  const lunchCard = page.locator('.meal', { hasText: 'ארוחת צהריים' }).first();
-  await lunchCard.locator('.check-btn').click();
+  const lunchCard = page.locator('.meal-row', { hasText: 'ארוחת צהריים' }).first();
+  await lunchCard.locator('.row-check').click();
   await wait(2800);
   check('marking lunch eaten tells the server (so the 13:00 reminder is skipped)', rec().state.done.l === true && rec().state.any === true);
-  await lunchCard.locator('.check-btn').click();
+  await lunchCard.locator('.row-check').click();
   await wait(2800);
   check('un-marking it tells the server too', rec().state.done.l === false);
   // the service worker turns an (empty) push into a notification
@@ -319,19 +323,31 @@ try {
 
   // =============== Today ===============
   const todayText = await text();
-  check('5 meals generated', (await page.locator('.meal').count()) === 5);
+  check('5 meals generated, each one a single row that opens the meal', (await page.locator('.meal-row').count()) === 5 && (await page.locator('.page-today .meal').count()) === 0 && (await page.locator('.meal-row a.meal-row-main').count()) === 5);
   const forbidden = ['טונה', 'בטטה', 'עוף', 'בקר', 'סלמון', 'הודו', 'שקדים', 'אגוזי מלך', 'דג לבן', 'שרימפס'];
   const hits = forbidden.filter((f) => todayText.includes(f));
   check('Today menu contains no restricted foods (vegetarian, nuts, dislikes)', hits.length === 0, hits.join(','));
-  await page.locator('.check-btn').first().click();
+  await page.locator('.row-check').first().click();
   await wait(400);
   check('marking a meal eaten fills the calorie ring', (await page.locator('.ring-label strong').innerText()) !== '0');
   await shot('06-today', { fullPage: true });
 
   // =============== drinks under every meal ===============
-  const ringKcal = async () => Number((await page.locator('.ring-label strong').innerText()).replace(/,/g, ''));
-  const mealA = () => page.locator('.meal').first();
-  check('every meal has a collapsed "שתייה" heading that asks "מה שתיתם?"', (await page.locator('.meal .drinks').count()) === 5
+  // The ring lives on Today: read it there and come back to where we were.
+  const ringKcal = async () => {
+    const here = await page.evaluate(() => location.hash);
+    if (!here.startsWith('#/today')) await onToday();
+    const n = Number((await page.locator('.ring-label strong').innerText()).replace(/,/g, ''));
+    if (!here.startsWith('#/today')) { await go(here); await page.waitForSelector('.page-meal .meal'); }
+    return n;
+  };
+  const mealA = () => page.locator('.page-meal .meal');
+  // The first meal opens from its row on Today.
+  await page.locator('.meal-row a.meal-row-main').first().click();
+  await page.waitForSelector('.page-meal .meal');
+  check('tapping a meal row opens the meal on its own page, with a back arrow', await visible('#back-meals') && (await page.locator('.page-meal .meal .item').count()) > 0);
+  await shot('05-meal-page', { fullPage: true });
+  check('the meal has a collapsed "שתייה" heading that asks "מה שתיתם?"', (await page.locator('.meal .drinks').count()) === 1
     && (await mealA().locator('.drinks-title').innerText()).includes('שתייה') && (await mealA().locator('.drinks-sum').innerText()).includes('מה שתיתם')
     && !(await mealA().locator('.drink-name').isVisible()));
   await mealA().locator('.drinks-head').click();
@@ -361,44 +377,65 @@ try {
   check('the heading closes again', !(await mealA().locator('.drink-name').isVisible()));
 
   // =============== habits: water, streak, activity, nutrients, fasting, badges ===============
+  await onToday();
   const waterText = () => page.locator('#water-count').innerText();
-  check('Today has a water card, one glass logged is counted', await visible('#water-card') && (await waterText()).includes('0'));
-  await page.click('#water-plus');
+  const cardAdd = (ml) => page.locator(`#water-card [data-act="water-add"][data-ml="${ml}"]`).click();
+  check('Today has a water card counted in litres, starting at zero', await visible('#water-card') && (await waterText()).includes('0 ') && (await waterText()).includes('ליטר'), await waterText());
+  check('the card offers half a litre, a litre and any other amount', (await page.locator('#water-card [data-act="water-add"]').count()) === 2 && await visible('#water-card [data-act="water-other"]'));
+  await cardAdd(500);
   await wait(400);
-  check('one tap adds a glass', (await waterText()).includes('1'));
+  check('+0.5 L adds half a litre', (await waterText()).startsWith('0.5'), await waterText());
+  await cardAdd(1000);
+  await wait(300);
+  check('+1 L adds a litre', (await waterText()).startsWith('1.5'), await waterText());
+  await page.click('#water-card [data-act="water-other"]');
+  await page.waitForSelector('#water-ml');
+  await page.fill('#water-ml', 'abc');
+  await page.click('#water-ml-add');
+  check('a free amount that is not a number is refused', await visible('#water-ml'));
+  await page.fill('#water-ml', '330');
+  await page.click('#water-ml-add');
+  await wait(400);
+  check('any amount in millilitres can be written (330 ml: 1.5 + 0.33 = 1.83 L)', (await waterText()).startsWith('1.83'), await waterText());
   await page.reload();
   await page.waitForSelector('#water-card');
-  check('the glass survives a reload', (await waterText()).includes('1'));
-  await page.click('#water-minus');
+  check('it all survives a reload', (await waterText()).startsWith('1.83'));
+  await page.click('#water-card [data-act="water-undo"]');
   await wait(300);
-  check('and can be taken back', (await waterText()).includes('0') && await page.locator('#water-minus').isDisabled());
-  // water with each meal: breakfast 1, lunch 2, dinner 1 -> all of it counts toward the day's goal
+  check('undo takes back the last drink (330 ml)', (await waterText()).startsWith('1.5'), await waterText());
+  // water with each meal: its own page has its own row; all of it counts toward the day's goal
+  await openMeal(0);
   const mealWater = (i) => page.locator(`.meal-water[data-meal="${i}"]`);
-  check('every meal has its own water counter', (await page.locator('.meal-water').count()) === (await page.locator('.meal').count()));
-  await mealWater(0).locator('[data-act="water-plus"]').click();
+  check('the meal page has a water row with the same three ways to add', await visible('.meal-water') && (await mealWater(0).locator('[data-act="water-add"]').count()) === 2);
+  await mealWater(0).locator('[data-act="water-add"][data-ml="500"]').click();
   await wait(300);
-  await mealWater(1).locator('[data-act="water-plus"]').click();
-  await wait(300);
-  await mealWater(1).locator('[data-act="water-plus"]').click();
-  await wait(300);
-  await mealWater(2).locator('[data-act="water-plus"]').click();
-  await wait(300);
-  check('meal glasses are shown on each meal (1, 2, 1)', (await mealWater(0).locator('.meal-water-n').innerText()).includes('אחת') && (await mealWater(1).locator('.meal-water-n').innerText()).includes('2') && (await mealWater(2).locator('.meal-water-n').innerText()).includes('אחת'));
-  check('they all count in the daily total, which keeps the goal', (await waterText()).startsWith('4') && (await page.locator('#water-split').innerText()).includes('4'), await waterText());
-  await page.click('#water-plus');
-  await wait(300);
-  check('the card adds glasses between meals on top (4 + 1 = 5)', (await waterText()).startsWith('5'));
-  await page.reload();
-  await page.waitForSelector('#water-card');
-  check('all of it survives a reload', (await waterText()).startsWith('5') && (await mealWater(1).locator('.meal-water-n').innerText()).includes('2'));
+  check('half a litre with breakfast shows on the meal', (await mealWater(0).locator('.meal-water-n').innerText()).startsWith('0.5'));
   await shot('59-water-per-meal', { fullPage: true });
-  await mealWater(1).locator('[data-act="water-minus"]').click();
+  await openMeal(1);
+  await mealWater(1).locator('[data-act="water-add"][data-ml="1000"]').click();
   await wait(300);
-  check('taking a meal glass back lowers the total', (await waterText()).startsWith('4'));
-  for (const i of [0, 1, 2]) { while (!(await mealWater(i).locator('[data-act="water-minus"]').isDisabled())) { await mealWater(i).locator('[data-act="water-minus"]').click(); await wait(200); } }
-  await page.click('#water-minus');
+  await mealWater(1).locator('[data-act="water-other"]').click();
+  await page.waitForSelector('#water-ml');
+  await page.fill('#water-ml', '250');
+  await page.click('#water-ml-add');
+  await wait(400);
+  check('a litre and 250 ml with lunch: 1.25 L', (await mealWater(1).locator('.meal-water-n').innerText()).startsWith('1.25'), await mealWater(1).locator('.meal-water-n').innerText());
+  await onToday();
+  check('Today counts everything: 1.5 + 0.5 + 1.25 = 3.25 L', (await waterText()).startsWith('3.25'), await waterText());
+  check('...and shows how it splits (1.75 with meals, 1.5 between meals)', (await page.locator('#water-split').innerText()).includes('1.75') && (await page.locator('#water-split').innerText()).includes('1.5'));
+  await openMeal(1);
+  await mealWater(1).locator('[data-act="water-undo"]').click();
   await wait(300);
-  check('everything back to zero', (await waterText()).startsWith('0'));
+  await mealWater(1).locator('[data-act="water-undo"]').click();
+  await wait(300);
+  check('undo on a meal takes back only that meal\'s drinks', (await mealWater(1).locator('.meal-water-n').innerText()).startsWith('0 ') && await mealWater(1).locator('[data-act="water-undo"]').isDisabled());
+  await openMeal(0);
+  await mealWater(0).locator('[data-act="water-undo"]').click();
+  await wait(300);
+  await onToday();
+  check('back to the 1.5 L between meals', (await waterText()).startsWith('1.5'), await waterText());
+  while (!(await page.locator('#water-card [data-act="water-undo"]').isDisabled())) { await page.click('#water-card [data-act="water-undo"]'); await wait(250); }
+  check('everything back to zero', (await waterText()).startsWith('0 '));
   check('one meal marked eaten starts a 1-day streak', (await page.locator('#streak-chip').innerText()).trim() === '1');
   check('the nutrients card shows fiber, sugars and sodium for the marked meal', (await page.locator('#nutrients-card [data-nutrient]').count()) === 7
     && Number((await page.locator('[data-nutrient="sodium"]').innerText()).match(/([\d,]+)\s*\//)[1].replace(/,/g, '')) > 0);
@@ -415,6 +452,11 @@ try {
   await page.click('#workout-save');
   await wait(500);
   check('the workout is listed with its calories', (await page.locator('.workout-row').count()) === 1 && /\d{3}/.test(await page.locator('.workout-row').innerText()));
+  const burned = await page.evaluate(async () => { const hb = await import('/js/habits.js'); const st = await import('/js/store.js'); return hb.dayActivity(st.state.logs[st.today()], (st.currentMetrics() || {}).weight || 70); });
+  check('the steps burn calories too, on top of the workout', burned.steps === 10500 && burned.stepsKcal >= 300 && burned.kcal === burned.stepsKcal + burned.workoutKcal && (await page.locator('#activity-kcal').innerText()).replace(/,/g, '').includes(String(burned.kcal)), JSON.stringify(burned));
+  check('what was burned goes back into today\'s calories (the budget says so)', burned.credit === burned.kcal && (await page.locator('#budget-credit').innerText()).replace(/,/g, '').includes(String(burned.credit)));
+  const ringOf = (await page.locator('.ring-label span, .ring-label small').allInnerTexts()).join(' ').replace(/,/g, '');
+  check('the ring is measured against calories plus what was burned', ringOf.includes(String(burned.credit + (await page.evaluate(async () => (await import('/js/store.js')).targets().calories)))), ringOf);
   check('10,000 steps earn the steps badge on the profile', await (async () => {
     await page.evaluate(() => { location.hash = '#/achievements'; });
     await page.waitForSelector('#badges-card');
@@ -427,6 +469,14 @@ try {
   check('fasting is off until it is switched on in the settings', !(await page.locator('#cards-fast').isChecked()));
   await page.locator('#cards-fast').check();
   await wait(300);
+  check('burned calories count toward the day unless turned off (on by default)', await page.locator('#activity-credit').isChecked());
+  await page.locator('#activity-credit').uncheck();
+  await wait(300);
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await page.waitForSelector('#fast-card');
+  check('turned off: nothing is added to the budget', (await page.locator('#budget-credit').count()) === 0);
+  await page.evaluate(() => { location.hash = '#/settings'; });
+  await page.waitForSelector('#activity-credit');
   await page.locator('#activity-credit').check();
   await wait(300);
   await page.evaluate(() => { location.hash = '#/today'; });
@@ -452,6 +502,7 @@ try {
   await page.waitForSelector('.page-today');
 
   // =============== sauces and cheese: calories come off the rest of the meal ===============
+  await openMeal(0);
   const mealKcal = async () => Number((await mealA().locator('.meal-sub').innerText()).match(/([\d,]+)\s*קק/)[1].replace(/,/g, ''));
   const target0 = Number(await mealA().getAttribute('data-target-kcal'));
   const itemsBefore = await mealA().locator('.item').count();
@@ -619,17 +670,19 @@ try {
   await page.click('a[href="#/plan"]');
   await page.waitForSelector('.page-plan');
   await shot('07-plan', { fullPage: true });
+  check('the menu lists each meal as a row with what is in it', (await page.locator('.page-plan .meal-row').count()) === 5 && (await page.locator('.page-plan .meal-row-foods').first().innerText()).includes('·'));
+  const before = await page.locator('.meal-row').first().innerText();
   const firstMains = [];
   for (let i = 0; i < 7; i++) {
     await page.locator('.day-strip .day').nth(i).click();
     await wait(120);
-    firstMains.push(await page.locator('.meal').nth(2).locator('.item-name').first().innerText());
+    firstMains.push((await page.locator('.meal-row').nth(2).locator('.meal-row-foods').innerText()).split(' · ')[0]);
   }
   await page.locator('.day-strip .day').first().click();
   await wait(150);
   check(`each day of the week shows a different lunch (${new Set(firstMains).size}/7)`, new Set(firstMains).size === 7, firstMains.join(' | '));
-  const firstMeal = page.locator('.meal').first();
-  const before = await firstMeal.innerText();
+  await openMeal(0);
+  const firstMeal = page.locator('.page-meal .meal');
   await firstMeal.getByRole('button', { name: /החלף פחמימה/ }).first().click();
   await page.waitForSelector('.sheet .alt');
   await shot('08-swap-sheet');
@@ -655,26 +708,32 @@ try {
   const altName = await page.locator('.sheet .alt .alt-name').first().innerText();
   await page.locator('.sheet .alt button').first().click();
   await wait(500);
-  check('choosing a substitute replaces the item in the menu', (await page.locator('.meal').first().innerText()).includes(altName), altName);
-  const m2 = page.locator('.meal').nth(2);
+  check('choosing a substitute replaces the item in the menu', (await page.locator('.page-meal .meal').innerText()).includes(altName), altName);
+  await openMeal(2);
+  const m2 = page.locator('.page-meal .meal');
   const m2before = await m2.innerText();
   await m2.getByRole('button', { name: 'ארוחה אחרת' }).click();
   await wait(400);
-  check('"another meal" reshuffles the meal', (await page.locator('.meal').nth(2).innerText()) !== m2before);
+  check('"another meal" reshuffles the meal', (await page.locator('.page-meal .meal').innerText()) !== m2before);
+  await go('#/plan');
+  await page.waitForSelector('.page-plan .meal-row');
   await page.locator('.day-strip .day').nth(3).click();
   await wait(300);
-  check('another day shows a different menu', (await page.locator('.meal').first().innerText()) !== before);
+  check('another day shows a different menu', (await page.locator('.meal-row').first().innerText()) !== before);
   await page.locator('.day-strip .day').first().click();
   await wait(300);
 
   // =============== "I don't eat this" ===============
-  const firstItem = page.locator('.meal').first().locator('.item').first();
+  await openMeal(0);
+  const firstItem = page.locator('.page-meal .meal').locator('.item').first();
   const neverName = (await firstItem.locator('.item-name').innerText()).trim();
   await firstItem.locator('.chip-btn').click();
   await page.waitForSelector('#btn-never');
   await page.click('#btn-never');
   await wait(500);
   let seen = 0;
+  await go('#/plan');
+  await page.waitForSelector('.page-plan .meal-row');
   for (let i = 0; i < 7; i++) {
     await page.locator('.day-strip .day').nth(i).click();
     await wait(150);
@@ -685,15 +744,18 @@ try {
   await wait(200);
 
   // =============== take a food group out of a meal ===============
-  const meal0 = () => page.locator('.meal').first();
+  await openMeal(0);
+  const meal0 = () => page.locator('.page-meal .meal');
   const kcalOf = async () => Number((await meal0().locator('.meal-sub').innerText()).replace(/,/g, '').match(/\d+/)[0]);
   const mealKcal0 = await kcalOf();
   check('every meal offers to take out protein / carbs / fat / vegetables (and fruit at breakfast)',
     (await meal0().locator('.rm-chip').count()) === 5 && (await meal0().locator('.rm-chip[data-group="fruit"]').count()) === 1
     && (await page.locator('.meal').count()) === (await page.locator('.rm-bar').count()));
   check('breakfast comes with a fruit', (await meal0().locator('.item.role-fruit').count()) === 1);
-  const perMeal = await page.locator('.meal').evaluateAll((els) => els.map((e) => [e.querySelectorAll('.item.role-protein').length, e.querySelectorAll('.item.role-fruit').length]));
-  check(`every meal on screen has one protein and one fruit (${perMeal.length} meals)`, perMeal.every(([p, f]) => p === 1 && f === 1), JSON.stringify(perMeal));
+  const perMeal = [];
+  for (let i = 0; i < 5; i++) { await openMeal(i); perMeal.push(await meal0().evaluate((e) => [e.querySelectorAll('.item.role-protein').length, e.querySelectorAll('.item.role-fruit').length])); }
+  await openMeal(0);
+  check(`every meal has one protein and one fruit (${perMeal.length} meals)`, perMeal.every(([p, f]) => p === 1 && f === 1), JSON.stringify(perMeal));
   const namesOf = async () => (await meal0().locator('.item-name').allInnerTexts()).map((t) => t.trim());
   const namesBefore = await namesOf();
   await meal0().locator('.rm-chip[data-group="carb"]').click();
@@ -709,7 +771,7 @@ try {
   check('the meal explains where the calories went', /קק״ל (חולקו|עברו)/.test(await meal0().locator('.rm-note').innerText()));
   await shot('08b-remove-carb');
   await page.reload();
-  await page.waitForSelector('.page-plan .meal');
+  await page.waitForSelector('.page-meal .meal');
   check('a removal survives a reload', (await meal0().locator('.item.role-carb').count()) === 0);
   await meal0().locator('.rm-chip[data-group="fat"]').click();
   await wait(400);
@@ -738,9 +800,10 @@ try {
   check('tapping again puts everything back', (await meal0().locator('.rm-note').count()) === 0 && (await meal0().locator('.item.role-protein').count()) > 0);
 
   // =============== calorie camera ===============
-  const lunch = () => page.locator('.meal').nth(1);
+  await openMeal(1);
+  const lunch = () => page.locator('.page-meal .meal');
   const lunchName = (await lunch().locator('h3').innerText()).trim();
-  check('every meal has a calorie camera at the top', (await page.locator('.meal .mc-open').count()) === (await page.locator('.meal').count())
+  check('the meal has a calorie camera at the top', (await page.locator('.meal .mc-open').count()) === 1
     && (await lunch().locator('.mc-open').evaluate((b) => b.previousElementSibling.classList.contains('meal-head'))));
   await lunch().locator('.mc-open').click();
   await page.waitForSelector('#mc-consent');
@@ -804,7 +867,8 @@ try {
   await wait(300);
   check('the planned meal can be restored', (await lunch().locator('.mc-badge').count()) === 0 && !(await lunch().innerText()).includes('רוטב שום'));
   mealPhotoMode = 'exact';
-  await page.locator('.meal').nth(2).locator('.mc-open').click();
+  await openMeal(2);
+  await page.locator('.page-meal .meal .mc-open').click();
   check('consent is asked only once', await page.waitForSelector('#mc-shoot').then(() => true));
   await shootAndAnalyze();
   await page.click('#mc-confirm');
@@ -813,13 +877,15 @@ try {
   const log = (await idbDump()).kv.find((v) => v && typeof v === 'object' && Object.values(v).some((d) => d && d.photo));
   const dayLog = log && Object.values(log).find((d) => d && d.photo);
   check('a plate matching the plan is logged as eaten without asking', dayLog && dayLog.eaten.includes(2) && dayLog.photo[2] && dayLog.photo[2].replace === false
-    && (await page.locator('.meal').nth(2).locator('.mc-badge').count()) === 0, JSON.stringify(dayLog));
+    && (await page.locator('.page-meal .meal .mc-badge').count()) === 0, JSON.stringify(dayLog));
   mealPhotoMode = 'sauce';
   void lunchName;
 
   // =============== weekly shopping list ===============
   // (granting replaces the set, so notifications and camera are listed again)
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write', 'notifications', 'camera'], { origin: BASE });
+  await go('#/plan');
+  await page.waitForSelector('#btn-shopping');
   await page.click('#btn-shopping');
   await page.waitForSelector('.page-shopping .shop-item');
   const products = await page.locator('.shop-item').count();
@@ -846,7 +912,8 @@ try {
   await page.waitForSelector('.page-plan');
 
   // =============== recipes ===============
-  await page.locator('.meal').first().locator('.rc-open').click();
+  await openMeal(0);
+  await page.locator('.page-meal .meal').locator('.rc-open').click();
   await page.waitForSelector('.overlay.recipes .rc-card');
   // One recipe is spelled out ("נמצא מתכון אחד"), with no digit.
   const countOf = async () => {
@@ -882,7 +949,8 @@ try {
   await page.uncheck('#rc-pantry-only');
   await page.check('#rc-no-spicy');
   await page.locator('.overlay.recipes .icon-btn[aria-label="סגירה"]').click();
-  await page.locator('.meal').first().locator('.rc-open').click();
+  await openMeal(0);
+  await page.locator('.page-meal .meal').locator('.rc-open').click();
   await page.waitForSelector('.overlay.recipes .rc-card');
   await page.click('#rc-filter-btn');
   check('recipe filters are remembered', await page.isChecked('#rc-no-spicy'));
@@ -904,7 +972,8 @@ try {
   await page.waitForSelector('.page-plan');
 
   // =============== Assistant ===============
-  await page.locator('.meal').first().getByRole('button', { name: /החלף חלבון/ }).first().click();
+  await openMeal(0);
+  await page.locator('.page-meal .meal').getByRole('button', { name: /החלף חלבון/ }).first().click();
   await page.waitForSelector('.sheet .alt, .sheet .empty');
   await page.getByRole('button', { name: /שאל את העוזר/ }).click();
   await page.waitForSelector('.page-assistant .msg.assistant:not(.typing)');
@@ -938,7 +1007,8 @@ try {
   check('offline: assistant explains it needs a connection', (await page.locator('.msg.error').last().innerText()).includes('חיבור'));
   check('offline banner visible', await visible('#offline-banner'));
   await page.click('a[href="#/plan"]');
-  await page.locator('.meal').first().getByRole('button', { name: /החלף פחמימה/ }).first().click();
+  await openMeal(0);
+  await page.locator('.page-meal .meal').getByRole('button', { name: /החלף פחמימה/ }).first().click();
   await page.getByRole('button', { name: /שאל את העוזר/ }).click();
   await page.waitForSelector('.msg.local');
   check('offline: substitution falls back to on-device answer', (await page.locator('.msg.local').last().innerText()).includes('ג׳'));
@@ -960,7 +1030,7 @@ try {
   await ctx.setOffline(true);
   await page.reload();
   await page.waitForSelector('.page', { timeout: 5000 }).catch(() => {});
-  check('app opens fully offline (plan & data from the device)', await visible('.meal'));
+  check('app opens fully offline (plan & data from the device)', await visible('.meal-row'));
   await ctx.setOffline(false);
 
   // =============== weekly gate: week 1 ===============
@@ -1162,7 +1232,7 @@ try {
   await wait(400);
   await page.click('a[href="#/today"]');
   await page.waitForSelector('.page-today');
-  check('changing meals/day regenerates the menu', (await page.locator('.meal').count()) === 3);
+  check('changing meals/day regenerates the menu', (await page.locator('.meal-row').count()) === 3);
 
   for (const [diet, banned] of [['קיטו', ['לחם', 'אורז', 'פסטה', 'קינואה', 'בטטה', 'תפוח', 'בננה', 'עדשים', 'פיתה']], ['קרניבור', ['לחם', 'אורז', 'סלט', 'ירקות', 'ברוקולי', 'טופו', 'שמן זית', 'אבוקדו', 'טחינה', 'עדשים']]]) {
     await go('#/settings');
@@ -1265,8 +1335,8 @@ try {
   check('after the trial the assistant asks for a plan and calls no AI', upstream.length === calls0);
   await page.locator('.sheet .icon-btn[aria-label="סגירה"]').click();
   await page.click('a[href="#/today"]');
-  await page.waitForSelector('.meal .mc-open');
-  await page.locator('.meal .mc-open').first().click();
+  await openMeal(0);
+  await page.locator('.page-meal .meal .mc-open').click();
   await page.waitForSelector('#paywall');
   check('the calorie camera is locked too', (await page.locator('.overlay.mc').count()) === 0 && (await page.locator('.paywall .lead').innerText()).includes('מצלמת הקלוריות'));
   await page.locator('.sheet .icon-btn[aria-label="סגירה"]').click();

@@ -20,7 +20,7 @@
     { "src": "icons/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ],
   "shortcuts": [
-    { "name": "Add a glass of water", "url": "./#/quick/water", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Add half a liter of water", "url": "./#/quick/water", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "My menu", "url": "./#/plan", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Nutrition assistant", "url": "./#/assistant", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ]

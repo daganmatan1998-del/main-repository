@@ -380,7 +380,7 @@ try {
   check('turning photo backup on uploads the progress photos', await until(() => [...fake.files.keys()].some((k) => k.startsWith('photos/'))));
   await A.page.click('a[href="#/today"]');
   await A.page.waitForSelector('.page-today');
-  await A.page.locator('.check-btn').first().click();
+  await A.page.locator('.row-check').first().click();
   check('a change on the device reaches the cloud within seconds', await until(() => {
     const logs = fake.row && fake.row.data.logs;
     return logs && Object.values(logs).some((l) => l.eaten && l.eaten.length);
@@ -587,7 +587,7 @@ try {
   await B.page.click('#entry-login');
   await B.page.waitForSelector('.page-today', { timeout: 15000 });
   check('new device opens straight on the restored plan', (await headText(B.page)).includes('מתנוש'));
-  check('the eaten meal came along', (await B.page.locator('.meal.eaten, .meal .check-btn[aria-pressed="true"]').count()) >= 1);
+  check('the eaten meal came along', (await B.page.locator('.meal-row.eaten').count()) >= 1);
   check('profile picture restored', (await B.page.locator('.head-avatar img').count()) === 1);
   await B.page.click('a[href="#/gallery"]');
   await B.page.waitForSelector('.page-gallery');

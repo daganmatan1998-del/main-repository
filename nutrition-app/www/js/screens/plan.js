@@ -3,14 +3,14 @@
 
 import { t as tr } from '../i18n.js';
 import { h, icon, fmt, addDays, weekdayName, fmtDate } from '../util.js';
-import { mealCard } from '../components.js';
+import { mealRow } from '../components.js';
 import { dayTotals } from '../mealplan.js';
-import { state, today, targets, dayPlan, setOverride } from '../store.js';
+import { today, targets, dayPlan } from '../store.js';
 import { printWeek } from '../print.js';
 
 let selected = null;
 
-export function renderPlan(root, { askAbout }) {
+export function renderPlan(root) {
   const t0 = today();
   if (!selected || selected < t0 || selected > addDays(t0, 6)) selected = t0;
   const day = selected;
@@ -43,14 +43,6 @@ export function renderPlan(root, { askAbout }) {
       h('div', { class: 'carb' }, h('small', null, tr('Carbs‖checkin')), h('b', { class: 'num' }, fmt(tot.c)), h('small', { class: 'muted num' }, tr('Target {0}', t.carbs))),
       h('div', { class: 'fat' }, h('small', null, tr('Fat')), h('b', { class: 'num' }, fmt(tot.f)), h('small', { class: 'muted num' }, tr('Target {0}', t.fat))))));
 
-  for (const m of plan) {
-    const card = mealCard(m, { day, onAsk: askAbout });
-    const ov = (state.overrides[day] || {})[m.index] || {};
-    card.appendChild(h('button', {
-      class: 'btn btn-ghost btn-small reshuffle',
-      onclick: () => setOverride(day, m.index, { reseed: (ov.reseed || 0) + 1 }),
-    }, icon('shuffle', 16), tr('Another meal')));
-    root.appendChild(card);
-  }
+  for (const m of plan) root.appendChild(mealRow(m, { day }));
   root.appendChild(h('p', { class: 'muted small center' }, tr('Amounts are by cooked / ready-to-eat weight. Vegetables can be eaten fairly freely.')));
 }

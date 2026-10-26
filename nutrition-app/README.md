@@ -423,3 +423,9 @@ Profile is now a short menu: **Achievements** (`#/achievements`: icon picker, st
 ## Water with each meal (v1.23)
 
 Every meal (today and past days) has its own water counter (`logs[day].waterMeals[mealIndex]`). The water card on Today shows the day's total — glasses with meals plus glasses between meals (the card's own counter) — against the daily goal, which is 35 ml per kg of body weight rounded to 250 ml glasses (`computeTargets`). No official Ministry of Health formula was found; height is not used.
+
+## Steps count, meals open on their own page, water in litres (v1.24)
+
+- **Burned calories go back into the day.** Steps (about 0.045 kcal a step at 70 kg: 8,000 steps ≈ 360 kcal, growing with weight) and workouts are added to the day's calorie budget, so an active day leaves more to eat (the ring is measured against calories + burned). On by default; Settings → "Subtract steps and workouts from my calories" turns it off. Estimates only; a walking workout and the steps can overlap.
+- **Meals are rows.** Today and the menu show each meal as one row (check, name, calories, what is in it). Tapping it opens `#/meal/<day>/<index>` with everything about the meal (swaps, sauces, own foods, water, drinks, recipes, calorie camera, "Another meal").
+- **Water in litres.** The goal is in litres; logging is +0.5 L, +1 L or any amount in millilitres (a small decimal like 1.5 is read as litres), with undo, on the card (between meals) and on each meal's page. Stored as `logs[day].waterAdds: [{ ml, meal }]`; older glass counts are still added in.

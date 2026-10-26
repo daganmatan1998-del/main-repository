@@ -1,23 +1,55 @@
-// Everyday habits: water glasses, intermittent fasting, streaks and badges,
+// Everyday habits: water, intermittent fasting, streaks and badges,
 // steps and workouts. Pure functions over the stored data (state.logs[day],
 // settings.fast, settings.badges) so they can be tested without a page.
 //
-// logs[day]: { eaten, full?, water?, waterDone?, steps?, workouts? }
+// logs[day]: { eaten, full?, waterAdds?, waterDone?, steps?, workouts? }
 
 import { t as tr } from './i18n.js';
 import { addDays } from './util.js';
 
 // ---------- water ----------
+// Amounts are millilitres. logs[day].waterAdds: [{ ml, meal }] — every drink the person
+// logged; meal = the meal index it was drunk with, -1 = between meals. Older versions
+// counted 250 ml glasses (logs[day].water between meals, logs[day].waterMeals per meal):
+// those are still added in.
 export const GLASS_ML = 250;
-export const MAX_GLASSES = 40;
-export const waterGoal = (liters) => Math.max(1, Math.round((Number(liters) || 2) * 1000 / GLASS_ML));
-// logs[day].water: glasses between meals (the card's own counter); logs[day].waterMeals: { [mealIndex]: glasses } drunk with a meal.
-export const glasses = (log) => Math.max(0, Math.min(MAX_GLASSES, Math.round((log && log.water) || 0)));
-export const MAX_MEAL_GLASSES = 10;
-export const mealGlasses = (log, idx) => Math.max(0, Math.min(MAX_MEAL_GLASSES, Math.round((log && log.waterMeals && log.waterMeals[idx]) || 0)));
-export const waterByMeals = (log) => Object.keys((log && log.waterMeals) || {}).reduce((s, k) => s + mealGlasses(log, k), 0);
+export const MAX_ADD_ML = 3000;
+export const MAX_ADDS = 80;
+export const QUICK_ML = [500, 1000];
+export const waterGoalMl = (liters) => Math.round((Number(liters) > 0 ? Number(liters) : 2) * 1000);
+
+const adds = (log) => ((log && log.waterAdds) || []).filter((a) => a && a.ml > 0);
+const legacyLoose = (log) => Math.max(0, Math.round((log && log.water) || 0)) * GLASS_ML;
+const legacyMeal = (log, idx) => Math.max(0, Math.round((log && log.waterMeals && log.waterMeals[idx]) || 0)) * GLASS_ML;
+const legacyMeals = (log) => Object.keys((log && log.waterMeals) || {}).reduce((s, k) => s + legacyMeal(log, k), 0);
+
+export const mealWaterMl = (log, idx) => adds(log).filter((a) => a.meal === idx).reduce((s, a) => s + a.ml, 0) + legacyMeal(log, idx);
+export const looseWaterMl = (log) => adds(log).filter((a) => a.meal === -1).reduce((s, a) => s + a.ml, 0) + legacyLoose(log);
+export const waterWithMealsMl = (log) => adds(log).filter((a) => a.meal >= 0).reduce((s, a) => s + a.ml, 0) + legacyMeals(log);
 // Everything counted toward the day's goal.
-export const waterTotal = (log) => glasses(log) + waterByMeals(log);
+export const waterTotalMl = (log) => adds(log).reduce((s, a) => s + a.ml, 0) + legacyLoose(log) + legacyMeals(log);
+
+// The new list of drinks with `ml` added (meal: index, or -1 between meals).
+export function addWater(log, ml, meal = -1) {
+  const n = Math.round(Number(ml));
+  if (!(n > 0)) return adds(log);
+  return [...adds(log), { ml: Math.min(MAX_ADD_ML, n), meal }].slice(-MAX_ADDS);
+}
+
+// The list without the last drink logged for that meal (or between meals).
+export function undoWater(log, meal = -1) {
+  const list = adds(log);
+  for (let i = list.length - 1; i >= 0; i--) if (list[i].meal === meal) return [...list.slice(0, i), ...list.slice(i + 1)];
+  return list;
+}
+
+// What was typed in the free field, in ml: "330" = 330 ml; a small decimal ("1.5", "0,5") is read as litres.
+export function parseMl(text) {
+  const v = Number(String(text).trim().replace(',', '.'));
+  if (!Number.isFinite(v) || v <= 0) return NaN;
+  const ml = v < 10 && !Number.isInteger(v) ? v * 1000 : v;
+  return Math.round(Math.min(MAX_ADD_ML, ml));
+}
 
 // ---------- intermittent fasting ----------
 export const PROTOCOLS = [
@@ -90,8 +122,12 @@ export function longestRun(logs) {
 // ---------- steps and workouts ----------
 export const STEP_GOAL = 8000;
 export const MAX_STEPS = 100000;
-// Estimates run high, so only half of the burned calories are given back.
-export const ACTIVITY_CREDIT = 0.5;
+// What the steps and workouts burned counts against the day's calories, so an
+// active day leaves more to eat. Steps: about 0.045 kcal a step at 70 kg
+// (8000 steps ≈ 360 kcal), growing with weight.
+export const ACTIVITY_CREDIT = 1;
+export const STEP_KCAL_PER_KG = 0.00064;
+export const stepKcal = (steps, kg) => Math.round(Math.max(0, Number(steps) || 0) * STEP_KCAL_PER_KG * (Number(kg) > 0 ? Number(kg) : 70));
 
 export const WORKOUTS = [
   { id: 'walk', met: 3.5, name: tr('Walking') },
@@ -116,10 +152,13 @@ export function makeWorkout(type, minutes, kg) {
   return { type: w.id, min, kcal: burn(w.met, kg, min) };
 }
 
-export function dayActivity(log) {
+export function dayActivity(log, kg = 70) {
   const workouts = (log && log.workouts) || [];
-  const kcal = workouts.reduce((s, w) => s + (w.kcal || 0), 0);
-  return { steps: Math.max(0, Math.round((log && log.steps) || 0)), workouts, kcal, credit: Math.round(kcal * ACTIVITY_CREDIT) };
+  const workoutKcal = workouts.reduce((s, w) => s + (w.kcal || 0), 0);
+  const steps = Math.max(0, Math.round((log && log.steps) || 0));
+  const stepsKcal = stepKcal(steps, kg);
+  const kcal = workoutKcal + stepsKcal;
+  return { steps, stepsKcal, workouts, workoutKcal, kcal, credit: Math.round(kcal * ACTIVITY_CREDIT) };
 }
 
 // ---------- emblems ----------

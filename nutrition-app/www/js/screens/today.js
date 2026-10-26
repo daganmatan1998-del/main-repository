@@ -3,12 +3,12 @@
 
 import { t as tr, locale } from '../i18n.js';
 import { h, icon, fmt, fmtDate, dayNumber, daysBetween, signed, ltr } from '../util.js';
-import { ring, macroBar, mealCard, avatar } from '../components.js';
+import { ring, macroBar, mealRow, avatar } from '../components.js';
 import { lineChart } from '../chart.js';
 import { dayTotals } from '../mealplan.js';
 import { dayMicros } from '../micros.js';
 import { dayActivity } from '../habits.js';
-import { waterCard, fastCard, activityCard, nutrientsCard, streakChip, checkBadges, framed, myEmblem } from './habits.js';
+import { waterCard, fastCard, activityCard, nutrientsCard, streakChip, checkBadges, framed, myEmblem, creditOn } from './habits.js';
 import { dayDrinks } from '../drinks.js';
 import { GOALS } from '../nutrition.js';
 import { state, today, targets, dayPlan, toggleEaten, gate, activePeriod, currentMetrics, periodEnded, saveSettings } from '../store.js';
@@ -68,15 +68,16 @@ export function renderToday(root, { askAbout }) {
   if (ic && !state.settings.installDismissed) root.appendChild(ic);
 
   // ---- calories & macros ----
-  const credit = state.settings.activityCredit ? dayActivity(state.logs[day]).credit : 0;
+  const credit = creditOn() ? dayActivity(state.logs[day], (cur && cur.weight) || 70).credit : 0;
   const remaining = t.calories + credit - consumed.kcal;
   root.appendChild(h('section', { class: 'card progress-card' },
     h('div', { class: 'progress-top' },
-      ring(consumed.kcal, t.calories, tr('kcal eaten'), tr('of {0}', fmt(t.calories))),
+      ring(consumed.kcal, t.calories + credit, tr('kcal eaten'), tr('of {0}', fmt(t.calories + credit))),
       h('div', { class: 'macros' },
         macroBar(tr('Protein'), 'protein', consumed.p, t.protein),
         macroBar(tr('Carbs‖checkin'), 'carb', consumed.c, t.carbs),
         macroBar(tr('Fat'), 'fat', consumed.f, t.fat))),
+    credit > 0 ? h('p', { class: 'muted small center', id: 'budget-credit' }, tr('{0} kcal were added to today\'s budget', fmt(credit))) : null,
     h('p', { class: 'muted small center' },
       remaining >= 0 ? tr('{0} kcal left for today · water: {1} liters', fmt(remaining), t.water) : tr('Over by {0} kcal', fmt(-remaining)))));
 
@@ -97,7 +98,7 @@ export function renderToday(root, { askAbout }) {
   // ---- meals ----
   root.appendChild(h('h2', { class: 'section-title' }, tr('Today\'s meals')));
   for (const m of plan) {
-    root.appendChild(mealCard(m, { day, eaten: eaten.has(m.index), onToggle: () => toggleEaten(day, m.index), onAsk: askAbout }));
+    root.appendChild(mealRow(m, { day, eaten: eaten.has(m.index), onToggle: () => toggleEaten(day, m.index) }));
   }
 
   // ---- activity and nutrients ----
