@@ -35,7 +35,8 @@ test('makeCustom: common foods scale with servings, typed ones are clamped', () 
   const t = makeCustom({ name: '  x'.repeat(30), kcal: 99999, p: -5, c: 'abc' });
   assert.equal(t.kcal, 5000);
   assert.ok(t.name.length <= 40 && t.p === 0 && t.c === 0);
-  assert.ok(!customValid(makeCustom({ name: 'nothing', kcal: 0 })) && !customValid(makeCustom({ name: '', kcal: 100 })));
+  assert.ok(customValid(makeCustom({ name: 'cola zero', kcal: 0 })), 'a 0-calorie product is a valid entry (it must show, or the row buttons would hit the wrong one)');
+  assert.ok(!customValid(makeCustom({ name: '', kcal: 100 })));
 });
 
 test('"take off the rest of the meal" keeps the meal on its calories', () => {
@@ -66,7 +67,8 @@ test('a food that replaces a plan item takes it out of the meal', () => {
 });
 
 test('invalid entries are ignored and the number is capped', () => {
-  assert.deepEqual(day([{ name: 'x', kcal: 0 }, { kcal: 100 }, null].filter(Boolean)).custom, []);
+  assert.deepEqual(day([{ name: 'x', kcal: NaN }, { kcal: 100 }, null].filter(Boolean)).custom, []);
+  assert.equal(day([{ name: 'cola zero', kcal: 0 }]).custom.length, 1);
   const many = Array.from({ length: 9 }, (_, i) => makeCustom({ name: `f${i}`, kcal: 50, mode: 'add' }));
   assert.equal(day(many).custom.length, MAX_CUSTOM);
 });

@@ -14,6 +14,7 @@ import { openRecipes } from './screens/recipes.js';
 import { validRemoval } from './mealplan.js';
 import { openCalorieCamera } from './screens/calorie-cam.js';
 import { openPaywall } from './screens/paywall.js';
+import { mealWaterRow } from './screens/habits.js';
 import { canUseAI } from './billing.js';
 
 export function ring(value, target, label, sub) {
@@ -45,6 +46,29 @@ export function macroBar(name, cls, value, target) {
 
 const SWAP_LABEL = { protein: tr('Swap protein'), carb: tr('Swap carb'), fat: tr('Swap fat'), fruit: tr('Swap fruit'), veg: tr('Swap vegetable') };
 
+// One meal as a single row: name, calories, what is in it. Tapping it opens the meal's
+// own page (#/meal/<day>/<index>, screens/meal.js); the check marks it eaten.
+export function mealRow(meal, { day, eaten, onToggle } = {}) {
+  const foods = meal.eaten ? [] : [
+    ...meal.items.map((i) => (FOOD_BY_ID[i.foodId] || {}).name),
+    ...(meal.extras || []).map((e) => (extraFood(e.foodId) || {}).name),
+    ...(meal.custom || []).map((x) => x.name),
+  ].filter(Boolean);
+  return h('div', { class: 'card meal-row' + (eaten ? ' eaten' : ''), 'data-meal': meal.index, 'data-target-kcal': meal.target.kcal },
+    onToggle ? h('button', {
+      type: 'button', class: 'row-check' + (eaten ? ' on' : ''),
+      'aria-pressed': eaten ? 'true' : 'false',
+      'aria-label': eaten ? tr('Unmark {0}', meal.name) : tr('Mark {0} as eaten', meal.name),
+      onclick: onToggle,
+    }, icon('check', 20)) : null,
+    h('a', { class: 'meal-row-main', href: `#/meal/${day}/${meal.index}`, 'aria-label': tr('Open {0}', meal.name) },
+      h('span', { class: 'meal-row-text' },
+        h('b', { class: 'meal-row-name' }, meal.name),
+        h('small', { class: 'meal-sub num' }, tr('{0} kcal · P {1} · C {2} · F {3}', fmt(meal.totals.kcal), fmt(meal.totals.p), fmt(meal.totals.c), fmt(meal.totals.f))),
+        foods.length ? h('small', { class: 'muted meal-row-foods' }, foods.join(' · ')) : null),
+      h('span', { class: 'menu-go', 'aria-hidden': 'true' }, icon('forward', 18))));
+}
+
 export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {}) {
   const card = h('section', { class: 'card meal' + (eaten ? ' eaten' : ''), 'data-target-kcal': meal.target.kcal });
   const head = h('div', { class: 'meal-head' },
@@ -68,6 +92,7 @@ export function mealCard(meal, { day, eaten, onToggle, swaps = true, onAsk } = {
       onclick: () => (canUseAI(aiStatus()) ? openCalorieCamera(meal, day) : openPaywall('camera')),
     }, icon(canUseAI(aiStatus()) ? 'camera' : 'lock', 18), meal.eaten ? tr('Retake with the calorie camera') : tr('Calorie camera — photograph your plate')));
   }
+  if (camOk) { const w = mealWaterRow(meal, day); if (w) card.appendChild(w); }
   if (camOk) card.appendChild(drinksBlock(meal, day));
   if (meal.eaten) return photoMealBody(card, meal, day);
 

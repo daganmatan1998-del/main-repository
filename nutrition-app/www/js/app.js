@@ -15,7 +15,7 @@ import { renderToday } from './screens/today.js';
 import { renderPlan } from './screens/plan.js';
 import { renderAssistant, queueSubstitution, queueAsk } from './screens/assistant.js';
 import { renderGallery } from './screens/gallery.js';
-import { renderProfile } from './screens/profile.js';
+import { renderProfile, renderAchievements, renderWeight, renderSettings } from './screens/profile.js';
 import { renderShopping } from './screens/shopping.js';
 import { applyTheme } from './theme.js';
 import { onInstallChange } from './install.js';
@@ -23,6 +23,15 @@ import { startSync, syncNow } from './sync.js';
 import { startPush } from './push.js';
 import { maybeAskReminders } from './screens/reminders.js';
 import { openConflict } from './screens/account.js';
+import { renderInbox } from './screens/inbox.js';
+import { renderUserProfile } from './screens/friends.js';
+import { renderChallenge } from './screens/challenges.js';
+import { addGlass } from './screens/habits.js';
+import { renderMeal } from './screens/meal.js';
+import { startChallengeSync } from './challenge-sync.js';
+import { usernameFromHash } from './social.js';
+import { startSocial } from './social-sync.js';
+import { loadInbox, addMessage } from './inbox.js';
 
 // The static page is English; this puts the active language into its texts.
 if (document.documentElement.lang !== 'en') {
@@ -35,6 +44,12 @@ if (document.documentElement.lang !== 'en') {
   document.getElementById('tabbar').setAttribute('aria-label', tr('Main navigation'));
 }
 
+function renderQuick() {
+  const what = (location.hash.split('/')[2] || '').split('?')[0];
+  const done = what === 'water' ? addGlass() : Promise.resolve();
+  done.finally(() => location.replace('#/today'));
+}
+
 const ROUTES = {
   today: { label: tr('Today'), icon: 'today', render: renderToday },
   plan: { label: tr('Menu'), icon: 'plan', render: renderPlan },
@@ -43,8 +58,21 @@ const ROUTES = {
   profile: { label: tr('Profile'), icon: 'profile', render: renderProfile },
   // Not a tab: opened from the menu screen, which stays highlighted.
   shopping: { render: renderShopping, tab: 'plan' },
+  // Friends: the inbox (opened from the bell on Today) and a person's public profile (invite links).
+  inbox: { render: renderInbox, tab: 'today' },
+  u: { render: renderUserProfile, tab: 'profile' },
+  challenge: { render: renderChallenge, tab: 'profile' },
+  // One meal on its own page, opened from a meal row on Today or the menu.
+  meal: { render: renderMeal, tab: 'today' },
+  // Pages opened from the profile menu; the profile tab stays highlighted.
+  achievements: { render: renderAchievements, tab: 'profile' },
+  weight: { render: renderWeight, tab: 'profile' },
+  settings: { render: renderSettings, tab: 'profile' },
+  // Home-screen shortcut: #/quick/water adds a glass and opens Today.
+  quick: { render: renderQuick, tab: 'today' },
 };
 
+const PENDING_LINK = 'nutri-pending-link';
 const view = document.getElementById('view');
 const tabbar = document.getElementById('tabbar');
 let cleanup = null;
@@ -107,6 +135,7 @@ export function render(force = false) {
   if (gate.state !== 'none') {
     // Any navigation while the gate is due lands here.
     const key = `gate:${gate.week}:${gate.state}`;
+    addMessage('checkin-due', { id: `checkin-due-${gate.week}`, args: [gate.week] });
     setLocked(true);
     if (force || lastKey !== key || !document.getElementById('gate')) {
       lastKey = key;
@@ -135,6 +164,12 @@ export function render(force = false) {
   }
 
   setLocked(false);
+  addMessage('welcome', { id: 'welcome' });
+  // An invite link opened before the account existed: go there now.
+  try {
+    const wanted = localStorage.getItem(PENDING_LINK);
+    if (wanted) { localStorage.removeItem(PENDING_LINK); if (usernameFromHash(wanted) && location.hash !== wanted) { location.hash = wanted; return; } }
+  } catch { /* storage unavailable */ }
   const name = route();
   lastKey = `route:${name}`;
   runCleanup();
@@ -190,6 +225,9 @@ async function boot() {
     return;
   }
   applyTheme(store.state.settings.theme);
+  await loadInbox();
+  // An invite link (#/u/name) opened by someone who is still setting up: keep it for after.
+  try { if (!store.isOnboarded() && usernameFromHash(location.hash)) localStorage.setItem(PENDING_LINK, location.hash); } catch { /* storage unavailable */ }
   // The service worker reads the language from the saved settings (it has no localStorage).
   if (store.isOnboarded() && store.state.settings.lang !== lang) store.saveSettings({ lang }).catch(() => {});
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(store.state.settings.theme));
@@ -228,6 +266,8 @@ async function boot() {
   render(true);
   registerSW();
   startPush();
+  startSocial();
+  startChallengeSync();
   // After setup is finished: offer daily reminders once, from the Today screen
   // (not over the weekly photo, the summary or a half-finished form).
   window.addEventListener('app:ready-for-reminders', () => maybeAskReminders());

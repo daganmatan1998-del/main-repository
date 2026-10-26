@@ -20,33 +20,45 @@ import { aiStatus } from '../store.js';
 import { photoButtons } from './photo-picker.js';
 import { squareImage } from '../image.js';
 import { accountCard } from './account.js';
+import { friendsCard, openInviteSheet } from './friends.js';
+import { challengesCard } from './challenges.js';
+import * as hb from '../habits.js';
+import { badgesCard, todaySettingsCard, framed, myEmblem, checkBadges, openEmblemSheet, habitStats } from './habits.js';
+import { cloudReady } from '../cloud.js';
 import * as cloud from '../cloud.js';
 
 export function renderProfile(root) {
   const p = state.profile;
-  const per = activePeriod();
   const cur = currentMetrics();
-  const t = targets();
 
   root.appendChild(h('header', { class: 'profile-head' },
     h('button', { class: 'avatar-btn', id: 'btn-avatar', 'aria-label': tr('Change profile photo'), onclick: editAvatar },
-      avatar(84), h('span', { class: 'avatar-badge' }, icon('camera', 16))),
+      framed(avatar(84), myEmblem(), 84), h('span', { class: 'avatar-badge' }, icon('camera', 16))),
     h('div', { class: 'profile-id' },
       h('h1', null, p.nickname || p.name),
       p.nickname ? h('p', { class: 'muted' }, p.name) : null,
-      h('p', { class: 'muted small' }, tr('Joined {0} · week {1}', fmtDate(p.regDay, true), currentWeek())))));
+      hb.emblemsEarned(habitStats().best).length ? h('button', { type: 'button', class: 'btn btn-small', id: 'btn-add-icon', onclick: openEmblemSheet }, icon('plus', 16), myEmblem() ? tr('Change icon') : tr('Add icon')) : null,
+      h('p', { class: 'muted small' }, tr('Joined {0} · week {1}', fmtDate(p.regDay, true), currentWeek())),
+      cloudReady() ? h('button', { type: 'button', class: 'btn btn-small btn-primary', id: 'btn-invite-head', onclick: openInviteSheet }, icon('send', 16), tr('Invite friends')) : null)));
 
-  // ---- personal details (first: who this profile is) ----
-  root.appendChild(h('section', { class: 'card', id: 'details-card' },
-    h('div', { class: 'row space' }, h('h2', null, tr('Personal details')), h('button', { class: 'btn btn-small btn-ghost', id: 'btn-edit-details', onclick: editDetails }, icon('edit', 16), tr('Edit'))),
-    h('div', { class: 'kv' },
-      h('span', null, tr('Name')), h('b', null, p.name),
-      h('span', null, tr('Nickname')), h('b', { id: 'kv-nickname' }, p.nickname || '—'),
-      h('span', null, tr('Sex, age, height')), h('b', null, tr('{0}, {1}, {2} cm', p.sex === 'female' ? tr('Female') : tr('Male'), p.age, p.height)),
-      h('span', null, tr('Activity')), h('b', null, tr('{0} · {1, plural, one {# workout} other {# workouts}} a week', ACTIVITY[p.activity].label, p.workouts)))));
+  // ---- the rest of the profile is one tap away ----
+  const stats = habitStats();
+  const earnedBadges = hb.BADGES.filter((b) => (state.settings.badges || {})[b.id]).length;
+  const row = (id, href, ic, title, sub) => h('a', { class: 'menu-row', id, href },
+    h('span', { class: 'menu-ic' }, icon(ic, 22)),
+    h('span', { class: 'menu-text' }, h('b', null, title), h('small', { class: 'muted' }, sub)),
+    h('span', { class: 'menu-go', 'aria-hidden': 'true' }, icon('forward', 18)));
+  root.appendChild(h('nav', { class: 'card menu-list', id: 'profile-menu', 'aria-label': tr('Profile menu') },
+    row('menu-achievements', '#/achievements', 'trophy', tr('Achievements'), tr('{0} of {1}', earnedBadges, hb.BADGES.length) + (stats.streak ? ` · ${tr('{0, plural, one {# day streak} other {# days streak}}', stats.streak)}` : '')),
+    row('menu-weight', '#/weight', 'today', tr('Update weight and body fat'), tr('Last: {0} kg · {1}', fmt(cur.weight, 1), fmtDate(cur.day))),
+    row('menu-settings', '#/settings', 'edit', tr('Settings'), tr('Details, preferences, language, notifications, privacy'))));
 
   // ---- cloud account ----
   root.appendChild(accountCard());
+  const friends = friendsCard();
+  if (friends) root.appendChild(friends);
+  const challenges = challengesCard();
+  if (challenges) root.appendChild(challenges);
 
   // ---- plan for the AI features ----
   if (BILLING.enabled) {
@@ -61,7 +73,28 @@ export function renderProfile(root) {
       h('button', { class: 'btn btn-block btn-primary', id: 'btn-plan', onclick: () => openPaywall('') }, a.state === 'active' ? tr('Subscription details') : tr('Upgrade'))));
   }
 
-  // ---- metrics ----
+  root.appendChild(disclaimer());
+  root.appendChild(h('p', { class: 'muted small center' }, tr('Version {0}', APP_VERSION)));
+}
+
+
+function subHeader(root, title) {
+  root.appendChild(h('header', { class: 'page-head' },
+    h('div', { class: 'row gap' },
+      h('a', { href: '#/profile', class: 'icon-btn', id: 'back-profile', 'aria-label': tr('Back to the profile') }, icon('back')),
+      h('h1', null, title))));
+}
+
+export function renderAchievements(root) {
+  subHeader(root, tr('Achievements'));
+  root.appendChild(badgesCard());
+  checkBadges();
+}
+
+export function renderWeight(root) {
+  const p = state.profile;
+  const cur = currentMetrics();
+  subHeader(root, tr('Update weight and body fat'));
   root.appendChild(h('section', { class: 'card' },
     h('h2', null, tr('Update weight and body fat')),
     h('p', { class: 'muted small' }, tr('Last: {0} kg, {1}% ({2}). Every update recalculates your plan.', fmt(cur.weight, 1), cur.bf ?? '—', fmtDate(cur.day))),
@@ -74,6 +107,22 @@ export function renderProfile(root) {
         toast(tr('Your measurements were saved and the plan was updated'));
       },
     })));
+
+}
+
+export function renderSettings(root) {
+  const p = state.profile;
+  const per = activePeriod();
+  const t = targets();
+  subHeader(root, tr('Settings'));
+  // ---- personal details (first: who this profile is) ----
+  root.appendChild(h('section', { class: 'card', id: 'details-card' },
+    h('div', { class: 'row space' }, h('h2', null, tr('Personal details')), h('button', { class: 'btn btn-small btn-ghost', id: 'btn-edit-details', onclick: editDetails }, icon('edit', 16), tr('Edit'))),
+    h('div', { class: 'kv' },
+      h('span', null, tr('Name')), h('b', null, p.name),
+      h('span', null, tr('Nickname')), h('b', { id: 'kv-nickname' }, p.nickname || '—'),
+      h('span', null, tr('Sex, age, height')), h('b', null, tr('{0}, {1}, {2} cm', p.sex === 'female' ? tr('Female') : tr('Male'), p.age, p.height)),
+      h('span', null, tr('Activity')), h('b', null, tr('{0} · {1, plural, one {# workout} other {# workouts}} a week', ACTIVITY[p.activity].label, p.workouts)))));
 
   // ---- period & targets ----
   root.appendChild(h('section', { class: 'card', id: 'period-settings' },
@@ -96,6 +145,8 @@ export function renderProfile(root) {
       h('span', null, tr('Allergies')), h('b', null, allergies),
       h('span', null, tr('Don\'t eat')), h('b', null, [p.prefs.dislikes, ...(p.prefs.excluded || []).map((id) => FOOD_BY_ID[id]?.name)].filter(Boolean).join(', ') || '—'),
       h('span', null, tr('Meals per day')), h('b', null, String(p.prefs.mealsPerDay)))));
+
+  root.appendChild(todaySettingsCard());
 
   // ---- app settings ----
   const remindersToggle = h('input', {
@@ -159,8 +210,6 @@ export function renderProfile(root) {
     storageInfo,
     h('button', { class: 'btn btn-danger btn-block', id: 'btn-delete-all', onclick: deleteAll }, icon('trash', 18), tr('Delete all data'))));
 
-  root.appendChild(disclaimer());
-  root.appendChild(h('p', { class: 'muted small center' }, tr('Version {0}', APP_VERSION)));
 }
 
 function editDetails() {

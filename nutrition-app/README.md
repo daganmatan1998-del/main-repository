@@ -383,3 +383,49 @@ The app shows that it is not medical advice, during onboarding, in the chat and 
 ## Languages (v1.14.0)
 
 English is the default (app name, logo text and every string). The language picker is on the first screen and in the profile. Packs: English, Hebrew, Spanish, French, German, Portuguese, Italian, Russian, Arabic (RTL). Packs live in `www/js/lang/`; check one with `node tools/i18n/check.mjs <lang>`; tour every screen with `LANGS=en,he,ar node tests/e2e/i18n.mjs`. Translations were machine-drafted and machine-reviewed, not checked by native speakers.
+
+## Barcode scanner (v1.16.0)
+
+"Add your own food" has a **Scan a barcode** button: the camera (or a photo, or typed digits) reads the code with ZBar (WebAssembly, vendored in `www/vendor/zbar`, LGPL-2.1), `/api/barcode` looks the product up in [Open Food Facts](https://world.openfoodfacts.org) (ODbL; credited in the product sheet) and caches it for a day, and the person picks grams, servings or the whole package. The CSP gained `'wasm-unsafe-eval'` for the reader. `node tests/e2e/barcode.mjs` tests the reader on a real video (needs ffmpeg).
+
+## Inbox and friends (v1.17.0)
+
+- **Inbox** (bell on Today): app messages kept on the device, and — in a separate folder — friend requests.
+- **Friends**: a public profile with a username (`@name`), invite link `#/u/<username>` (WhatsApp / copy), search by username, requests to accept or decline. Needs the new tables: **re-run `supabase/setup.sql`** in the Supabase SQL editor (adds `nutri_profiles` and `nutri_friend_requests` with row-level security; wins/losses can only be changed by the server). Tested against an in-memory fake of the PostgREST calls (`tests/e2e/cloud.mjs`), not against a real project.
+
+## Friend challenges (v1.18)
+
+From a friend's profile: **Challenge to a competition** — pick 7/14/30 days (or 3–30) and how many misses are allowed. A *miss* is a planned meal not marked as eaten by the end of its day (a day nobody reports counts as a full day of misses). The first to go over the limit loses at once; if nobody does, whoever missed more when the period ends loses (equal = draw). Accepting starts the challenge tomorrow. Wins/losses show on every profile. The rules live in `supabase/setup.sql` (re-run it in Supabase); each phone reports its own days, so scoring is an honor system between friends. Tests: `tests/unit/sql.test.mjs` runs the real SQL in PGlite (`npm install` first).
+
+## Habits, nutrients and more (v1.19)
+
+- **Water**: a quick glass counter on Today (goal from your plan), and a home-screen shortcut (`#/quick/water`).
+- **Intermittent fasting** (off by default; switch on in Profile → Today screen): 14:10 / 16:8 / 18:6 / 20:4 timer with history.
+- **Streaks and badges** (Profile → Achievements): a day counts when a planned meal is marked eaten; 15 badges, kept even after old logs are pruned.
+- **Steps and workouts**: typed in by hand (a PWA cannot read Apple Health / Health Connect). Workout calories come from MET × weight × time; optionally half of them are added to the day's budget.
+- **Nutrients**: fiber, sugars, sodium, potassium, calcium, iron, vitamin C for the meals marked eaten (`www/js/micros.js`, typical USDA values — estimates). Scanned products bring the label's fiber / sugars / sodium.
+- **Search packaged products by name** (Open Food Facts via `/api/foodsearch`) in Add your own food.
+- **Print** the week's menu (Menu → Print) and the shopping list.
+- Not possible in a PWA: native widgets, store listing, wearable sync. Not built: human coaching.
+
+## Emblems (v1.21)
+
+Six emblems (`www/img/emblems/1..6.webp`) are earned by the longest streak of days with a planned meal marked: Common 5, Rare 10, Epic 20, Legendary 25, Mythical 50, Above all 100 days. A reached emblem is kept. In Profile → Add icon the person chooses one; it shows small above the top right of their picture (Today, Profile, a friend's profile, the friends list). The choice is stored in `nutri_profiles.level` (re-run `supabase/setup.sql`); each phone reports its own, so it is honor-system like the challenge days. The streak is carried in settings (`runLen`, `runEnd`) so it can pass the 60 days the logs keep.
+
+### Challenge counting notes (v1.21)
+
+A day is counted only once the day after it has begun, so a friend who opens the app just after midnight cannot close the other player's last day before they could report it. The settling phone's day is stored in `nutri_challenges.final_day` so every screen shows the same scoreboard. Known limit: two phones whose local dates differ by a day (zones ~13 h apart) can still count a day a few hours early.
+
+## A shorter profile (v1.22)
+
+Profile is now a short menu: **Achievements** (`#/achievements`: icon picker, streaks, badges), **Update weight and body fat** (`#/weight`) and **Settings** (`#/settings`: personal details, current period, food preferences, Today cards, language, appearance, notifications, privacy, delete all). Account, friends, challenges and the plan stay on the profile. Each page has a back arrow to the profile.
+
+## Water with each meal (v1.23)
+
+Every meal (today and past days) has its own water counter (`logs[day].waterMeals[mealIndex]`). The water card on Today shows the day's total — glasses with meals plus glasses between meals (the card's own counter) — against the daily goal, which is 35 ml per kg of body weight rounded to 250 ml glasses (`computeTargets`). No official Ministry of Health formula was found; height is not used.
+
+## Steps count, meals open on their own page, water in litres (v1.24)
+
+- **Burned calories go back into the day.** Steps (about 0.045 kcal a step at 70 kg: 8,000 steps ≈ 360 kcal, growing with weight) and workouts are added to the day's calorie budget, so an active day leaves more to eat (the ring is measured against calories + burned). On by default; Settings → "Subtract steps and workouts from my calories" turns it off. Estimates only; a walking workout and the steps can overlap.
+- **Meals are rows.** Today and the menu show each meal as one row (check, name, calories, what is in it). Tapping it opens `#/meal/<day>/<index>` with everything about the meal (swaps, sauces, own foods, water, drinks, recipes, calorie camera, "Another meal").
+- **Water in litres.** The goal is in litres; logging is +0.5 L, +1 L or any amount in millilitres (a small decimal like 1.5 is read as litres), with undo, on the card (between meals) and on each meal's page. Stored as `logs[day].waterAdds: [{ ml, meal }]`; older glass counts are still added in.

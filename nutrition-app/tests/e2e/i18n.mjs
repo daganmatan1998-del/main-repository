@@ -191,6 +191,10 @@ async function tour(lang) {
   if (await page.locator('#push-yes').count()) { await audit('reminders question'); await shot('reminders'); await page.locator('#reminders-sheet button').last().click(); await wait(300); }
   await audit('today');
   await shot('today');
+  await page.locator('.meal-row a.meal-row-main').first().click();
+  await page.waitForSelector('.page-meal .meal');
+  await audit('meal page');
+  await shot('meal');
   await page.locator('.meal .drinks-head').first().click();
   await audit('today, drinks open');
   await page.locator('.meal .alt-btn, .meal .swap-btn').first().click().catch(() => {});

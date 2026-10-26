@@ -275,7 +275,16 @@ export async function toggleEaten(day, mealIdx) {
   const log = state.logs[day] || { eaten: [] };
   const set = new Set(log.eaten);
   if (set.has(mealIdx)) set.delete(mealIdx); else set.add(mealIdx);
-  state.logs[day] = { ...log, eaten: [...set].sort((a, b) => a - b) };
+  // `full`: every planned meal of the day is marked (the "perfect day" badges count it).
+  const planned = dayPlan(day).length;
+  state.logs[day] = { ...log, eaten: [...set].sort((a, b) => a - b), full: planned > 0 && set.size >= planned };
+  await saveLogs();
+}
+
+// Habit entries of a day: water glasses, steps, workouts (see habits.js).
+export async function patchLog(day, patch) {
+  const log = state.logs[day] || { eaten: [] };
+  state.logs[day] = { ...log, ...patch };
   await saveLogs();
 }
 
@@ -366,7 +375,7 @@ export async function setAvatar(img) {
 
 // ---------- cloud copy (see sync.js) ----------
 // Settings that belong to this device and never travel between devices.
-const DEVICE_SETTINGS = ['reminders', 'installDismissed', 'lang'];
+const DEVICE_SETTINGS = ['reminders', 'installDismissed', 'lang', 'emblemSynced'];
 
 export function snapshot() {
   const settings = { ...state.settings };
