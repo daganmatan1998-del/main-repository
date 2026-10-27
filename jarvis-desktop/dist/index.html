@@ -10559,7 +10559,7 @@ async function phoneCommandRefusal(){
 }
 
 window.__phoneTest = { get active(){ return phoneCallActive; }, get status(){ return phoneStatus; }, callPhoneTool, refreshPhoneStatus,
-                       israelNow, zonedToIso, phoneCommandOf, phoneHasPurpose, isPhoneStatusQuestion, describePhoneStatus, claimsItDidSomething };
+                       israelNow, zonedToIso, phoneCommandOf, phoneHasPurpose, detectWorkflowCommand, isPhoneStatusQuestion, describePhoneStatus, claimsItDidSomething };
 
 const SCHEDULE_MANAGE_TOOL = {
   name: 'manage_scheduled',
@@ -11264,6 +11264,7 @@ function warnIfNothingCanSee(){
 }
 
 function stopLive(quiet){
+  cameraMode = 'none'; cameraModeBefore = null;
   if(liveWinOpen){
     stopLiveWindow();
     liveBtn.classList.remove('active');
@@ -14344,6 +14345,29 @@ function aiOpenSummary(results, he){
 }
 
 const FLOW_RULES = [
+  /* CAMERA MODES: "control mode" (hands drive the screen), "watch mode" / "watch me" (a video call). */
+  { flow: 'camera_mode_off', strong: [
+      /\b(exit|leave|stop|end|cancel|quit|turn\s+off|disable)\s+(the\s+|this\s+)?(control|watch|gesture|video)\s+mode\b/,
+      /\bstop\s+watching\s+me\b/,
+      /\b(control|watch)\s+mode\s+(off|over|done)\b/,
+      /(צא|תצא|תבטל|תפסיק|סגור|תסגור)[\s\S]{0,14}מצב\s+(שליטה|צפייה|צפיה|וידאו)/,
+      /תפסיק\s+(לצפות|להסתכל)\s+(בי|עליי|עלי)/
+    ], bare: [] },
+  { flow: 'control_mode', strong: [
+      /\bcontrol\s+mode\b/,
+      /\bgesture\s+(control\s+)?mode\b/,
+      /\bhand\s+control\s+mode\b/,
+      /מצב\s+שליטה/
+    ], bare: [] },
+  { flow: 'watch_mode', strong: [
+      /\bwatch\s+mode\b/,
+      /\bwatch\s+me\b/,
+      /\bvideo\s+call\s+mode\b/,
+      /\bstart\s+watching\s+me\b/,
+      /מצב\s+(צפייה|צפיה|וידאו|מעקב)/,
+      /תצפה\s+(בי|עליי|עלי)/
+    ], bare: [] },
+
   /* "What is this?" is a question AND an instruction — he is holding
      something up while he says it. So this rule is marked as not subject
      to the asking guard below, which exists to stop "what is the
@@ -14678,7 +14702,7 @@ function splitRequests(text){
 
 /* The commands that finish on their own. Looking and the store report need
    the model, so in a compound sentence they go to it with the rest. */
-const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'fullscreen', 'fullscreen_exit',
+const SELF_CONTAINED_FLOWS = new Set(['camera_on', 'camera_off', 'control_mode', 'watch_mode', 'camera_mode_off', 'fullscreen', 'fullscreen_exit',
                                       'live_full', 'live_full_exit', 'workspace', 'open_site', 'bring_window',
                                       'workspace3d', 'workspace3d_project', 'agent_atlas', 'music_on', 'music_off',
                                       'webshooter_on', 'webshooter_off', 'adjust_window', 'close_thing', 'browser_write',
@@ -15892,6 +15916,13 @@ async function runWorkflowCommand(flow, text){
       persistCurrentSession();
       if(IS_DESKTOP && typeof speak === 'function') speak(line);
     }
+    return true;
+  }
+
+  if(flow === 'control_mode' || flow === 'watch_mode' || flow === 'camera_mode_off'){
+    const mode = flow === 'control_mode' ? 'control' : flow === 'watch_mode' ? 'watch' : 'none';
+    const r = await setCameraMode(mode);
+    say(cameraModeLine(r, mode, he));
     return true;
   }
 
@@ -20206,6 +20237,54 @@ const CAMERA_TOOL = {
   }
 };
 
+/* CAMERA MODES (control / watch). The camera used to have one behaviour; he asked for two on purpose.
+   CONTROL MODE: his hands drive the screen (pinch zoom, turning a model, the finger mouse), JARVIS
+   keeps quiet. WATCH MODE: a video call: the hands control nothing, a frame rides along with every
+   message, and he is told what is new in view. Each remembers what the camera was doing before, so
+   leaving a mode puts it back. Built from the switches that already existed (setGestureZoom, setEye). */
+var cameraMode = 'none';
+var cameraModeBefore = null;
+async function setCameraMode(mode){
+  if(!IS_DESKTOP) return { ok:false, error:'the camera modes are in the desktop app' };
+  if(mode === 'none'){
+    if(cameraMode === 'none') return { ok:true, already:true };
+    const before = cameraModeBefore || {};
+    cameraMode = 'none'; cameraModeBefore = null;
+    if(liveActive()){
+      try{ await setGestureZoom(before.gestures !== false); }catch(err){}
+      if(eyeOn !== !!before.eye) setEye(!!before.eye);
+    }
+    return { ok:true, mode:'none' };
+  }
+  if(!liveActive()){
+    try{ await startLive(); }catch(err){}
+    if(!liveActive()) return { ok:false, code:'no_camera', error:'the camera would not open' };
+  }
+  if(cameraMode === 'none') cameraModeBefore = { gestures: gestureSettings.enabled !== false, eye: eyeOn };
+  cameraMode = mode;
+  if(mode === 'control'){
+    await setGestureZoom(true, true, true);
+    if(eyeOn) setEye(false);
+  } else {
+    await setGestureZoom(false);
+    if(!eyeOn) setEye(true);
+  }
+  return { ok:true, mode };
+}
+function cameraModeNote(){
+  if(cameraMode === 'watch' && liveActive()) return '\n\nWATCH MODE: he is on a VIDEO CALL with you. His camera frame comes with every message, and you are told when something new comes into view. ' +
+    'Treat it as seeing him: say what he is holding when he asks (or when you are asked about a new object), help with the project on his bench (name parts, spot a mistake, say where the next piece goes), keep it to one or two short spoken sentences. ' +
+    'If the frame is dark, blurred or the object is unclear, say so rather than guessing. Do not narrate an empty room or describe him back to himself. His hands control nothing in this mode.';
+  if(cameraMode === 'control' && liveActive()) return '\n\nCONTROL MODE: his hands are driving the screen through the camera. Stay quiet unless he speaks to you; answer in a few words.';
+  return '';
+}
+function cameraModeLine(r, mode, he){
+  if(r && r.error) return (he ? 'לא הצלחתי: ' : 'I could not: ') + r.error;
+  if(mode === 'control') return he ? 'מצב שליטה. הידיים שלך שולטות במסך.' : 'Control mode. Your hands are on the screen.';
+  if(mode === 'watch')   return he ? 'מצב צפייה. אני רואה אותך.' : 'Watch mode. I can see you.';
+  return he ? 'חזרתי למצב הרגיל.' : 'Back to normal.';
+}
+
 async function callCameraTool(input){
   if(!IS_DESKTOP) return { error: 'only available in the desktop app' };
   if(input && input.close === true){
@@ -20587,7 +20666,7 @@ function phoneNote(){
   return '\n\nPHONE CALLS: Phone calls here have nothing to do with WhatsApp or CallMeBot: never mention WHATSAPP_PHONE or CALLMEBOT_APIKEY when asked about calling him. Calling him by phone (ringback) is not set up yet. ' + (phoneStatus.why || '') + ' If he asks you to call him or talk by phone, tell him exactly that in one sentence; never claim to dial. The older call_me tool (a one-way Telegram call through the worker) needs its own secrets and may not be set up: do not use it for this.';
 }
 function cameraSystemExtras(){
-  return phoneNote() + (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + mailServiceNote() + (compactCodeNote || '') +
+  return phoneNote() + cameraModeNote() + (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + mailServiceNote() + (compactCodeNote || '') +
          (turnWants3d ? never3dNote() : '') + (turn3dMentionOnly ? QUIET_3D_NOTE : '') + (turnWantsNote ? NOTE_TURN_NOTE : '');
 }
 /* SET ONLY AFTER A CUT-OFF (2.22.1): the last attempt ran out of room in the
