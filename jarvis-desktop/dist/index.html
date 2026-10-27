@@ -1665,6 +1665,38 @@
     #commPanel{ max-height:min(42vh, 48dvh); }
     #optionsPanel{ max-height:min(52vh, 58dvh); }
   }
+
+  /* SMART NOTES: a HUD panel per note, on the right, above the chat and below full-screen previews. */
+  #noteDock{ position:fixed; top:calc(56px + var(--vv-top)); right:12px; width:min(440px, 46vw); max-height:calc(100vh - 140px - var(--vv-top));
+             display:flex; flex-direction:column; gap:10px; z-index:55; pointer-events:none; }
+  .hudNote{ pointer-events:auto; display:flex; flex-direction:column; min-height:0; max-height:44vh; background:rgba(var(--panel-rgb), 0.93);
+            border:1px solid rgba(var(--cyan-rgb), 0.5); border-radius:4px; backdrop-filter:blur(6px);
+            box-shadow:0 0 22px rgba(var(--cyan-rgb), 0.18), inset 0 0 24px rgba(var(--cyan-rgb), 0.05); animation:hudNoteIn .28s ease-out; }
+  @keyframes hudNoteIn{ from{ opacity:0; transform:translateX(18px); } to{ opacity:1; transform:none; } }
+  .hudNoteHead{ display:flex; align-items:center; gap:6px; padding:6px 8px; border-bottom:1px solid rgba(var(--cyan-rgb), 0.28); background:rgba(var(--panel-rgb), 0.7); }
+  .hudNoteTitle{ flex:1; min-width:0; color:var(--cyan); font-size:11px; letter-spacing:1.2px; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hudNoteBtn{ background:transparent; color:var(--cyan); border:1px solid rgba(var(--cyan-rgb), 0.4); border-radius:2px; padding:2px 7px; font:inherit; font-size:10px; letter-spacing:1px; cursor:pointer; }
+  .hudNoteBtn:hover{ background:rgba(var(--cyan-rgb), 0.16); }
+  .hudNoteBtn.on{ background:rgba(var(--cyan-rgb), 0.22); }
+  .hudNoteBody{ overflow:auto; padding:10px 12px; color:var(--text-bright); font-size:13px; line-height:1.55; user-select:text; -webkit-user-select:text; cursor:text; }
+  .hudNoteBody h2,.hudNoteBody h3,.hudNoteBody h4{ color:var(--cyan); margin:.9em 0 .35em; font-size:1.05em; letter-spacing:.6px; }
+  .hudNoteBody p{ margin:.5em 0; } .hudNoteBody ul,.hudNoteBody ol{ margin:.4em 0; padding-inline-start:1.4em; }
+  .hudNoteBody li{ list-style-position:inside; margin:.15em 0; } .hudNoteBody ul,.hudNoteBody ol{ padding-inline-start:.4em; }
+  .hudNoteBody blockquote{ margin:.5em 0; padding:.1em .8em; border-inline-start:2px solid rgba(var(--cyan-rgb), 0.5); color:rgba(var(--dim-rgb), 1); }
+  .hudNoteBody hr{ border:0; border-top:1px solid rgba(var(--cyan-rgb), 0.3); margin:.8em 0; }
+  .hudNoteBody code{ background:rgba(var(--cyan-rgb), 0.12); padding:0 .3em; border-radius:2px; font-family:Consolas,Menlo,monospace; font-size:.92em; unicode-bidi:plaintext; }
+  .hudNoteBody a{ color:var(--cyan); text-decoration:underline; cursor:pointer; }
+  .hudNoteBody pre{ margin:0; white-space:pre-wrap; word-break:break-word; font-family:Consolas,Menlo,monospace; font-size:12px; }
+  .noteCode{ margin:.6em 0; border:1px solid rgba(var(--cyan-rgb), 0.3); border-radius:3px; background:rgba(0,0,0,.35); direction:ltr; text-align:left; }
+  .noteCodeBar{ display:flex; justify-content:space-between; align-items:center; padding:2px 8px; font-size:10px; letter-spacing:1px; color:rgba(var(--dim-rgb), 1); border-bottom:1px solid rgba(var(--cyan-rgb), 0.2); }
+  .noteCode pre{ padding:8px 10px; overflow:auto; }
+  .noteCodeCopy{ background:transparent; color:var(--cyan); border:0; font:inherit; cursor:pointer; letter-spacing:1px; }
+  .hudNoteEdit{ flex:1; min-height:160px; resize:none; background:rgba(0,0,0,.35); color:var(--text-bright); border:0; outline:0; padding:10px 12px; font-family:Consolas,Menlo,monospace; font-size:12.5px; line-height:1.5; }
+  #noteTray{ position:fixed; right:12px; bottom:calc(12px + var(--vv-bottom)); display:none; flex-direction:column; align-items:flex-end; gap:5px; z-index:54; max-width:min(320px, 40vw); }
+  #noteTray.has{ display:flex; }
+  .noteChip{ background:rgba(var(--panel-rgb), 0.9); color:var(--cyan); border:1px solid rgba(var(--cyan-rgb), 0.4); border-radius:3px; padding:4px 9px; font:inherit; font-size:11px; letter-spacing:.8px; cursor:pointer; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .noteChip:hover{ background:rgba(var(--cyan-rgb), 0.16); }
+  @media (max-width: 700px){ #noteDock{ left:8px; right:8px; width:auto; top:calc(70px + var(--vv-top)); max-height:calc(100vh - 150px - var(--vv-top)); } .hudNote{ max-height:38vh; } }
 </style>
 </head>
 <body>
@@ -21044,7 +21076,7 @@ async function callClaudeOnce(messages, usingOwnBackend, onText, retriedAuth, bu
                                       NOTE_SEEN_TOOL, LOOK_AGAIN_TOOL, GESTURE_ZOOM_TOOL, BRING_WINDOW_TOOL, WEB_SHOOTER_TOOL,
                                       ADJUST_WINDOW_TOOL, TYPE_TEXT_TOOL, SHUTDOWN_TOOL, CLOSE_BROWSER_TOOL);
     /* Music (2.23.0): his YouTube playlist, through the worker. */
-    everydayTools.push(MUSIC_TOOL, YOUTUBE_CONNECT_TOOL);
+    everydayTools.push(MUSIC_TOOL, YOUTUBE_CONNECT_TOOL, CREATE_NOTE_TOOL);
     /* Phone calls: only when the app says ringback is fully set up. */
     if(IS_DESKTOP && phoneStatus && phoneStatus.ready) everydayTools.push(PHONE_CALL_TOOL, PHONE_SAY_TOOL, PHONE_SPEAK_TOOL, PHONE_LISTEN_TOOL, PHONE_HANGUP_TOOL);
     /* His mail (worker 2.10.0): offered only when the worker says it can. */
@@ -21734,6 +21766,8 @@ async function askJarvis(userText, images, onText, tag){
             payload = await callWhatsAppTool(tu.input);
           } else if(Object.prototype.hasOwnProperty.call(PHONE_TOOL_MAP, tu.name)){
             payload = await callPhoneTool(tu.name, tu.input || {}, tu.id);
+          } else if(tu.name === 'create_note'){
+            payload = callCreateNoteTool(tu.input || {});
           } else if(tu.name === 'call_me'){
             payload = await callCallTool(tu.input);
           } else if(tu.name === 'manage_scheduled'){
@@ -22263,6 +22297,471 @@ function codeAsPage(code){
          'font:13px/1.55 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;' +
          'word-break:break-word;}</style></head><body>' + escaped + '</body></html>';
 }
+
+/* =====================================================================
+   SMART NOTES
+
+   A written deliverable (a prompt, an email, a plan, a summary, code to reuse) is not a chat
+   reply: it is something he will copy, edit and keep. So it opens as a NOTE on the HUD, by
+   itself, without a command. This is separate from write_note, which opens Windows Notepad and
+   stays what "put it in my notes / Notepad" means.
+
+   Pieces, each small:
+     - Notes          the manager: create / update / focus / save / close / minimize, persisted
+     - writtenIntent  what he ASKED for: note, chat (stay in chat), or speak (voice only)
+     - looksWritten   what came BACK: long or structured enough to be a deliverable
+     - noteGate       holds the start of a streamed reply to decide, then streams into ONE note
+   Content is only ever put on screen with textContent. Nothing in a note is HTML or run. */
+const NOTES_KEY = 'notes:v1';
+const NOTES_MAX = 60;            // unsaved notes beyond this are dropped, oldest first
+const NOTES_OPEN_MAX = 3;        // panels shown at once; older ones fold into the tray
+const NOTE_CHARS_MAX = 120000;
+const NOTE_DUP_MS = 180000;      // the same text twice within this is one note (a retry, a repeated tool call)
+
+const NOTE_SECRET_RE = /\b(?:sk|pk|rk)[-_][A-Za-z0-9_-]{16,}|\bAKIA[0-9A-Z]{12,}|\bghp_[A-Za-z0-9]{20,}|\bxox[abp]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+\/-]{20,}|\b(?:password|passwd|api[_ -]?key|secret|token|סיסמ[הא]|טוקן)\s*[:=]\s*\S{6,}/i;
+function noteHasSecret(text){ return NOTE_SECRET_RE.test(String(text || '')); }
+
+const Notes = (function(){
+  let list = [];
+  let loaded = false;
+  let saveTimer = null;
+  const subs = [];
+
+  function id(){ return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function hash(s){
+    s = String(s || '').replace(/\s+/g, ' ').trim();
+    let h = 5381;
+    for(let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return s.length + ':' + (h >>> 0).toString(36);
+  }
+  function persistSoon(){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(persistNow, 400);
+  }
+  async function persistNow(){
+    clearTimeout(saveTimer); saveTimer = null;
+    /* Beyond the cap the oldest notes he did not keep go; kept ones stay. */
+    if(list.length > NOTES_MAX){
+      const drop = list.filter(n => !n.saved).sort((a, b) => a.updatedAt - b.updatedAt).slice(0, list.length - NOTES_MAX);
+      list = list.filter(n => drop.indexOf(n) < 0);
+    }
+    try{
+      await Store.set(NOTES_KEY, JSON.stringify(list.map(n => ({
+        id: n.id, title: n.title, content: n.content, format: n.format, lang: n.lang, meta: n.meta,
+        createdAt: n.createdAt, updatedAt: n.updatedAt, saved: !!n.saved, minimized: !!n.minimized, closed: !!n.closed
+      }))));
+    }catch(err){}
+  }
+  async function load(){
+    if(loaded) return list;
+    loaded = true;
+    try{
+      const r = await Store.get(NOTES_KEY);
+      const arr = JSON.parse(r.value);
+      if(Array.isArray(arr)) list = arr.filter(n => n && typeof n.id === 'string' && typeof n.content === 'string').map(n => ({
+        id: n.id, title: String(n.title || 'Note').slice(0, 120), content: n.content.slice(0, NOTE_CHARS_MAX),
+        format: n.format === 'code' || n.format === 'text' ? n.format : 'markdown', lang: n.lang || '', meta: n.meta || {},
+        createdAt: n.createdAt || Date.now(), updatedAt: n.updatedAt || Date.now(),
+        saved: !!n.saved, minimized: true, closed: n.closed !== false   // nothing pops open on its own at startup
+      }));
+    }catch(err){}
+    emit();
+    return list;
+  }
+  function emit(){ subs.forEach(f => { try{ f(); }catch(err){} }); }
+  function get(noteId){ return list.find(n => n.id === noteId) || null; }
+
+  /* create_note(title, content, format, metadata). The same text, recently, is the same note. */
+  function create(o){
+    o = o || {};
+    const content = String(o.content || '').slice(0, NOTE_CHARS_MAX);
+    if(!content.trim()) return { ok:false, code:'empty', error:'there is nothing to put in a note' };
+    if(noteHasSecret(content)) return { ok:false, code:'sensitive', error:'it looks like it contains a secret (a key, token or password), so it stays out of notes' };
+    const h = hash(content), now = Date.now();
+    const dup = list.find(n => n.meta && n.meta.hash === h && now - n.createdAt < NOTE_DUP_MS);
+    if(dup){ dup.closed = false; dup.minimized = false; emit(); return { ok:true, id:dup.id, duplicate:true, title:dup.title }; }
+    const note = {
+      id: id(), title: String(o.title || noteTitleOf(content)).slice(0, 120), content,
+      format: o.format === 'code' || o.format === 'text' ? o.format : 'markdown',
+      lang: o.lang || '', meta: Object.assign({}, o.metadata || {}, { hash: h }),
+      createdAt: now, updatedAt: now, saved: false, minimized: false, closed: false
+    };
+    list.push(note);
+    persistSoon(); emit();
+    return { ok:true, id:note.id, title:note.title };
+  }
+  function update(noteId, content, o){
+    const n = get(noteId);
+    if(!n) return { ok:false, code:'no_such_note', error:'no such note' };
+    n.content = String(content == null ? n.content : content).slice(0, NOTE_CHARS_MAX);
+    if(o && o.title) n.title = String(o.title).slice(0, 120);
+    n.updatedAt = Date.now();
+    n.meta = Object.assign({}, n.meta, { hash: hash(n.content) });
+    persistSoon(); emit();
+    return { ok:true, id:n.id };
+  }
+  function focus(noteId){
+    const n = get(noteId);
+    if(!n) return { ok:false, code:'no_such_note' };
+    n.closed = false; n.minimized = false; n.focusedAt = Date.now();
+    emit(); return { ok:true };
+  }
+  function minimize(noteId, on){ const n = get(noteId); if(!n) return { ok:false }; n.minimized = on !== false; emit(); persistSoon(); return { ok:true }; }
+  function save(noteId){ const n = get(noteId); if(!n) return { ok:false, code:'no_such_note' }; n.saved = true; persistNow(); emit(); return { ok:true }; }
+  function close(noteId){ const n = get(noteId); if(!n) return { ok:false, code:'no_such_note' }; n.closed = true; persistSoon(); emit(); return { ok:true }; }
+  function remove(noteId){ list = list.filter(n => n.id !== noteId); persistSoon(); emit(); return { ok:true }; }
+  return { load, create, update, focus, minimize, save, close, remove, get, hash,
+           all(){ return list.slice(); }, subscribe(f){ subs.push(f); }, flush: persistNow };
+})();
+
+/* A title from the content: the first heading, else the first line, trimmed to a few words. */
+function noteTitleOf(content){
+  const lines = String(content || '').split('\n').map(l => l.trim()).filter(Boolean);
+  let first = lines.find(l => /^#{1,3}\s+\S/.test(l));
+  first = first ? first.replace(/^#{1,3}\s+/, '') : (lines.find(l => !/^```/.test(l)) || 'Note');
+  first = first.replace(/[*_`>#-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const words = first.split(' ');
+  return (words.length > 9 ? words.slice(0, 9).join(' ') + '…' : first).slice(0, 80) || 'Note';
+}
+
+/* ------------------------------------------------------------------
+   WHAT HE ASKED FOR. Returns 'speak' (voice only), 'chat' (keep it in chat), 'note', or null
+   (no opinion: the reply decides). Matched on meaning-bearing families, in two languages, over
+   the normalised sentence; the verb plus a deliverable, or one of the indirect phrasings.
+------------------------------------------------------------------ */
+const NI_SPEAK = /\b(?:out loud only|voice only|speak only|just (?:say|tell) (?:it|me)(?: out loud)?|say it out loud|tell me out loud|read it to me|no need to write)\b|בקול בלבד|רק בקול|רק תגיד|תגיד לי בקול|תקריא לי|תגיד את זה בקול/;
+const NI_CHAT = /\b(?:(?:in|here in|right here in|inside the|just in) (?:the )?chat|no notes?|without (?:a |any )?notes?|do not (?:make|create|open|write) (?:a )?notes?|dont (?:make|create|open|write) (?:a )?notes?|here is fine|just answer me|answer me here|dont open anything)\b|בצאט|בצאט|בצ.אט|בלי פתק|אל תפתח פתק|אל תכתוב פתק|פה בשיחה|כאן בשיחה|תענה לי כאן/;
+const NI_ASK_EN = '(?:write|draft|compose|prepare|put together|put together|create|generate|make|give|get|build|produce|come up with|whip up|knock out|type up|spell out|lay out|map out|sketch)';
+const NI_THING_EN = '(?:prompt|prompts|email|e-?mail|mail|message|msg|text|reply|response|post|caption|tweet|thread|description|bio|letter|cover letter|resume|cv|doc|document|docs|proposal|pitch|brief|spec|specs|specification|requirements|plan|roadmap|checklist|to-?do list|todo list|itinerary|agenda|schedule|outline|report|summary|recap|overview|analysis|comparison|review|notes?|instructions|steps|guide|how-?to|tutorial|walkthrough|readme|template|script|snippet|code|function|class|query|config|configuration|list|table|strategy|breakdown|handoff|hand-off|ticket|story|essay|article|blog|speech|toast|tagline|slogan|names|ideas)';
+const NI_WRITE_EN = new RegExp('\\b' + NI_ASK_EN + '\\b[^.?!]{0,60}\\b' + NI_THING_EN + '\\b');
+const NI_VERB_EN = /\b(?:summari[sz]e|rewrite|re-?phrase|reword|translate|proofread|polish|improve|fix up|clean up|tidy up|shorten|expand|condense|paraphrase|restructure|reorgani[sz]e|organi[sz]e|structure)\b/;
+const NI_INDIRECT_EN = [
+  /\bsomething (?:i|we) can (?:paste|send|copy|forward|share|give)\b/,
+  /\bgive me (?:something|a version) (?:to|i can) (?:paste|send|copy|use|forward)\b/,
+  /\bhow (?:should|do|would|can) i (?:explain|tell|describe|put|word|phrase|pitch|brief|ask)\b[^.?!]{0,60}\b(?:to|for)\b/,
+  /\bwhat (?:should|do|would) i (?:send|say|write|tell|reply|respond)\b/,
+  /\bwhat (?:did|have) we (?:decide|decided|agree|agreed|settle|settled)\b/,
+  /\bwhat (?:are|were) (?:the|our) (?:requirements|decisions|next steps|action items|takeaways)\b/,
+  /\b(?:help me )?(?:organi[sz]e|structure|sort out|lay out)\b[^.?!]{0,40}\b(?:ideas|thoughts|notes|points)\b/,
+  /\bmake (?:this|it|that) (?:clearer|better|shorter|tighter|cleaner|more (?:professional|formal|clear|concise|polite))\b/,
+  /\bi need (?:a |an |the )?(?:plan|prompt|draft|summary|outline|checklist|template|script)\b/,
+  /\bput together\b[^.?!]{0,30}\b(?:everything|all)\b[^.?!]{0,30}\b(?:discussed|talked|covered|decided)\b/,
+  /\b(?:i )?want (?:a |the )?clean(?:ed)?(?: up)? version\b/,
+  /\bcan you (?:prepare|write up|draw up|put together) the (?:instructions|steps|brief|notes|summary|plan)\b/,
+  /\b(?:wrap|sum) (?:this|it|everything) up\b/,
+  /\bwhat do i (?:tell|say to|send to) (?:him|her|them|the (?:client|developer|team|customer|boss))\b/
+];
+const NI_HE_ASK = '(?:תכתוב|כתוב|תנסח|נסח|תכין|הכן|תכין לי|תיצור|צור|תן לי|תביא לי|תרכיב|הרכב|תפיק|תגבש|תכתבו|לכתוב|לנסח|להכין|תסכם|סכם|תארגן|ארגן|תארגן לי|תשכתב|שכתב|תתרגם|תרגם|תשפר|שפר|תקצר|קצר|תסדר|סדר|תנקה|נקה)';
+const NI_HE_THING = '(?:פרומפט|פרומט|הנחיה|הנחיות|מייל|אימייל|הודעה|הודעת|טקסט|פוסט|כיתוב|תיאור|מסמך|הצעה|סיכום|תוכנית|תכנית|תכנון|צ?ק ?ליסט|רשימה|רשימת|מפת דרכים|דוח|דוח|ניתוח|השוואה|המלצות|הוראות|שלבים|מדריך|תבנית|סקריפט|קוד|פונקציה|שאילתה|קונפיגורציה|אסטרטגיה|מכתב|קורות חיים|ביוגרפיה|סיפור|מאמר|בלוג|נאום|סלוגן|רעיונות|אגנדה|לוח זמנים|מסר|ניסוח)';
+const NI_WRITE_HE = new RegExp(NI_HE_ASK + '[^.?!]{0,60}' + NI_HE_THING);
+const NI_VERB_HE = /(?:תסכם|סכם|תשכתב|שכתב|תתרגם|תרגם|תשפר|שפר|תקצר|קצר|תארגן|ארגן|תסדר לי|סדר לי|נקה לי|תנקה)/;
+const NI_INDIRECT_HE = [
+  /תן לי משהו ש(?:אני )?(?:יכול|אוכל|אפשר) (?:להדביק|לשלוח|להעתיק|להעביר)/,
+  /איך (?:אני )?(?:מסביר|אסביר|אומר|אגיד|מנסח|אנסח|מציג|אציג)[^.?!]{0,60}(?:ל|אל)/,
+  /מה (?:כדאי|צריך|אפשר) (?:לי )?(?:לשלוח|לכתוב|להגיד|לענות|להשיב)/,
+  /מה (?:החלטנו|סיכמנו|הסכמנו|קבענו)/,
+  /מה (?:היו|הן|הם) ה(?:החלטות|דרישות|צעדים הבאים|משימות)/,
+  /תעזור לי לארגן[^.?!]{0,30}(?:רעיונות|מחשבות|נקודות)/,
+  /תעשה (?:את )?(?:זה|את זה) (?:ברור|קצר|מסודר|מקצועי) יותר/,
+  /אני צריך (?:תוכנית|תכנית|פרומפט|טיוטה|סיכום|רשימה|תבנית|סקריפט)/,
+  /תרכיב (?:לי )?(?:הכל|את כל)[^.?!]{0,30}(?:דיברנו|שדנו|החלטנו)/,
+  /אני רוצה (?:גרסה )?נקי(?:ה)?/,
+  /תכין (?:לי )?את ה(?:הוראות|הנחיות|שלבים)/
+];
+/* A question ABOUT a thing is not a request for one ("what is a prompt?", "how do emails work"). */
+const NI_ABOUT = /^(?:what is|whats|what are|what does|what do|why|how does|how do|how is|how are|is it|are there|does|did you|can you explain|explain|tell me about|מה זה|מהו|מהי|למה|איך עובד|איך עובדת|תסביר|האם)\b/;
+
+function writtenIntent(text){
+  const raw = String(text || '');
+  if(!raw.trim()) return null;
+  const s = normaliseHeard(raw);
+  if(!s) return null;
+  if(NI_SPEAK.test(raw) || NI_SPEAK.test(s)) return 'speak';
+  if(NI_CHAT.test(raw) || NI_CHAT.test(s)) return 'chat';
+  /* Dropping a leading greeting and his name so a leading "what is" is seen as the lead. */
+  const core = s.replace(/^(?:(?:hey|hi|ok|okay|yo|please|היי|הי|אוקיי|נו)\s+)*(?:(?:jarvis|ג?רוויס|ultron|אולטרון)\s+)?/, '').replace(/^(?:please|בבקשה)\s+/, '');
+  const indirect = NI_INDIRECT_EN.some(re => re.test(core)) || NI_INDIRECT_HE.some(re => re.test(core));
+  if(indirect) return 'note';
+  if(NI_ABOUT.test(core) && !NI_WRITE_EN.test(core) && !NI_WRITE_HE.test(core)) return null;
+  if(NI_WRITE_EN.test(core) || NI_WRITE_HE.test(core)) return 'note';
+  if(NI_VERB_EN.test(core) || NI_VERB_HE.test(core)) return 'note';
+  return null;
+}
+
+/* WHAT CAME BACK: long, or structured, enough to be something he keeps. Decides only when the
+   request itself had no opinion, and never turns a short reply or a question back into a note. */
+function noteStructure(text){
+  const t = String(text || '');
+  const lines = t.split('\n');
+  let score = 0;
+  if(/```/.test(t)) score += 2;
+  if(lines.some(l => /^#{1,3}\s+\S/.test(l))) score += 1;
+  const items = lines.filter(l => /^\s*(?:[-*•]|\d+[.)])\s+\S/.test(l)).length;
+  if(items >= 3) score += 1;
+  if(items >= 6) score += 1;
+  if(lines.filter(l => /^\|.*\|\s*$/.test(l)).length >= 3) score += 1;
+  return score;
+}
+function looksWritten(text, intent){
+  const t = String(text || '').trim();
+  if(!t || intent === 'chat' || intent === 'speak') return false;
+  if(noteHasSecret(t)) return false;
+  const structure = noteStructure(t);
+  if(intent === 'note'){
+    if(t.length < 120 && structure < 2) return false;                     // a one-line answer or a clarifying question
+    if(t.length < 220 && /[?？]\s*$/.test(t) && structure < 2) return false;
+    return true;
+  }
+  return t.length >= 1100 || (t.length >= 520 && structure >= 2);
+}
+
+/* The sentence left in chat (and spoken) in place of the whole document. */
+function notePointerLine(title, text){
+  const he = /[֐-׿]/.test(String(text || '')) || currentLang === 'he';
+  return he ? 'פתחתי את זה בפתק: ' + title : 'Opened it as a note: ' + title;
+}
+
+/* ------------------------------------------------------------------
+   THE GATE. A streamed reply for a note-shaped request is held until it is clearly a document,
+   then goes into ONE note, updated as it grows. If the reply ends first and is short (a
+   clarifying question), the held text is released to the chat as if nothing had happened.
+------------------------------------------------------------------ */
+function makeNoteGate(intent){
+  const g = { on: intent === 'note', buf: '', noteId: null, promoted: false, released: false, final: false };
+  g.push = function(chunk, release){
+    if(!g.on) return false;
+    g.buf += chunk;
+    if(!g.promoted){
+      const visible = g.buf.replace(/\s+/g, ' ').trim();
+      if(visible.length < 110 && noteStructure(g.buf) < 2) return true;     // still deciding
+      if(/[?？]\s*$/.test(visible) && visible.length < 220) return true;
+      const r = Notes.create({ content: g.buf, title: noteTitleOf(g.buf), metadata: { source: 'auto', intent: 'note' } });
+      if(!r.ok){ g.on = false; release(g.buf); g.buf = ''; return true; }   // a secret, say: back to chat
+      g.noteId = r.id; g.promoted = true;
+      noteSurface(r.id);
+      return true;
+    }
+    g.update();
+    return true;
+  };
+  g.update = function(){
+    if(!g.noteId) return;
+    if(g._raf) return;
+    g._raf = setTimeout(() => { g._raf = 0; Notes.update(g.noteId, g.buf, { title: noteTitleOf(g.buf) }); }, 120);
+  };
+  g.finish = function(finalText){
+    if(g._raf){ clearTimeout(g._raf); g._raf = 0; }
+    if(!g.promoted) return null;
+    let body = String(finalText != null && finalText.trim() ? finalText : g.buf);
+    /* A lead-in line ("Sure, here is the email:") is the assistant talking, not part of the document. */
+    body = body.replace(/^\s*(?:sure|of course|certainly|okay|ok|here(?:'s| is| you go)|no problem|בטח|הנה|בשמחה)[^\n]{0,80}[:：]\s*\n+/i, '');
+    const title = noteTitleOf(body);
+    Notes.update(g.noteId, body, { title });
+    g.final = true;
+    return { id: g.noteId, title };
+  };
+  return g;
+}
+
+/* ------------------------------------------------------------------
+   THE HUD. One dock on the right, a tray for folded notes. Plain DOM, textContent only.
+------------------------------------------------------------------ */
+let noteDock = null, noteTray = null;
+function noteEnsureDock(){
+  if(noteDock) return;
+  noteDock = document.createElement('div'); noteDock.id = 'noteDock';
+  noteTray = document.createElement('div'); noteTray.id = 'noteTray';
+  document.body.appendChild(noteDock); document.body.appendChild(noteTray);
+}
+function noteSurface(noteId){
+  /* In the orb there is no room for a panel in 180 pixels: it opens the way the chat does. */
+  try{ if(IS_DESKTOP && window.__orbExpand && !(window.__orbExpanded && window.__orbExpanded())) window.__orbExpand(true); }catch(err){}
+  Notes.focus(noteId);
+}
+
+/* Markdown -> DOM, by hand, on purpose: headings, lists, quotes, rules, fenced code, **bold**,
+   *italic*, `code`, [text](https://link). Every string is a text node. dir="auto" per block, so a
+   Hebrew paragraph and an English code block sit correctly in the same note. */
+function noteInline(parent, text){
+  const re = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\n]+\*)|(\[[^\]\n]+\]\(https?:\/\/[^\s)]+\))|(https?:\/\/[^\s<>)]+)/g;
+  let last = 0, m;
+  while((m = re.exec(text))){
+    if(m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
+    const tok = m[0];
+    let el;
+    if(m[1]){ el = document.createElement('code'); el.textContent = tok.slice(1, -1); }
+    else if(m[2]){ el = document.createElement('strong'); el.textContent = tok.slice(2, -2); }
+    else if(m[3]){ el = document.createElement('em'); el.textContent = tok.slice(1, -1); }
+    else {
+      let label = tok, url = tok;
+      if(m[4]){ const mm = /^\[([^\]]+)\]\((.+)\)$/.exec(tok); label = mm[1]; url = mm[2]; }
+      el = document.createElement('a'); el.textContent = label; el.dataset.url = url; el.setAttribute('role', 'link'); el.tabIndex = 0;
+    }
+    parent.appendChild(el);
+    last = m.index + tok.length;
+  }
+  if(last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+}
+function noteRender(container, content, format){
+  container.textContent = '';
+  const src = String(content || '');
+  if(format === 'text' || format === 'code'){
+    const pre = document.createElement('pre'); pre.textContent = src; pre.setAttribute('dir', 'auto'); container.appendChild(pre); return;
+  }
+  const lines = src.replace(/\r/g, '').split('\n');
+  let i = 0, para = [];
+  const flushPara = () => {
+    if(!para.length) return;
+    const p = document.createElement('p'); p.setAttribute('dir', 'auto');
+    noteInline(p, para.join(' ')); container.appendChild(p); para = [];
+  };
+  while(i < lines.length){
+    const line = lines[i];
+    const fence = /^\s*```\s*([\w+-]*)\s*$/.exec(line);
+    if(fence){
+      flushPara();
+      const body = []; i++;
+      while(i < lines.length && !/^\s*```\s*$/.test(lines[i])) body.push(lines[i++]);
+      i++;                                                   // closing fence (or the end of a still-streaming block)
+      const wrap = document.createElement('div'); wrap.className = 'noteCode';
+      const bar = document.createElement('div'); bar.className = 'noteCodeBar';
+      const lang = document.createElement('span'); lang.textContent = fence[1] || 'code';
+      const copy = document.createElement('button'); copy.type = 'button'; copy.textContent = 'COPY'; copy.className = 'noteCodeCopy';
+      copy.dataset.code = body.join('\n');
+      bar.appendChild(lang); bar.appendChild(copy);
+      const pre = document.createElement('pre'); pre.setAttribute('dir', 'ltr'); pre.textContent = body.join('\n');
+      wrap.appendChild(bar); wrap.appendChild(pre); container.appendChild(wrap);
+      continue;
+    }
+    const h = /^(#{1,3})\s+(.+?)\s*#*\s*$/.exec(line);
+    if(h){ flushPara(); const e = document.createElement('h' + (h[1].length + 1)); e.setAttribute('dir', 'auto'); noteInline(e, h[2]); container.appendChild(e); i++; continue; }
+    if(/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)){ flushPara(); container.appendChild(document.createElement('hr')); i++; continue; }
+    if(/^\s*>\s?/.test(line)){
+      flushPara(); const q = document.createElement('blockquote'); q.setAttribute('dir', 'auto'); const qs = [];
+      while(i < lines.length && /^\s*>\s?/.test(lines[i])) qs.push(lines[i++].replace(/^\s*>\s?/, ''));
+      noteInline(q, qs.join(' ')); container.appendChild(q); continue;
+    }
+    const li = /^\s*(?:([-*•])|(\d+)[.)])\s+(.*)$/.exec(line);
+    if(li){
+      flushPara();
+      const ordered = !!li[2];
+      const list = document.createElement(ordered ? 'ol' : 'ul'); list.setAttribute('dir', 'auto');
+      while(i < lines.length){
+        const m2 = /^\s*(?:([-*•])|(\d+)[.)])\s+(.*)$/.exec(lines[i]);
+        if(!m2 || !!m2[2] !== ordered) break;
+        const item = document.createElement('li'); item.setAttribute('dir', 'auto'); noteInline(item, m2[3]); list.appendChild(item); i++;
+      }
+      container.appendChild(list); continue;
+    }
+    if(!line.trim()){ flushPara(); i++; continue; }
+    para.push(line.trim()); i++;
+  }
+  flushPara();
+}
+
+async function noteCopyText(text){
+  try{ if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(text); return true; } }catch(err){}
+  try{
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;top:-9999px;opacity:0';
+    document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); return !!ok;
+  }catch(err){ return false; }
+}
+
+const noteViews = {};      // id -> { el, body, edit, editing }
+function noteMakePanel(n){
+  const el = document.createElement('section'); el.className = 'hudNote'; el.dataset.id = n.id;
+  el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', n.title);
+  const head = document.createElement('header'); head.className = 'hudNoteHead';
+  const title = document.createElement('span'); title.className = 'hudNoteTitle'; title.setAttribute('dir', 'auto');
+  const btn = (cls, label, tip) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'hudNoteBtn ' + cls; b.textContent = label; b.title = tip; b.setAttribute('aria-label', tip); return b; };
+  const bCopy = btn('copy', 'COPY', 'Copy'), bEdit = btn('edit', 'EDIT', 'Edit'), bSave = btn('save', 'SAVE', 'Keep this note'),
+        bMin = btn('min', '–', 'Minimize'), bClose = btn('close', '✕', 'Close');
+  head.append(title, bCopy, bEdit, bSave, bMin, bClose);
+  const body = document.createElement('div'); body.className = 'hudNoteBody';
+  const edit = document.createElement('textarea'); edit.className = 'hudNoteEdit'; edit.setAttribute('dir', 'auto'); edit.spellcheck = false; edit.hidden = true;
+  el.append(head, body, edit);
+  const view = { el, body, edit, title, bSave, bEdit, editing: false };
+  noteViews[n.id] = view;
+  bCopy.addEventListener('click', async () => {
+    const cur = Notes.get(n.id); if(!cur) return;
+    const ok = await noteCopyText(view.editing ? edit.value : cur.content);
+    bCopy.textContent = ok ? 'COPIED' : 'SELECT + CTRL+C'; setTimeout(() => { bCopy.textContent = 'COPY'; }, 1400);
+  });
+  bEdit.addEventListener('click', () => {
+    const cur = Notes.get(n.id); if(!cur) return;
+    view.editing = !view.editing;
+    if(view.editing){ edit.value = cur.content; edit.hidden = false; body.hidden = true; bEdit.textContent = 'DONE'; edit.focus(); }
+    else { Notes.update(n.id, edit.value); edit.hidden = true; body.hidden = false; bEdit.textContent = 'EDIT'; }
+  });
+  edit.addEventListener('input', () => { Notes.update(n.id, edit.value); });
+  bSave.addEventListener('click', () => Notes.save(n.id));
+  bMin.addEventListener('click', () => Notes.minimize(n.id, true));
+  bClose.addEventListener('click', () => Notes.close(n.id));
+  /* Links and per-block copy are handled here: an <a> never navigates the orb. */
+  body.addEventListener('click', (e) => {
+    const t = e.target;
+    if(t && t.classList && t.classList.contains('noteCodeCopy')){ noteCopyText(t.dataset.code || '').then(ok => { t.textContent = ok ? 'COPIED' : 'COPY'; setTimeout(() => { t.textContent = 'COPY'; }, 1200); }); return; }
+    const a = t && t.closest ? t.closest('a[data-url]') : null;
+    if(a){ e.preventDefault(); const url = a.dataset.url; try{ if(IS_DESKTOP) callOpenUrlTool({ url }); else window.open(url, '_blank', 'noopener,noreferrer'); }catch(err){} }
+  });
+  return view;
+}
+function noteRefresh(){
+  noteEnsureDock();
+  const all = Notes.all();
+  const open = all.filter(n => !n.closed && !n.minimized).sort((a, b) => (a.focusedAt || a.createdAt) - (b.focusedAt || b.createdAt));
+  /* More than fit: the oldest fold into the tray rather than piling up over the workspace. */
+  while(open.length > NOTES_OPEN_MAX){ const o = open.shift(); o.minimized = true; }
+  all.forEach(n => {
+    let v = noteViews[n.id];
+    const shown = !n.closed && !n.minimized;
+    if(!shown){ if(v && v.el.parentNode) v.el.remove(); return; }
+    if(!v) v = noteMakePanel(n);
+    v.title.textContent = n.title;
+    v.el.setAttribute('aria-label', n.title);
+    v.bSave.textContent = n.saved ? 'SAVED' : 'SAVE';
+    v.bSave.classList.toggle('on', !!n.saved);
+    if(!v.editing) noteRender(v.body, n.content, n.format);
+    if(v.el.parentNode !== noteDock) noteDock.appendChild(v.el);
+  });
+  /* Order in the dock: newest at the bottom. */
+  open.forEach(n => { const v = noteViews[n.id]; if(v && v.el.parentNode === noteDock) noteDock.appendChild(v.el); });
+  const stream = open.length ? open[open.length - 1] : null;
+  const dock = noteDock.querySelector('.hudNote:last-child .hudNoteBody');
+  if(dock && stream && Date.now() - stream.updatedAt < 1500) dock.scrollTop = dock.scrollHeight;
+  /* Tray: every note that is folded, or closed but kept. */
+  noteTray.textContent = '';
+  const folded = all.filter(n => n.minimized && !n.closed).concat(all.filter(n => n.closed && n.saved));
+  folded.slice(-6).forEach(n => {
+    const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'noteChip'; chip.textContent = '▤ ' + n.title; chip.setAttribute('dir', 'auto'); chip.title = 'Open note';
+    chip.addEventListener('click', () => { Notes.focus(n.id); });
+    noteTray.appendChild(chip);
+  });
+  noteTray.classList.toggle('has', folded.length > 0);
+}
+Notes.subscribe(noteRefresh);
+
+/* The tool other parts of Jarvis (and the model) use: create_note(title, content, format). */
+const CREATE_NOTE_TOOL = {
+  name: 'create_note',
+  description: "Open a NEW NOTE on his screen (a panel of its own, editable, with a copy button) holding a written result he will want to keep, copy or reuse: a prompt for another AI, an email or message, a plan or checklist, a summary or report, code or a script, instructions, a rewrite. Put the COMPLETE text in `content` (markdown is fine: headings, lists, fenced code). Use it for written deliverables; do NOT use it for a short answer or ordinary conversation, and NEVER for passwords, keys or tokens. This is not the Notepad program; for \"in my Notepad\" use write_note. After it succeeds, say ONE short sentence that it is in a note; do not read the note out.",
+  input_schema: { type: 'object', properties: {
+    title: { type: 'string', description: 'A short title, in the language of the content.' },
+    content: { type: 'string', description: 'The whole note.' },
+    format: { type: 'string', enum: ['markdown', 'text', 'code'], description: 'markdown (default), text, or code for a single block of code.' }
+  }, required: ['content'] }
+};
+let turnNoteId = null;       // set when the model made a note itself this turn, so nothing makes a second
+function callCreateNoteTool(input){
+  const content = String((input && input.content) || '');
+  const r = Notes.create({ title: input && input.title, content, format: input && input.format, metadata: { source: 'tool' } });
+  if(!r.ok) return { ok:false, error: r.error, tell_the_user: r.code === 'sensitive' ? 'That contains something secret, so I kept it out of notes.' : r.error };
+  turnNoteId = r.id;
+  noteSurface(r.id);
+  return { ok:true, id:r.id, title:r.title, duplicate: !!r.duplicate, note: 'It is open on his screen. Say one short sentence that it is in a note; do not repeat its text.' };
+}
+window.__notesTest = { Notes, writtenIntent, looksWritten, noteTitleOf, noteStructure, makeNoteGate, noteRender, noteHasSecret, notePointerLine, callCreateNoteTool };
+Notes.load();
 
 function openHtmlPreview(title, code, lang){
   pagePreviewErrors = [];
@@ -23664,7 +24163,15 @@ async function handleSend(){
     enqueueSpeech(sentence);
   };
 
-  const onText = (chunk)=>{
+  /* SMART NOTES: for a request that asks for something written, the streamed reply is held until it is
+     clearly a document and then goes into ONE note (see makeNoteGate); a short reply, a clarifying
+     question, is released to the chat unchanged. The request for chat / voice only, and Notepad
+     requests (write_note), switch this off. */
+  turnNoteId = null;
+  const notepadTurn = IS_DESKTOP && wantsNoteTurn(text);
+  const noteIntent = notepadTurn ? 'chat' : writtenIntent(text);
+  const noteGateNow = makeNoteGate(noteIntent);
+  const feedChat = (chunk)=>{
     if(!chunk) return;
     /* Text still arriving is a live request, not a stalled one: a complete
        long answer can stream past the watchdog's 45 seconds, which counted
@@ -23685,8 +24192,15 @@ async function handleSend(){
       speechBuffer = taken[1];
     }
   };
+  const onText = (chunk)=>{
+    if(!chunk) return;
+    if(noteGateNow.on && noteGateNow.push(chunk, (held)=>{ noteGateNow.on = false; feedChat(held); })) return;
+    feedChat(chunk);
+  };
 
   const reply = await askJarvis(modelText, images, onText);
+  /* The reply ended while still held (too short to be a document): it goes to the chat as it always did. */
+  if(reply !== null && noteGateNow.on && !noteGateNow.promoted && noteGateNow.buf){ noteGateNow.on = false; feedChat(noteGateNow.buf); }
   screenTurnNote = '';
   model3dTurnNote = '';
   await persistCurrentSession(); // ensure the user's message is saved even if askJarvis failed
@@ -23699,6 +24213,23 @@ async function handleSend(){
     if(bubble && !shown.trim()) bubble.remove();
     else if(typer) typer.finish(); // show everything that landed, not a half-typed line
     return;
+  }
+
+  /* The written deliverable is in its note; chat and voice get one sentence, not the document. */
+  const finishedNote = noteGateNow.promoted ? noteGateNow.finish(reply) : null;
+  if(finishedNote){
+    const line = notePointerLine(finishedNote.title, reply);
+    addMessage('assistant', line);
+    enqueueSpeech(line);
+    await speechDrained();
+    if(conversationMode && !isThinking) convRestartTimer = setTimeout(startListening, 400);
+    resumeAmbientSoon();
+    return;
+  }
+  /* No opinion in the request, but the reply is long or structured enough to be something he keeps. */
+  if(!turnNoteId && noteIntent === null && !turnModelShown && !/```(?:html|svg)/i.test(reply) && looksWritten(reply, null)){
+    const made = Notes.create({ content: reply, metadata: { source: 'auto', intent: 'reply' } });
+    if(made.ok){ noteSurface(made.id); addMessage('system', '\u25B8 ' + (currentLang === 'he' ? '\u05e0\u05e4\u05ea\u05d7 \u05d2\u05dd \u05db\u05e4\u05ea\u05e7: ' : 'also opened as a note: ') + made.title); }
   }
 
   // Rescue any code the model wrote into the prose instead of into a tool.
