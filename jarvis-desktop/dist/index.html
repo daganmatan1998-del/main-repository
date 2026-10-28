@@ -1667,8 +1667,11 @@
   }
 
   /* SMART NOTES: a HUD panel per note, on the right, above the chat and below full-screen previews. */
-  #noteDock{ position:fixed; top:calc(56px + var(--vv-top)); right:12px; width:min(440px, 46vw); max-height:calc(100vh - 140px - var(--vv-top));
-             display:flex; flex-direction:column; gap:10px; z-index:55; pointer-events:none; }
+  /* At the BOTTOM, right-aligned, lifted above the status row (mic label, approvals badge, camera box) so it
+     never covers those; --note-bottom is raised by noteLayout() when the camera box is up. Its width stops
+     short of the centred chat panel (440px) on a wide screen, and spans the screen on a narrow one. */
+  #noteDock{ position:fixed; right:12px; bottom:calc(var(--note-bottom, 76px) + var(--vv-bottom)); width:min(440px, max(300px, calc(50vw - 236px)));
+             max-height:calc(100vh - var(--note-bottom, 76px) - 64px - var(--vv-top)); display:flex; flex-direction:column; justify-content:flex-end; gap:10px; z-index:55; pointer-events:none; }
   .hudNote{ pointer-events:auto; display:flex; flex-direction:column; min-height:0; max-height:44vh; background:rgba(var(--panel-rgb), 0.93);
             border:1px solid rgba(var(--cyan-rgb), 0.5); border-radius:4px; backdrop-filter:blur(6px);
             box-shadow:0 0 22px rgba(var(--cyan-rgb), 0.18), inset 0 0 24px rgba(var(--cyan-rgb), 0.05); animation:hudNoteIn .28s ease-out; }
@@ -1692,11 +1695,11 @@
   .noteCode pre{ padding:8px 10px; overflow:auto; }
   .noteCodeCopy{ background:transparent; color:var(--cyan); border:0; font:inherit; cursor:pointer; letter-spacing:1px; }
   .hudNoteEdit{ flex:1; min-height:160px; resize:none; background:rgba(0,0,0,.35); color:var(--text-bright); border:0; outline:0; padding:10px 12px; font-family:Consolas,Menlo,monospace; font-size:12.5px; line-height:1.5; }
-  #noteTray{ position:fixed; right:12px; bottom:calc(12px + var(--vv-bottom)); display:none; flex-direction:column; align-items:flex-end; gap:5px; z-index:54; max-width:min(320px, 40vw); }
+  #noteTray{ display:none; flex-direction:row; flex-wrap:wrap; justify-content:flex-end; gap:5px; pointer-events:auto; }
   #noteTray.has{ display:flex; }
   .noteChip{ background:rgba(var(--panel-rgb), 0.9); color:var(--cyan); border:1px solid rgba(var(--cyan-rgb), 0.4); border-radius:3px; padding:4px 9px; font:inherit; font-size:11px; letter-spacing:.8px; cursor:pointer; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .noteChip:hover{ background:rgba(var(--cyan-rgb), 0.16); }
-  @media (max-width: 700px){ #noteDock{ left:8px; right:8px; width:auto; top:calc(70px + var(--vv-top)); max-height:calc(100vh - 150px - var(--vv-top)); } .hudNote{ max-height:38vh; } }
+  @media (max-width: 900px){ #noteDock{ left:8px; right:8px; width:auto; } .hudNote{ max-height:38vh; } }
 </style>
 </head>
 <body>
@@ -22599,7 +22602,29 @@ function noteEnsureDock(){
   if(noteDock) return;
   noteDock = document.createElement('div'); noteDock.id = 'noteDock';
   noteTray = document.createElement('div'); noteTray.id = 'noteTray';
-  document.body.appendChild(noteDock); document.body.appendChild(noteTray);
+  noteDock.appendChild(noteTray);           // the folded notes sit under the open ones, at the very bottom
+  document.body.appendChild(noteDock);
+  window.addEventListener('resize', noteLayout);
+  setInterval(noteLayout, 1500);            // the camera box comes and goes without telling anyone
+}
+/* Keeps the dock clear of the camera box in the bottom-right corner, the one thing that lives where it sits. */
+function noteLayout(){
+  if(!noteDock) return;
+  let bottom = 76;
+  try{
+    /* The typing row, when the chat is open, is the highest thing along the bottom edge. */
+    const row = document.getElementById('panelInputRow');
+    if(row && row.offsetParent !== null){
+      const rr = row.getBoundingClientRect();
+      if(rr.height && rr.top < window.innerHeight) bottom = Math.max(bottom, Math.round(window.innerHeight - rr.top + 10));
+    }
+    const lp = document.getElementById('livePane');
+    if(lp && lp.offsetParent !== null){
+      const r = lp.getBoundingClientRect();
+      if(r.width && r.right > window.innerWidth - 460 && r.top < window.innerHeight) bottom = Math.max(bottom, Math.round(window.innerHeight - r.top + 10));
+    }
+  }catch(err){}
+  noteDock.style.setProperty('--note-bottom', bottom + 'px');
 }
 function noteSurface(noteId){
   /* In the orb there is no room for a panel in 180 pixels: it opens the way the chat does. */
@@ -22750,12 +22775,13 @@ function noteRefresh(){
     v.bSave.textContent = n.saved ? 'SAVED' : 'SAVE';
     v.bSave.classList.toggle('on', !!n.saved);
     if(!v.editing) noteRender(v.body, n.content, n.format);
-    if(v.el.parentNode !== noteDock) noteDock.appendChild(v.el);
+    if(v.el.parentNode !== noteDock) noteDock.insertBefore(v.el, noteTray);
   });
-  /* Order in the dock: newest at the bottom. */
-  open.forEach(n => { const v = noteViews[n.id]; if(v && v.el.parentNode === noteDock) noteDock.appendChild(v.el); });
+  /* Order in the dock: newest nearest the bottom, the tray of folded notes last of all. */
+  open.forEach(n => { const v = noteViews[n.id]; if(v && v.el.parentNode === noteDock) noteDock.insertBefore(v.el, noteTray); });
+  noteLayout();
   const stream = open.length ? open[open.length - 1] : null;
-  const dock = noteDock.querySelector('.hudNote:last-child .hudNoteBody');
+  const dock = (noteDock.querySelectorAll('.hudNote .hudNoteBody') || [])[Math.max(0, noteDock.querySelectorAll('.hudNote').length - 1)];
   if(dock && stream && Date.now() - stream.updatedAt < 1500) dock.scrollTop = dock.scrollHeight;
   /* Tray: every note that is folded, or closed but kept. */
   noteTray.textContent = '';
