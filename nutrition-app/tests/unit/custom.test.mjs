@@ -60,7 +60,8 @@ test('a food that replaces a plan item takes it out of the meal', () => {
   assert.ok(Math.abs(keep.totals.kcal - base.totals.kcal) <= base.totals.kcal * 0.1);
   assert.ok(keep.custom[0].replaced && keep.custom[0].p > 0, 'macros borrowed from the replaced item');
   const add = day([makeCustom({ name: 'Schnitzel', kcal: 450, mode: 'add', slot: prot.slot })]);
-  assert.equal(add.totals.kcal, base.totals.kcal - prot.kcal + 450);
+  // totals are sums of individually rounded items, so allow 1 kcal of rounding
+  assert.ok(Math.abs(add.totals.kcal - (base.totals.kcal - prot.kcal + 450)) <= 1, `${add.totals.kcal} vs ${base.totals.kcal - prot.kcal + 450}`);
   // a slot the meal no longer has: it is just an addition
   const lost = day([makeCustom({ name: 'X', kcal: 100, mode: 'add', slot: 'nope' })]);
   assert.equal(lost.items.length, base.items.length);

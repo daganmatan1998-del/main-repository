@@ -211,6 +211,7 @@ function vegPrep(id, grams, inOven) {
   if (id === 'cucumber') return tr('Cut {0} g of cucumber into slices or sticks', grams);
   if (id === 'tomato') return tr('Slice {0} g of tomatoes', grams);
   if (id === 'peppers') return tr('Cut {0} g of colorful peppers into strips', grams);
+  if (id === 'celery' || id === 'radishes' || id === 'kohlrabi') return tr('Wash and cut {0} g of {1} into sticks or slices', grams, FOOD_BY_ID[id].name);
   if (id === 'cabbage') return tr('Finely shred {0} g of cabbage and dress with lemon and salt', grams);
   if (id === 'beets') return tr('Cut {0} g of cooked beets into cubes', grams);
   if (id === 'eggplant') return inOven ? tr('Halve an eggplant ({0} g) and bake it on the same tray until soft', grams) : tr('Char an eggplant ({0} g) over the flame or in the oven, then chop the flesh', grams);

@@ -117,6 +117,6 @@ test('quantities are converted to what you buy', () => {
   g = buildShoppingList(day([{ foodId: 'eggs', grams: 550 }, { foodId: 'eggs', grams: 110 }]));
   assert.equal(find(g, 'ביצים').qty, '12 ביצים (1 × תבנית 12)');
   g = buildShoppingList(day([{ foodId: 'salad', grams: 1000 }, { foodId: 'roasted_veg', grams: 500 }]));
-  assert.equal(find(g, 'פלפלים').qty, '350 ג׳'); // 200 + 150 merged
+  assert.equal(find(g, 'גמבה').qty, '350 ג׳'); // 200 + 150 merged
   assert.equal(fmtWeight(2340), '2.4 ק״ג');
 });

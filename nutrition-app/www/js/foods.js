@@ -134,6 +134,12 @@ export const FOODS = [
   { id: 'brussels', name: tr('Roasted Brussels sprouts'), aliases: [...trl('brussels sprouts'), ...trl('vegetables')], role: 'veg', kcal: 36, p: 2.6, c: 7.1, f: 0.5, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(155)], min: 80, max: 250, portion: 150 },
   { id: 'pumpkin', name: tr('Roasted pumpkin'), aliases: [...trl('pumpkin'), ...trl('vegetables')], role: 'veg', kcal: 26, p: 1, c: 6.5, f: 0.1, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(245)], min: 100, max: 300, portion: 180 },
   { id: 'beets', name: tr('Cooked beets'), aliases: [...trl('beet'), ...trl('vegetables')], role: 'veg', kcal: 44, p: 1.7, c: 10, f: 0.2, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [{ u: raw('{0, plural, =0.25 {{1} medium beet} =0.5 {{1} medium beet} =0.75 {{1} medium beet} one {{1} medium beet} other {{1} medium beets}}'), g: 80, step: 0.5 }], min: 80, max: 240, portion: 120 },
+  { id: 'celery', name: tr('Celery sticks'), aliases: [tr('Celery sticks'), ...trl('vegetables')], role: 'veg', kcal: 16, p: 0.7, c: 3, f: 0.2, meals: 'bls', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(100)], min: 100, max: 300, portion: 150 },
+  { id: 'radishes', name: tr('Radishes'), aliases: [tr('Radishes'), ...trl('vegetables')], role: 'veg', kcal: 16, p: 0.7, c: 3.4, f: 0.1, meals: 'bls', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(116)], min: 50, max: 200, portion: 100 },
+  { id: 'kohlrabi', name: tr('Kohlrabi'), aliases: [tr('Kohlrabi'), ...trl('vegetables')], role: 'veg', kcal: 27, p: 1.7, c: 6.2, f: 0.1, meals: 'bls', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(135)], min: 80, max: 250, portion: 150 },
+  { id: 'okra', name: tr('Cooked okra'), aliases: [tr('Cooked okra'), ...trl('vegetables')], role: 'veg', kcal: 22, p: 1.9, c: 4.5, f: 0.2, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(160)], min: 80, max: 250, portion: 150 },
+  { id: 'fennel', name: tr('Roasted fennel'), aliases: [tr('Roasted fennel'), ...trl('vegetables')], role: 'veg', kcal: 35, p: 1.2, c: 7.3, f: 0.2, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(87)], min: 80, max: 250, portion: 150 },
+  { id: 'artichoke_hearts', name: tr('Artichoke hearts'), aliases: [tr('Artichoke hearts'), ...trl('vegetables')], role: 'veg', kcal: 53, p: 2.9, c: 11.9, f: 0.4, meals: 'ld', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(168)], min: 80, max: 250, portion: 120 },
 
   // ---------------- fruit ----------------
   { id: 'banana', name: tr('Banana'), aliases: [tr('Banana'), ...trl('fruit')], role: 'fruit', kcal: 89, p: 1.1, c: 22.8, f: 0.3, meals: 'blds', src: 'plant', kosher: 'parve', allergens: [], units: [{ u: raw('{0, plural, =0.25 {{1} medium banana} =0.5 {{1} medium banana} =0.75 {{1} medium banana} one {{1} medium banana} other {{1} medium bananas}}'), g: 120, step: 0.25 }], min: 60, max: 240, portion: 120 },
@@ -166,6 +172,8 @@ export const FOODS = [
   { id: 'papaya', name: tr('Papaya'), aliases: [tr('Papaya'), ...trl('fruit')], role: 'fruit', kcal: 43, p: 0.5, c: 10.8, f: 0.3, meals: 'blds', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(145)], min: 70, max: 290, portion: 145 },
   { id: 'blueberries', name: tr('Blueberries'), aliases: [tr('Blueberries'), tr('Berries'), ...trl('fruit')], role: 'fruit', kcal: 57, p: 0.7, c: 14.5, f: 0.3, meals: 'blds', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(150)], min: 75, max: 300, portion: 150 },
   { id: 'raspberries', name: tr('Raspberries'), aliases: [tr('Raspberries'), tr('Berries'), ...trl('fruit')], role: 'fruit', kcal: 52, p: 1.2, c: 11.9, f: 0.7, meals: 'blds', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(125)], min: 60, max: 250, portion: 125 },
+  { id: 'blackberries', name: tr('Blackberries'), aliases: [tr('Blackberries'), tr('Berries'), ...trl('fruit')], role: 'fruit', kcal: 43, p: 1.4, c: 9.6, f: 0.5, meals: 'blds', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(144)], min: 75, max: 300, portion: 150 },
+  { id: 'dragon_fruit', name: tr('Dragon fruit'), aliases: [tr('Dragon fruit'), ...trl('fruit')], role: 'fruit', kcal: 60, p: 1.2, c: 13, f: 0.4, meals: 'blds', src: 'plant', kosher: 'parve', allergens: [], units: [U.cup(140)], min: 100, max: 350, portion: 200 },
   { id: 'loquat', name: tr('Loquat'), aliases: [tr('Loquat'), ...trl('fruit')], role: 'fruit', kcal: 47, p: 0.4, c: 12.1, f: 0.2, meals: 'blds', src: 'plant', kosher: 'parve', allergens: [], units: [{ u: raw('{0, plural, =0.25 {{1} loquat} =0.5 {{1} loquat} =0.75 {{1} loquat} one {{1} loquat} other {{1} loquats}}'), g: 20, step: 1 }], min: 60, max: 300, portion: 140, discrete: true },
   { id: 'raisins', name: tr('Raisins'), aliases: [tr('Raisins'), ...trl('dried fruit'), ...trl('fruit')], role: 'fruit', kcal: 299, p: 3.1, c: 79.2, f: 0.5, meals: 'blds', src: 'plant', kosher: 'parve', allergens: [], units: [U.tbsp(10)], min: 10, max: 60, portion: 30 },
   { id: 'dried_apricots', name: tr('Dried apricot'), aliases: [tr('Apricot'), ...trl('dried fruit'), ...trl('fruit')], role: 'fruit', kcal: 241, p: 3.4, c: 62.6, f: 0.5, meals: 'blds', src: 'plant', kosher: 'parve', allergens: [], units: [{ u: raw('{0, plural, =0.25 {{1} dried apricot} =0.5 {{1} dried apricot} =0.75 {{1} dried apricot} one {{1} dried apricot} other {{1} dried apricots}}'), g: 8, step: 1 }], min: 16, max: 80, portion: 40, discrete: true },
@@ -215,7 +223,7 @@ export const DIET_ALLOWED_SRC = {
 };
 
 // Keto keeps protein, fat and low-carb vegetables; these are too starchy.
-const KETO_EXCLUDE = new Set(['lentils', 'chickpeas', 'black_beans', 'white_beans', 'cashews', 'pistachios', 'carrot', 'corn', 'beets', 'pumpkin', 'hummus_spread']);
+const KETO_EXCLUDE = new Set(['lentils', 'chickpeas', 'black_beans', 'white_beans', 'cashews', 'pistachios', 'carrot', 'corn', 'beets', 'pumpkin', 'hummus_spread', 'artichoke_hearts', 'fennel']);
 
 // The categories a diet's menus actually use.
 export function dietRoles(diet) {
