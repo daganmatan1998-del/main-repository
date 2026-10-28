@@ -20698,7 +20698,7 @@ function phoneNote(){
   return '\n\nPHONE CALLS: Phone calls here have nothing to do with WhatsApp or CallMeBot: never mention WHATSAPP_PHONE or CALLMEBOT_APIKEY when asked about calling him. Calling him by phone (ringback) is not set up yet. ' + (phoneStatus.why || '') + ' If he asks you to call him or talk by phone, tell him exactly that in one sentence; never claim to dial. The older call_me tool (a one-way Telegram call through the worker) needs its own secrets and may not be set up: do not use it for this.';
 }
 function cameraSystemExtras(){
-  return phoneNote() + cameraModeNote() + (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + mailServiceNote() + (compactCodeNote || '') +
+  return phoneNote() + cameraModeNote() + turnNoteLang + (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + mailServiceNote() + (compactCodeNote || '') +
          (turnWants3d ? never3dNote() : '') + (turn3dMentionOnly ? QUIET_3D_NOTE : '') + (turnWantsNote ? NOTE_TURN_NOTE : '');
 }
 /* SET ONLY AFTER A CUT-OFF (2.22.1): the last attempt ran out of room in the
@@ -22515,6 +22515,34 @@ function looksWritten(text, intent){
   return t.length >= 1100 || (t.length >= 520 && structure >= 2);
 }
 
+/* THE LANGUAGE OF A WRITTEN DELIVERABLE. It follows the language he is speaking, unless he names one
+   ("write it in Hebrew", "תכתוב באנגלית", "translate to English"). The language he speaks is
+   read from his sentence (Hebrew letters, or Latin), and only when that is mixed or empty from the
+   mode the orb is in. Returns 'he' | 'en' and whether he asked for it by name. */
+const NL_NAMED_EN = /\b(?:in|into|to)\s+(hebrew|english)\b|\b(hebrew|english)\s+(?:version|translation)\b/i;
+const NL_NAMED_HE = /(?:^|[\s,])(?:ב|ל)(עברית|אנגלית)(?=[\s.,!?]|$)/;
+function noteLanguageOf(text){
+  const raw = String(text || '');
+  let m = NL_NAMED_EN.exec(raw);
+  if(m){ const w = (m[1] || m[2]).toLowerCase(); return { lang: w === 'hebrew' ? 'he' : 'en', named: true }; }
+  m = NL_NAMED_HE.exec(raw);
+  if(m) return { lang: m[1] === 'עברית' ? 'he' : 'en', named: true };
+  /* By words, not letters: a Hebrew sentence with an English term in it is Hebrew, and a token that has
+     any Hebrew letter in it ("ל-launch") counts as Hebrew. */
+  let heN = 0, laN = 0;
+  raw.split(/\s+/).forEach(w => { if(/[\u0590-\u05FF]/.test(w)) heN++; else if(/[A-Za-z]{2,}/.test(w)) laN++; });
+  if(heN && heN >= laN) return { lang: 'he', named: false };
+  if(laN > heN) return { lang: 'en', named: false };
+  return { lang: currentLang === 'he' ? 'he' : 'en', named: false };
+}
+function noteLanguageNote(text){
+  const L = noteLanguageOf(text);
+  const name = L.lang === 'he' ? 'HEBREW' : 'ENGLISH';
+  return '\n\nLANGUAGE OF THE WRITTEN RESULT: write the note, the draft, the plan or the summary in ' + name +
+         (L.named ? ' (he asked for it by name)' : ' (the language he is speaking to you; he did not ask for another)') +
+         '. Do not switch language because the source material, a name or a technical term is in the other one. Code, commands and proper names stay as they are.';
+}
+
 /* The sentence left in chat (and spoken) in place of the whole document. */
 function notePointerLine(title, text){
   const he = /[֐-׿]/.test(String(text || '')) || currentLang === 'he';
@@ -22744,13 +22772,14 @@ Notes.subscribe(noteRefresh);
 /* The tool other parts of Jarvis (and the model) use: create_note(title, content, format). */
 const CREATE_NOTE_TOOL = {
   name: 'create_note',
-  description: "Open a NEW NOTE on his screen (a panel of its own, editable, with a copy button) holding a written result he will want to keep, copy or reuse: a prompt for another AI, an email or message, a plan or checklist, a summary or report, code or a script, instructions, a rewrite. Put the COMPLETE text in `content` (markdown is fine: headings, lists, fenced code). Use it for written deliverables; do NOT use it for a short answer or ordinary conversation, and NEVER for passwords, keys or tokens. This is not the Notepad program; for \"in my Notepad\" use write_note. After it succeeds, say ONE short sentence that it is in a note; do not read the note out.",
+  description: "Write in the language he is speaking to you (Hebrew or English) unless he named another. Open a NEW NOTE on his screen (a panel of its own, editable, with a copy button) holding a written result he will want to keep, copy or reuse: a prompt for another AI, an email or message, a plan or checklist, a summary or report, code or a script, instructions, a rewrite. Put the COMPLETE text in `content` (markdown is fine: headings, lists, fenced code). Use it for written deliverables; do NOT use it for a short answer or ordinary conversation, and NEVER for passwords, keys or tokens. This is not the Notepad program; for \"in my Notepad\" use write_note. After it succeeds, say ONE short sentence that it is in a note; do not read the note out.",
   input_schema: { type: 'object', properties: {
     title: { type: 'string', description: 'A short title, in the language of the content.' },
     content: { type: 'string', description: 'The whole note.' },
     format: { type: 'string', enum: ['markdown', 'text', 'code'], description: 'markdown (default), text, or code for a single block of code.' }
   }, required: ['content'] }
 };
+let turnNoteLang = '';       // the language instruction for this turn's written result, '' when it is not a written turn
 let turnNoteId = null;       // set when the model made a note itself this turn, so nothing makes a second
 function callCreateNoteTool(input){
   const content = String((input && input.content) || '');
@@ -22760,7 +22789,7 @@ function callCreateNoteTool(input){
   noteSurface(r.id);
   return { ok:true, id:r.id, title:r.title, duplicate: !!r.duplicate, note: 'It is open on his screen. Say one short sentence that it is in a note; do not repeat its text.' };
 }
-window.__notesTest = { Notes, writtenIntent, looksWritten, noteTitleOf, noteStructure, makeNoteGate, noteRender, noteHasSecret, notePointerLine, callCreateNoteTool };
+window.__notesTest = { noteLanguageOf, noteLanguageNote, Notes, writtenIntent, looksWritten, noteTitleOf, noteStructure, makeNoteGate, noteRender, noteHasSecret, notePointerLine, callCreateNoteTool };
 Notes.load();
 
 function openHtmlPreview(title, code, lang){
@@ -24171,6 +24200,7 @@ async function handleSend(){
   const notepadTurn = IS_DESKTOP && wantsNoteTurn(text);
   const noteIntent = notepadTurn ? 'chat' : writtenIntent(text);
   const noteGateNow = makeNoteGate(noteIntent);
+  turnNoteLang = noteIntent === 'note' ? noteLanguageNote(text) : '';
   const feedChat = (chunk)=>{
     if(!chunk) return;
     /* Text still arriving is a live request, not a stalled one: a complete
@@ -24199,6 +24229,7 @@ async function handleSend(){
   };
 
   const reply = await askJarvis(modelText, images, onText);
+  turnNoteLang = '';
   /* The reply ended while still held (too short to be a document): it goes to the chat as it always did. */
   if(reply !== null && noteGateNow.on && !noteGateNow.promoted && noteGateNow.buf){ noteGateNow.on = false; feedChat(noteGateNow.buf); }
   screenTurnNote = '';
