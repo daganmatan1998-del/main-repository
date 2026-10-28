@@ -20701,7 +20701,7 @@ function phoneNote(){
   return '\n\nPHONE CALLS: Phone calls here have nothing to do with WhatsApp or CallMeBot: never mention WHATSAPP_PHONE or CALLMEBOT_APIKEY when asked about calling him. Calling him by phone (ringback) is not set up yet. ' + (phoneStatus.why || '') + ' If he asks you to call him or talk by phone, tell him exactly that in one sentence; never claim to dial. The older call_me tool (a one-way Telegram call through the worker) needs its own secrets and may not be set up: do not use it for this.';
 }
 function cameraSystemExtras(){
-  return phoneNote() + cameraModeNote() + turnNoteLang + (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + mailServiceNote() + (compactCodeNote || '') +
+  return phoneNote() + cameraModeNote() + turnNoteLang + turnRefBrief + (lookPending ? LOOK_INSTRUCTION : seenNote()) + screenWatchNote() + (model3dTurnNote || '') + model3dServiceNote() + mailServiceNote() + (compactCodeNote || '') +
          (turnWants3d ? never3dNote() : '') + (turn3dMentionOnly ? QUIET_3D_NOTE : '') + (turnWantsNote ? NOTE_TURN_NOTE : '');
 }
 /* SET ONLY AFTER A CUT-OFF (2.22.1): the last attempt ran out of room in the
@@ -21600,6 +21600,7 @@ async function askJarvis(userText, images, onText, tag){
     if(photo && photo.data){ lastAttachedImage = photo; lastAttachedAt = Date.now(); }
     const blocks = [];
     for(const att of images){
+      if(att && att.name && !att.live && !att.screen) noteRecent(att.kind === 'pdf' ? 'pdf' : att.kind === 'video' ? 'video' : att.kind === 'text' ? 'file' : 'image', att.name);
       if(att.kind === 'pdf'){
         blocks.push({ type:'document', source:{ type:'base64', media_type:'application/pdf', data: att.data } });
       } else if(att.kind === 'text'){
@@ -22805,6 +22806,62 @@ const CREATE_NOTE_TOOL = {
     format: { type: 'string', enum: ['markdown', 'text', 'code'], description: 'markdown (default), text, or code for a single block of code.' }
   }, required: ['content'] }
 };
+
+/* =====================================================================
+   WHAT "THAT PROJECT" MEANS
+
+   "The website we worked on", "the file I just showed you", "the previous version", "הפרויקט ההוא".
+   The model only has the words, and a long conversation does not hold the answer. The page does: it
+   knows which files were attached and when, which projects he authorised, the last page, model and
+   note made. When a sentence points at something by description, the candidates are listed for the
+   model, newest first, with the instruction to pick the likeliest and go, and to ask one short
+   question only when two fit and the choice changes the outcome. Nothing is invented: an empty list
+   says so. */
+const recentWork = [];      // { kind, name, at }, newest last, in this session
+function noteRecent(kind, name){
+  name = String(name || '').trim().slice(0, 100);
+  if(!name) return;
+  const i = recentWork.findIndex(r => r.kind === kind && r.name === name);
+  if(i >= 0) recentWork.splice(i, 1);
+  recentWork.push({ kind, name, at: Date.now() });
+  if(recentWork.length > 30) recentWork.shift();
+}
+const REF_NOUN_EN = '(?:project|projects|file|files|site|website|web ?page|page|app|application|image|picture|photo|screenshot|model|note|email|mail|draft|version|doc|document|plan|code|script|folder|repo|repository|design|store|shop|thing|one)';
+const REF_EN = [
+  new RegExp('\\b(?:that|this|those|the same)\\s+' + REF_NOUN_EN + '\\b'),
+  new RegExp('\\bthe\\s+(?:previous|last|earlier|old|older|original|first|latest|other)\\s+' + REF_NOUN_EN + '\\b'),
+  /\bthe\s+(?:project|website|site|app|page|store|design|plan|doc|document|code|script)\s+(?:we|i)\s+(?:were\s+)?(?:work(?:ed|ing)\s+on|made|built|wrote|started|did|discussed|talked about)\b/,
+  /\bthe\s+(?:file|image|picture|photo|screenshot|doc|document|pdf|video|model)\s+(?:i|you)\s+(?:just\s+)?(?:showed|sent|uploaded|attached|gave|made|opened)\b/,
+  /\bwhat\s+we\s+(?:did|made|built|worked on|discussed)\b|\bwhere\s+we\s+left\s+off\b/,
+  /\b(?:go|get)\s+back\s+to\b|\bcontinue\s+(?:with\s+)?(?:that|it|the)\b/
+];
+const REF_HE = [
+  /(?:^|\s)[בלמכו]?ה?(?:פרויקט|אתר|קובץ|דף|אפליקציה|תמונה|צילום|מודל|פתק|מייל|טיוטה|גרסה|מסמך|תוכנית|תכנית|קוד|סקריפט|תיקייה|חנות|עיצוב)\s+(?:ההוא|ההיא|הזה|הזאת|הקודם|הקודמת|האחרון|האחרונה|ההוא שעבדנו|הראשון|הראשונה)/,
+  /(?:^|\s)[בלמכו]?ה?(?:גרסה|טיוטה|תוכנית|תכנית)\s+(?:הקודמת|הישנה|המקורית|הראשונה|האחרונה)/,
+  /(?:^|\s)[בלמכו]?ה?(?:פרויקט|אתר|אפליקציה|דף|חנות|עיצוב|מסמך|קוד)\s+ש(?:עבדנו|בנינו|עשינו|התחלנו|דיברנו)/,
+  /(?:^|\s)[בלמכו]?ה?(?:קובץ|תמונה|צילום|מסמך|וידאו|מודל)\s+ש(?:הראיתי|שלחתי|העליתי|צירפתי|נתת|עשית|פתחנו)/,
+  /מה\s+ש(?:עשינו|בנינו|דיברנו)|איפה\s+שעצרנו|תמשיך\s+(?:עם\s+)?(?:זה|ה)/
+];
+function referenceBrief(text){
+  const raw = String(text || ''), s = normaliseHeard(raw);
+  if(!s) return '';
+  const hit = REF_EN.some(re => re.test(s)) || REF_HE.some(re => re.test(raw) || re.test(s));
+  if(!hit) return '';
+  const he = currentLang === 'he';
+  const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? (he ? 'ממש עכשיו' : 'just now') : m < 60 ? (he ? 'לפני ' + m + ' דק׳' : m + ' min ago') : (he ? 'לפני ' + Math.round(m / 60) + ' שעות' : Math.round(m / 60) + ' h ago'); };
+  const lines = [];
+  recentWork.slice().reverse().slice(0, 8).forEach(r => lines.push('- ' + r.kind + ': ' + r.name + ' (' + ago(r.at) + ')'));
+  try{ if(typeof lastArtifact !== 'undefined' && lastArtifact && lastArtifact.title) lines.push('- page/code he was shown: ' + lastArtifact.title); }catch(err){}
+  try{ if(typeof lastModelName !== 'undefined' && lastModelName) lines.push('- 3D model on screen: ' + lastModelName); }catch(err){}
+  try{ const ns = Notes.all().filter(n => !n.closed || n.saved).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 3); ns.forEach(n => lines.push('- note: ' + n.title + ' (' + ago(n.updatedAt) + ')')); }catch(err){}
+  try{ if(typeof lastDescribedPicture !== 'undefined' && lastDescribedPicture) lines.push('- picture he showed (' + ago(lastDescribedPicture.at) + '): ' + String(lastDescribedPicture.description || '').slice(0, 90)); }catch(err){}
+  try{ if(Array.isArray(projectsCache) && projectsCache.length) projectsCache.slice(0, 8).forEach(p => lines.push('- project he authorised: ' + (p.name || p.id))); }catch(err){}
+  const seen = new Set(); const uniq = lines.filter(l => !seen.has(l) && seen.add(l));
+  return '\n\nHE REFERRED TO SOMETHING BY DESCRIPTION ("that project", "the file I showed you", "the previous version"). What this app knows, newest first:\n' +
+         (uniq.length ? uniq.join('\n') : '(nothing recent is recorded: say so plainly, and ask which one he means)') +
+         '\nPick the likeliest match and carry on; say which one you took in a few words. Ask ONE short question, naming both, only if two fit equally and the choice changes the result. Never invent something that is not in this list or in the conversation.';
+}
+let turnRefBrief = '';
 let turnNoteLang = '';       // the language instruction for this turn's written result, '' when it is not a written turn
 let turnNoteId = null;       // set when the model made a note itself this turn, so nothing makes a second
 function callCreateNoteTool(input){
@@ -22815,7 +22872,7 @@ function callCreateNoteTool(input){
   noteSurface(r.id);
   return { ok:true, id:r.id, title:r.title, duplicate: !!r.duplicate, note: 'It is open on his screen. Say one short sentence that it is in a note; do not repeat its text.' };
 }
-window.__notesTest = { noteLanguageOf, noteLanguageNote, Notes, writtenIntent, looksWritten, noteTitleOf, noteStructure, makeNoteGate, noteRender, noteHasSecret, notePointerLine, callCreateNoteTool };
+window.__notesTest = { referenceBrief, noteRecent, noteLanguageOf, noteLanguageNote, Notes, writtenIntent, looksWritten, noteTitleOf, noteStructure, makeNoteGate, noteRender, noteHasSecret, notePointerLine, callCreateNoteTool };
 Notes.load();
 
 function openHtmlPreview(title, code, lang){
@@ -24227,6 +24284,7 @@ async function handleSend(){
   const noteIntent = notepadTurn ? 'chat' : writtenIntent(text);
   const noteGateNow = makeNoteGate(noteIntent);
   turnNoteLang = noteIntent === 'note' ? noteLanguageNote(text) : '';
+  turnRefBrief = referenceBrief(text);
   const feedChat = (chunk)=>{
     if(!chunk) return;
     /* Text still arriving is a live request, not a stalled one: a complete
@@ -24255,7 +24313,7 @@ async function handleSend(){
   };
 
   const reply = await askJarvis(modelText, images, onText);
-  turnNoteLang = '';
+  turnNoteLang = ''; turnRefBrief = '';
   /* The reply ended while still held (too short to be a document): it goes to the chat as it always did. */
   if(reply !== null && noteGateNow.on && !noteGateNow.promoted && noteGateNow.buf){ noteGateNow.on = false; feedChat(noteGateNow.buf); }
   screenTurnNote = '';
