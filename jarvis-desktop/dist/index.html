@@ -8224,7 +8224,7 @@ const GESTURE_ZOOM_TOOL = {
 if(IS_DESKTOP){
   loadTasks().then(()=>{
     renderTasks();
-    setTimeout(()=>{ catchUpTasks().catch(()=>{}); }, 4000);
+    setTimeout(()=>{ recoverInterruptedTasks().then(() => catchUpTasks()).catch(()=>{}); }, 4000);
     startTaskScheduler();
   }).catch(()=>{});
 }
@@ -10847,8 +10847,14 @@ function nextDueAt(task, from){
   return null;
 }
 
+/* A run that failed is tried again, a little later each time, a few times, before it is given up on:
+   2 minutes, 10, 30. A one-off is a one-off for SUCCESS: until it has worked (or been given up on)
+   it is still owed. */
+const TASK_RETRY_MS = [2 * 60000, 10 * 60000, 30 * 60000];
+const TASK_MAX_ATTEMPTS = TASK_RETRY_MS.length + 1;
 function taskIsDue(task, now){
   if(!task.enabled) return false;
+  if(task.retryAt) return task.retryAt <= (now || Date.now());
   if(task.every === 'once' && task.lastRun) return false;   // a one-off fires once, ever
   const due = task.nextRun || nextDueAt(task, task.lastRun || task.created);
   return due !== null && due <= (now || Date.now());
@@ -10905,7 +10911,10 @@ async function removeStandingTask(id){
 async function runStandingTask(task){
   task.lastRun = Date.now();
   task.runs = (task.runs || 0) + 1;
-  task.nextRun = nextDueAt(task, Date.now());
+  task.attempts = (task.attempts || 0) + 1;
+  task.retryAt = null;
+  task.running = Date.now();                // written to disk BEFORE the work, so a crash mid-run is known on restart
+  if(task.every !== 'once') task.nextRun = nextDueAt(task, Date.now());
   saveTasks();
 
   const late = task.missedBy ? t('taskLate').replace('{n}', String(task.missedBy)) : '';
@@ -10913,28 +10922,82 @@ async function runStandingTask(task){
     ? '[משימה קבועה שנקבעה מראש. ' + late + ' תעשה אותה עכשיו, בלי לשאול אישור, ותדווח במשפט אחד מה עשית בפועל. אם לא הצלחת — תגיד במפורש מה נכשל ולמה. המשימה:] '
     : '[A standing task, set up in advance. ' + late + ' Do it now, without asking for approval, and report in one sentence what you actually did. If it did not work, say plainly what failed and why. The task:] ';
 
-  let said = '';
+  let said = '', failure = '';
   try{
     said = await askJarvis(brief + task.goal, [], null, { origin: 'schedule', taskId: task.id });
   }catch(err){
     said = '';
-    task.lastOk = false;
-    task.lastNote = String((err && err.message) || err).slice(0, 200);
+    failure = String((err && err.message) || err).slice(0, 200);
   }
-  if(typeof said === 'string' && said.trim()){
+  /* Failed means: it threw, said nothing, or its tools ran and none of them worked. Whatever the
+     model then SAYS about it does not turn that into a success. */
+  if(!failure && turnModelFailure) failure = turnModelFailure.replace(/^[A-Z_]+ \([^)]*\):?\s*/, '').slice(0, 200);
+  if(!failure && turnToolRan && !turnToolSucceeded){
+    failure = (turnToolFailures.map(f => f.tell_the_user || f.error).filter(Boolean)[0] || t('taskNothing')).toString().slice(0, 200);
+  }
+  if(!failure && !(typeof said === 'string' && said.trim())) failure = t('taskNothing');
+  task.running = null;
+  task.missedBy = 0;
+  if(!failure){
     task.lastOk = true;
     task.lastNote = said.trim().slice(0, 200);
+    task.attempts = 0;
     addMessage('system', t('taskRan').replace('{goal}', task.goal.slice(0, 50)));
     addMessage('assistant', said.trim());
     persistCurrentSession();
+    taskNotify(task, 'done', task.lastNote);
+    saveTasks(); renderTasks();
     await speak(said.trim());
-  } else if(task.lastOk !== false){
-    task.lastOk = false;
-    task.lastNote = t('taskNothing');
+    return;
   }
-  task.missedBy = 0;
-  saveTasks();
-  renderTasks();
+  task.lastOk = false;
+  task.lastNote = failure;
+  if(task.attempts < TASK_MAX_ATTEMPTS){
+    const wait = TASK_RETRY_MS[task.attempts - 1];
+    task.retryAt = Date.now() + wait;
+    taskNotify(task, 'retrying', failure, { attempt: task.attempts, in_ms: wait });
+  } else {
+    /* Given up on. A recurring task keeps its schedule; a one-off stays failed, and says so. */
+    task.attempts = 0;
+    taskNotify(task, 'failed', failure);
+    const he = currentLang === 'he';
+    const line = he ? 'המשימה "' + task.goal.slice(0, 40) + '" נכשלה גם אחרי כמה ניסיונות: ' + failure
+                    : 'The task "' + task.goal.slice(0, 40) + '" failed after several tries: ' + failure;
+    addMessage('assistant', line); persistCurrentSession();
+    saveTasks(); renderTasks();
+    try{ await speak(line); }catch(err){}
+    return;
+  }
+  saveTasks(); renderTasks();
+}
+
+/* TELLING THE REST OF THE SYSTEM. A task that finishes, is being retried, or is given up on is an event,
+   not only a line in a panel: the page broadcasts it (window event `jarvis:task`, and `jarvis://task-event`
+   on the desktop bridge, where the camera window or the 3D Agent Atlas can listen). */
+const TASK_EVENTS_MAX = 50;
+const taskEvents = [];
+function taskNotify(task, kind, detail, extra){
+  const ev = Object.assign({ kind, id: task.id, goal: String(task.goal || '').slice(0, 120), detail: String(detail || '').slice(0, 200), at: Date.now(), attempts: task.attempts || 0 }, extra || {});
+  taskEvents.push(ev); if(taskEvents.length > TASK_EVENTS_MAX) taskEvents.shift();
+  try{ window.dispatchEvent(new CustomEvent('jarvis:task', { detail: ev })); }catch(err){}
+  try{
+    const bridge = window.__TAURI__ && window.__TAURI__.event;
+    if(bridge && bridge.emit){ const r = bridge.emit('jarvis://task-event', ev); if(r && r.catch) r.catch(() => {}); }
+  }catch(err){}
+  if(kind === 'retrying') addMessage('system', '\u25B8 ' + (currentLang === 'he' ? 'משימה נכשלה, מנסה שוב בעוד ' + Math.round(ev.in_ms / 60000) + ' דק׳: ' : 'task failed, trying again in ' + Math.round(ev.in_ms / 60000) + ' min: ') + ev.goal.slice(0, 50));
+  return ev;
+}
+/* A task that was mid-run when the app stopped (closed, crashed, machine off) is retried soon, not lost. */
+async function recoverInterruptedTasks(){
+  await loadTasks();
+  let n = 0;
+  for(const task of standingTasks){
+    if(!task.running) continue;
+    task.running = null; task.lastOk = false; task.lastNote = 'interrupted: the app stopped while it was running';
+    if((task.attempts || 0) < TASK_MAX_ATTEMPTS){ task.retryAt = Date.now() + 30000; n++; taskNotify(task, 'retrying', task.lastNote, { attempt: task.attempts || 1, in_ms: 30000 }); }
+  }
+  if(n){ saveTasks(); renderTasks(); }
+  return n;
 }
 
 /* One at a time, and never on top of him. A task that fires while he is
@@ -21572,7 +21635,9 @@ function showOrbError(err){
     clearTimeout(box._t); box._t = setTimeout(() => box.remove(), 5 * 60000);
   }catch(e){}
 }
+let turnModelFailure = '';   // why the model call failed this turn, '' when it did not (askJarvis returns a SPOKEN error line then, which is not an answer)
 async function askJarvis(userText, images, onText, tag){
+  turnModelFailure = '';
   userInterrupted = false;
   turnToolRan = false;
   turnToolSucceeded = false;
@@ -22183,6 +22248,7 @@ async function askJarvis(userText, images, onText, tag){
        the fuel for the feedback loop. The orb says one plain sentence; the
        website keeps the fuller wording, since there is a screen to read it
        on and nobody is listening to it. */
+    turnModelFailure = String((err && err.message) || err).slice(0, 300) || 'model error';
     addMessage('system', 'DEBUG: ' + err.message);
     /* The orb has no chat on screen, so the DEBUG line above is invisible
        there. Returning '' made every failed model call look like "he only
@@ -22872,6 +22938,7 @@ function callCreateNoteTool(input){
   noteSurface(r.id);
   return { ok:true, id:r.id, title:r.title, duplicate: !!r.duplicate, note: 'It is open on his screen. Say one short sentence that it is in a note; do not repeat its text.' };
 }
+window.__taskTest = { addStandingTask, taskTick, loadTasks, recoverInterruptedTasks, get tasks(){ return standingTasks; }, get events(){ return taskEvents; }, TASK_RETRY_MS, TASK_MAX_ATTEMPTS, taskIsDue };
 window.__notesTest = { referenceBrief, noteRecent, noteLanguageOf, noteLanguageNote, Notes, writtenIntent, looksWritten, noteTitleOf, noteStructure, makeNoteGate, noteRender, noteHasSecret, notePointerLine, callCreateNoteTool };
 Notes.load();
 
